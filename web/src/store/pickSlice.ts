@@ -9,6 +9,7 @@
 import type { SliceCreator } from "./modelStore";
 import type { PickGeometry } from "../lib/facePick";
 import type { TieSide } from "./tieSlice";
+import type { AppMode } from "./resultsSlice";
 
 export interface FaceSelection {
   nodeIds: number[];
@@ -60,6 +61,42 @@ export interface PickSlice {
   ): void;
 }
 
+type PickSessionState = Pick<
+  PickSlice,
+  | "pickMode"
+  | "pickTargetGroupId"
+  | "pickGeometry"
+  | "selectedFace"
+  | "pendingFaces"
+  | "pickTieSide"
+  | "tieDraft"
+  | "couplingDraft"
+>;
+
+// End the pick session and drop what it gathered.
+function endPickSession(s: PickSessionState): void {
+  s.pickMode = null;
+  s.pickTargetGroupId = null;
+  s.pickTieSide = "a";
+  s.tieDraft = { a: [], b: [] };
+  s.couplingDraft = null;
+  s.selectedFace = null;
+  s.pendingFaces = [];
+  s.pickGeometry = "face";
+}
+
+// A pick session belongs to the Supports & Loads step ("constraints"): its
+// clicks are matched against the undeformed mesh, so one left running on
+// Results would measure a click on the deformed surface against undeformed
+// node positions and select another rim or node than the one clicked
+// (KOF-407). Every mode change goes through here.
+export function endPickSessionOutside(
+  s: PickSessionState,
+  mode: AppMode,
+): void {
+  if (mode !== "constraints" && s.pickMode !== null) endPickSession(s);
+}
+
 export const createPickSlice: SliceCreator<PickSlice> = (set) => ({
   pickMode: null,
   pickTargetGroupId: null,
@@ -72,18 +109,17 @@ export const createPickSlice: SliceCreator<PickSlice> = (set) => ({
 
   setPickMode: (mode: PickMode | null, targetGroupId: number | null = null) =>
     set((s) => {
+      if (mode === null) {
+        endPickSession(s);
+        return;
+      }
       s.pickMode = mode;
-      s.pickTargetGroupId = mode !== null ? (targetGroupId ?? null) : null;
+      s.pickTargetGroupId = targetGroupId ?? null;
       s.pickTieSide = "a";
       s.tieDraft = { a: [], b: [] };
-      // Leaving the pick session abandons the coupling being placed with it, so
-      // its preview must not outlive the form that owned it.
+      // Switching the pick session abandons the coupling being placed with it,
+      // so its preview must not outlive the form that owned it.
       s.couplingDraft = null;
-      if (mode === null) {
-        s.selectedFace = null;
-        s.pendingFaces = [];
-        s.pickGeometry = "face";
-      }
     }),
 
   setCouplingDraft: (draft) =>

@@ -9,6 +9,7 @@
 import type { ModelState, SliceCreator } from "./modelStore";
 import type { ActiveResult, ResultType } from "./resultsSlice";
 import { studyFingerprint, type StudyLevel } from "../lib/refinementStudy";
+import { endPickSessionOutside } from "./pickSlice";
 
 export type StudyKind = "static" | "topopt" | "refinement";
 
@@ -280,6 +281,7 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
     set((s) => {
       const plot = ensurePlot(s, "refinement");
       s.mode = "results";
+      endPickSessionOutside(s, s.mode);
       s.treeSelection = {
         group: "results",
         target: { type: "item", kind: "plot", id: plot.id },

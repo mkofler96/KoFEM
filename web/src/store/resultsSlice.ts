@@ -9,6 +9,7 @@ import type { HandCheck } from "../lib/handCheck";
 import type { ResultProbe } from "../lib/resultProbe";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
+import { endPickSessionOutside } from "./pickSlice";
 import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
 
 export interface SolverResult {
@@ -187,6 +188,7 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
       s.mode = mode;
       // Clicks place probes only on the result they read.
       if (mode !== "results") s.probing = false;
+      endPickSessionOutside(s, mode);
       applyTreeSelection(s, modeSelection(mode, s));
     }),
 });

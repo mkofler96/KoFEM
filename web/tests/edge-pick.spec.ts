@@ -312,3 +312,37 @@ test("edges on a shell's collapsed side faces survive a re-mesh @pipeline", asyn
     "Kept 3 support/load/tie groups on their CAD faces.",
   );
 });
+
+// A pick session matches clicks against the undeformed mesh, so it must not
+// follow the user onto the deformed result (KOF-407): there a click on the
+// tip rim selected the bottom rim instead. Opening Results ends the session,
+// and a click on the deformed surface then picks nothing.
+test("opening Results ends an edge pick, so the deformed surface picks nothing @pipeline", async ({
+  page,
+}) => {
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  const run = page.getByRole("button", { name: /Run static solve/ });
+  await expect(run).toBeEnabled();
+  await run.click();
+  await expect(page.getByTestId("colorbar")).toBeVisible();
+
+  await addBoundary(page, "bc");
+  await page.getByTestId("pick-geometry-edge").click();
+  await expect(page.getByText("Pick edge — fixed displacement")).toBeVisible();
+
+  await page.getByTestId("tree-plot-1").click();
+  await expect(page.getByTestId("colorbar")).toBeVisible();
+  await expect(page.getByText("Pick edge — fixed displacement")).toHaveCount(0);
+  const canvas = page.locator("canvas").first();
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("viewport canvas has no bounding box");
+  await clickViewportAt(
+    page,
+    box.x + box.width * 0.3,
+    box.y + box.height * 0.5,
+  );
+  const after = await readPickState(page);
+  expect(after.selected).toBeNull();
+  expect(after.pickGeometry).toBe("face");
+});

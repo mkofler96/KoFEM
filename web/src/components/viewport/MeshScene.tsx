@@ -205,11 +205,13 @@ export function MeshScene() {
         showResult={showResult}
         onFacePick={onFacePick}
       />
+      {/* The deformed surface only places probes: face picks match clicks
+          against undeformed nodes and live on Supports & Loads (KOF-407). */}
       {showResult && (
         <ResultsColormap
           topology={topology}
           deformScale={deformScale}
-          onFacePick={probing ? onProbePick : onFacePick}
+          onFacePick={probing ? onProbePick : undefined}
         />
       )}
       {showResult && (
