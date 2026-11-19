@@ -6,6 +6,7 @@
 
 import type { AppMode, ModelState, SliceCreator } from "./modelStore";
 import { showPlot, studyOf, type Study, type StudyKind } from "./studySlice";
+import { endPickSessionOutside } from "./pickSlice";
 import {
   AUTO_DEFORM_SCALE,
   checkDeformFactor,
@@ -293,6 +294,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
         s.viewRepr = s.meshRepr;
       }
       s.mode = selectionMode(selection, s.studies);
+      endPickSessionOutside(s, s.mode);
       applyTreeSelection(s, selection);
       s.sidebarOpen = true;
     }),

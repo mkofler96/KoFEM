@@ -15,9 +15,11 @@ import {
 import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
 import { rimEdgeKey, type ShellRim } from "../../lib/shellRim";
 
-// Picking handler for the pickable boundary surfaces (undeformed solid and
-// deformed result surface). Returns undefined outside pick mode so the meshes
-// carry no onClick at all.
+// Picking handler for the undeformed boundary surface: clicks are matched
+// against undeformed node positions, so the deformed result surface never
+// carries it (a pick session ends when the app leaves Supports & Loads,
+// KOF-407). Returns undefined outside pick mode so the mesh carries no onClick
+// at all.
 //
 // Face mode selects a surface region: when OCC face IDs are available (STEP mesh
 // via Netgen) an instant face-ID lookup (topologically exact on any CAD face),
