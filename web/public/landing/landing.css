@@ -275,6 +275,27 @@ p {
   color: var(--body);
 }
 
+/* The privacy link in the lede (KOF-392): the one hero element that takes
+   clicks. */
+.intro-local {
+  pointer-events: auto;
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+.intro-local:hover {
+  text-decoration: underline;
+}
+@media (max-width: 700px) {
+  /* The lede wraps to a third line on a phone: tighter, so the hero keeps
+     its room above the bracket. */
+  .intro {
+    top: 24.5%;
+  }
+  .intro h1 {
+    margin-bottom: 12px;
+  }
+}
+
 .model-caption {
   position: absolute;
   right: 5.5vw;

@@ -555,6 +555,8 @@ async function start() {
   function copy(element, opacity) {
     element.style.opacity = String(opacity);
     element.setAttribute("aria-hidden", String(opacity < 0.05));
+    // A faded block's links leave the tab order and take no clicks.
+    element.inert = opacity < 0.05;
   }
   const yaw = -0.65,
     phi = 1.05;
@@ -648,7 +650,7 @@ async function start() {
     const canvasWidth = sceneHost.clientWidth,
       canvasHeight = sceneHost.clientHeight;
     const horizontal = mobile.matches ? 0.5 : 0.7 - orientation * 0.4;
-    const vertical = mobile.matches ? 0.55 : 0.505;
+    const vertical = mobile.matches ? 0.56 : 0.505;
     sceneHost.dataset.frameVertical = String(vertical);
     scene.camera3D
       .getCamera()

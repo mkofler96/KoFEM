@@ -172,6 +172,8 @@ function ImportSection() {
           <span className={styles.cardSub}>.igs / .iges</span>
         </button>
       </div>
+      {/* KOF-392: files are read and processed in this browser only. */}
+      <p className={styles.localNote}>Your CAD never leaves your device.</p>
 
       {stepImportError && (
         <div
