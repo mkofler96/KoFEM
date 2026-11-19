@@ -52,6 +52,8 @@ export function OrbitPivot() {
     function onPointerDown(event: PointerEvent) {
       pointers.add(event.pointerId);
       // A second finger is a pinch or a pan: the orbit controls take it.
+      // The first finger keeps its capture, so its release still reaches
+      // this canvas and leaves `pointers`, wherever it lifts.
       if (pointers.size > 1) {
         drag = null;
         return;
@@ -65,6 +67,11 @@ export function OrbitPivot() {
         y: event.clientY,
         pivot: surfacePoint(event) ?? orbit.target.clone(),
       };
+      // The drag goes on, and ends, wherever the cursor goes (KOF-404):
+      // without capture the canvas sees no move or release outside it, so
+      // the turn stopped at its edge and went on after a release outside.
+      // The browser releases the capture after the pointer is released.
+      element.setPointerCapture(event.pointerId);
     }
 
     function onPointerMove(event: PointerEvent) {
@@ -93,17 +100,27 @@ export function OrbitPivot() {
       if (drag?.pointerId === event.pointerId) drag = null;
     }
 
+    // The browser drops the capture on its own, e.g. when the canvas leaves
+    // the page mid-drag; the drag ends with it.
+    function onLostPointerCapture(event: PointerEvent) {
+      if (drag?.pointerId === event.pointerId) drag = null;
+    }
+
     // Capture phase: runs before the orbit controls' own handlers on the same
     // element, so the pivot is chosen from the view the user pressed on.
     element.addEventListener("pointerdown", onPointerDown, true);
     element.addEventListener("pointermove", onPointerMove);
     element.addEventListener("pointerup", onPointerUp);
     element.addEventListener("pointercancel", onPointerUp);
+    element.addEventListener("lostpointercapture", onLostPointerCapture);
     return () => {
       element.removeEventListener("pointerdown", onPointerDown, true);
       element.removeEventListener("pointermove", onPointerMove);
       element.removeEventListener("pointerup", onPointerUp);
       element.removeEventListener("pointercancel", onPointerUp);
+      element.removeEventListener("lostpointercapture", onLostPointerCapture);
+      if (drag && element.hasPointerCapture(drag.pointerId))
+        element.releasePointerCapture(drag.pointerId);
     };
   }, [camera, controls, gl, scene, invalidate]);
 

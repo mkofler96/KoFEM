@@ -10,7 +10,9 @@ import type { Page } from "@playwright/test";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 import {
   dragViewport,
+  hoverViewport,
   projectPoint,
+  touchViewport,
   wheelViewportAt,
   type Point,
 } from "./fixtures/viewport";
@@ -110,6 +112,109 @@ test("a drag that starts off the model turns about the orbit target", async ({
 
   const after = await screenOf(page, [5, 2, 2]);
   expectSamePixel(after, centre);
+});
+
+async function canvasBox(page: Page) {
+  const canvas = await page.locator("canvas").first().boundingBox();
+  if (!canvas) throw new Error("the viewport canvas is not on the page");
+  return canvas;
+}
+
+// KOF-404: the drag turned the view only while the cursor was over the
+// canvas, so one drag could not turn the view more than about a full circle.
+test("a drag keeps turning the view after the cursor leaves the viewport", async ({
+  page,
+}) => {
+  await openBox(page);
+  const canvas = await canvasBox(page);
+  const pageWidth = page.viewportSize()?.width;
+  if (!pageWidth) throw new Error("the page has no viewport size");
+
+  // A drag across the canvas height turns a full circle, so a drag of one and
+  // a half heights turns 540°: half a turn about the vertical axis through
+  // the box centre, where a drag on the background turns. The box is
+  // symmetric under that turn, and it takes this corner to where the
+  // opposite one was.
+  const start = { x: canvas.x + 30, y: canvas.y + canvas.height / 2 };
+  const end = { x: start.x + 1.5 * canvas.height, y: start.y };
+  if (end.x <= canvas.x + canvas.width || end.x >= pageWidth)
+    throw new Error(
+      `a ${end.x - start.x} px drag from x = ${start.x} must end right of the canvas and on the page`,
+    );
+  const opposite = await screenOf(page, [10, 0, 0]);
+
+  await dragViewport(page, start, end, 30);
+
+  expectSamePixel(await screenOf(page, [0, 0, 4]), opposite);
+});
+
+test("releasing the button outside the viewport ends the drag", async ({
+  page,
+}) => {
+  await openBox(page);
+  const canvas = await canvasBox(page);
+  // Background near the right edge, halfway down; released over the
+  // sidebar, left of the canvas.
+  const start = {
+    x: canvas.x + canvas.width - 30,
+    y: canvas.y + canvas.height / 2,
+  };
+  const before = await screenOf(page, FAR_CORNER);
+  await dragViewport(page, start, { x: canvas.x - 100, y: start.y + 40 });
+  const corner = await screenOf(page, FAR_CORNER);
+  expect(Math.hypot(corner.x - before.x, corner.y - before.y)).toBeGreaterThan(
+    20,
+  );
+
+  // The cursor comes back over the canvas with no button pressed.
+  await hoverViewport(
+    page,
+    { x: canvas.x + 30, y: start.y },
+    { x: canvas.x + canvas.width - 30, y: start.y - 80 },
+  );
+
+  expectSamePixel(await screenOf(page, FAR_CORNER), corner);
+});
+
+test.describe("touch", () => {
+  test.use({ hasTouch: true });
+
+  // A second finger hands the gesture to the orbit controls. The first finger
+  // may then lift anywhere: outside the canvas too, and a one-finger drag
+  // afterwards still turns the view.
+  test("a one-finger drag turns the view after a two-finger gesture that ends outside the viewport", async ({
+    page,
+  }) => {
+    await openBox(page);
+    const canvas = await canvasBox(page);
+    const midY = canvas.y + canvas.height / 2;
+    const first = { id: 1, x: canvas.x + 30, y: midY };
+    const second = { id: 2, x: canvas.x + canvas.width - 30, y: midY };
+    const firstOutside = { ...first, x: canvas.x - 100 };
+    await touchViewport(page, [
+      { type: "start", fingers: [first] },
+      { type: "start", fingers: [first, second] },
+      { type: "move", fingers: [firstOutside, second] },
+      { type: "end", fingers: [second] },
+      { type: "end", fingers: [] },
+    ]);
+    const before = await screenOf(page, FAR_CORNER);
+
+    const finger = { id: 3, x: canvas.x + 30, y: midY + 40 };
+    await touchViewport(page, [
+      { type: "start", fingers: [finger] },
+      ...[1, 2, 3, 4, 5].map((i) => ({
+        type: "move" as const,
+        fingers: [{ ...finger, x: finger.x + 30 * i }],
+      })),
+      { type: "end", fingers: [] },
+    ]);
+
+    const after = await screenOf(page, FAR_CORNER);
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(
+      20,
+    );
+  });
 });
 
 test("the mouse wheel zooms toward the point under the cursor", async ({
