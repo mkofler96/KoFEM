@@ -6,6 +6,7 @@ import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useModelStore } from "../../store/modelStore";
 import { fitViewBox } from "../../lib/fitView";
+import { WORLD_UP } from "../../lib/orbitPivot";
 
 // [1,1,1] normalized — standard isometric direction
 const ISO_DIR = new THREE.Vector3(1, 1, 1).normalize();
@@ -60,6 +61,8 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
     const halfTan = Math.tan((cam.fov * Math.PI) / 360);
     const distance = radius / (halfTan * Math.min(1, cam.aspect));
 
+    // Upright, also after a drag turned the view upside down.
+    camera.up.copy(WORLD_UP);
     camera.position.copy(center).addScaledVector(ISO_DIR, distance);
     cam.near = Math.max(distance * 0.001, 1e-4);
     cam.far = distance * 100;

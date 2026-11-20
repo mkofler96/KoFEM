@@ -15,21 +15,30 @@
 import { Quaternion, Vector3 } from "three";
 import type { Camera } from "three";
 
-// How close the view direction may come to straight up or down. OrbitControls
-// keeps the same margin from the poles.
-const POLE_MARGIN = 1e-6;
+// The world's up direction: the view's vertical while it is upright.
+// `camera.up` follows the view instead, and points down while it is upside
+// down (see orbitAboutPivot).
+export const WORLD_UP: Readonly<Vector3> = new Vector3(0, 1, 0);
 
 const offset = new Vector3();
-const viewDir = new Vector3();
 const right = new Vector3();
+const screenUp = new Vector3();
+const axis = new Vector3();
 const turn = new Quaternion();
 const tilt = new Quaternion();
 
 /**
- * Turn `camera` and `target` about `pivot`: by `-azimuth` about the world `up`
- * axis and by `-polar` about the camera's right axis, the signs OrbitControls
- * uses for the same drag. The tilt stops short of the poles, so the view never
- * turns upside down. Mutates `camera` and `target`.
+ * Turn `camera` and `target` about `pivot`: by `-polar` about the camera's
+ * right axis, then by `-azimuth` about the vertical, the signs OrbitControls
+ * uses for the same drag. `up` is the world's up direction. Mutates `camera`
+ * and `target`.
+ *
+ * The tilt has no limit: it carries the view over the top or bottom and on
+ * round, and the view turns upside down (KOF-420). OrbitControls look at their
+ * target along `camera.up`, so `camera.up` is set to `up` while the view is
+ * upright and to `-up` while it is upside down; otherwise their next update
+ * would turn the view upright again. The sideways turn is about `camera.up`,
+ * so a drag to the right turns the view the same way on screen either way.
  */
 export function orbitAboutPivot(
   camera: Camera,
@@ -39,25 +48,15 @@ export function orbitAboutPivot(
   azimuth: number,
   polar: number,
 ): void {
-  // The polar angle of the view direction, from `up`. The tilt axis is
-  // horizontal and perpendicular to the view, so the tilt changes this angle
-  // by exactly -polar; clamp it there.
-  viewDir.subVectors(camera.position, target);
-  const distance = viewDir.length();
-  if (distance === 0)
+  const side = Math.sign(camera.up.dot(up));
+  if (side === 0) throw new Error("orbitAboutPivot: camera.up is horizontal");
+  if (camera.position.equals(target))
     throw new Error("orbitAboutPivot: the camera sits on its target");
-  viewDir.divideScalar(distance);
-  const phi = Math.acos(Math.min(1, Math.max(-1, viewDir.dot(up))));
-  const tiltAngle =
-    phi - Math.min(Math.PI - POLE_MARGIN, Math.max(POLE_MARGIN, phi - polar));
 
-  right.crossVectors(up, viewDir);
-  if (right.lengthSq() === 0)
-    throw new Error("orbitAboutPivot: the camera looks straight along up");
-  right.normalize();
-
-  tilt.setFromAxisAngle(right, -tiltAngle);
-  turn.setFromAxisAngle(up, -azimuth).multiply(tilt);
+  right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  tilt.setFromAxisAngle(right, -polar);
+  axis.copy(up).multiplyScalar(side);
+  turn.setFromAxisAngle(axis, -azimuth).multiply(tilt);
 
   offset.subVectors(camera.position, pivot).applyQuaternion(turn);
   camera.position.copy(pivot).add(offset);
@@ -65,6 +64,12 @@ export function orbitAboutPivot(
   target.copy(pivot).add(offset);
   camera.quaternion.premultiply(turn);
   camera.updateMatrixWorld();
+
+  // Exactly at the top or bottom view the screen's up is horizontal: keep
+  // camera.up as it was.
+  screenUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  const upright = screenUp.dot(up);
+  if (upright !== 0) camera.up.copy(up).multiplyScalar(Math.sign(upright));
 }
 
 /**
