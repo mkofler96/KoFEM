@@ -18,19 +18,20 @@
 /** One crossing per cut edge, shared by the triangles that use it. */
 function crossings(positions, values, axis, level, out) {
   const index = new Map();
-  return (a, b) => {
-    const key = a < b ? `${a},${b}` : `${b},${a}`;
+  return (from, to) => {
+    const key = from < to ? `${from},${to}` : `${to},${from}`;
     const known = index.get(key);
     if (known !== undefined) return known;
-    const da = positions[3 * a + axis] - level;
-    const db = positions[3 * b + axis] - level;
-    const t = da / (da - db);
-    for (let k = 0; k < 3; k++)
+    const near = positions[3 * from + axis] - level;
+    const far = positions[3 * to + axis] - level;
+    const fraction = near / (near - far);
+    for (let component = 0; component < 3; component++)
       out.positions.push(
-        positions[3 * a + k] +
-          t * (positions[3 * b + k] - positions[3 * a + k]),
+        positions[3 * from + component] +
+          fraction *
+            (positions[3 * to + component] - positions[3 * from + component]),
       );
-    out.values.push(values[a] + t * (values[b] - values[a]));
+    out.values.push(values[from] + fraction * (values[to] - values[from]));
     const id = out.values.length - 1;
     index.set(key, id);
     return id;
@@ -52,8 +53,8 @@ export function cutTets({ positions, tets, values }, axis, level) {
   const cross = crossings(positions, values, axis, level, out);
   for (let e = 0; e < tets.length; e += 4) {
     const corners = [tets[e], tets[e + 1], tets[e + 2], tets[e + 3]];
-    const below = corners.filter((n) => positions[3 * n + axis] < level);
-    const above = corners.filter((n) => positions[3 * n + axis] >= level);
+    const below = corners.filter((node) => positions[3 * node + axis] < level);
+    const above = corners.filter((node) => positions[3 * node + axis] >= level);
     if (below.length === 0 || above.length === 0) continue;
     if (below.length === 2) {
       const [a, b] = below;
@@ -75,14 +76,14 @@ export function cutTets({ positions, tets, values }, axis, level) {
  * Add a cap triangle wound so its normal points along +axis, out of the
  * part kept below the plane: shading then lights the whole cap alike.
  */
-function facing(out, axis, a, b, c) {
-  const at = (n, k) => out.positions[3 * n + k];
-  const [u, v] = [(axis + 1) % 3, (axis + 2) % 3];
+function facing(out, axis, one, two, three) {
+  const at = (node, component) => out.positions[3 * node + component];
+  const [first, second] = [(axis + 1) % 3, (axis + 2) % 3];
   const normal =
-    (at(b, u) - at(a, u)) * (at(c, v) - at(a, v)) -
-    (at(b, v) - at(a, v)) * (at(c, u) - at(a, u));
-  if (normal >= 0) out.triangles.push(a, b, c);
-  else out.triangles.push(a, c, b);
+    (at(two, first) - at(one, first)) * (at(three, second) - at(one, second)) -
+    (at(two, second) - at(one, second)) * (at(three, first) - at(one, first));
+  if (normal >= 0) out.triangles.push(one, two, three);
+  else out.triangles.push(one, three, two);
 }
 
 /**
@@ -93,25 +94,26 @@ export function clipSurface({ positions, values, triangles }, axis, level) {
   checkAxis(axis);
   const out = { positions: [], values: [], triangles: [] };
   const kept = new Map();
-  const keep = (n) => {
-    const known = kept.get(n);
+  const keep = (node) => {
+    const known = kept.get(node);
     if (known !== undefined) return known;
-    for (let k = 0; k < 3; k++) out.positions.push(positions[3 * n + k]);
-    out.values.push(values[n]);
+    for (let component = 0; component < 3; component++)
+      out.positions.push(positions[3 * node + component]);
+    out.values.push(values[node]);
     const id = out.values.length - 1;
-    kept.set(n, id);
+    kept.set(node, id);
     return id;
   };
   const cross = crossings(positions, values, axis, level, out);
-  const inside = (n) => positions[3 * n + axis] <= level;
-  for (let t = 0; t < triangles.length; t += 3) {
-    const loop = [triangles[t], triangles[t + 1], triangles[t + 2]];
+  const inside = (node) => positions[3 * node + axis] <= level;
+  for (let first = 0; first < triangles.length; first += 3) {
+    const loop = [triangles[first], triangles[first + 1], triangles[first + 2]];
     const polygon = [];
-    for (let k = 0; k < 3; k++) {
-      const a = loop[k];
-      const b = loop[(k + 1) % 3];
-      if (inside(a)) polygon.push(keep(a));
-      if (inside(a) !== inside(b)) polygon.push(cross(a, b));
+    for (let corner = 0; corner < 3; corner++) {
+      const from = loop[corner];
+      const to = loop[(corner + 1) % 3];
+      if (inside(from)) polygon.push(keep(from));
+      if (inside(from) !== inside(to)) polygon.push(cross(from, to));
     }
     for (let k = 1; k + 1 < polygon.length; k++)
       out.triangles.push(polygon[0], polygon[k], polygon[k + 1]);
@@ -127,6 +129,9 @@ export function sectionMesh(model, axis, level) {
   return {
     positions: [...surface.positions, ...cap.positions],
     values: [...surface.values, ...cap.values],
-    triangles: [...surface.triangles, ...cap.triangles.map((n) => n + offset)],
+    triangles: [
+      ...surface.triangles,
+      ...cap.triangles.map((node) => node + offset),
+    ],
   };
 }

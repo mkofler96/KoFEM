@@ -35,7 +35,7 @@ test("a section plane cuts the solved bar and shows the field on the cut @pipeli
   await solveExample(page, "axial-bar");
   await page.getByTestId("plot-field").selectOption("Ux");
   await page.getByLabel("Deformation scale").fill("0");
-  const legend = await page.getByTestId("colorbar").innerText();
+  const legend = await page.getByTestId("colorbar").textContent();
   const canvas = page.locator("canvas").first();
   const whole = await canvas.screenshot();
 
@@ -49,7 +49,7 @@ test("a section plane cuts the solved bar and shows the field on the cut @pipeli
     .toBe(false);
 
   // The legend still spans the whole model.
-  await expect(page.getByTestId("colorbar")).toHaveText(legend);
+  expect(await page.getByTestId("colorbar").textContent()).toBe(legend);
 
   // The min and max on the cut: Ux is δ/2 across the whole section.
   await page.getByTestId("section-range").check();

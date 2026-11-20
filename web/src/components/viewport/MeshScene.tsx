@@ -132,11 +132,6 @@ export function MeshScene() {
     );
   };
 
-  const hasStepTessellation = !!stepSurface && stepSurface.triangles.length > 0;
-  if (nodes.length === 0 && !hasStepTessellation) {
-    return null;
-  }
-
   // A density field replaces the deformed static result: the final run when it
   // is the active result in Results (KOF-233), or the live iteration while an
   // optimization runs on the Optimize step (KOF-240).
@@ -155,6 +150,11 @@ export function MeshScene() {
     () => (section ? [section.clip] : []),
     [section],
   );
+
+  const hasStepTessellation = !!stepSurface && stepSurface.triangles.length > 0;
+  if (nodes.length === 0 && !hasStepTessellation) {
+    return null;
+  }
 
   // Hovering a row in the Bodies panel highlights that body, which only the
   // coloured CAD tessellation can show — the FEM surface is one neutral colour.
