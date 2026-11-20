@@ -536,6 +536,12 @@ describe("level-set topology optimization: Rust against the C++ engine", () => {
     expect(run({ ...LEVEL_SET_SETTINGS, maxIterations: 0 })).toThrow(
       "maxIterations must be a positive integer",
     );
+    expect(
+      run({ ...LEVEL_SET_SETTINGS, constraints: { volumeFraction: 1.5 } }),
+    ).toThrow("the volume fraction must be in (0, 1]");
+    expect(run({ ...LEVEL_SET_SETTINGS, tolerance: 0 })).toThrow(
+      "the tolerance must be finite and positive",
+    );
     expect(run({ ...LEVEL_SET_SETTINGS, method: "genetic" })).toThrow(
       'unknown topology-optimization method "genetic"',
     );
