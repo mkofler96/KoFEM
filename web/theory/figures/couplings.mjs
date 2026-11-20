@@ -27,8 +27,25 @@ const record = JSON.parse(
 );
 const { screw, bar } = record;
 
-/** Drawn displacement = this × computed displacement (mm per mm). */
-export const SCREW_PROFILE_ENLARGEMENT = screw.enlargement;
+const niceBelow = (value) => {
+  const power = 10 ** Math.floor(Math.log10(value));
+  return [5, 2, 1].map((m) => m * power).find((v) => v <= value);
+};
+
+/**
+ * Drawn displacement = this × computed displacement (mm per mm). The drawing
+ * is a schematic, so it enlarges more than the result viewers do: the
+ * deepest point of the section sinks at most 3 mm, half the plate's
+ * thickness, so no cell of the grid folds over.
+ */
+export const SCREW_PROFILE_ENLARGEMENT = niceBelow(
+  3 /
+    Math.max(
+      ...Object.values(screw.kinds).flatMap((kind) =>
+        [...kind.section, ...kind.boreBack].flat().map(([, , uz]) => -uz),
+      ),
+    ),
+);
 
 // A second hatch direction, for the second part of a section drawing.
 const HATCH_BACK = `<defs><pattern id="hatch-back" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${palette.muted}" stroke-width="1.2"/></pattern></defs>`;
