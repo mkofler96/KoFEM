@@ -26,6 +26,11 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
   live in `crates/kofem-shellize` (one module per stage), reached through
   `web/src/lib/shellize.ts`; shell element math is in
   `crates/kofem-fem/src/shell`.
+- Prefer Rust for new logic: numerics, geometry and mesh processing, result
+  post-processing, and anything both the app and a script compute. TypeScript
+  keeps the UI, state, wiring and the calls into the WASM modules. Use
+  TypeScript or JavaScript only where Rust would be clearly cumbersome, for
+  example on a page that does not load the Rust module, and say why in the PR.
 - Geometry tessellation is for display. Never call it a mesh; surface and
   volume meshes are FEM discretisations.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,

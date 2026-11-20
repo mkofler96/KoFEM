@@ -41,6 +41,11 @@ const CHECKS = [
     "theory/optimization/capture-evidence.mjs",
     [],
   ],
+  [
+    "the coupling comparisons still match their recorded evidence",
+    "theory/numerical-methods/coupling-evidence.mjs",
+    [],
+  ],
 ];
 
 test.each(CHECKS)("%s", async (_name, file, args) => {

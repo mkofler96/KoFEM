@@ -25,6 +25,7 @@ const NUMERICAL_PAGES = [
   "/theory/numerical-methods/elements-and-quadrature/",
   "/theory/numerical-methods/assembly/",
   "/theory/numerical-methods/loads-and-constraints/",
+  "/theory/numerical-methods/couplings/",
   "/theory/numerical-methods/linear-solve/",
 ];
 const RESULT_PAGES = [
@@ -591,7 +592,7 @@ test("loads and constraints give checkable worked examples and evidence", async 
 test("linear solve links the residual calculation, settings and failure evidence", async ({
   page,
 }) => {
-  const [, , loads, solve] = NUMERICAL_PAGES;
+  const [, , , couplings, solve] = NUMERICAL_PAGES;
   await page.goto(solve);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Linear solve",
@@ -622,13 +623,13 @@ test("linear solve links the residual calculation, settings and failure evidence
   );
   await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
     "href",
-    loads,
+    couplings,
   );
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
     RESULT_PAGES[0],
   );
-  await page.goto(loads);
+  await page.goto(couplings);
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
     solve,
@@ -756,6 +757,45 @@ test("result viewers show the solved example in 3D with its colour bar", async (
   await page.mouse.up();
   expect((await canvas.screenshot()).equals(before)).toBe(false);
   await viewer.getByRole("button", { name: "Reset view" }).click();
+});
+
+test("coupling viewers cut the solved model and show the coupling's legs", async ({
+  page,
+}) => {
+  await page.goto("/theory/numerical-methods/couplings/");
+  const viewer = page.locator("#viewer-coupling-screw-kinematic");
+  // Without script the static figure shows the same section, with the legend.
+  await expect(viewer.locator(".viewer-legend")).toContainText("MPa");
+  await expect(viewer.locator(".viewer-stage > img")).toHaveAttribute(
+    "src",
+    "/theory/viewers/coupling-screw-kinematic.png",
+  );
+  await viewer.scrollIntoViewIfNeeded();
+  const canvas = viewer.locator("canvas");
+  await expect(canvas).toBeVisible();
+  // The section starts where the static figure cuts: through the screw axis.
+  const axis = viewer.getByLabel("Section", { exact: true });
+  await expect(axis).toHaveValue("1");
+  const position = viewer.getByLabel("Section position");
+  await expect(position).toBeVisible();
+  const cut = await canvas.screenshot();
+  // y = 0 is the middle of the slider; move the plane a quarter of the way in.
+  await position.fill(
+    String(Number(await position.getAttribute("max")) * 0.25),
+  );
+  await position.dispatchEvent("input");
+  await expect
+    .poll(async () => (await canvas.screenshot()).equals(cut))
+    .toBe(false);
+  // Off shows the whole model, and the position has nothing to move.
+  await axis.selectOption("off");
+  await expect(position).toBeDisabled();
+  // The pair shares one colour scale, so the two can be compared by colour.
+  expect(
+    await page
+      .locator("#viewer-coupling-screw-distributing .viewer-legend")
+      .textContent(),
+  ).toBe(await viewer.locator(".viewer-legend").textContent());
 });
 
 test("verified reading path reaches reproducible displacement and stress evidence", async ({

@@ -17,7 +17,7 @@ The published articles are `foundations/what-is-fem` (formerly
 articles: gradients/divergence, tensor products, integration by parts, and
 reference-element mappings, the solid-mechanics articles `linear-elasticity`
 and `equilibrium-and-weak-form`, the numerical-methods articles
-`elements-and-quadrature`, `assembly`, `loads-and-constraints` and `linear-solve`,
+`elements-and-quadrature`, `assembly`, `loads-and-constraints`, `couplings` and `linear-solve`,
 and the results articles `displacement-and-stress` and
 `interpretation-and-convergence`. The `reading-a-study` introduction connects
 these topics to `verification/axial-bar` and `verification/strategy`. The shell
@@ -31,7 +31,9 @@ as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
 HTML, figures, viewer data and sitemap. `just test-web theory` checks output, content-map alignment
 and the worked elasticity, linear-solve, stress and SIMP calculations, then executes the four
-axial-bar WASM solves and the recorded topology-optimization benchmarks.
+axial-bar WASM solves and the recorded topology-optimization benchmarks and coupling comparisons
+(`web/theory/numerical-methods/coupling-evidence.mjs`, which also writes the
+coupling article's viewers and their section figures with `--report`).
 
 Articles use the existing examples' native MathML renderer (`tex` / `texBlock`)
 and self-hosted math font. Its supported TeX subset is documented in

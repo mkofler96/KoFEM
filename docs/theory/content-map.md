@@ -34,6 +34,7 @@ published. Renames require redirects and preserved heading anchors.
 | Numerical methods      | `/theory/numerical-methods/elements-and-quadrature/` | How are the displacement field and element integrals approximated?                                         |
 | Numerical methods      | `/theory/numerical-methods/assembly/`                | How do element contributions become the global linear system?                                              |
 | Numerical methods      | `/theory/numerical-methods/loads-and-constraints/`   | How do supported load and displacement conditions enter that system?                                       |
+| Numerical methods      | `/theory/numerical-methods/couplings/`               | What does a kinematic or a distributing coupling do to the surface it grips?                               |
 | Numerical methods      | `/theory/numerical-methods/linear-solve/`            | How is the linear system solved, and what do tolerance and non-convergence mean?                           |
 | Results                | `/theory/results/displacement-and-stress/`           | How are nodal displacement and element von Mises stress produced and displayed?                            |
 | Results                | `/theory/results/interpretation-and-convergence/`    | Which conclusions are justified by a result, and when must the FEM discretisation be refined?              |

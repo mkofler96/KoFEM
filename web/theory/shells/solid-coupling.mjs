@@ -122,8 +122,8 @@ export default {
         ],
         [
           "Distributing, RBE3 style (kind 0)",
-          "Reference translation is a weighted average of patch translations; reference rotation is computed from relative patch motion by the implemented least-squares map.",
-          "Allows patch deformation; the dependent reference can be loaded, but cannot be directly fixed or driven. Automatic partner sets use equal weights. Patch geometry, reach and eccentricity affect behavior.",
+          "The reference follows the patch’s weighted least-squares rigid motion, fitted about the patch centroid and carried to the reference point, rotation included.",
+          'Allows patch deformation; the dependent reference can be loaded, but cannot be directly fixed or driven. Automatic partner sets use equal weights. See <a href="/theory/numerical-methods/couplings/">kinematic and distributing couplings</a>.',
         ],
         [
           "Kinematic, RBE2 style (kind 2)",
