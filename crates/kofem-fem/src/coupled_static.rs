@@ -439,6 +439,15 @@ pub fn prepare_mixed_static(
         ) {
             continue;
         }
+        // So is a gap tie's distributing reference: a node of the other face,
+        // which only its translation joins. A free point, which no element
+        // uses, carries rotations a moment can load.
+        if coupling.kind == CouplingKind::Distributing
+            && solid_used.get(coupling.reference).copied().unwrap_or(false)
+            && !shell_used.get(coupling.reference).copied().unwrap_or(false)
+        {
+            continue;
+        }
         if let Some(flag) = has_rotation.get_mut(coupling.reference) {
             *flag = true;
         }

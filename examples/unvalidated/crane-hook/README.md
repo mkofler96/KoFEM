@@ -73,8 +73,13 @@ the latter stalling at a relative residual of 8e-3. Per-body materials and
 ### The 6 mm example is NOT mesh-converged
 
 An OptiStruct run of the same load case reports max |u| = 0.5482 mm. The shipped
-6 mm model gives 0.2690 mm. That gap is mostly mesh, not physics — the answer is
+6 mm model gave 0.2690 mm. That gap is mostly mesh, not physics — the answer is
 still climbing at 1.5 mm elements.
+
+Since KOF-410 the shipped 6 mm model gives 0.407 mm. Distributing couplings had
+measured their patch's motion at its centroid rather than at the reference
+node, which made the cylinder↔bore and pin↔hook ties too stiff. The study
+below ran before that fix and has not been repeated.
 
 Refinement study, both models per size, materials as above. `F·u` is the
 compliance (twice the strain energy) — the measure to read, since max |u| is a

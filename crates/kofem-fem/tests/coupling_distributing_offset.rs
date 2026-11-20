@@ -194,3 +194,59 @@ fn a_moment_at_an_offset_reference_point_arrives_unscaled() {
     assert_close("force", total, [0.0; 3]);
     assert_close("moment", about_reference, moment);
 }
+
+/// A patch on one line, as a gap tie can pick on a narrow face, and a
+/// reference node off that line.
+const LINE: [[f64; 3]; 4] = [
+    [0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 2.5, 0.0],
+    [0.0, 4.0, 0.0],
+];
+const OFF_LINE: [f64; 3] = [0.5, 1.0, 2.0];
+
+fn line_coupling(reference_has_rotation: bool) -> Result<CouplingConstraints, kofem_fem::FemError> {
+    let mut points = LINE.to_vec();
+    points.push(OFF_LINE);
+    let reference = LINE.len();
+    let mut has_rotation = vec![false; points.len()];
+    has_rotation[reference] = reference_has_rotation;
+    let coupling = Coupling {
+        reference,
+        nodes: (0..LINE.len()).collect(),
+        weights: Vec::new(),
+        kind: CouplingKind::Distributing,
+    };
+    CouplingConstraints::build(&points, &[coupling], &has_rotation)
+}
+
+#[test]
+fn a_tie_node_off_a_line_patch_follows_the_motion_the_line_can_measure() {
+    // A solid node has no rotations: only its translation is tied, and the
+    // patch measures every rotation but the spin about its own line (y), which
+    // carries nothing across to the node.
+    let constraints = line_coupling(false).expect("a solid tie node builds");
+    let reference = LINE.len();
+    let translation = [0.3, -1.2, 0.7];
+    let rotation = [0.02, 0.0, -0.05];
+    let mut values = vec![0.0; DOFS_PER_NODE * (LINE.len() + 1)];
+    for (node, point) in LINE.iter().enumerate() {
+        let turn = cross(rotation, sub(*point, OFF_LINE));
+        for axis in 0..3 {
+            values[DOFS_PER_NODE * node + axis] = translation[axis] + turn[axis];
+        }
+    }
+    let motion = reference_motion(&constraints, reference, &values);
+    assert_close(
+        "translation",
+        [motion[0], motion[1], motion[2]],
+        translation,
+    );
+}
+
+#[test]
+fn a_point_with_rotations_on_a_line_patch_is_refused() {
+    // A point that can carry a moment would drop the part about the line.
+    let error = line_coupling(true).expect_err("a line patch cannot carry a moment");
+    assert!(error.to_string().contains("one line"), "{error}");
+}

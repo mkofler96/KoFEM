@@ -109,7 +109,8 @@ impl CouplingConstraints {
     /// [`FemError::Coupling`] for an out-of-range or repeated node, too few
     /// coupled nodes, bad weights, a kinematic coupling that ties nothing, or
     /// a distributing patch whose rotation cannot be measured (nodes on one
-    /// line); [`FemError::CouplingDofConflict`] for a DOF two couplings
+    /// line, when the reference node has rotations; no extent at all
+    /// otherwise); [`FemError::CouplingDofConflict`] for a DOF two couplings
     /// both eliminate.
     pub fn build(
         points: &[[f64; 3]],
@@ -158,7 +159,7 @@ impl CouplingConstraints {
                     constraints.add_kinematic(points, coupling, dof_mask, has_rotation, &fail)?;
                 }
                 CouplingKind::Distributing => {
-                    constraints.add_distributing(points, coupling, &fail)?;
+                    constraints.add_distributing(points, coupling, has_rotation, &fail)?;
                 }
                 CouplingKind::RelaxedMpc { relaxation } => {
                     constraints.add_relaxed_mpc(points, coupling, relaxation, &fail)?;
@@ -229,6 +230,7 @@ impl CouplingConstraints {
         &mut self,
         points: &[[f64; 3]],
         coupling: &Coupling,
+        has_rotation: &[bool],
         fail: &impl Fn(String) -> FemError,
     ) -> Result<(), FemError> {
         let weights = patch_weights(coupling, "distributing", fail)?;
@@ -262,13 +264,29 @@ impl CouplingConstraints {
                 }
             }
         }
-        let inverse = invert(&inertia).ok_or_else(|| {
-            fail(
-                "the coupled nodes lie on one line, so no rotation can be measured from them — \
-                 pick a surface, or make the coupling kinematic"
-                    .into(),
-            )
-        })?;
+        let inverse = match invert(&inertia) {
+            Some(inverse) => inverse,
+            // A solid node (a gap tie's) has no rotations: only its translation
+            // is tied, and the spin about the patch's line, which the patch
+            // cannot measure, is taken as zero — the least-squares fit of least
+            // norm. A point with rotations could be loaded by a moment about
+            // that line, which the patch could not carry.
+            None if !has_rotation[coupling.reference] => line_pseudo_inverse(&offsets, &weights)
+                .ok_or_else(|| {
+                    fail(format!(
+                        "every coupled node sits at one point, so the patch has no extent to \
+                         follow (reference node {})",
+                        coupling.reference
+                    ))
+                })?,
+            None => {
+                return Err(fail(
+                    "the coupled nodes lie on one line, so no rotation can be measured from \
+                     them — pick a surface, or make the coupling kinematic"
+                        .into(),
+                ))
+            }
+        };
         // U_R = U_c + Θ × (R − c) = U_c − [R − c]× Θ.
         let lever = skew(sub(origin, centroid));
         let mut rows = <[Vec<(usize, f64)>; DOFS_PER_NODE]>::default();
@@ -717,6 +735,37 @@ fn multiply(lhs: &[[f64; 3]; 3], rhs: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
         }
     }
     out
+}
+
+/// Pseudo-inverse of the weighted inertia of a patch on one line, about its
+/// centroid: with the scatter `C = Σ wᵢ dᵢ dᵢᵀ = s·a aᵀ` along the unit
+/// direction a, the inertia is `s (I − a aᵀ)` and its pseudo-inverse
+/// `(I − a aᵀ) / s`. `None` when the patch has no extent (s = 0).
+fn line_pseudo_inverse(offsets: &[[f64; 3]], weights: &[f64]) -> Option<[[f64; 3]; 3]> {
+    let mut scatter = [[0.0; 3]; 3];
+    for (offset, &weight) in offsets.iter().zip(weights) {
+        for row in 0..3 {
+            for column in 0..3 {
+                scatter[row][column] += weight * offset[row] * offset[column];
+            }
+        }
+    }
+    let spread = scatter[0][0] + scatter[1][1] + scatter[2][2];
+    if !(spread.is_finite() && spread > 0.0) {
+        return None;
+    }
+    // The row of the largest diagonal entry is s·a_k·a: the direction, up to sign.
+    let largest = (0..3).max_by(|&lhs, &rhs| scatter[lhs][lhs].total_cmp(&scatter[rhs][rhs]))?;
+    let length = norm(scatter[largest]);
+    let direction = scatter[largest].map(|value| value / length);
+    let mut out = [[0.0; 3]; 3];
+    for (row, line) in out.iter_mut().enumerate() {
+        for (column, value) in line.iter_mut().enumerate() {
+            let identity = if row == column { 1.0 } else { 0.0 };
+            *value = (identity - direction[row] * direction[column]) / spread;
+        }
+    }
+    Some(out)
 }
 
 /// Inverse of a symmetric positive semi-definite 3×3 matrix, or `None` when
