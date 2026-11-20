@@ -9,20 +9,22 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
-import type { ResultType } from "../../store/modelStore";
-import { nodeVonMisesField, resultFraction } from "../../lib/resultField";
+import { nodalResultValues, resultFraction } from "../../lib/resultField";
 import type { MeshTopology } from "./useMeshTopology";
 
 interface ResultsColormapProps {
   topology: MeshTopology;
   deformScale: number;
   onFacePick?: (e: ThreeEvent<MouseEvent>) => void;
+  // The section plane's clipping plane (SectionLayer draws the cut), or none.
+  clippingPlanes: THREE.Plane[];
 }
 
 export function ResultsColormap({
   topology,
   deformScale,
   onFacePick,
+  clippingPlanes,
 }: ResultsColormapProps) {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -31,13 +33,6 @@ export function ResultsColormap({
   const legendRange = useModelStore((s) => s.legendRange);
 
   const { nodeMap, boundaryQuadFaceIds, boundaryTriFaceIds } = topology;
-
-  // Per-node von Mises: volume-weighted average of the element-level stresses,
-  // shared with the colorbar range in resultField so the two stay identical.
-  const nodeVonMises = useMemo(
-    () => (result ? nodeVonMisesField(result, nodes, elements) : null),
-    [result, nodes, elements],
-  );
 
   const deformedSurface = useMemo(() => {
     if (!result) return null;
@@ -52,42 +47,17 @@ export function ResultsColormap({
     // plausible-looking but wrong colormap/deformed shape — bail instead.
     if (disp.length !== nodeMap.size * 3) return null;
 
+    // The plotted field per node, as the legend and the section cut read it.
     // `SolverResult.vonMises` is optional, so an analysis file written before
-    // the field existed (or produced elsewhere) legitimately lacks it. Filling
-    // the missing field with zeros paints every node the same colour, which
-    // reads as a valid uniform-stress result — the same silent zero-fill the
-    // guard above rejects. Bail instead; ResultsPanel already reports
-    // "Von Mises data not available — re-run the solver".
-    if (resultType === "Von Mises stress" && !nodeVonMises) return null;
-
-    // Compute per-node scalar value for the selected result type
-    const nodeValue = (i: number, rt: ResultType): number => {
-      switch (rt) {
-        case "Ux":
-          return disp[i * 3];
-        case "Uy":
-          return disp[i * 3 + 1];
-        case "Uz":
-          return disp[i * 3 + 2];
-        case "Von Mises stress":
-          if (!nodeVonMises)
-            throw new Error(
-              "von Mises node field is unavailable although it was requested",
-            );
-          return nodeVonMises[i];
-        default: {
-          const ux = disp[i * 3],
-            uy = disp[i * 3 + 1],
-            uz = disp[i * 3 + 2];
-          return Math.sqrt(ux * ux + uy * uy + uz * uz);
-        }
-      }
-    };
+    // the field existed legitimately lacks it: null then, and nothing is drawn
+    // rather than a uniform colour that reads as a valid result. ResultsPanel
+    // already reports "Von Mises data not available — re-run the solver".
+    const values = nodalResultValues(result, resultType, nodes, elements);
+    if (!values) return null;
 
     let minVal = Infinity,
       maxVal = -Infinity;
-    for (let i = 0; i < nodes.length; i++) {
-      const val = nodeValue(i, resultType);
+    for (const val of values) {
       if (val < minVal) minVal = val;
       if (val > maxVal) maxVal = val;
     }
@@ -109,7 +79,7 @@ export function ResultsColormap({
     };
     const nodeColor = (id: number): [number, number, number] => {
       const { i } = nodeMap.get(id)!;
-      const frac = resultFraction(nodeValue(i, resultType), colorMin, colorMax);
+      const frac = resultFraction(values[i], colorMin, colorMax);
       const color = new THREE.Color();
       color.setHSL(0.667 * (1 - frac), 1, 0.5);
       return [color.r, color.g, color.b];
@@ -146,7 +116,7 @@ export function ResultsColormap({
     result,
     resultType,
     legendRange,
-    nodeVonMises,
+    elements,
     boundaryQuadFaceIds,
     boundaryTriFaceIds,
     nodeMap,
@@ -168,7 +138,11 @@ export function ResultsColormap({
           args={[deformedSurface.colors, 3]}
         />
       </bufferGeometry>
-      <meshStandardMaterial vertexColors side={THREE.DoubleSide} />
+      <meshStandardMaterial
+        vertexColors
+        side={THREE.DoubleSide}
+        clippingPlanes={clippingPlanes}
+      />
     </mesh>
   );
 }

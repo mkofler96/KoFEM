@@ -103,6 +103,8 @@ pub enum FemError {
          the model is probably not fully constrained"
     )]
     CoarseNotPositiveDefinite { unknowns: usize },
+    #[error("section cut: {reason}")]
+    SectionInput { reason: String },
     #[error("coupling {coupling}: {reason}")]
     Coupling { coupling: usize, reason: String },
     #[error("coupling input is invalid: {reason}")]

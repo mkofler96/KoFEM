@@ -11,6 +11,7 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 mod mixed;
+mod section;
 mod shell;
 mod shellize;
 mod tie;

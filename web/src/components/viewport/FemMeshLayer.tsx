@@ -22,6 +22,8 @@ interface FemMeshLayerProps {
   deformScale: number;
   showResult: boolean;
   onFacePick?: (e: ThreeEvent<MouseEvent>) => void;
+  // The section plane's clipping plane in results mode, or none (KOF-390).
+  clippingPlanes: THREE.Plane[];
 }
 
 export function FemMeshLayer({
@@ -30,6 +32,7 @@ export function FemMeshLayer({
   deformScale,
   showResult,
   onFacePick,
+  clippingPlanes,
 }: FemMeshLayerProps) {
   const result = useModelStore((s) => s.result);
   const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
@@ -297,7 +300,12 @@ export function FemMeshLayer({
               args={[deformedSurfaceEdgePositions, 3]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.4} />
+          <lineBasicMaterial
+            color="#1e3a5f"
+            transparent
+            opacity={0.4}
+            clippingPlanes={clippingPlanes}
+          />
         </lineSegments>
       )}
 
@@ -310,7 +318,12 @@ export function FemMeshLayer({
               args={[deformedEdgePositions, 3]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.4} />
+          <lineBasicMaterial
+            color="#1e3a5f"
+            transparent
+            opacity={0.4}
+            clippingPlanes={clippingPlanes}
+          />
         </lineSegments>
       )}
 
@@ -325,7 +338,12 @@ export function FemMeshLayer({
                 args={[undeformedSurfaceEdgePositions, 3]}
               />
             </bufferGeometry>
-            <lineBasicMaterial color="#6b8cad" transparent opacity={0.5} />
+            <lineBasicMaterial
+              color="#6b8cad"
+              transparent
+              opacity={0.5}
+              clippingPlanes={clippingPlanes}
+            />
           </lineSegments>
         )}
     </group>

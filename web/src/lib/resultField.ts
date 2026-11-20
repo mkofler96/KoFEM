@@ -142,6 +142,40 @@ export function resultFraction(
   return Math.min(1, Math.max(0, (value - min) / span));
 }
 
+// The plotted field per node, in node order: a displacement component or
+// magnitude, or the node-averaged von Mises stress. The result surface's
+// colours, the legend's range and the section cut all read it, so they cannot
+// disagree. Null when von Mises is requested and the result carries none.
+export function nodalResultValues(
+  result: SolverResult,
+  resultType: ResultType,
+  nodes: Node[],
+  elements: Element[],
+): Float64Array | null {
+  const disp = result.displacements;
+  if (disp.length !== nodes.length * 3)
+    throw new Error(
+      `displacement result carries ${disp.length} values for ${nodes.length} nodes (expected ${nodes.length * 3}) — the result is stale or belongs to a different mesh`,
+    );
+  if (resultType === "Von Mises stress")
+    return nodeVonMisesField(result, nodes, elements);
+  const values = new Float64Array(nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    const ux = disp[i * 3],
+      uy = disp[i * 3 + 1],
+      uz = disp[i * 3 + 2];
+    values[i] =
+      resultType === "Ux"
+        ? ux
+        : resultType === "Uy"
+          ? uy
+          : resultType === "Uz"
+            ? uz
+            : Math.sqrt(ux * ux + uy * uy + uz * uz);
+  }
+  return values;
+}
+
 // Min/max of the selected scalar field over all nodes.  Returns null when the
 // field cannot be computed (e.g. Von Mises requested but unavailable).
 export function computeResultRange(
@@ -151,47 +185,13 @@ export function computeResultRange(
   elements: Element[],
 ): ResultRange | null {
   if (nodes.length === 0) return null;
-  const disp = result.displacements;
-  if (disp.length !== nodes.length * 3)
-    throw new Error(
-      `displacement result carries ${disp.length} values for ${nodes.length} nodes (expected ${nodes.length * 3}) — the result is stale or belongs to a different mesh`,
-    );
-
-  let nodeVm: Float64Array | null = null;
-  if (resultType === "Von Mises stress") {
-    nodeVm = nodeVonMisesField(result, nodes, elements);
-    if (!nodeVm) return null;
-  }
-
-  const nodeValue = (i: number): number => {
-    switch (resultType) {
-      case "Ux":
-        return disp[i * 3];
-      case "Uy":
-        return disp[i * 3 + 1];
-      case "Uz":
-        return disp[i * 3 + 2];
-      case "Von Mises stress":
-        if (!nodeVm)
-          throw new Error(
-            "von Mises node field is unavailable although it was requested",
-          );
-        return nodeVm[i];
-      default: {
-        const ux = disp[i * 3],
-          uy = disp[i * 3 + 1],
-          uz = disp[i * 3 + 2];
-        return Math.sqrt(ux * ux + uy * uy + uz * uz);
-      }
-    }
-  };
-
+  const values = nodalResultValues(result, resultType, nodes, elements);
+  if (!values) return null;
   let min = Infinity,
     max = -Infinity;
-  for (let i = 0; i < nodes.length; i++) {
-    const val = nodeValue(i);
-    if (val < min) min = val;
-    if (val > max) max = val;
+  for (const value of values) {
+    if (value < min) min = value;
+    if (value > max) max = value;
   }
   return { min, max };
 }
