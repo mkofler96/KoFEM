@@ -41,7 +41,7 @@ import {
   type ThinWallCheckInput,
 } from "../lib/solve/thinWall.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
-import { inStage, splitStage } from "../lib/workerError.js";
+import { inStage, inStageAsync, splitStage } from "../lib/workerError.js";
 import {
   buildMeshTimeShellModel,
   prepareAutoShellSolve,
@@ -1005,7 +1005,9 @@ function dispatchRequest({
       handleVolumeMesh(id, payload as VolumeMeshPayload);
       return null;
     case "solve":
-      return handleSolve(id, payload as SolvePayload);
+      return inStageAsync("solving", () =>
+        handleSolve(id, payload as SolvePayload),
+      );
     case "thin_wall_check":
       self.postMessage({
         id,
@@ -1014,7 +1016,7 @@ function dispatchRequest({
       });
       return null;
     case "optimize_topology":
-      handleTopOpt(id, payload as TopOptPayload);
+      inStage("solving", () => handleTopOpt(id, payload as TopOptPayload));
       return null;
     case "test_generate_fem_mesh":
       handleTestGenerateFemMesh(id);
