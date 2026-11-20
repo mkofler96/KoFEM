@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { orbitAboutPivot, orbitAngles } from "../../lib/orbitPivot";
+import { WORLD_UP, orbitAboutPivot, orbitAngles } from "../../lib/orbitPivot";
 
 // Turns the view about the model point under the cursor (KOF-345). The orbit
 // controls keep panning and zooming; their own rotation is switched off
@@ -87,7 +87,7 @@ export function OrbitPivot() {
         camera,
         orbit.target,
         drag.pivot,
-        camera.up,
+        WORLD_UP,
         azimuth,
         polar,
       );

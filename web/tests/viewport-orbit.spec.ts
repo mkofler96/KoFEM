@@ -148,6 +148,58 @@ test("a drag keeps turning the view after the cursor leaves the viewport", async
   expectSamePixel(await screenOf(page, [0, 0, 4]), opposite);
 });
 
+// A drag down half the canvas height tilts the view half a turn about the
+// box centre, where a drag on the background turns: from the front, over the
+// top, to the back, upside down. Starts on the background near the top left.
+async function tiltHalfTurn(page: Page) {
+  const canvas = await canvasBox(page);
+  const start = { x: canvas.x + 30, y: canvas.y + 30 };
+  await dragViewport(
+    page,
+    start,
+    { x: start.x, y: start.y + canvas.height / 2 },
+    20,
+  );
+}
+
+// KOF-420: the full rotation of KOF-404 holds up and down too. The tilt
+// stopped at the top view, so the part could not be turned over.
+test("a drag down turns the view over the top, upside down", async ({
+  page,
+}) => {
+  await openBox(page);
+
+  await tiltHalfTurn(page);
+
+  // Upside down: the top face is drawn below the bottom face. Stopped at the
+  // top view, the two centres would coincide on screen.
+  const top = await screenOf(page, [5, 4, 2]);
+  const bottom = await screenOf(page, [5, 0, 2]);
+  expect(top.y - bottom.y).toBeGreaterThan(20);
+});
+
+test("two half turns down bring the view back to where it started", async ({
+  page,
+}) => {
+  await openBox(page);
+  const start = await screenOf(page, FAR_CORNER);
+
+  await tiltHalfTurn(page);
+  await tiltHalfTurn(page);
+
+  expectSamePixel(await screenOf(page, FAR_CORNER), start);
+});
+
+test("Fit View turns an upside-down view upright again", async ({ page }) => {
+  await openBox(page);
+  const fitted = await screenOf(page, FAR_CORNER);
+  await tiltHalfTurn(page);
+
+  await page.getByRole("button", { name: "Fit View" }).click();
+
+  expectSamePixel(await screenOf(page, FAR_CORNER), fitted);
+});
+
 test("releasing the button outside the viewport ends the drag", async ({
   page,
 }) => {
