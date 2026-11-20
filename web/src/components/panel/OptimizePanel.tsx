@@ -113,11 +113,14 @@ export function OptimizePanel({
   const rerunTopOptWithMoreIterations = useModelStore(
     (s) => s.rerunTopOptWithMoreIterations,
   );
-  const clearTopOptRunRequest = useModelStore((s) => s.clearTopOptRunRequest);
   useEffect(() => {
     if (!runRequested) return;
-    clearTopOptRunRequest();
-    if (isOptimizing) return;
+    // Take the request from the store, not from this render: StrictMode
+    // replays the effect with the same closure, which must not run twice.
+    const state = useModelStore.getState();
+    if (!state.topOptRunRequested) return;
+    state.clearTopOptRunRequest();
+    if (state.isOptimizing) return;
     if (allOk) optimize();
     else
       setError(

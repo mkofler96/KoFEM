@@ -27,6 +27,12 @@ test("TO convergence: a run stopped at its limit says so, and runs again with a 
   page.on("pageerror", (e) =>
     console.error(`[to-convergence] page error: ${e.message}`),
   );
+  // The worker's log reaches the console; one line ends each run.
+  const completions: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.text().includes("Topology optimization complete"))
+      completions.push(msg.text());
+  });
 
   // A tolerance no design meets in three iterations: the run hits its cap.
   await configureRun(page, "3", "0.000001");
@@ -67,6 +73,20 @@ test("TO convergence: a run stopped at its limit says so, and runs again with a 
       ).__kofemStore.getState().topOpt.maxIterations,
   );
   expect(maxIterations).toBe("6");
+
+  // "Run again" starts one run, not one per mount of the Optimize panel
+  // (React StrictMode replays its effects). The worker answers in order, so
+  // once a no-op request returns, every run sent before it has logged.
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __kofem: {
+          sendToWorker(type: string, payload: object): Promise<unknown>;
+        };
+      }
+    ).__kofem.sendToWorker("init", {}),
+  );
+  expect(completions).toHaveLength(2);
 });
 
 test("TO convergence: a converged run shows no notice @pipeline", async ({
