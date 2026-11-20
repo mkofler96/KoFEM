@@ -10,6 +10,10 @@
 
 import type { TopOptHistoryEntry } from "../lib/solve/contracts.js";
 import type { SliceCreator } from "./modelStore";
+import {
+  raisedIterationLimit,
+  type TopOptConvergence,
+} from "../lib/topOptConvergence";
 import { ensurePlot } from "./studySlice";
 
 // The two objectives the panel offers: minimize compliance under a volume
@@ -58,8 +62,9 @@ export interface TopOptSettingsState {
 }
 
 // A completed run's output: one density per element (solve/element order) plus
-// the per-iteration history that drives the convergence plot (KOF-233).
-export interface DensityResult {
+// the per-iteration history that drives the convergence plot (KOF-233), and
+// whether the run converged or stopped at its iteration limit (KOF-412).
+export interface DensityResult extends TopOptConvergence {
   density: Float64Array;
   // Level-set runs only: φ per node, aligned with the store's `nodes` array.
   levelSet?: Float64Array;
@@ -111,6 +116,9 @@ export interface TopOptSlice {
   isOptimizing: boolean;
   densityResult: DensityResult | null;
   liveDensity: LiveDensity | null;
+  // A run asked for from outside the Optimize panel (KOF-412: "Run again" on
+  // Results). The panel starts it when it mounts, and clears the request.
+  topOptRunRequested: boolean;
 
   setTopOptMethod(method: TopOptMethod): void;
   setTopOptObjective(objective: TopOptObjective): void;
@@ -120,6 +128,8 @@ export interface TopOptSlice {
   setOptimizing(v: boolean): void;
   setDensityResult(result: DensityResult | null): void;
   setLiveDensity(live: LiveDensity | null): void;
+  rerunTopOptWithMoreIterations(): void;
+  clearTopOptRunRequest(): void;
 }
 
 export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
@@ -127,6 +137,7 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   isOptimizing: false,
   densityResult: null,
   liveDensity: null,
+  topOptRunRequested: false,
 
   // Changing any setting makes an existing density stale — it was computed with
   // the previous setup. Clear it so the Optimize/Results nav steps no longer read
@@ -177,5 +188,23 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   setLiveDensity: (live) =>
     set((s) => {
       s.liveDensity = live;
+    }),
+  // Run a capped optimization again with twice its iteration limit. It starts
+  // from scratch: the optimizers take no starting design. Raising the limit
+  // makes the capped design stale, as any settings change does.
+  rerunTopOptWithMoreIterations: () =>
+    set((s) => {
+      const run = s.densityResult;
+      if (run === null || run.converged)
+        throw new Error(
+          "rerunTopOptWithMoreIterations: the last optimization converged or there is none — nothing to run again",
+        );
+      s.topOpt.maxIterations = String(raisedIterationLimit(run.iterations));
+      s.densityResult = null;
+      s.topOptRunRequested = true;
+    }),
+  clearTopOptRunRequest: () =>
+    set((s) => {
+      s.topOptRunRequested = false;
     }),
 });

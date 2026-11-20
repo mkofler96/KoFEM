@@ -304,6 +304,8 @@ export function useTopOpt() {
       density: Float64Array;
       levelSet?: Float64Array;
       history: TopOptHistoryEntry[];
+      converged: boolean;
+      iterations: number;
     }>("optimize_topology", {
       nodes,
       elements,
@@ -316,8 +318,8 @@ export function useTopOpt() {
       couplings: couplingGroups,
       settings: { ...settings, passive: passiveElements(elements, properties) },
     })
-      .then(({ density, levelSet, history }) => {
-        setDensityResult({ density, levelSet, history });
+      .then(({ density, levelSet, history, converged, iterations }) => {
+        setDensityResult({ density, levelSet, history, converged, iterations });
         track("solve_completed", {
           workflow,
           analysis_type: "topology",

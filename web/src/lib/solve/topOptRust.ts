@@ -120,11 +120,16 @@ function objectiveBound(settings: TopOptSettings): number | undefined {
 
 // What a run returns: the element densities, and for the level-set method
 // φ per vertex in store node order (buildVertexIndexer), which the viewport
-// contours at φ = 0.
+// contours at φ = 0. `converged` is false when the run stopped at its
+// iteration limit (KOF-412): its design is not an optimum. `iterations` is
+// how many it ran; a capped run that fell back to an earlier feasible design
+// ran more than its history keeps.
 export interface TopOptRunResult {
   density: Float64Array;
   levelSet?: Float64Array;
   history: TopOptHistoryEntry[];
+  converged: boolean;
+  iterations: number;
 }
 
 // The level-set run's arguments from the wire settings, refused with the
@@ -491,6 +496,7 @@ function runToCompletion(
 ): TopOptRunResult {
   const history: TopOptHistoryEntry[] = [];
   let converged = false;
+  let iterations = 0;
   for (;;) {
     const step = run.step();
     try {
@@ -512,6 +518,7 @@ function runToCompletion(
       if (step.stream) onDensity(step.densityIteration, run.density);
       if (step.finished) {
         converged = step.converged;
+        iterations = step.iteration;
         break;
       }
     } finally {
@@ -531,6 +538,6 @@ function runToCompletion(
     `[topopt] complete: ${history.length} iteration(s), ${converged ? "converged" : "hit max_iterations"}; returning ${returning}`,
   );
   return levelSet === undefined
-    ? { density, history }
-    : { density, levelSet, history };
+    ? { density, history, converged, iterations }
+    : { density, levelSet, history, converged, iterations };
 }

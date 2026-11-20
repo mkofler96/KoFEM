@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { Study, TopOptNumericField } from "../../store/modelStore";
 import { useTopOpt, type FieldErrors } from "../../hooks/useTopOpt";
@@ -10,6 +10,7 @@ import { convergenceFromLogs } from "../../lib/topOptProgress";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LogSection } from "./LogSection";
+import { NotConvergedNotice } from "./NotConvergedNotice";
 import { PreflightChecks } from "./PreflightChecks";
 import styles from "./Panel.module.css";
 
@@ -104,6 +105,25 @@ export function OptimizePanel({
   const allOk = modelOk && staticCase !== null;
   const liveDensity = useModelStore((s) => s.liveDensity);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // A run that stopped at its iteration limit (KOF-412) offers to run again
+  // with a higher one; Results asks for that run too, and this panel starts it.
+  const densityResult = useModelStore((s) => s.densityResult);
+  const runRequested = useModelStore((s) => s.topOptRunRequested);
+  const rerunTopOptWithMoreIterations = useModelStore(
+    (s) => s.rerunTopOptWithMoreIterations,
+  );
+  const clearTopOptRunRequest = useModelStore((s) => s.clearTopOptRunRequest);
+  useEffect(() => {
+    if (!runRequested) return;
+    clearTopOptRunRequest();
+    if (isOptimizing) return;
+    if (allOk) optimize();
+    else
+      setError(
+        "Could not run the optimization again: resolve the failed checks above first.",
+      );
+  });
 
   // Live convergence curve, parsed from the streamed "[topopt] it N: …" log
   // lines as they arrive. The density field streams separately (KOF-240) and is
@@ -306,6 +326,13 @@ export function OptimizePanel({
               </>
             )}
           </>
+        )}
+
+        {densityResult && !isOptimizing && (
+          <NotConvergedNotice
+            run={densityResult}
+            onRerun={rerunTopOptWithMoreIterations}
+          />
         )}
 
         <button

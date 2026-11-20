@@ -9,7 +9,7 @@ import type {
   ResultType,
   SolverResult,
 } from "../../store/modelStore";
-import type { TreeTarget } from "../../store/viewSlice";
+import { modeSelection, type TreeTarget } from "../../store/viewSlice";
 import {
   computeResultRange,
   resultFieldSymbol,
@@ -34,16 +34,20 @@ import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { LegendRangeControls } from "./LegendRangeControls";
+import { NotConvergedNotice } from "./NotConvergedNotice";
 import { RefinementResult } from "./RefinementStudy";
 import styles from "./Panel.module.css";
 
 // The density-field result view (KOF-233): the threshold slider that filters the
 // viewport, the convergence plot from the returned history, and the run summary.
-// Shown whenever a topology-optimization run is the active result.
+// Shown whenever a topology-optimization run is the active result. A run that
+// stopped at its iteration limit says so first (KOF-412).
 function TopOptSummary({
   density,
   levelSet,
   history,
+  converged,
+  iterations,
   footer,
 }: DensityResult & { footer: ReactNode }) {
   // Changing any TO setting clears the density result, so the store's settings
@@ -75,9 +79,18 @@ function TopOptSummary({
       : {}),
   }));
 
+  // Run again on the Optimize panel, which starts the requested run.
+  const rerun = () => {
+    const { rerunTopOptWithMoreIterations, selectTreeNode } =
+      useModelStore.getState();
+    rerunTopOptWithMoreIterations();
+    selectTreeNode(modeSelection("optimize", useModelStore.getState()));
+  };
+
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
+        <NotConvergedNotice run={{ converged, iterations }} onRerun={rerun} />
         <DensityThresholdControl density={density} />
 
         {points.length > 0 && (

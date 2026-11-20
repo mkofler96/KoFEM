@@ -391,3 +391,24 @@ describe("coupled topology optimization: Rust against the C++ engine", () => {
     );
   });
 });
+
+// KOF-412: a run that stops at its iteration cap says so.
+describe("shell and coupled topology optimization report whether they converged", () => {
+  test("a shell run capped before it settles is not converged", () => {
+    const rust = inRust("shell", buildShellEngineInputs(plateModel(16)), {
+      ...PLATE_SETTINGS,
+      maxIterations: 3,
+    });
+    expect(rust.converged).toBe(false);
+    expect(rust.iterations).toBe(3);
+  });
+
+  test("a coupled run capped before it settles is not converged", () => {
+    const rust = inRust("coupled", wallOnBlock(), {
+      ...WALL_SETTINGS,
+      maxIterations: 2,
+    });
+    expect(rust.converged).toBe(false);
+    expect(rust.iterations).toBe(2);
+  });
+});
