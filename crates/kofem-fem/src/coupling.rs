@@ -12,8 +12,9 @@
 //! one-pass reduction `K_r = TᵀKT` needs.
 //!
 //! * Distributing (RBE3): the reference node's six DOFs are dependent — the
-//!   weighted mean translation of the coupled nodes and their weighted
-//!   least-squares rotation. It adds no stiffness, so the coupled surface
+//!   weighted least-squares rigid motion of the coupled nodes, fitted about
+//!   their weighted centroid and carried to the reference point, wherever it
+//!   sits. It adds no stiffness, so the coupled surface
 //!   stays flexible, but the point can only be loaded, never fixed or driven.
 //! * Kinematic (RBE2): the coupled nodes are dependent and follow the
 //!   reference node as a rigid body, `u_i = u_R + θ_R × r_i`. The point stays
@@ -42,7 +43,8 @@ pub const ALL_DOFS: u8 = 0x3f;
 /// How a coupling joins its reference node to its coupled nodes.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CouplingKind {
-    /// RBE3: the reference node follows the weighted mean of the coupled nodes.
+    /// RBE3: the reference node follows the weighted least-squares rigid
+    /// motion of the coupled nodes, measured at the reference point.
     Distributing,
     /// RBE2: the coupled nodes follow the reference node rigidly. Bit c of
     /// `dof_mask` ties DOF c (0..2 translations, 3..5 rotations) of every
@@ -107,7 +109,7 @@ impl CouplingConstraints {
     /// [`FemError::Coupling`] for an out-of-range or repeated node, too few
     /// coupled nodes, bad weights, a kinematic coupling that ties nothing, or
     /// a distributing patch whose rotation cannot be measured (nodes on one
-    /// line through the reference point); [`FemError::CouplingDofConflict`] for a DOF two couplings
+    /// line); [`FemError::CouplingDofConflict`] for a DOF two couplings
     /// both eliminate.
     pub fn build(
         points: &[[f64; 3]],
@@ -232,18 +234,28 @@ impl CouplingConstraints {
         let weights = patch_weights(coupling, "distributing", fail)?;
         let total: f64 = weights.iter().sum();
         let origin = points[coupling.reference];
+        // Fit the rigid motion about the weighted centroid c, where Σ wᵢ dᵢ = 0
+        // drops the translation out of the least-squares rotation, then carry
+        // it to the reference point R. Fitting about R itself would be off by
+        // the lever arm c − R whenever the point is not at the centroid
+        // (KOF-410): a force there would lose its moment, a moment there would
+        // arrive scaled.
+        let mut centroid = [0.0; 3];
+        for (&node, &weight) in coupling.nodes.iter().zip(&weights) {
+            for (axis, value) in centroid.iter_mut().enumerate() {
+                *value += weight / total * points[node][axis];
+            }
+        }
         let offsets: Vec<[f64; 3]> = coupling
             .nodes
             .iter()
-            .map(|&node| sub(points[node], origin))
+            .map(|&node| sub(points[node], centroid))
             .collect();
-        // S = Σ wᵢ rᵢ and the weighted inertia H = Σ wᵢ (|rᵢ|² I − rᵢ rᵢᵀ).
-        let mut moment = [0.0; 3];
+        // The weighted inertia about the centroid, H = Σ wᵢ (|dᵢ|² I − dᵢ dᵢᵀ).
         let mut inertia = [[0.0; 3]; 3];
         for (offset, &weight) in offsets.iter().zip(&weights) {
             let squared = dot(*offset, *offset);
             for row in 0..3 {
-                moment[row] += weight * offset[row];
                 for column in 0..3 {
                     let identity = if row == column { squared } else { 0.0 };
                     inertia[row][column] += weight * (identity - offset[row] * offset[column]);
@@ -252,31 +264,38 @@ impl CouplingConstraints {
         }
         let inverse = invert(&inertia).ok_or_else(|| {
             fail(
-                "the coupled nodes lie on one line through the reference point, so no rotation \
-                 can be measured from them — pick a surface, or make the coupling kinematic"
+                "the coupled nodes lie on one line, so no rotation can be measured from them — \
+                 pick a surface, or make the coupling kinematic"
                     .into(),
             )
         })?;
-        let skew_moment = skew(moment);
+        // U_R = U_c + Θ × (R − c) = U_c − [R − c]× Θ.
+        let lever = skew(sub(origin, centroid));
         let mut rows = <[Vec<(usize, f64)>; DOFS_PER_NODE]>::default();
         for ((&node, offset), &weight) in coupling.nodes.iter().zip(&offsets).zip(&weights) {
             let share = weight / total;
-            // U_R = Σ (wᵢ/W) uᵢ.
-            for (component, row) in rows.iter_mut().take(3).enumerate() {
-                row.push((DOFS_PER_NODE * node + component, share));
-            }
-            // Θ_R = H⁻¹ · Σ (wᵢ [rᵢ]× − (wᵢ/W) [S]×) uᵢ.
-            let skew_offset = skew(*offset);
-            let mut inner = [[0.0; 3]; 3];
-            for row in 0..3 {
-                for column in 0..3 {
-                    inner[row][column] =
-                        weight * skew_offset[row][column] - share * skew_moment[row][column];
+            // Θ_R = H⁻¹ · Σ wᵢ [dᵢ]× uᵢ.
+            let mut inner = skew(*offset);
+            for line in &mut inner {
+                for value in line.iter_mut() {
+                    *value *= weight;
                 }
             }
-            let map = multiply(&inverse, &inner);
+            let spin = multiply(&inverse, &inner);
+            let carried = multiply(&lever, &spin);
+            for (component, row) in rows.iter_mut().take(3).enumerate() {
+                for (target, &coefficient) in carried[component].iter().enumerate() {
+                    let identity = if target == component { share } else { 0.0 };
+                    let value = identity - coefficient;
+                    // A point at the centroid has no lever arm: keep its rows
+                    // to the plain weighted mean.
+                    if target == component || value != 0.0 {
+                        row.push((DOFS_PER_NODE * node + target, value));
+                    }
+                }
+            }
             for (axis, row) in rows.iter_mut().skip(3).enumerate() {
-                for (component, &coefficient) in map[axis].iter().enumerate() {
+                for (component, &coefficient) in spin[axis].iter().enumerate() {
                     row.push((DOFS_PER_NODE * node + component, coefficient));
                 }
             }

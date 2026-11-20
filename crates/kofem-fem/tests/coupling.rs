@@ -617,8 +617,7 @@ fn modelling_errors_are_named() {
         }
     );
 
-    // A distributing coupling needs three nodes that do not lie on one line
-    // with the point.
+    // A distributing coupling needs nodes that do not all lie on one line.
     let edge = model.nodes_where(|node| {
         (node[0] - LENGTH).abs() < 1e-9 && (node[2] - HEIGHT / 2.0).abs() < 1e-9
     });

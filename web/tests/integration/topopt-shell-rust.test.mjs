@@ -11,7 +11,9 @@
 // The models are the cases of engine/tests/topology_shell_validation.cpp: a
 // simply-supported plate under a uniform pressure (a store model, through
 // buildShellEngineInputs as the worker builds it), and a solid block with a
-// thin shell wall hanging from it on distributing couplings.
+// thin shell wall hanging from it on distributing couplings. The wall's
+// stored C++ runs carry the KOF-410 coupling error, so it is checked on its
+// own (see its describe below); the refusals still match the engine.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { buildShellEngineInputs } from "../../src/lib/solve/shell.ts";
@@ -282,8 +284,7 @@ function compare(rust, engine) {
 }
 
 // Both solve to a 1e-5 relative force residual with IC(0) CG, the engine's
-// setting for these domains. Measured: the plate's histories agree to 1e-11,
-// the coupled wall's to 3e-7 (its reduction sums in a different order).
+// setting for these domains. Measured: the plate's histories agree to 1e-11.
 function expectSameRun(rust, engine) {
   expect(rust.history.length).toBe(engine.history.length);
   const difference = compare(rust, engine);
@@ -358,25 +359,42 @@ describe("shell topology optimization: Rust against the C++ engine", () => {
   });
 });
 
-describe("coupled topology optimization: Rust against the C++ engine", () => {
-  test("the wall on a block gives the engine's history and design", async () => {
-    const engine = await inEngine("coupled", wallOnBlock(), WALL_SETTINGS);
+// The wall hangs from the block on distributing couplings whose reference
+// nodes sit up to 20 mm from their patches' centroids. The C++ engine measured
+// the patch motion at the centroid, not at the reference node (KOF-410), so
+// its stored runs of this model are no reference: the wall's run is checked
+// for what an optimum must satisfy instead, and the two objectives against
+// each other.
+describe("coupled topology optimization: the wall on a block", () => {
+  test("min_compliance meets its volume and lowers the compliance", () => {
     const rust = inRust("coupled", wallOnBlock(), WALL_SETTINGS);
     expect(rust.density).toHaveLength(12 + 8);
-    expectSameRun(rust, engine);
     expect(rust.logs[0]).toContain("12 tets + 8 facets");
+    expect(rust.logs.at(-1)).toContain("converged");
+    const [first, last] = [rust.history[0], rust.history.at(-1)];
+    expect(last.compliance).toBeLessThan(first.compliance);
+    expect(Math.abs(last.volume - 0.5)).toBeLessThan(1e-3);
+    for (const rho of rust.density) {
+      expect(rho).toBeGreaterThan(0);
+      expect(rho).toBeLessThanOrEqual(1);
+    }
   });
 
-  test("min_volume matches", async () => {
+  test("min_volume at the min_compliance optimum returns to its volume", () => {
     const reference = inRust("coupled", wallOnBlock(), WALL_SETTINGS);
+    const limit = reference.history.at(-1).compliance;
     const settings = {
       ...WALL_SETTINGS,
       objective: "min_volume",
-      constraints: { complianceLimit: reference.history.at(-1).compliance },
+      constraints: { complianceLimit: limit },
     };
-    const engine = await inEngine("coupled", wallOnBlock(), settings);
     const rust = inRust("coupled", wallOnBlock(), settings);
-    expectSameRun(rust, engine);
+    expect(rust.logs.at(-1)).toContain("converged");
+    const last = rust.history.at(-1);
+    expect(last.compliance).toBeLessThanOrEqual(
+      limit * (1 + WALL_SETTINGS.tolerance),
+    );
+    expect(Math.abs(last.volume - 0.5)).toBeLessThan(WALL_SETTINGS.tolerance);
   });
 
   test("refuses a prescribed displacement, as the engine does", async () => {

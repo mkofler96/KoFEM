@@ -400,6 +400,51 @@ function tiedAcrossGap() {
   return model;
 }
 
+// The same cantilever without the cut: one beam of the tied model's full
+// length, the materials split where the cut was. A tie across a gap stands
+// for this beam, so it must be about as stiff.
+function uncutBeam() {
+  const model = emptyModel();
+  const far = 2 * LENGTH + 0.5;
+  addBeam(model, { x0: 0, length: far, height: HEIGHT, nx: 18, split: LENGTH });
+  const tipIds = idsWhere(model, (node) => near(node.x, far));
+  const point = addPoint(model, far, HEIGHT / 2, HEIGHT / 2);
+  model.couplings = [
+    {
+      name: "Tip",
+      kind: "distributing",
+      dofs: [0, 1, 2, 3, 4, 5],
+      refNodeId: point,
+      faces: [{ nodeIds: tipIds }],
+    },
+  ];
+  model.constraints = clampAll(idsWhere(model, (node) => near(node.x, 0)));
+  model.loads = [
+    { nodeId: point, dof: 2, value: -600 },
+    { nodeId: point, dof: 4, value: 15000 },
+  ];
+  return model;
+}
+
+// The largest displacement of a model solved in Rust alone.
+async function peakDisplacement(model) {
+  const inputs = buildCoupledEngineInputs(model, discard);
+  const raw = await solveCoupledSolidInRust(
+    fem,
+    inputs,
+    1,
+    "amg",
+    undefined,
+    neverAsk,
+    discard,
+  );
+  const { displacements } = mapMixedResult(model, inputs.model, raw);
+  return displacements.reduce(
+    (peak, value) => Math.max(peak, Math.abs(value)),
+    0,
+  );
+}
+
 // The wall bracket meshed by Netgen at `maxElementSize` (mm), as a store
 // model with two materials (split halfway along its length), and the helpers
 // the cases pick nodes with.
@@ -532,7 +577,6 @@ describe("linear elements", () => {
     ],
     ["A clamped kinematic reference point holds the root", boltedRoot],
     ["A rigid point-to-point connection between two beams", rigidJoint],
-    ["A tie across a gap together with a coupling", tiedAcrossGap],
     ["Wall bracket (Netgen mesh) with two couplings", bracketWithTwoCouplings],
   ])("%s", (_label, buildModel) => {
     let outcome = null;
@@ -558,6 +602,21 @@ describe("linear elements", () => {
     test("von Mises stresses agree", () => {
       expect(outcome.stress.relative).toBeLessThan(1e-4);
     });
+  });
+});
+
+// A gap tie joins the two beams with distributing couplings: each node of
+// one face follows the rigid motion of the patch of the other face around it,
+// carried across to where the node is. The C++ engine measured that motion at
+// the patch's centroid instead, which welded the cut stiff (KOF-410): its
+// stored result for this model is 0.18 mm at the tip, against 0.45 mm for the
+// uncut beam, so it is no reference here. The beam without the cut is.
+describe("A tie across a gap together with a coupling", () => {
+  test("is as stiff as the beam without the cut", async () => {
+    const tied = await peakDisplacement(tiedAcrossGap());
+    const uncut = await peakDisplacement(uncutBeam());
+    expect(uncut).toBeGreaterThan(0);
+    expect(Math.abs(tied - uncut) / uncut).toBeLessThan(0.05);
   });
 });
 
