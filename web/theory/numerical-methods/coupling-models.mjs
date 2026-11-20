@@ -9,9 +9,11 @@
 //
 //   screwHead   a plate with a clearance hole, its lower face fixed on a rigid
 //               base; a screw head bears on the ring of the top face around
-//               the hole.
-//               The ring is coupled to a point on the screw axis, which
-//               carries the screw force.
+//               the hole. The plate is two bonded solids, the ring under the
+//               head and the rest, so the ring is its own face (as a user
+//               splits it off to pick it) and is meshed finer.
+//               The ring is coupled to a point on the screw axis, at the
+//               height of the top face, which carries the screw force.
 //   cantilever  a square bar clamped at its root; its free end face is
 //               coupled to a point at the face centre, which carries a
 //               transverse force or a torque.
@@ -20,7 +22,9 @@ import { freshEngine } from "../../../examples/validation/lib/pipeline.mjs";
 import { rustFem } from "../../../examples/validation/lib/solver.mjs";
 import { APP_STEEL } from "../../../examples/validation/lib/recipe.mjs";
 import {
-  plateWithHoleStep,
+  circleLoop,
+  extrudedProfilesStep,
+  line,
   prismStep,
 } from "../../../examples/gallery/step-prism.mjs";
 import {
@@ -36,12 +40,13 @@ const ORDER = 2;
 
 /** The screw-head model's dimensions (mm) and load (N). */
 export const SCREW = Object.freeze({
-  halfWidth: 20,
+  halfWidth: 16,
   thickness: 6,
   holeRadius: 4.5, // M8 clearance hole
   headRadius: 8, // the head (or washer) bears out to this radius
   force: 5000, // screw force, pressing the head into the plate (−z)
-  meshSize: 1.25,
+  meshSize: 1.25, // the plate
+  ringMeshSize: 0.5, // the ring under the head
 });
 
 /** The cantilever's dimensions (mm) and loads (N, N·mm). */
@@ -58,8 +63,11 @@ const TESSELLATE = JSON.stringify({
   angular_deflection: 0.5,
 });
 
-/** Mesh STEP text as the app does; the mesh with its CAD face of each surface triangle. */
-async function meshStep(stepText, maxElementSize) {
+/**
+ * Mesh STEP text as the app does; the mesh with its CAD face of each surface
+ * triangle. `solidSizes` gives each solid its own largest element size.
+ */
+async function meshStep(stepText, maxElementSize, solidSizes) {
   const engine = await freshEngine();
   engine.tessellate_step(new TextEncoder().encode(stepText), TESSELLATE);
   const mesh = engine.generate_fem_mesh(
@@ -72,6 +80,7 @@ async function meshStep(stepText, maxElementSize) {
       elementspercurve: 2.0,
       optsteps_2d: 3,
       optsteps_3d: 3,
+      ...(solidSizes ? { solid_max_sizes: solidSizes } : {}),
     }),
   );
   if ("overlaps" in mesh)
@@ -118,6 +127,12 @@ function faceNodes(mesh, faces) {
   return [...ids];
 }
 
+/** The ids of the nodes elements use that satisfy `test`. */
+function solidNodes(model, test) {
+  const used = new Set(model.elements.flatMap((e) => e.nodeIds));
+  return [...used].filter((id) => test(model.nodes[id]));
+}
+
 /** A reference point: a store node no element uses. */
 function addPoint(model, [x, y, z]) {
   const id = model.nodes.length;
@@ -152,22 +167,43 @@ async function solve(model) {
   return { ...result, nodalVonMises: nodal };
 }
 
+/** The STEP text of the screw-head plate: the ring under the head, bonded to the rest. */
+export function screwPlateStep() {
+  const { halfWidth: b, holeRadius: a, headRadius: r, thickness: t } = SCREW;
+  return extrudedProfilesStep(
+    [
+      {
+        outer: circleLoop([0, 0], r, true),
+        holes: [circleLoop([0, 0], a, false)],
+      },
+      {
+        outer: [line([b, -b]), line([b, b]), line([-b, b]), line([-b, -b])],
+        holes: [circleLoop([0, 0], r, false)],
+      },
+    ],
+    t,
+    "Plate",
+  );
+}
+
 /** The screw-head model with the given coupling kind, solved. */
 export async function screwHead(kind) {
   const s = SCREW;
-  const mesh = await meshStep(
-    plateWithHoleStep(s.holeRadius, s.halfWidth, s.thickness, "Plate"),
+  const mesh = await meshStep(screwPlateStep(), s.meshSize, [
+    s.ringMeshSize,
     s.meshSize,
-  );
+  ]);
   const model = storeModel(mesh);
-  // Faces of plateWithHoleStep: 1–4 the edges, 5 the hole, 6 z = 0, 7 the top.
+  const tol = 1e-6;
   // The lower face stands on a rigid base: fixed.
-  model.constraints = clamp(faceNodes(mesh, [6]));
-  const ring = faceNodes(mesh, [7]).filter((id) => {
-    const { x, y } = model.nodes[id];
-    return Math.hypot(x, y) <= s.headRadius + 1e-9;
-  });
-  const point = addPoint(model, [0, 0, s.thickness / 2]);
+  model.constraints = clamp(solidNodes(model, ({ z }) => Math.abs(z) < tol));
+  // The ring under the head: the top face out to the head's radius.
+  const ring = solidNodes(
+    model,
+    ({ x, y, z }) =>
+      Math.abs(z - s.thickness) < tol && Math.hypot(x, y) <= s.headRadius + tol,
+  );
+  const point = addPoint(model, [0, 0, s.thickness]);
   model.couplings = [
     {
       name: "Screw head",

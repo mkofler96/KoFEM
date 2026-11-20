@@ -27,18 +27,8 @@ const record = JSON.parse(
 );
 const { screw, bar } = record;
 
-const niceBelow = (value) => {
-  const power = 10 ** Math.floor(Math.log10(value));
-  return [5, 2, 1].map((m) => m * power).find((v) => v <= value);
-};
-
-const deepest = Math.max(
-  ...Object.values(screw.kinds).flatMap((kind) =>
-    kind.section.flat().map(([, , uz]) => -uz),
-  ),
-);
 /** Drawn displacement = this × computed displacement (mm per mm). */
-export const SCREW_PROFILE_ENLARGEMENT = niceBelow(1.2 / deepest);
+export const SCREW_PROFILE_ENLARGEMENT = screw.enlargement;
 
 // A second hatch direction, for the second part of a section drawing.
 const HATCH_BACK = `<defs><pattern id="hatch-back" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${palette.muted}" stroke-width="1.2"/></pattern></defs>`;
@@ -48,7 +38,7 @@ const hatched = (points, back = false) =>
   polygon(points, "", `style="fill:url(#${back ? "hatch-back" : "hatch"})"`);
 
 const REACH = Math.max(...screw.grid.xs);
-const PANEL = 205;
+const PANEL = 250;
 const X = scale([-REACH, REACH], [70, 610]);
 const PX = X(1) - X(0); // pixels per mm, both directions
 
@@ -69,16 +59,17 @@ function breakLine(from, to) {
 /**
  * One panel of the section through the screw axis, around the hole, seen
  * from −y: the cut face with a structured grid, the back half of the bore
- * through the hole, the fixed base under the plate, the coupling's legs to
- * the ring (on the cut, and fainter behind it) and the force on the point.
+ * through the hole, the fixed base under the plate, the coupled ring with
+ * the coupling's legs to its nodes on the cut, and the force on the point,
+ * which sits on the axis at the height of the top face.
  * `kind` null draws the undeformed model.
  */
 function sectionPanel(kind, top, heading) {
   const { thickness: t, holeRadius: a, headRadius: r } = screw.model;
-  const { xs, zs, phis, ringRadii } = screw.grid;
+  const { xs, zs, phis } = screw.grid;
   const E = kind ? SCREW_PROFILE_ENLARGEMENT : 0;
   const data = kind ? screw.kinds[kind] : null;
-  const zBase = top + 48 + PX * t; // pixel row of z = 0
+  const zBase = top + 72 + PX * t; // pixel row of z = 0
   const P = (x, z, u = [0, 0, 0]) => [
     X(x + E * u[0]),
     zBase - PX * (z + E * u[2]),
@@ -117,21 +108,6 @@ function sectionPanel(kind, top, heading) {
         ),
       );
     }
-  // Legs behind the cut, to the ring on the top face beyond the hole.
-  const ref = P(0, t / 2, data ? [0, 0, -data.pointDeflection] : undefined);
-  ringRadii.forEach((radius, ri) =>
-    phis.forEach((phi, j) => {
-      if (phi === 0 || phi === 180 || j % 2 === 1) return;
-      parts.push(
-        line(
-          ref,
-          P(radius * Math.cos(rad(phi)), t, u("ringBack", ri, j)),
-          "accent3",
-          'style="stroke-width:0.9" opacity="0.4"',
-        ),
-      );
-    }),
-  );
   // The cut face: a structured grid on each side of the hole.
   const half = xs.length / 2;
   for (const [first, last] of [
@@ -162,22 +138,32 @@ function sectionPanel(kind, top, heading) {
         P(xs[j], 0, u("section", 0, j)),
       ),
     );
-  // Legs on the cut, to the ring's nodes on the top face.
-  xs.forEach((x, j) => {
-    if (Math.abs(x) <= r + 1e-9)
+  // The coupled ring on the cut, its nodes, and the legs from the point.
+  const ref = P(0, t, data ? [0, 0, -data.pointDeflection] : undefined);
+  const ringTop = (side) =>
+    xs
+      .map((x, j) => [x, j])
+      .filter(([x]) => Math.sign(x) === side && Math.abs(x) <= r + 1e-9)
+      .map(([x, j]) => P(x, t, u("section", zs.length - 1, j)));
+  for (const side of [-1, 1]) {
+    const nodes = ringTop(side);
+    parts.push(
+      polyline(
+        nodes,
+        "accent3",
+        'style="stroke-width:6" opacity="0.35" stroke-linecap="round"',
+      ),
+    );
+    for (const node of nodes)
       parts.push(
-        line(
-          ref,
-          P(x, t, u("section", zs.length - 1, j)),
-          "accent3",
-          'style="stroke-width:1.5"',
-        ),
+        line(ref, node, "accent3", 'style="stroke-width:1.1"'),
+        `<circle cx="${node[0]}" cy="${node[1]}" r="2.3" style="fill:${palette.accent3}"/>`,
       );
-  });
+  }
   parts.push(
     circle(ref, 4.5, "node-accent"),
-    arrow([ref[0], ref[1] + 6], [ref[0], ref[1] + 40], "load"),
-    text([ref[0] - 9, ref[1] + 38], "F", "sym load-text", "end"),
+    arrow([ref[0], ref[1] - 40], [ref[0], ref[1] - 7], "load"),
+    text([ref[0] + 8, ref[1] - 26], "F", "sym load-text", "start"),
   );
   return parts.join("");
 }
@@ -254,44 +240,58 @@ function hexSide(
   return parts.join("");
 }
 
+/** A leader line from `from` to `to`, with its words just past `to`. */
+const label = (from, to, words, anchor = "start") =>
+  line(from, to, "dim") +
+  text(
+    [to[0] + (anchor === "start" ? 4 : -4), to[1] + 4],
+    words,
+    "small lbl",
+    anchor,
+  );
+
+/** A rectangle from its corners. */
+const box = (x0, y0, x1, y1) => [
+  [x0, y0],
+  [x1, y0],
+  [x1, y1],
+  [x0, y1],
+];
+
 /**
  * How a bolt becomes a coupling: on the left a section through a bolted
- * joint (head, washer, threaded shank, nut, two plates); on the right the
- * model — the upper part on a fixed base, the bolt gone, the ring its head
- * bears on coupled to a point on its axis, and the bolt's force on the point.
+ * joint (head and washer, threaded shank, washer and nut, two plates); on the
+ * right the model at the same scale — the upper plate on a fixed base, the
+ * bolt gone, the ring its washer bears on coupled to a point on the bolt's
+ * axis at the height of the top face, and the bolt's force on the point.
  */
 function boltIdealisation() {
   const parts = [HATCH_BACK];
-  const cx = 175;
-  const hole = 12; // clearance hole radius (px)
-  const shank = 10; // bolt radius
-  const plates = [
-    [104, 140, false],
-    [140, 188, true],
-  ];
-  for (const [y0, y1, back] of plates)
+  const hole = 18; // clearance hole radius (px)
+  const shank = 15; // bolt radius
+  const washer = 40; // washer radius: the ring the joint bears on
+  const top = 120; // top face of the upper plate
+  const plate = 40; // plate thickness
+
+  // Left: the bolted joint.
+  const cx = 165;
+  for (const [y0, back] of [
+    [top, false],
+    [top + plate, true],
+  ])
     for (const [x0, x1] of [
-      [40, cx - hole],
-      [cx + hole, 310],
+      [25, cx - hole],
+      [cx + hole, 305],
     ])
-      parts.push(
-        hatched(
-          [
-            [x0, y0],
-            [x1, y0],
-            [x1, y1],
-            [x0, y1],
-          ],
-          back,
-        ),
-      );
-  // Shank through both plates, thread from below the joint line to the end.
-  const end = 236;
+      parts.push(hatched(box(x0, y0, x1, y0 + plate), back));
+  const bottom = top + 2 * plate;
+  const end = bottom + 52; // the shank's end, past the nut
+  const threadFrom = top + plate + 12;
   parts.push(
     polygon(
       [
-        [cx - shank, 96],
-        [cx + shank, 96],
+        [cx - shank, top - 20],
+        [cx + shank, top - 20],
         [cx + shank, end - 3],
         [cx + shank - 3, end],
         [cx - shank + 3, end],
@@ -299,104 +299,79 @@ function boltIdealisation() {
       ],
       "body-alt",
     ),
-    line([cx - shank + 2.5, 160], [cx - shank + 2.5, end], "thin"),
-    line([cx + shank - 2.5, 160], [cx + shank - 2.5, end], "thin"),
-    line([cx - shank, 160], [cx + shank, 160], "ink"),
-    // Washers and nut, head on top.
-    polygon(
-      [
-        [cx - 27, 97],
-        [cx + 27, 97],
-        [cx + 27, 104],
-        [cx - 27, 104],
-      ],
-      "body-alt",
+    line([cx - shank + 3, threadFrom], [cx - shank + 3, end], "thin"),
+    line([cx + shank - 3, threadFrom], [cx + shank - 3, end], "thin"),
+    line([cx - shank, threadFrom], [cx + shank, threadFrom], "ink"),
+    polygon(box(cx - washer, top - 7, cx + washer, top), "body-alt"),
+    polygon(box(cx - washer, bottom, cx + washer, bottom + 7), "body-alt"),
+    hexSide(cx, top - 33, top - 7, 36, { chamferBottom: false }),
+    hexSide(cx, bottom + 7, bottom + 37, 36),
+    line(
+      [cx, top - 45],
+      [cx, end + 10],
+      "dash",
+      'style="stroke-dasharray:10 3 2 3"',
     ),
-    polygon(
-      [
-        [cx - 27, 188],
-        [cx + 27, 188],
-        [cx + 27, 195],
-        [cx - 27, 195],
-      ],
-      "body-alt",
-    ),
-    hexSide(cx, 74, 97, 24, { chamferBottom: false }),
-    hexSide(cx, 195, 222, 24),
-    line([cx, 64], [cx, 246], "dash", 'style="stroke-dasharray:10 3 2 3"'),
-  );
-  const label = (from, to, words, anchor = "start") =>
-    line(from, to, "dim") +
-    text(
-      [to[0] + (anchor === "start" ? 4 : -4), to[1] + 4],
-      words,
-      "small lbl",
-      anchor,
-    );
-  parts.push(
-    label([cx + 20, 80], [cx + 60, 64], "hex head"),
-    label([cx + 26, 100], [cx + 70, 92], "washer"),
-    label([cx + shank, 205 - 20], [cx + 70, 176 - 12], "thread"),
-    label([cx + 22, 214], [cx + 70, 230], "nut"),
-    label([90, 126], [60, 72], "plates", "start"),
-    text([cx, 274], "The bolted joint", "title"),
+    label([cx - 30, top - 24], [cx - 72, top - 40], "hex head", "end"),
+    label([cx - 38, top - 3], [cx - 72, top - 14], "washer", "end"),
+    label([cx + 34, bottom + 22], [cx + 70, bottom + 22], "nut"),
+    label([cx + shank - 3, end - 8], [cx + 70, end - 2], "thread"),
+    label([60, bottom - 4], [30, bottom + 30], "clamped plates"),
+    text([cx, 292], "The bolted joint", "title"),
   );
 
   parts.push(
-    arrow([328, 150], [368, 150], "muted"),
-    text([348, 140], "model", "small lbl"),
+    arrow([322, top + plate], [366, top + plate], "muted"),
+    text([344, top + plate - 10], "model", "small lbl"),
   );
 
-  // Right: the upper part on a fixed base; the bolt replaced by a coupling.
-  const rx = 520;
+  // Right: the upper plate on a fixed base; the bolt replaced by a coupling.
+  const rx = 525;
   for (const [x0, x1] of [
-    [395, rx - hole],
-    [rx + hole, 650],
+    [385, rx - hole],
+    [rx + hole, 665],
   ])
-    parts.push(
-      hatched([
-        [x0, 104],
-        [x1, 104],
-        [x1, 140],
-        [x0, 140],
-      ]),
-    );
+    parts.push(hatched(box(x0, top, x1, top + plate)));
   parts.push(
-    polygon(
-      [
-        [390, 140],
-        [655, 140],
-        [655, 152],
-        [390, 152],
-      ],
-      "hatch-fill",
+    polygon(box(380, top + plate, 670, top + plate + 12), "hatch-fill"),
+    line([380, top + plate], [670, top + plate], "ground"),
+    line(
+      [rx, top + 6],
+      [rx, top + plate + 22],
+      "dash",
+      'style="stroke-dasharray:10 3 2 3"',
     ),
-    line([390, 140], [655, 140], "ground"),
-    line([rx, 64], [rx, 160], "dash", 'style="stroke-dasharray:10 3 2 3"'),
   );
-  const ref = [rx, 122];
-  for (const dx of [hole, 18, 24])
-    for (const side of [-1, 1])
-      parts.push(
-        line(ref, [rx + side * dx, 104], "accent3", 'style="stroke-width:1.5"'),
-      );
-  for (const side of [-1, 1])
+  const ref = [rx, top];
+  const ringNodes = [0, 1, 2, 3].map((k) => hole + (k * (washer - hole)) / 3);
+  for (const side of [-1, 1]) {
     parts.push(
       line(
-        [rx + side * hole, 104],
-        [rx + side * 24, 104],
+        [rx + side * hole, top],
+        [rx + side * washer, top],
         "accent3",
-        'style="stroke-width:4" opacity="0.55"',
+        'style="stroke-width:6" opacity="0.35"',
+      ),
+      line(
+        ref,
+        [rx + side * washer, top],
+        "accent3",
+        'style="stroke-width:1.5"',
       ),
     );
+    for (const dx of ringNodes)
+      parts.push(
+        `<circle cx="${rx + side * dx}" cy="${top}" r="2.6" style="fill:${palette.accent3}"/>`,
+      );
+  }
   parts.push(
     circle(ref, 4.5, "node-accent"),
-    arrow([rx, 52], [rx, 114], "load"),
-    text([rx + 8, 62], "F", "sym load-text", "start"),
-    label([rx + 21, 103], [rx + 46, 82], "coupled ring", "start"),
-    label([rx - 5, 124], [rx - 70, 176], "reference point", "end"),
-    label([440, 150], [450, 196], "lower face fixed"),
-    text([rx, 274], "The bolt as a coupling", "title"),
+    arrow([rx, top - 64], [rx, top - 7], "load"),
+    text([rx + 8, top - 50], "F", "sym load-text", "start"),
+    label([rx - 6, top - 4], [rx - 50, top - 28], "reference point", "end"),
+    label([rx + 32, top - 3], [rx + 66, top - 28], "coupled ring"),
+    label([420, top + plate + 10], [432, top + plate + 36], "lower face fixed"),
+    text([rx, 292], "The bolt as a coupling", "title"),
   );
   return parts.join("");
 }
@@ -463,9 +438,9 @@ export default [
   {
     id: "coupling-bolt-idealisation",
     title: "A bolt replaced by a coupling",
-    alt: "Left: a section through a bolted joint: two hatched plates clamped by a bolt with a hex head and washer on top, a threaded shank through the clearance hole, and a washer and nut below. Right: the model: the upper plate alone on a fixed base, the bolt removed, and a reference point on the bolt's axis joined by legs to the ring of the top face under the head, with the bolt's force on the point.",
+    alt: "Left: a section through a bolted joint: two hatched plates of equal thickness clamped by a bolt with a hex head and washer on top, a shank through the clearance hole, threaded below the joint, and a washer and nut below. Right: the model: the upper plate alone on a fixed base, the bolt removed, and a reference point on the bolt's axis, at the height of the top face, joined by legs to the ring of the top face under the washer, with the bolt's force on the point.",
     width: 680,
-    height: 290,
+    height: 310,
     body: boltIdealisation(),
   },
   {

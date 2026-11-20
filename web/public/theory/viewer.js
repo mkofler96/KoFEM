@@ -32,7 +32,11 @@ function deformed(data) {
  */
 function surfaceMesh(data, points, section) {
   if (!section) {
-    return { positions: points, values: data.values, triangles: data.triangles };
+    return {
+      positions: points,
+      values: data.values,
+      triangles: data.triangles,
+    };
   }
   return sectionMesh(
     {
@@ -104,20 +108,28 @@ function buildScene(THREE, data, section) {
       }),
     ),
   );
-  if (data.spider) group.add(spider(THREE, data, points));
+  if (data.spider) group.add(spider(THREE, data, points, below));
   return { group, sphere: surface.boundingSphere };
 }
 
-/** A coupling's legs: its reference point joined to the nodes it couples. */
-function spider(THREE, data, points) {
+/**
+ * A coupling's legs: its reference point joined to the nodes it couples, on
+ * the side a section keeps. A view framed about a target draws the point at
+ * a size for that frame; otherwise it is 1 model unit across.
+ */
+function spider(THREE, data, points, kept) {
   const { origin, originDisplacement, targets } = data.spider;
-  const from = origin.map((v, k) => v + data.deformScale * originDisplacement[k]);
-  const legs = targets.flatMap((t) => [
-    ...from,
-    points[3 * t],
-    points[3 * t + 1],
-    points[3 * t + 2],
-  ]);
+  const from = origin.map(
+    (v, k) => v + data.deformScale * originDisplacement[k],
+  );
+  const legs = targets
+    .filter(kept)
+    .flatMap((t) => [
+      ...from,
+      points[3 * t],
+      points[3 * t + 1],
+      points[3 * t + 2],
+    ]);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     "position",
@@ -135,6 +147,7 @@ function spider(THREE, data, points) {
     new THREE.MeshBasicMaterial({ color: 0x15803d }),
   );
   marker.position.set(...from);
+  if (data.view?.target) marker.scale.setScalar(0.025 * data.view.half);
   group.add(marker);
   return group;
 }
@@ -196,16 +209,19 @@ async function mount(figure, THREE, OrbitControls) {
     ...(data.view?.direction ?? [-0.55, -0.5, -1]),
   ).normalize();
   if (data.view?.up) camera.up.set(...data.view.up);
-  const home = sphere.center
-    .clone()
-    .addScaledVector(
-      view,
-      // A Theory model's own view says how tightly to frame it.
-      (-(data.view?.fit ?? 0.85) * radius) /
-        Math.sin((camera.fov * Math.PI) / 360),
-    );
+  // A Theory model's own view says what to frame: a box of half-width `half`
+  // about `target` (as its static figure does), or the whole model, `fit`
+  // times as tight.
+  const center = data.view?.target
+    ? new THREE.Vector3(...data.view.target)
+    : sphere.center;
+  const halfFov = (camera.fov * Math.PI) / 360;
+  const distance = data.view?.target
+    ? data.view.half / (Math.tan(halfFov) * camera.aspect)
+    : ((data.view?.fit ?? 0.85) * radius) / Math.sin(halfFov);
+  const home = center.clone().addScaledVector(view, -distance);
   camera.position.copy(home);
-  camera.lookAt(sphere.center);
+  camera.lookAt(center);
   // Light from over the viewer's shoulder.
   camera.add(key);
   key.position.set(1, 1.2, 0.5);
@@ -213,7 +229,7 @@ async function mount(figure, THREE, OrbitControls) {
 
   // The constructor aims the camera at the origin; re-aim it at the model.
   const controls = new OrbitControls(camera, canvas);
-  controls.target.copy(sphere.center);
+  controls.target.copy(center);
   controls.update();
   // On touch screens a vertical swipe scrolls the page; a sideways drag rotates.
   canvas.style.touchAction = "pan-y";
@@ -255,7 +271,7 @@ async function mount(figure, THREE, OrbitControls) {
   reset.textContent = "Reset view";
   reset.addEventListener("click", () => {
     camera.position.copy(home);
-    controls.target.copy(sphere.center);
+    controls.target.copy(center);
     controls.update();
     render();
   });

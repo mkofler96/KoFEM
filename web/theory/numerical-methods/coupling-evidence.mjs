@@ -17,7 +17,7 @@ import {
   renderPng,
   pngSize,
 } from "../../../examples/validation/lib/render.mjs";
-import { sectionMesh } from "../../public/theory/section.js";
+import { clipSurface, sectionMesh } from "../../public/theory/section.js";
 import {
   BAR,
   KINDS,
@@ -114,16 +114,18 @@ function rigidResidual(model, result, ids) {
 }
 
 /**
- * uz along the line y = 0 of a face z = const, sampled at `xs` by linear
- * interpolation on the face's surface triangles (the vertex field a linear
+ * uz along the line y = 0 of the top face z = thickness, sampled at `xs` by
+ * linear interpolation on its surface triangles (the vertex field a linear
  * triangle carries).
  */
-function faceProfile(built, face, xs) {
+function topProfile(built, xs) {
   const { mesh, model, result } = built;
   const tris = [];
-  for (let t = 0; t < mesh.surfaceFaceIds.length; t++)
-    if (mesh.surfaceFaceIds[t] === face)
-      tris.push([0, 1, 2].map((k) => mesh.surfaceTriangles[3 * t + k]));
+  for (let t = 0; t < mesh.surfaceTriangles.length / 3; t++) {
+    const tri = [0, 1, 2].map((k) => mesh.surfaceTriangles[3 * t + k]);
+    if (tri.every((id) => Math.abs(model.nodes[id].z - SCREW.thickness) < 1e-6))
+      tris.push(tri);
+  }
   return xs.map((x) => {
     for (const tri of tris) {
       const [a, b, c] = tri.map((id) => point(model, id));
@@ -139,7 +141,7 @@ function faceProfile(built, face, xs) {
           0,
         );
     }
-    throw new Error(`no triangle of face ${face} contains (${x}, 0)`);
+    throw new Error(`no triangle of the top face contains (${x}, 0)`);
   });
 }
 
@@ -215,14 +217,14 @@ function sampler(built) {
 }
 
 /** How far from the axis the article's section figure reaches (mm). */
-const SECTION_REACH = 14;
+const SECTION_REACH = 11;
 
 /**
  * The structured grid the article's section figure draws on the plane y = 0,
  * around the hole: from the hole edge to the head's edge in four cells, then
  * out to SECTION_REACH in cells of about 0.75 mm, mirrored; six layers through
- * the thickness. The bore's back wall (y > 0, seen through the hole) and the
- * coupled ring behind the cut are sampled at 15° steps.
+ * the thickness. The bore's back wall (y > 0, seen through the hole) is
+ * sampled at 15° steps.
  */
 function sectionGrid() {
   const { holeRadius: a, headRadius: r, thickness: t } = SCREW;
@@ -238,7 +240,6 @@ function sectionGrid() {
     xs: [...right.map((x) => -x).reverse(), ...right],
     zs: Array.from({ length: 7 }, (_, k) => (k * t) / 6),
     phis: Array.from({ length: 13 }, (_, i) => i * 15),
-    ringRadii: [a, (a + r) / 2, r],
   };
 }
 
@@ -297,20 +298,8 @@ for (const kind of KINDS) {
         ]),
       ),
     ),
-    ringBack: grid.ringRadii.map((radius) =>
-      grid.phis.map((phi) =>
-        at([
-          radius * Math.cos(rad(phi)),
-          radius * Math.sin(rad(phi)),
-          SCREW.thickness,
-        ]),
-      ),
-    ),
     peakNearHead: maxOver(screw.result.nodalVonMises, near),
-    profile: faceProfile(screw, 7, profileXs).map((uz, i) => [
-      profileXs[i],
-      uz,
-    ]),
+    profile: topProfile(screw, profileXs).map((uz, i) => [profileXs[i], uz]),
   };
 
   const bending = (solved.bending[kind] = await cantilever(kind, "bending"));
@@ -333,6 +322,19 @@ for (const kind of KINDS) {
     bandPeaks: bandPeaks(torsion, BAR.side / 4),
   };
 }
+
+const niceBelow = (value) => {
+  const power = 10 ** Math.floor(Math.log10(value));
+  return [5, 2, 1].map((m) => m * power).find((v) => v <= value);
+};
+// One enlargement for the article's section figure and the screw viewers:
+// the deepest point of the section drawn 1.2 mm deep.
+const deepest = Math.max(
+  ...Object.values(record.screw.kinds).flatMap((kind) =>
+    kind.section.flat().map(([, , uz]) => -uz),
+  ),
+);
+record.screw.enlargement = niceBelow(1.2 / deepest);
 
 // ── Check or record ──────────────────────────────────────────────────────────
 
@@ -384,10 +386,6 @@ if (!report) {
 // ── Viewer payloads and their static section figures ────────────────────────
 
 const round = (value, digits) => Number(value.toPrecision(digits));
-const niceBelow = (value) => {
-  const power = 10 ** Math.floor(Math.log10(value));
-  return [5, 2, 1].map((m) => m * power).find((v) => v <= value);
-};
 
 /** A viewer payload of one solved model, on the vertex nodes its elements use. */
 function payload(id, built, { title, range, deformScale, section, view }) {
@@ -441,13 +439,30 @@ function payload(id, built, { title, range, deformScale, section, view }) {
   };
 }
 
-/** The static figure: the deformed model, cut by its default section. */
-function sectionFigure(data) {
+/** Keep the part of a cut surface with |x[axis]| ≤ reach. */
+function crop(surface, axis, reach) {
+  const mirror = (positions) =>
+    positions.map((v, i) => (i % 3 === axis ? -v : v));
+  const near = clipSurface(surface, axis, reach);
+  const both = clipSurface(
+    { ...near, positions: mirror(near.positions) },
+    axis,
+    reach,
+  );
+  return { ...both, positions: mirror(both.positions) };
+}
+
+/**
+ * The static figure: the deformed model, cut by its default section and seen
+ * along its view. A view with a `target` frames a box of half-width `half`
+ * about it, and a `crop` keeps only the part of the model drawn there.
+ */
+function sectionFigure(data, cropTo) {
   const n = data.values.length;
   const deformed = data.positions.map(
     (v, i) => v + data.deformScale * data.displacements[i],
   );
-  const cut = sectionMesh(
+  let cut = sectionMesh(
     {
       positions: deformed,
       values: data.values,
@@ -457,9 +472,11 @@ function sectionFigure(data) {
     data.section.axis,
     data.section.level,
   );
+  if (cropTo) cut = crop(cut, cropTo.axis, cropTo.reach);
   if (n === 0 || cut.triangles.length === 0)
     throw new Error(`${data.id}: the default section cuts nothing`);
-  const png = renderPng(
+  const { direction, up, target, half, aspect } = data.view;
+  return renderPng(
     {
       positions: cut.positions,
       displacements: new Array(cut.positions.length).fill(0),
@@ -469,13 +486,13 @@ function sectionFigure(data) {
     },
     {
       width: 900,
-      view: data.view.direction,
-      up: data.view.up,
+      view: direction,
+      up,
       deformScale: 0,
       range: [data.min, data.max],
+      ...(target ? { focus: { center: target, half, aspect } } : {}),
     },
   );
-  return png;
 }
 
 const pairs = [
@@ -483,10 +500,19 @@ const pairs = [
     key: "screw",
     title: (kind) =>
       `Screw head, ${kind === "kinematic" ? "kinematic (RBE2)" : "distributing (RBE3)"}`,
-    // Cut through the screw axis (y = 0), keeping y ≤ 0, seen from +y and a
-    // little above: the section of the article's figure.
+    // Cut through the screw axis (y = 0), keeping y ≤ 0, seen square on to
+    // the cut and framed around the hole: the section of the article's
+    // figure, at its enlargement.
     section: { axis: 1, level: 0 },
-    view: { direction: [-0.15, -1, -0.3], up: [0, 0, 1], fit: 0.62 },
+    view: {
+      direction: [0, -1, 0],
+      up: [0, 0, 1],
+      target: [0, 0, SCREW.thickness / 2],
+      half: SECTION_REACH + 1,
+      aspect: 0.32,
+    },
+    crop: { axis: 0, reach: SECTION_REACH },
+    deformScale: () => record.screw.enlargement,
   },
   {
     key: "torsion",
@@ -495,6 +521,8 @@ const pairs = [
     // Cut along the bar axis (x = 0), keeping x ≤ 0, seen from +x.
     section: { axis: 0, level: 0 },
     view: { direction: [-1, -0.45, -0.5], up: [0, 1, 0], fit: 1 },
+    crop: null,
+    deformScale: (size, maxU) => niceBelow((0.08 * size) / maxU),
   },
 ];
 record.viewers = {};
@@ -516,7 +544,7 @@ for (const pair of pairs) {
   const maxU = Math.max(
     ...models.flatMap((m) => Array.from(m.result.displacements, Math.abs)),
   );
-  const deformScale = niceBelow((0.08 * size) / maxU);
+  const deformScale = pair.deformScale(size, maxU);
   for (const [i, kind] of KINDS.entries()) {
     const id = `coupling-${pair.key}-${kind}`;
     const data = payload(id, models[i], {
@@ -530,7 +558,7 @@ for (const pair of pairs) {
       new URL(`viewers/${id}.json`, publicTheory),
       `${JSON.stringify(data)}\n`,
     );
-    const png = sectionFigure(data);
+    const png = sectionFigure(data, pair.crop);
     writeFileSync(new URL(`viewers/${id}.png`, publicTheory), png);
     record.viewers[id] = {
       title: data.title,

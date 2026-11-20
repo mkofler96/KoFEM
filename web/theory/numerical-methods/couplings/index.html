@@ -823,7 +823,7 @@
       The point carries three translations and three rotations, so it can
       take a moment, which a single solid node cannot.</p>
     <figure class="theory-figure full" id="figure-coupling-bolt-idealisation">
-      <a href="/theory/figures/coupling-bolt-idealisation.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/coupling-bolt-idealisation.svg" type="image/svg+xml" /><img src="/theory/figures/coupling-bolt-idealisation.png" width="680" height="290" alt="Left: a section through a bolted joint: two hatched plates clamped by a bolt with a hex head and washer on top, a threaded shank through the clearance hole, and a washer and nut below. Right: the model: the upper plate alone on a fixed base, the bolt removed, and a reference point on the bolt's axis joined by legs to the ring of the top face under the head, with the bolt's force on the point." loading="lazy" decoding="async" /></picture></a>
+      <a href="/theory/figures/coupling-bolt-idealisation.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/coupling-bolt-idealisation.svg" type="image/svg+xml" /><img src="/theory/figures/coupling-bolt-idealisation.png" width="680" height="310" alt="Left: a section through a bolted joint: two hatched plates of equal thickness clamped by a bolt with a hex head and washer on top, a shank through the clearance hole, threaded below the joint, and a washer and nut below. Right: the model: the upper plate alone on a fixed base, the bolt removed, and a reference point on the bolt's axis, at the height of the top face, joined by legs to the ring of the top face under the washer, with the bolt's force on the point." loading="lazy" decoding="async" /></picture></a>
       <figcaption>A bolt in the model: the bolt is not meshed, and the part below the joint is a fixed base. The ring the head bears on is coupled to a point on the bolt's axis, and the bolt's force acts on that point.</figcaption>
     </figure>
     <p>There are two ways to tie the point to the surface, and they are not
@@ -880,27 +880,29 @@
       nodes cannot measure a spin about itself.</p>
 
     <h2 id="screw">Example: a screw head on a plate</h2>
-    <p>A steel plate 40 × 40
+    <p>A steel plate 32 × 32
       × 6 mm stands on a rigid base: its lower face is
       fixed. It has a clearance hole of radius 4.5 mm,
       as for the screw in the figure above. A screw head
       bears on the ring of the top face out to radius
       8 mm and presses it down with
       5 kN. The screw itself is not
-      modelled: the ring is coupled to a point on the screw axis at
-      mid-thickness, and the force is applied to that point. The plate is
-      meshed with Netgen at 1.25 mm and solved with
-      quadratic tetrahedra, once with each coupling.</p>
+      modelled: the ring is coupled to a point on the screw axis at the
+      height of the top face, and the force is applied to that point. The
+      ring is its own face, split off the top face as you would to pick it
+      in the app. Netgen meshes it at 0.5 mm and the
+      rest of the plate at 1.25 mm. The plate is solved
+      with quadratic tetrahedra, once with each coupling.</p>
     <figure class="theory-figure full" id="figure-coupling-screw-sections">
-      <a href="/theory/figures/coupling-screw-sections.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/coupling-screw-sections.svg" type="image/svg+xml" /><img src="/theory/figures/coupling-screw-sections.png" width="680" height="639" alt="Three sections around the hole of a plate whose lower face is fixed, cut through the screw axis, each with a fine structured grid on the cut face and the back half of the hole visible between the two sides. A point on the axis is joined by legs to the ring of the top face around the hole and carries the screw force. Undeformed, the plate is flat. With a kinematic coupling the ring is pressed in flat. With a distributing coupling the ring dishes, deepest at the hole edge." loading="lazy" decoding="async" /></picture></a>
-      <figcaption>The section through the screw axis, drawn from the two solves: the displacement of each grid point and of the back of the hole is the solved field there. Legs on the cut are drawn solid, legs to the ring behind it faint. The grid is a drawing of the section; the solves use the tetrahedral mesh. Displacements enlarged 500×.</figcaption>
+      <a href="/theory/figures/coupling-screw-sections.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/coupling-screw-sections.svg" type="image/svg+xml" /><img src="/theory/figures/coupling-screw-sections.png" width="680" height="774" alt="Three sections around the hole of a plate whose lower face is fixed, cut through the screw axis, each with a fine structured grid on the cut face and the back half of the hole visible between the two sides. A point on the axis is joined by legs to the ring of the top face around the hole and carries the screw force. Undeformed, the plate is flat. With a kinematic coupling the ring is pressed in flat. With a distributing coupling the ring dishes, deepest at the hole edge." loading="lazy" decoding="async" /></picture></a>
+      <figcaption>The section through the screw axis, drawn from the two solves: the displacement of each grid point and of the back of the hole is the solved field there. The legs run from the point to the ring's nodes on the cut. The grid is a drawing of the section; the solves use the tetrahedral mesh. Displacements enlarged 500×.</figcaption>
     </figure>
     <div class="table-wrap" tabindex="0" role="region" aria-label="The screw head on the plate, by coupling; scroll horizontally if needed"><table>
     <caption>The screw head on the plate, by coupling</caption><thead><tr><th scope="col"></th><th scope="col">Kinematic (RBE2)</th><th scope="col">Distributing (RBE3)</th></tr></thead>
-    <tbody><tr><th scope="row">Deflection of the point</th><td>0.69 µm</td><td>1.15 µm</td></tr><tr><th scope="row">Ring's departure from a rigid motion</th><td>0 µm</td><td>1.13 µm</td></tr><tr><th scope="row">Peak von Mises stress within r = 16 mm</th><td>36 MPa</td><td>66 MPa</td></tr></tbody></table></div>
+    <tbody><tr><th scope="row">Deflection of the point</th><td>0.58 µm</td><td>0.77 µm</td></tr><tr><th scope="row">Ring's departure from a rigid motion</th><td>0 µm</td><td>0.79 µm</td></tr><tr><th scope="row">Peak von Mises stress within r = 16 mm</th><td>46 MPa</td><td>74 MPa</td></tr></tbody></table></div>
     <p>The kinematic coupling presses the ring in as a flat, rigid punch.
       The plate is stiffer under it — the point moves
-      40.0 %
+      25.0 %
       less — and the stress collects where the rigid punch ends, at the edge
       of the ring. The distributing coupling lets the ring dish, deepest at
       the hole, where the plate has no material beside it to carry the load.
@@ -908,24 +910,27 @@
       so its stress peaks at the hole edge. A real head lies between the two:
       stiffer than the plate, but not rigid, and in contact rather than
       bonded.</p>
-    <p>Cut each model through the screw axis to see the stress inside the
-      plate. Both use one colour scale.</p>
+    <p>Cut each model through the screw axis and look square on to the cut,
+      as in the drawing above, to see the stress inside the plate. Both use
+      one colour scale. With the kinematic coupling the stress peaks at the
+      ring's outer edge, where the rigid ring meets the free top face. With
+      the distributing coupling it peaks at the hole edge.</p>
     <div class="viewer-pair">
       <figure class="result-viewer" data-viewer="/theory/viewers/coupling-screw-kinematic.json" id="viewer-coupling-screw-kinematic">
       <div class="viewer-stage">
         <img src="/theory/viewers/coupling-screw-kinematic.png" width="900" height="288" alt="Screw head, kinematic (RBE2): von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>65.9 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>74.3 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
-      <figcaption><strong>Screw head, kinematic (RBE2).</strong> The ring is held rigid. Displacements enlarged 1000×.</figcaption>
+      <figcaption><strong>Screw head, kinematic (RBE2).</strong> The ring is held rigid; the stress peaks at its outer edge, where the rigid ring meets the free surface. Displacements enlarged 500×.</figcaption>
     </figure>
       <figure class="result-viewer" data-viewer="/theory/viewers/coupling-screw-distributing.json" id="viewer-coupling-screw-distributing">
       <div class="viewer-stage">
         <img src="/theory/viewers/coupling-screw-distributing.png" width="900" height="288" alt="Screw head, distributing (RBE3): von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>65.9 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>74.3 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
-      <figcaption><strong>Screw head, distributing (RBE3).</strong> The ring deforms with the plate. Displacements enlarged 1000×.</figcaption>
+      <figcaption><strong>Screw head, distributing (RBE3).</strong> The ring deforms with the plate; the stress peaks at the hole edge. Displacements enlarged 500×.</figcaption>
     </figure>
     </div>
 

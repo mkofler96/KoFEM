@@ -129,11 +129,13 @@ export default {
       bears on the ring of the top face out to radius
       ${screw.model.headRadius} mm and presses it down with
       ${(screw.model.force / 1000).toFixed(0)} kN. The screw itself is not
-      modelled: the ring is coupled to a point on the screw axis at
-      mid-thickness, and the force is applied to that point. The plate is
-      meshed with Netgen at ${screw.model.meshSize} mm and solved with
-      quadratic tetrahedra, once with each coupling.</p>
-    ${figure("coupling-screw-sections", `The section through the screw axis, drawn from the two solves: the displacement of each grid point and of the back of the hole is the solved field there. Legs on the cut are drawn solid, legs to the ring behind it faint. The grid is a drawing of the section; the solves use the tetrahedral mesh. Displacements enlarged ${SCREW_PROFILE_ENLARGEMENT}×.`)}
+      modelled: the ring is coupled to a point on the screw axis at the
+      height of the top face, and the force is applied to that point. The
+      ring is its own face, split off the top face as you would to pick it
+      in the app. Netgen meshes it at ${screw.model.ringMeshSize} mm and the
+      rest of the plate at ${screw.model.meshSize} mm. The plate is solved
+      with quadratic tetrahedra, once with each coupling.</p>
+    ${figure("coupling-screw-sections", `The section through the screw axis, drawn from the two solves: the displacement of each grid point and of the back of the hole is the solved field there. The legs run from the point to the ring's nodes on the cut. The grid is a drawing of the section; the solves use the tetrahedral mesh. Displacements enlarged ${SCREW_PROFILE_ENLARGEMENT}×.`)}
     ${table(
       "The screw head on the plate, by coupling",
       ["", "Kinematic (RBE2)", "Distributing (RBE3)"],
@@ -165,11 +167,14 @@ export default {
       so its stress peaks at the hole edge. A real head lies between the two:
       stiffer than the plate, but not rigid, and in contact rather than
       bonded.</p>
-    <p>Cut each model through the screw axis to see the stress inside the
-      plate. Both use one colour scale.</p>
+    <p>Cut each model through the screw axis and look square on to the cut,
+      as in the drawing above, to see the stress inside the plate. Both use
+      one colour scale. With the kinematic coupling the stress peaks at the
+      ring's outer edge, where the rigid ring meets the free top face. With
+      the distributing coupling it peaks at the hole edge.</p>
     <div class="viewer-pair">
-      ${solvedViewer("coupling-screw-kinematic", { caption: "The ring is held rigid." })}
-      ${solvedViewer("coupling-screw-distributing", { caption: "The ring deforms with the plate." })}
+      ${solvedViewer("coupling-screw-kinematic", { caption: "The ring is held rigid; the stress peaks at its outer edge, where the rigid ring meets the free surface." })}
+      ${solvedViewer("coupling-screw-distributing", { caption: "The ring deforms with the plate; the stress peaks at the hole edge." })}
     </div>
 
     <h2 id="cantilever">Example: a coupled bar end</h2>
