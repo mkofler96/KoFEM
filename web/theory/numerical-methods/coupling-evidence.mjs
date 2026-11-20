@@ -214,25 +214,29 @@ function sampler(built) {
   };
 }
 
+/** How far from the axis the article's section figure reaches (mm). */
+const SECTION_REACH = 14;
+
 /**
- * The structured grid the article's section figure draws on the plane y = 0:
- * from the hole edge to the head's edge in two cells, then to the plate edge
- * in 2 mm cells, mirrored; three layers through the thickness. The bore's
- * back wall (y > 0, seen through the hole) and the coupled ring behind the
- * cut are sampled at 15° steps.
+ * The structured grid the article's section figure draws on the plane y = 0,
+ * around the hole: from the hole edge to the head's edge in four cells, then
+ * out to SECTION_REACH in cells of about 0.75 mm, mirrored; six layers through
+ * the thickness. The bore's back wall (y > 0, seen through the hole) and the
+ * coupled ring behind the cut are sampled at 15° steps.
  */
 function sectionGrid() {
-  const { holeRadius: a, headRadius: r, halfWidth: b, thickness: t } = SCREW;
-  const outer = Math.round((b - r) / 2);
+  const { holeRadius: a, headRadius: r, thickness: t } = SCREW;
+  const outer = Math.round((SECTION_REACH - r) / 0.75);
   const right = [
-    a,
-    (a + r) / 2,
-    r,
-    ...Array.from({ length: outer }, (_, i) => r + ((i + 1) * (b - r)) / outer),
+    ...Array.from({ length: 5 }, (_, i) => a + (i * (r - a)) / 4),
+    ...Array.from(
+      { length: outer },
+      (_, i) => r + ((i + 1) * (SECTION_REACH - r)) / outer,
+    ),
   ];
   return {
     xs: [...right.map((x) => -x).reverse(), ...right],
-    zs: [0, 1, 2, 3].map((k) => (k * t) / 3),
+    zs: Array.from({ length: 7 }, (_, k) => (k * t) / 6),
     phis: Array.from({ length: 13 }, (_, i) => i * 15),
     ringRadii: [a, (a + r) / 2, r],
   };
@@ -254,9 +258,10 @@ const theory = {
   saintVenantVonMises: (Math.sqrt(3) * BAR.torque) / (0.208 * BAR.side ** 3),
 };
 
-const profileXs = Array.from({ length: 121 }, (_, i) => -30 + i * 0.5).filter(
-  (x) => Math.abs(x) >= SCREW.holeRadius,
-);
+const profileXs = Array.from(
+  { length: 4 * SCREW.halfWidth + 1 },
+  (_, i) => -SCREW.halfWidth + i * 0.5,
+).filter((x) => Math.abs(x) >= SCREW.holeRadius);
 
 const solved = { screw: {}, bending: {}, torsion: {} };
 const record = {

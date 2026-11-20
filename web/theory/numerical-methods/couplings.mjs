@@ -24,7 +24,7 @@ const kin = screw.kinds.kinematic;
 const dist = screw.kinds.distributing;
 
 const fixed = (value, digits) => value.toFixed(digits);
-const micro = (mm) => (mm * 1000).toFixed(1);
+const micro = (mm) => (mm * 1000).toFixed(2);
 const percent = (value, reference) =>
   `${value >= reference ? "+" : "−"}${Math.abs(100 * (value / reference - 1)).toFixed(1)} %`;
 const table = (caption, headings, rows) =>
@@ -67,7 +67,7 @@ export default {
       on the point reaches the surface, and a support on the point holds it.
       The point carries three translations and three rotations, so it can
       take a moment, which a single solid node cannot.</p>
-    ${figure("coupling-bolt-idealisation", "A bolt in the model: the bolt is not meshed. The ring its head bears on is coupled to a point on its axis, and the bolt's force acts on that point.")}
+    ${figure("coupling-bolt-idealisation", "A bolt in the model: the bolt is not meshed, and the part below the joint is a fixed base. The ring the head bears on is coupled to a point on the bolt's axis, and the bolt's force acts on that point.")}
     <p>There are two ways to tie the point to the surface, and they are not
       interchangeable. A <strong>kinematic</strong> coupling makes the
       surface move as a rigid body with the point. A
@@ -123,8 +123,9 @@ export default {
 
     <h2 id="screw">Example: a screw head on a plate</h2>
     <p>A steel plate ${2 * screw.model.halfWidth} × ${2 * screw.model.halfWidth}
-      × ${screw.model.thickness} mm, clamped at its four edges, has a
-      clearance hole of radius ${screw.model.holeRadius} mm. A screw head
+      × ${screw.model.thickness} mm stands on a rigid base: its lower face is
+      fixed. It has a clearance hole of radius ${screw.model.holeRadius} mm,
+      as for the screw in the figure above. A screw head
       bears on the ring of the top face out to radius
       ${screw.model.headRadius} mm and presses it down with
       ${(screw.model.force / 1000).toFixed(0)} kN. The screw itself is not
@@ -154,16 +155,16 @@ export default {
         ],
       ],
     )}
-    <p>The kinematic coupling holds the ring flat, so the plate bends away
-      from its outer edge, and the stress collects in a band around that
-      edge. The joint is stiffer: the point moves
+    <p>The kinematic coupling presses the ring in as a flat, rigid punch.
+      The plate is stiffer under it — the point moves
       ${percent(kin.pointDeflection, dist.pointDeflection).replace("−", "")}
-      less, because a rigid disc has been glued into the plate. The
-      distributing coupling lets the ring dish with the plate, deepest at the
-      hole. Its equal nodal shares put the force on the nodes nearest the
-      hole as hard as on the outer ones, so its stress peaks at the hole
-      edge. A real head lies between the two: stiffer than the plate, but not
-      rigid, and in contact rather than bonded.</p>
+      less — and the stress collects where the rigid punch ends, at the edge
+      of the ring. The distributing coupling lets the ring dish, deepest at
+      the hole, where the plate has no material beside it to carry the load.
+      Its equal nodal shares push the nodes there as hard as the outer ones,
+      so its stress peaks at the hole edge. A real head lies between the two:
+      stiffer than the plate, but not rigid, and in contact rather than
+      bonded.</p>
     <p>Cut each model through the screw axis to see the stress inside the
       plate. Both use one colour scale.</p>
     <div class="viewer-pair">

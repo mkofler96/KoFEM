@@ -7,8 +7,9 @@
 // coupled solid solve in the Rust module (buildCoupledEngineInputs →
 // solveCoupledSolidInRust → mapMixedResult).
 //
-//   screwHead   a plate clamped at its four edges, with a clearance hole; a
-//               screw head bears on the ring of the top face around the hole.
+//   screwHead   a plate with a clearance hole, its lower face fixed on a rigid
+//               base; a screw head bears on the ring of the top face around
+//               the hole.
 //               The ring is coupled to a point on the screw axis, which
 //               carries the screw force.
 //   cantilever  a square bar clamped at its root; its free end face is
@@ -35,12 +36,12 @@ const ORDER = 2;
 
 /** The screw-head model's dimensions (mm) and load (N). */
 export const SCREW = Object.freeze({
-  halfWidth: 30,
+  halfWidth: 20,
   thickness: 6,
   holeRadius: 4.5, // M8 clearance hole
   headRadius: 8, // the head (or washer) bears out to this radius
   force: 5000, // screw force, pressing the head into the plate (−z)
-  meshSize: 2,
+  meshSize: 1.25,
 });
 
 /** The cantilever's dimensions (mm) and loads (N, N·mm). */
@@ -160,7 +161,8 @@ export async function screwHead(kind) {
   );
   const model = storeModel(mesh);
   // Faces of plateWithHoleStep: 1–4 the edges, 5 the hole, 6 z = 0, 7 the top.
-  model.constraints = clamp(faceNodes(mesh, [1, 2, 3, 4]));
+  // The lower face stands on a rigid base: fixed.
+  model.constraints = clamp(faceNodes(mesh, [6]));
   const ring = faceNodes(mesh, [7]).filter((id) => {
     const { x, y } = model.nodes[id];
     return Math.hypot(x, y) <= s.headRadius + 1e-9;
