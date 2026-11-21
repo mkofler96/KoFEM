@@ -100,9 +100,22 @@ export const faceKey = (ids: readonly number[]): string =>
 // every edge of a shell facet (a line load). The one definition the load
 // builder (rebuildSurfaceLoads) and the solve's check (surfaceLoadRefusal)
 // both use, so they cannot disagree on what is loadable.
-export function loadableFaceKeys(
-  elements: readonly { type: string; nodeIds: number[] }[],
-): Set<string> {
+//
+// Cached per element array: the Solve panel routes the model on every render,
+// log lines included, and a re-mesh or element edit replaces the array
+// (store updates are immutable), so the identity is the mesh's version.
+type FaceElements = readonly { type: string; nodeIds: number[] }[];
+const loadableCache = new WeakMap<FaceElements, ReadonlySet<string>>();
+
+export function loadableFaceKeys(elements: FaceElements): ReadonlySet<string> {
+  const cached = loadableCache.get(elements);
+  if (cached !== undefined) return cached;
+  const loadable = computeLoadableFaceKeys(elements);
+  loadableCache.set(elements, loadable);
+  return loadable;
+}
+
+function computeLoadableFaceKeys(elements: FaceElements): Set<string> {
   const solidOwners = new Map<string, number>();
   const loadable = new Set<string>();
   for (const el of elements) {

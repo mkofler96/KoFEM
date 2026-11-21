@@ -25,7 +25,10 @@ import {
   coupledToShellPointLoads,
 } from "../../src/lib/solve/bcs";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking";
-import { rebuildSurfaceLoads } from "../../src/store/boundaryRebuild";
+import {
+  loadableFaceKeys,
+  rebuildSurfaceLoads,
+} from "../../src/store/boundaryRebuild";
 import type { NamedLoadGroup } from "../../src/store/boundaryGroups";
 
 const steel: Material = {
@@ -357,4 +360,13 @@ test("the pure auto-shell path keeps nodal moments when it folds loads into the 
     { vertex: 1, force: [1, 0, 2], moment: [7, 0, 0] },
     { vertex: 2, force: [0, 3, 0], moment: [0, 0, 4] },
   ]);
+});
+
+// The Solve panel routes the model on every render (log lines included), so
+// the loadable faces of one element array are worked out once.
+test("the loadable faces of an element array are computed once", () => {
+  const first = loadableFaceKeys(cubeTets);
+  expect(loadableFaceKeys(cubeTets)).toBe(first);
+  expect(first.size).toBe(12);
+  expect(loadableFaceKeys([...cubeTets])).not.toBe(first);
 });
