@@ -7,11 +7,14 @@
 import { describe, expect, test } from "bun:test";
 import { chartLayout, type ChartBox } from "../../src/lib/refinementChart";
 import {
-  CONVERGED_TOLERANCE,
+  DEFAULT_REFINEMENT_SETTINGS,
   levelSizes,
-  REFINEMENT_RATIO,
   type StudyLevel,
 } from "../../src/lib/refinementStudy";
+
+const settings = DEFAULT_REFINEMENT_SETTINGS;
+const REFINEMENT_RATIO = settings.ratio;
+const CONVERGED_TOLERANCE = settings.tolerance;
 
 const box: ChartBox = { left: 50, right: 450, top: 20, bottom: 220 };
 const base = { max: 8, min: 0.8, regions: {} };
@@ -23,7 +26,7 @@ function level(
   maxVonMises: number | null = 100,
 ): StudyLevel {
   return {
-    sizes: levelSizes(base, k),
+    sizes: levelSizes(base, k, REFINEMENT_RATIO),
     nodes: elements / 5,
     elements,
     maxDisplacement,
@@ -33,13 +36,18 @@ function level(
 
 describe("chartLayout", () => {
   test("no levels yet: nothing to draw", () => {
-    const layout = chartLayout([], "displacement", box);
+    const layout = chartLayout([], "displacement", box, settings);
     expect(layout.points).toEqual([]);
     expect(layout.band).toBeNull();
   });
 
   test("one level sits in the middle of the plot", () => {
-    const layout = chartLayout([level(0, 1000, 1.0)], "displacement", box);
+    const layout = chartLayout(
+      [level(0, 1000, 1.0)],
+      "displacement",
+      box,
+      settings,
+    );
     expect(layout.points[0].x).toBeCloseTo(250, 9);
     expect(layout.points[0].y).toBeCloseTo(120, 9);
   });
@@ -51,6 +59,7 @@ describe("chartLayout", () => {
       [level(0, 1000, 1.0), level(1, 4000, 1.1), level(2, 16000, 1.12)],
       "displacement",
       box,
+      settings,
     );
     const [first, middle, last] = layout.points.map((p) => p.x);
     expect(first).toBeLessThan(middle);
@@ -62,6 +71,7 @@ describe("chartLayout", () => {
       [level(0, 1000, 1.0), level(1, 4000, 1.1)],
       "displacement",
       box,
+      settings,
     );
     expect(layout.points[1].y).toBeLessThan(layout.points[0].y);
   });
@@ -78,6 +88,7 @@ describe("chartLayout", () => {
       ],
       "displacement",
       box,
+      settings,
     );
     expect(layout.reference).toBeCloseTo(2, 9);
     expect(layout.extrapolated).toBe(true);
@@ -98,6 +109,7 @@ describe("chartLayout", () => {
       [level(0, 1000, 1.0), level(1, 2800, 1.1)],
       "displacement",
       box,
+      settings,
     );
     expect(layout.extrapolated).toBe(false);
     expect(layout.reference).toBeCloseTo(1.1, 9);
@@ -108,6 +120,7 @@ describe("chartLayout", () => {
       [level(0, 1000, 1.0, 50), level(1, 2800, 1.1, 60)],
       "stress",
       box,
+      settings,
     );
     expect(layout.band).toBeNull();
     expect(layout.points.map((p) => p.value)).toEqual([50, 60]);
@@ -118,7 +131,20 @@ describe("chartLayout", () => {
       [level(0, 1000, 1.0, null), level(1, 2800, 1.1, null)],
       "stress",
       box,
+      settings,
     );
     expect(layout.points).toEqual([]);
+  });
+
+  // KOF-424: the band is the study's own target.
+  test("the band is the study's target around the reference", () => {
+    const layout = chartLayout(
+      [level(0, 1000, 1.0), level(1, 2800, 1.1)],
+      "displacement",
+      box,
+      { ...settings, tolerance: 0.05 },
+    );
+    expect(layout.band?.low).toBeCloseTo(1.1 * 0.95, 9);
+    expect(layout.band?.high).toBeCloseTo(1.1 * 1.05, 9);
   });
 });

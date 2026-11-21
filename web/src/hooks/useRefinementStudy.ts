@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Mesh refinement study (KOF-401): one click solves the static case on the
-// current mesh and on meshes √2 and 2 times finer, so the user sees whether
-// the result still depends on the mesh. Each level meshes exactly as the Mesh
-// button would (lib/volumeMesh) and solves exactly as the Solve button would
-// (lib/solve/payload); the supports and loads follow their CAD faces onto each
-// mesh. The model ends on the finest mesh with its result; the Mesh settings
+// current mesh and on ever finer meshes (by default √2 and 2 times finer; the
+// levels and the ratio are the study's settings, KOF-424), so the user sees
+// whether the result still depends on the mesh. Each level meshes exactly as
+// the Mesh button would (lib/volumeMesh) and solves exactly as the Solve button
+// would (lib/solve/payload); the supports, loads and couplings follow their CAD
+// faces onto each mesh. The model ends on the finest mesh with its result; the Mesh settings
 // stay as the user typed them.
 
 import { useMemo } from "react";
@@ -20,10 +21,11 @@ import {
   levelSizes,
   checkLevelDisplacement,
   nextLevelNodes,
-  REFINEMENT_LEVELS,
+  parseRefinementSettings,
   sizeLabel,
   studyFingerprint,
   STUDY_NODE_BUDGET,
+  type RefinementSettings,
   type StudyLevel,
 } from "../lib/refinementStudy";
 import {
@@ -53,6 +55,7 @@ type StudySource = Pick<
   | "maxElementSize"
   | "minElementSize"
   | "properties"
+  | "refinementInput"
 >;
 
 // The sizes of the first level, and whether the current mesh is that level.
@@ -73,8 +76,6 @@ export function refinementRefusal(s: StudySource): string | null {
   if (s.nodes.length === 0) return null; // the solve checks say "mesh first"
   if (s.stepBytes === null)
     return "The study re-meshes the geometry, and this model has none (an opened analysis keeps only its mesh). Re-import the STEP file to run it.";
-  if (s.couplingGroups.length > 0)
-    return `Couplings cannot follow onto a new mesh: their reference point is a node of this one. Remove ${s.couplingGroups.map((c) => c.name).join(", ")} to run the study.`;
   // Carry the groups onto the mesh they are on: what does not come across
   // here cannot come across to a finer mesh either.
   const carried = carryGroupsToMesh(
@@ -82,7 +83,7 @@ export function refinementRefusal(s: StudySource): string | null {
       bcGroups: s.bcGroups,
       loadGroups: s.loadGroups,
       tieGroups: s.tieGroups,
-      couplingGroups: [],
+      couplingGroups: s.couplingGroups,
     },
     s.surfaceTriangles,
     s.surfaceFaceIds,
@@ -98,7 +99,7 @@ export function refinementRefusal(s: StudySource): string | null {
     ).nodesByFace,
   );
   if (carried.dropped.length > 0)
-    return `Only supports and loads picked as whole CAD faces follow onto a new mesh. Pick these again as faces to run the study: ${carried.dropped.join("; ")}.`;
+    return `Only supports, loads and couplings picked as whole CAD faces follow onto a new mesh. Pick these again as faces to run the study: ${carried.dropped.join("; ")}.`;
   try {
     studyBase(s);
   } catch (err) {
@@ -108,12 +109,25 @@ export function refinementRefusal(s: StudySource): string | null {
   return null;
 }
 
-// Supports, loads and tie surfaces: a re-mesh that loses one changes the model.
+// The max element size of each level the settings plan.
+function plannedMaxSizes(
+  base: MeshSizes,
+  settings: RefinementSettings,
+): number[] {
+  return Array.from(
+    { length: settings.levels },
+    (_, k) => levelSizes(base, k, settings.ratio).max,
+  );
+}
+
+// Supports, loads, tie surfaces and coupled surfaces: a re-mesh that loses one
+// changes the model.
 function entryCount(s: StudySource): number {
   return (
     s.bcGroups.reduce((n, g) => n + g.faces.length, 0) +
     s.loadGroups.reduce((n, g) => n + g.faces.length, 0) +
-    s.tieGroups.reduce((n, t) => n + t.facesA.length + t.facesB.length, 0)
+    s.tieGroups.reduce((n, t) => n + t.facesA.length + t.facesB.length, 0) +
+    s.couplingGroups.reduce((n, c) => n + c.faces.length, 0)
   );
 }
 
@@ -135,6 +149,7 @@ function levelSnapshot(s: ModelState): RefinementLevelSnapshot {
     bcGroups: s.bcGroups,
     loadGroups: s.loadGroups,
     tieGroups: s.tieGroups,
+    couplingGroups: s.couplingGroups,
     constraints: s.constraints,
     loads: s.loads,
     surfaceLoads: s.surfaceLoads,
@@ -184,6 +199,7 @@ export function useRefinementStudy() {
   const maxElementSize = useModelStore((s) => s.maxElementSize);
   const minElementSize = useModelStore((s) => s.minElementSize);
   const properties = useModelStore((s) => s.properties);
+  const refinementInput = useModelStore((s) => s.refinementInput);
 
   const source: StudySource = useMemo(
     () => ({
@@ -201,6 +217,7 @@ export function useRefinementStudy() {
       maxElementSize,
       minElementSize,
       properties,
+      refinementInput,
     }),
     [
       stepBytes,
@@ -217,18 +234,21 @@ export function useRefinementStudy() {
       maxElementSize,
       minElementSize,
       properties,
+      refinementInput,
     ],
   );
   const refusal = useMemo(() => refinementRefusal(source), [source]);
+  const { settings, errors } = useMemo(
+    () => parseRefinementSettings(refinementInput),
+    [refinementInput],
+  );
   // The sizes the levels will mesh at, for the hint under the button.
   const plannedSizes = useMemo(() => {
-    if (refusal !== null || nodes.length === 0) return null;
+    if (refusal !== null || settings === null || nodes.length === 0)
+      return null;
     const { sizes } = studyBase(source);
-    return Array.from(
-      { length: REFINEMENT_LEVELS },
-      (_, k) => levelSizes(sizes, k).max,
-    );
-  }, [refusal, source, nodes.length]);
+    return plannedMaxSizes(sizes, settings);
+  }, [refusal, settings, source, nodes.length]);
 
   async function start(): Promise<void> {
     const get = useModelStore.getState;
@@ -238,6 +258,12 @@ export function useRefinementStudy() {
     if (s0.stepBytes === null)
       throw new Error("The study needs the geometry to re-mesh");
     const stepBytes = s0.stepBytes;
+    const parsed = parseRefinementSettings(s0.refinementInput);
+    if (parsed.settings === null)
+      throw new Error(
+        `The study settings are invalid: ${Object.values(parsed.errors).join(" ")}`,
+      );
+    const settings = parsed.settings;
     const { sizes: base, remesh } = studyBase(s0);
     // The editors stay open while the study runs: a level solved after an
     // edit would mix two models into one verdict, so the study stops instead.
@@ -251,12 +277,10 @@ export function useRefinementStudy() {
 
     let current: RefinementStudyRun = {
       status: "running",
+      settings,
       step: null,
       phase: null,
-      plannedSizes: Array.from(
-        { length: REFINEMENT_LEVELS },
-        (_, k) => levelSizes(base, k).max,
-      ),
+      plannedSizes: plannedMaxSizes(base, settings),
       levels: [],
       snapshots: [],
       fingerprint,
@@ -273,15 +297,15 @@ export function useRefinementStudy() {
     get().showRefinementResult();
     s0.setRunning(true);
     try {
-      for (let k = 0; k < REFINEMENT_LEVELS; k++) {
-        const sizes = levelSizes(base, k);
-        const label = `Level ${k + 1} of ${REFINEMENT_LEVELS}`;
+      for (let k = 0; k < settings.levels; k++) {
+        const sizes = levelSizes(base, k, settings.ratio);
+        const label = `Level ${k + 1} of ${settings.levels}`;
         const previous = current.levels[current.levels.length - 1];
         if (previous !== undefined) {
           const model = get();
           const shellOnly = model.elements.every((e) => e.type === "CTRIA3");
           const estimate = solverNodes(
-            nextLevelNodes(previous.nodes, shellOnly ? 2 : 3),
+            nextLevelNodes(previous.nodes, shellOnly ? 2 : 3, settings.ratio),
             model.elementOrder,
           );
           if (estimate > STUDY_NODE_BUDGET) {
@@ -359,5 +383,5 @@ export function useRefinementStudy() {
     }
   }
 
-  return { run, refusal, plannedSizes, start };
+  return { run, refusal, settingsErrors: errors, plannedSizes, start };
 }

@@ -3,13 +3,13 @@
 
 // Layout of the mesh refinement chart (KOF-401): each solved level as a point,
 // element count on a logarithmic axis (it grows geometrically, ~2.8× a level),
-// and for displacement the band the verdict is judged by — ±CONVERGED_TOLERANCE
+// and for displacement the band the verdict is judged by — ± the study's target
 // around the extrapolated value, or around the finest level when the levels
 // allow no extrapolation. Pure, so the chart component only draws.
 
 import {
   assessConvergence,
-  CONVERGED_TOLERANCE,
+  type RefinementSettings,
   type StudyLevel,
 } from "./refinementStudy";
 
@@ -63,6 +63,7 @@ export function chartLayout(
   levels: StudyLevel[],
   field: ChartField,
   box: ChartBox,
+  settings: Pick<RefinementSettings, "ratio" | "tolerance">,
 ): ChartLayout {
   const solved = levels.flatMap((l, i) => {
     const value = fieldValue(l, field);
@@ -73,7 +74,7 @@ export function chartLayout(
   let reference: number | null = null;
   let extrapolated = false;
   if (field === "displacement" && levels.length >= 2) {
-    const assessment = assessConvergence(levels);
+    const assessment = assessConvergence(levels, settings);
     extrapolated = assessment.extrapolated !== null;
     reference =
       assessment.extrapolated ?? levels[levels.length - 1].maxDisplacement;
@@ -82,8 +83,8 @@ export function chartLayout(
     reference === null
       ? null
       : {
-          low: reference * (1 - CONVERGED_TOLERANCE),
-          high: reference * (1 + CONVERGED_TOLERANCE),
+          low: reference * (1 - settings.tolerance),
+          high: reference * (1 + settings.tolerance),
         };
 
   // The value range: every point and the band, with a margin.

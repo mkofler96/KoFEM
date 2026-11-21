@@ -77,13 +77,13 @@ export function RefinementChart() {
 
   const spec = FIELDS.find((f) => f.value === field);
   if (spec === undefined) throw new Error(`Unknown chart field "${field}"`);
-  const layout = chartLayout(run.levels, field, pointBox);
+  const layout = chartLayout(run.levels, field, pointBox, run.settings);
   const openable = run.status === "done" && matches;
   const status =
     run.status === "running"
       ? run.step
       : run.status === "done" && run.levels.length >= 2
-        ? verdictLine(run.levels).text
+        ? verdictLine(run.levels, run.settings).text
         : run.status === "failed"
           ? "The study stopped — see the panel"
           : null;
