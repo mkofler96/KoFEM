@@ -87,6 +87,11 @@ export interface Property {
   maxElementSize?: string;
   // What topology optimization may do with the region; absent is "design".
   optimizationRole?: OptimizationRole;
+  // Set on a body the mesh contained but the body table did not (meshing split
+  // a domain of an imported part, KOF-413). Its materialId is only the offer of
+  // the first material: nobody chose it, so the solve waits until the user
+  // picks a material or keeps the offered one (confirmBodyMaterial).
+  materialUnconfirmed?: true;
 }
 
 // A property the user owns: one CAD body of the imported file. Everything else
@@ -117,6 +122,23 @@ export function suppressionMismatch(
       .filter((p) => atMesh.has(p.id) && !now.has(p.id))
       .map((p) => p.id),
   };
+}
+
+// The bodies whose material nobody has chosen yet (Property.materialUnconfirmed).
+export function unconfirmedMaterialBodies(properties: Property[]): number[] {
+  return properties
+    .filter((p) => p.materialUnconfirmed)
+    .map((p) => p.id)
+    .sort((a, b) => a - b);
+}
+
+// The pre-flight line for bodies whose material is not confirmed, or null.
+export function unconfirmedMaterialMessage(ids: number[]): string | null {
+  if (ids.length === 0) return null;
+  const list = ids.join(", ");
+  return ids.length === 1
+    ? `Choose the material of body ${list}: the mesh added it`
+    : `Choose the materials of bodies ${list}: the mesh added them`;
 }
 
 // The pre-flight line for a mesh that disagrees with the suppression, or null.
@@ -337,6 +359,8 @@ export interface GeometrySlice {
   // Solid; Shell is the user's choice per body.
   setBodies(count: number): void;
   assignBodyMaterial(propertyId: number, materialId: number): void;
+  // Keep the material a body was offered when the mesh added it (KOF-413).
+  confirmBodyMaterial(propertyId: number): void;
   setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
   setRegionMaxElementSize(propertyId: number, size: string): void;
@@ -412,6 +436,25 @@ function freshBodies(s: ModelState, count: number): Property[] {
     materialId: mat.id,
     discretization: "solid" as BodyDiscretization,
   }));
+}
+
+// A model built without a CAD import (a test or a script driving the store)
+// has no body table from an import and nobody to ask: its bodies take the
+// first material, as a fresh import's do.
+function defaultBodiesOfModelWithoutImport(
+  properties: Property[],
+  bodyIds: number[],
+  materialId: number,
+): void {
+  for (const id of bodyIds) properties.push({ id, materialId });
+}
+
+// The remesh-notice sentence for bodies the mesh added to an imported part.
+function newBodiesNotice(ids: number[]): string {
+  const list = ids.join(", ");
+  return ids.length === 1
+    ? `Meshing split the part: body ${list} is new — choose its material.`
+    : `Meshing split the part: bodies ${list} are new — choose their materials.`;
 }
 
 // Everything built ON the geometry — mesh, groups, results, transient body view
@@ -588,12 +631,22 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           `Cannot assign material: material ${materialId} does not exist`,
         );
       prop.materialId = materialId;
+      delete prop.materialUnconfirmed;
       // A shell-idealised body owns no elements after meshing — its walls became
       // PSHELLs, and the solve resolves their material through those. Assigning
       // to the body alone would silently leave the shells on the old material.
       for (const section of s.properties)
         if (section.sourceBodyId === propertyId)
           section.materialId = materialId;
+    }),
+  confirmBodyMaterial: (propertyId) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop)
+        throw new Error(
+          `Cannot confirm material: body ${propertyId} does not exist`,
+        );
+      delete prop.materialUnconfirmed;
     }),
   setStepBytes: (bytes) =>
     set((s) => {
@@ -654,14 +707,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (
-    bytes,
-    tessellation,
-    bodyCount,
-    bodySources,
-    piecesAs = "bodies",
-  ) =>
+  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources, piecesAs) =>
     set((s) => {
+      // Where the pieces of one solid go is the edit's to say (KOF-432).
+      if (bodySources && piecesAs === undefined)
+        throw new Error(
+          "Geometry edit: body sources given without saying whether the pieces of a solid become regions or bodies",
+        );
       if (!s.stepBytes || !s.stepSurface)
         throw new Error(
           "Cannot apply a geometry edit: no geometry is loaded to edit",
@@ -851,19 +903,32 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.viewRepr = "surface";
       s.fitViewTrigger++;
       // Every body present in the mesh needs a material assignment. The bodies
-      // were listed at import (setBodies), so this only fills gaps — e.g. a
-      // model built without a CAD import, or a body count that changed because
-      // meshing split/merged domains unexpectedly.
+      // were listed at import (setBodies), so a body the table does not know
+      // came from meshing splitting a domain (KOF-413). Nobody chose its
+      // material: it is offered the first one, marked unconfirmed, and named
+      // in the notice, and the solve waits until the user chooses.
       const knownBodies = new Set(s.properties.map((p) => p.id));
-      const meshBodies = new Set(elements.map((e) => e.propertyId));
-      for (const bodyId of [...meshBodies].sort((a, b) => a - b)) {
-        if (knownBodies.has(bodyId)) continue;
-        const mat = s.materials[0];
-        if (!mat)
-          throw new Error(
-            `Cannot create a material assignment for body ${bodyId}: the model has no materials`,
-          );
-        s.properties.push({ id: bodyId, materialId: mat.id });
+      const newBodies = [...new Set(elements.map((e) => e.propertyId))]
+        .filter((id) => !knownBodies.has(id))
+        .sort((a, b) => a - b);
+      if (newBodies.length === 0) return;
+      const mat = s.materials[0];
+      if (!mat)
+        throw new Error(
+          `Cannot create a material assignment for body ${newBodies.join(", ")}: the model has no materials`,
+        );
+      if (s.stepBytes === null) {
+        defaultBodiesOfModelWithoutImport(s.properties, newBodies, mat.id);
+        return;
       }
+      for (const bodyId of newBodies)
+        s.properties.push({
+          id: bodyId,
+          materialId: mat.id,
+          materialUnconfirmed: true,
+        });
+      s.remeshNotice = [s.remeshNotice, newBodiesNotice(newBodies)]
+        .filter((line) => line !== null)
+        .join(" ");
     }),
 });

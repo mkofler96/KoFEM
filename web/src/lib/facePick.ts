@@ -89,7 +89,7 @@ export function sameFaceNodes(a: number[], b: number[]): boolean {
 export function toggleFaceSelection(
   current: PickedFace[],
   picked: PickedFace,
-  noun: SelectionNoun = "Face",
+  noun: SelectionNoun,
   floodFillTri?: Tri,
 ): PickedFace[] {
   let existingIdx = current.findIndex((f) =>

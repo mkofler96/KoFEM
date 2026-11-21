@@ -66,11 +66,11 @@ const PICK_HINT: Record<PickGeometry, string> = {
 export function PickedFaceList({
   faces,
   onRemove,
-  geometry = "face",
+  geometry,
 }: {
   faces: FaceSelection[];
   onRemove(index: number): void;
-  geometry?: PickGeometry;
+  geometry: PickGeometry;
 }) {
   if (faces.length === 0) {
     return <div className={styles.pickHint}>{PICK_HINT[geometry]}</div>;
@@ -248,11 +248,11 @@ export function TieExtentInputs({
 export function DofCheckboxes({
   checkedDofs,
   onToggle,
-  showRotations = false,
+  showRotations,
 }: {
   checkedDofs: boolean[];
   onToggle(index: number): void;
-  showRotations?: boolean;
+  showRotations: boolean;
 }) {
   return (
     <div className={styles.dofGrid}>

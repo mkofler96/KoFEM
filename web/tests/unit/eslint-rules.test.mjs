@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The two lint rules that keep the browser specs deterministic
-// (web/eslint-rules): time budgets live in playwright.config.ts only, and the
-// viewport is clicked through tests/fixtures/viewport.ts only.
+// The lint rules in web/eslint-rules. Two keep the browser specs
+// deterministic: time budgets live in playwright.config.ts only, and the
+// viewport is clicked through tests/fixtures/viewport.ts only. One keeps
+// missing data from turning into a plausible default (no-silent-fallback).
 
 import { describe, test } from "bun:test";
 import { RuleTester } from "eslint";
+import noSilentFallback from "../../eslint-rules/no-silent-fallback.js";
 import noTestTimeouts from "../../eslint-rules/no-test-timeouts.js";
 import viewportThroughFixture from "../../eslint-rules/viewport-through-fixture.js";
 
@@ -111,6 +113,162 @@ ruleTester.run("viewport-through-fixture", viewportThroughFixture, {
     {
       code: "const canvas = page.locator('canvas'); await canvas.click();",
       errors: [{ messageId: "viaFixture" }],
+    },
+  ],
+});
+
+const valueDefaults = [{ checkValueDefaults: true }];
+
+ruleTester.run("no-silent-fallback", noSilentFallback, {
+  valid: [
+    // Absence markers stay allowed: they flow into explicit emptiness checks.
+    { code: "const ids = payload.ids ?? [];", options: valueDefaults },
+    { code: "const name = prop.name ?? null;", options: valueDefaults },
+    { code: "const { ids = [] } = payload;", options: valueDefaults },
+    { code: "function f(opts = {}) { return opts; }", options: valueDefaults },
+    // An empty collection is "no data", like [] and {}.
+    { code: "const taken = given ?? new Set();", options: valueDefaults },
+    {
+      code: "function f(byFace = new Map()) { return byFace; }",
+      options: valueDefaults,
+    },
+    {
+      code: "const t = mesh.t ?? new Float64Array(0);",
+      options: valueDefaults,
+    },
+    // A default that is no value: the caller's own variable.
+    {
+      code: "const { size = requestedSize } = payload;",
+      options: valueDefaults,
+    },
+    // Ternaries that are not presence checks choose between two real values.
+    { code: 'const s = n === 1 ? "" : "s";', options: valueDefaults },
+    { code: "const v = a > b ? a : 1;", options: valueDefaults },
+    // A flag is no presence check: the chosen branch does not use it.
+    { code: 'const label = isOn ? "On" : "Off";', options: valueDefaults },
+    { code: "const n = hasShells ? shellCount : 0;", options: valueDefaults },
+    {
+      code: 'const id = ok ? "check-ok" : "check-fail";',
+      options: valueDefaults,
+    },
+    // Prose is a message to the user that states the absence, not a value
+    // standing in for data.
+    {
+      code: 'const os = match ? match[0] : "unrecognised OS";',
+      options: valueDefaults,
+    },
+    {
+      code: "const label = stale !== null ? stale : `Mesh ready · ${n} nodes`;",
+      options: valueDefaults,
+    },
+    { code: 'const id = engineId ?? "not recorded";', options: valueDefaults },
+    // Choosing between two messages is no fallback of the value checked.
+    {
+      code: 'const title = group ? `Add face to ${group.name}` : "New BC";',
+      options: valueDefaults,
+    },
+    // A presence check whose absent branch is an absence marker or an error.
+    {
+      code: "const m = prop ? prop.materialId : null;",
+      options: valueDefaults,
+    },
+    {
+      code: "const m = prop ? prop.materialId : fail('no property');",
+      options: valueDefaults,
+    },
+    // Outside the solver paths only the parse rule applies.
+    "const { format = 'step' } = payload;",
+    "const m = prop ? prop.materialId : 1;",
+  ],
+  invalid: [
+    {
+      code: "const e = parseFloat(text) || 0;",
+      errors: [{ messageId: "nanMasking" }],
+    },
+    // An empty object of another kind is a value: a zero vector.
+    {
+      code: "const acc = outward.get(id) ?? new Vector3();",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const t = mesh.t ?? new Float64Array(3);",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const m = prop.materialId ?? 1;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    // KOF-432: the same default written as a destructuring default...
+    {
+      code: 'const { format = "step", maxElementSize = 20.0 } = payload;',
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }, { messageId: "valueDefault" }],
+    },
+    {
+      code: "const [first = 1] = list;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    // ...a parameter default...
+    {
+      code: "function mesh(size = 20) { return size; }",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const f = ({ order = 1 }) => order;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    // ...or a presence-check ternary (the KOF-413 shell material).
+    {
+      code: "const m = shellProp ? shellProp.materialId : 1;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const m = !shellProp ? 1 : shellProp.materialId;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    // A one-word string is a value: an enum member, a format.
+    {
+      code: 'const f = payload.format !== undefined ? payload.format : "step";',
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const kind = shape ?? `solid`;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const w = coupling.weights ? coupling.weights[i] : 1;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const n = mesh?.thicknesses ? mesh.thicknesses.length : 0;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const t = prop.thickness !== undefined ? prop.thickness : 1;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const t = prop.thickness == null ? 1 : prop.thickness;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const t = undefined === prop.thickness ? DEFAULT_THICKNESS : prop.thickness;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
     },
   ],
 });

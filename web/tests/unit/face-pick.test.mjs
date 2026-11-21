@@ -230,8 +230,8 @@ describe("toggleFaceSelection (#264)", () => {
 
   test("picks accumulate, toggle off and relabel by position", () => {
     // Picking two distinct faces accumulates both.
-    let selection = toggleFaceSelection([], faceA);
-    selection = toggleFaceSelection(selection, faceB);
+    let selection = toggleFaceSelection([], faceA, "Face");
+    selection = toggleFaceSelection(selection, faceB, "Face");
     expect(selection).toHaveLength(2);
     expect(selection[0].label).toBe("Face 1 (3 nodes)");
     expect(selection[1].label).toBe("Face 2 (3 nodes)");
@@ -243,13 +243,13 @@ describe("toggleFaceSelection (#264)", () => {
       isMax: true,
       label: "",
     };
-    selection = toggleFaceSelection(selection, faceAReordered);
+    selection = toggleFaceSelection(selection, faceAReordered, "Face");
     expect(selection).toHaveLength(1);
     expect(new Set(selection[0].nodeIds)).toEqual(new Set(faceB.nodeIds));
     expect(selection[0].label).toBe("Face 1 (3 nodes)");
 
     // Toggling the last remaining face off empties the selection.
-    selection = toggleFaceSelection(selection, faceB);
+    selection = toggleFaceSelection(selection, faceB, "Face");
     expect(selection).toHaveLength(0);
   });
 });

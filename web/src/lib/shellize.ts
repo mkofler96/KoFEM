@@ -70,7 +70,7 @@ export interface CouplingSet {
   offsets: number[];
   solid: number[];
   mpc?: number[]; // per ref; length matches ref when present
-  weights?: number[]; // per partner; shell-footprint interpolation coefficients
+  weights?: number[]; // per partner; shell-footprint interpolation coefficients; absent ⇒ every partner weighs 1
   dofMask?: number[]; // per ref; length matches ref when present
 }
 
@@ -335,6 +335,7 @@ function pairMap(keys: Uint32Array, values: Uint32Array): Map<number, number> {
 export function extractThinWallShells(
   m: ShellizeMesh,
   {
+    // eslint-disable-next-line kofem/no-silent-fallback -- the thin-wall limit in mm, a documented option of the extraction; the app never passes model data through it
     maxWall = 15,
     shellBodyIds,
   }: { maxWall?: number; shellBodyIds?: Set<number> } = {},
@@ -363,6 +364,7 @@ export interface CurvedWall {
 // does not use them.
 export function detectCurvedWalls(
   m: ShellizeMesh,
+  // eslint-disable-next-line kofem/no-silent-fallback -- the thin-wall limit in mm, a documented option of the measurement, as for extractThinWallShells
   { maxWall = 15 }: { maxWall?: number } = {},
 ): CurvedWall[] {
   return using(meshInput(m), (mesh) =>
@@ -386,6 +388,7 @@ export function detectCurvedWalls(
 export function shellWallTets(
   m: ShellizeMesh,
   shells: ShellExtraction,
+  // eslint-disable-next-line kofem/no-silent-fallback -- a documented option of the dev-script tet selection: 1 takes the wall's own thickness
   { margin = 1.0 }: { margin?: number } = {},
 ): Set<number> {
   return using(meshInput(m), (mesh) =>
@@ -638,6 +641,7 @@ export function dropCouplingsOnFixedNodes(
     ref.push(coupling.ref[k]);
     for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++) {
       solid.push(coupling.solid[i]);
+      // eslint-disable-next-line kofem/no-silent-fallback -- a coupling set without weights weighs every partner 1 (CouplingSet.weights)
       weights.push(coupling.weights ? coupling.weights[i] : 1);
     }
     offsets.push(solid.length);

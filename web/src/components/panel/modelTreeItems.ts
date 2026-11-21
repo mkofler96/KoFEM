@@ -44,6 +44,10 @@ export interface TreeItem {
   nested?: boolean;
 }
 
+// The tree's note on a body or region whose material the mesh offered and
+// nobody has chosen yet (KOF-413).
+const CHOOSE_MATERIAL = "choose material";
+
 // The model objects listed under each tree group. Groups without objects map
 // to an empty list.
 export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
@@ -77,6 +81,8 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
       geometry: hasGeometry
         ? bodyGroups(properties).flatMap(({ body, regions }): TreeItem[] => {
             const floating = regions.some((r) => unbonded.has(r.id));
+            // A body the mesh added has a material nobody chose (KOF-413).
+            const unconfirmed = regions.some((r) => r.materialUnconfirmed);
             if (regions.length === 1)
               return [
                 {
@@ -84,7 +90,11 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                   id: body,
                   label: `Body ${body}`,
                   color: colorOf(regions[0].materialId),
-                  detail: floating ? "unbonded" : undefined,
+                  detail: unconfirmed
+                    ? CHOOSE_MATERIAL
+                    : floating
+                      ? "unbonded"
+                      : undefined,
                   solidIds: [regions[0].id],
                 },
               ];
@@ -93,7 +103,11 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                 kind: "body",
                 id: body,
                 label: `Body ${body}`,
-                detail: floating ? "unbonded" : `${regions.length} regions`,
+                detail: unconfirmed
+                  ? CHOOSE_MATERIAL
+                  : floating
+                    ? "unbonded"
+                    : `${regions.length} regions`,
                 solidIds: regions.map((r) => r.id),
               },
               ...regions.map((r, k): TreeItem => ({
@@ -101,6 +115,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                 id: r.id,
                 label: `Region ${k + 1}`,
                 color: colorOf(r.materialId),
+                detail: r.materialUnconfirmed ? CHOOSE_MATERIAL : undefined,
                 solidIds: [r.id],
                 nested: true,
               })),

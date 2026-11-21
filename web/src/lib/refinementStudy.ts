@@ -12,7 +12,11 @@
 // first (a solid) instead of 64× for plain halving. The user sets the number
 // of levels, the ratio and the error the verdict accepts (KOF-424).
 
-import type { MeshSizes } from "../store/geometrySlice";
+import {
+  unconfirmedMaterialBodies,
+  type MeshSizes,
+  type Property,
+} from "../store/geometrySlice";
 
 export interface RefinementSettings {
   // Meshes the study solves, the current one included.
@@ -287,6 +291,22 @@ export function checkLevelDisplacement(
     throw new Error(
       `The solve at ${sizeLabel(size)} mm moved nothing (max displacement 0): the loads act only where the supports hold the part. Check the supports and loads.`,
     );
+}
+
+// A finer level's mesh can add a body that the body table did not have
+// (KOF-413). Its material is only an offer, so the level is not solved: the
+// study stops, naming the size and the bodies.
+export function checkLevelMaterials(
+  properties: Property[],
+  size: number,
+): void {
+  const ids = unconfirmedMaterialBodies(properties);
+  if (ids.length === 0) return;
+  const bodies =
+    ids.length === 1 ? `body ${ids[0]}` : `bodies ${ids.join(", ")}`;
+  throw new Error(
+    `The mesh at ${sizeLabel(size)} mm added ${bodies}: choose ${ids.length === 1 ? "its material" : "their materials"} in the Geometry step, then run the study again.`,
+  );
 }
 
 // A fraction as a percentage the way the user typed it: 2, 0.5.

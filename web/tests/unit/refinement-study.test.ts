@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import {
   assessConvergence,
   checkLevelDisplacement,
+  checkLevelMaterials,
   DEFAULT_REFINEMENT_INPUT,
   DEFAULT_REFINEMENT_SETTINGS,
   levelSizes,
@@ -302,6 +303,29 @@ describe("checkLevelDisplacement", () => {
 
   test("a level that moves nothing is refused with its size", () => {
     expect(() => checkLevelDisplacement(0, 8)).toThrow(/8 mm.*moved nothing/);
+  });
+});
+
+// KOF-413: a finer level's mesh can add a body, which is only offered a
+// material. The study must stop before solving that level, not solve it with
+// a material nobody chose.
+describe("checkLevelMaterials", () => {
+  test("a level whose bodies all have chosen materials passes", () => {
+    expect(() =>
+      checkLevelMaterials([{ id: 1, materialId: 1 }], 8),
+    ).not.toThrow();
+  });
+
+  test("a level whose mesh added a body is refused with its size and the body", () => {
+    expect(() =>
+      checkLevelMaterials(
+        [
+          { id: 1, materialId: 1 },
+          { id: 2, materialId: 1, materialUnconfirmed: true },
+        ],
+        8,
+      ),
+    ).toThrow(/8 mm.*body 2/);
   });
 });
 

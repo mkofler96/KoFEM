@@ -194,6 +194,7 @@ function BodyDetail({ id }: { id: number }) {
   const properties = useModelStore((s) => s.properties);
   const materials = useModelStore((s) => s.materials);
   const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
+  const confirmBodyMaterial = useModelStore((s) => s.confirmBodyMaterial);
   const setBodyDiscretization = useModelStore((s) => s.setBodyDiscretization);
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
@@ -233,6 +234,9 @@ function BodyDetail({ id }: { id: number }) {
   const notMeshed = mismatch.missing.includes(prop.id);
   const tip = sectionsTip(shellSectionsOf(properties, prop.id));
   const unbonded = unconnectedBodies(interfaces, properties).includes(prop.id);
+  // The material a body the mesh added was offered (KOF-413). A deleted one has
+  // nothing to keep; the solve's pre-flight names that case.
+  const offeredMaterial = materials.find((m) => m.id === prop.materialId);
   return (
     <>
       <div className={styles.formRow}>
@@ -291,6 +295,28 @@ function BodyDetail({ id }: { id: number }) {
           ))}
         </select>
       </div>
+      {prop.materialUnconfirmed && (
+        <>
+          <p
+            className={styles.fieldError}
+            data-testid="body-material-unconfirmed"
+          >
+            Meshing added this body. Choose its material before solving.
+          </p>
+          {offeredMaterial && (
+            <div className={styles.formRow}>
+              <span className={styles.formLabel} />
+              <button
+                className={styles.outlineBtn}
+                data-testid={`body-material-confirm-${prop.id}`}
+                onClick={() => confirmBodyMaterial(prop.id)}
+              >
+                Keep {offeredMaterial.name}
+              </button>
+            </div>
+          )}
+        </>
+      )}
       <div className={styles.formRow} title={ELEMENT_TYPE_TIP}>
         <span className={styles.formLabel}>Element type</span>
         <select

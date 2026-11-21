@@ -327,6 +327,7 @@ export function referencePointOptions(
   faces: { nodeIds: number[] }[],
   nodes: CouplingNode[],
   elements: CouplingElement[],
+  // eslint-disable-next-line kofem/no-silent-fallback -- a tuning option of the cylinder fit, documented here; no caller passes model data through it
   { cylinderTolerance = 0.12 }: { cylinderTolerance?: number } = {},
 ): ReferencePointOption[] {
   const nodeIds = new Set<number>();

@@ -113,3 +113,21 @@ test("surface arrays of different lengths are an error, not a model without shel
     ),
   ).toThrow(/4 surface triangles but 3 face ids/);
 });
+
+// KOF-413: the PSHELLs of a Shell body inherit its material. A body missing
+// from the property table has no material to inherit; meshing must say which
+// body, not give its shells material 1.
+test("a Shell body without a property is an error that names the body", () => {
+  for (const properties of [[], [{ id: 2, materialId: 1 }]])
+    expect(() =>
+      buildMeshTimeShellModel(
+        nodes,
+        [tet],
+        tetSurface,
+        [1, 2, 3, 4],
+        new Set([1]),
+        properties,
+        quiet,
+      ),
+    ).toThrow(/Body 1 is marked "Shell" but has no material assignment/);
+});

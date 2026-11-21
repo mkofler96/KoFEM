@@ -43,7 +43,7 @@ export function faceKey(face: FaceSelection): string {
 export function toFaceEntries(
   faces: FaceSelection[],
   existingCount: number,
-  geometry: PickGeometry = "face",
+  geometry: PickGeometry,
 ) {
   return faces.map((face, i) => ({
     label: `${SELECTION_NOUN[geometry]} ${existingCount + i + 1}`,

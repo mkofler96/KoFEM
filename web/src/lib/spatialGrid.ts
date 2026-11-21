@@ -36,6 +36,7 @@ export class SpatialGrid<T> {
   *candidates(
     point: Point3,
     outerRing: number,
+    // eslint-disable-next-line kofem/no-silent-fallback -- 0 searches from the centre cell; a ring search that resumes passes the ring it reached
     innerRing = 0,
   ): IterableIterator<T> {
     if (

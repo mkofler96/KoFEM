@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// eslint-disable-next-line kofem/no-silent-fallback -- display precision of a formatter, not model data
 export function fmt(v: number, digits = 3) {
   if (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-2 && v !== 0))
     return v.toExponential(digits);

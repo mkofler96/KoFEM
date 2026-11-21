@@ -81,6 +81,18 @@ export function requireOneShellBody(shellBodyIds: Set<number>): void {
     );
 }
 
+// The material of the body marked Shell, which its PSHELLs inherit. A body
+// missing from the property table has none to give (KOF-413).
+function shellBodyMaterial(cadBodies: Property[], bodyId: number): number {
+  const prop = cadBodies.find((p) => p.id === bodyId);
+  if (!prop)
+    throw new Error(
+      `Body ${bodyId} is marked "Shell" but has no material assignment: the property table ` +
+        "sent with the mesh request does not list it. Re-import the geometry or assign the body a material.",
+    );
+  return prop.materialId;
+}
+
 // Flat 0-based mesh for the shellize pipeline, built from the store model.
 export function buildShellizeMesh(
   nodes: Node[],
@@ -215,6 +227,11 @@ export function buildMeshTimeShellModel(
   requireMatchingSurface(surfaceTriangles, surfaceFaceIds);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
   if (tetElements.length !== elements.length) return null;
+  // The PSHELLs inherit the Shell body's material: look it up before the
+  // idealisation runs, so a missing one fails fast and names the body.
+  const cadBodies = properties.filter((p) => p.sourceBodyId === undefined);
+  const [shellBodyId] = shellBodyIds;
+  const shellMaterialId = shellBodyMaterial(cadBodies, shellBodyId);
 
   const vid = buildVertexIndexer(nodes);
   const mesh = buildShellizeMesh(
@@ -232,6 +249,10 @@ export function buildMeshTimeShellModel(
     extractShellsOrThrow(mesh, shellBodyIds),
   );
   const { model, shells } = transition;
+  if (shells.shellBody !== shellBodyId)
+    throw new Error(
+      `mesh-time shell: body ${shellBodyId} was marked "Shell" but the idealisation returned body ${shells.shellBody}`,
+    );
 
   // Nodes: the coupled pool (solid nodes first, then the shell mid-surface nodes).
   const poolNodes: Node[] = [];
@@ -248,10 +269,7 @@ export function buildMeshTimeShellModel(
   // The PSHELLs of an earlier mesh are dropped first — they describe walls that
   // no longer exist, and carrying them over made every re-mesh append another
   // dead body to the list.
-  const cadBodies = properties.filter((p) => p.sourceBodyId === undefined);
   const nextId = cadBodies.reduce((mx, p) => Math.max(mx, p.id), 0) + 1;
-  const shellProp = cadBodies.find((p) => p.id === shells.shellBody);
-  const shellMaterialId = shellProp ? shellProp.materialId : 1;
   const thkKey = (t: number) => Number(t.toFixed(6));
   const propOfThk = new Map<number, number>();
   const outProperties: Property[] = cadBodies.map((p) => ({ ...p }));

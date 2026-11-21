@@ -174,7 +174,7 @@ function createWorker(): Worker {
     if (ok) {
       pending.resolve(rest);
     } else {
-      // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a failure that arrived without a message; this is the error path itself, not solver data
+      // A failure that arrived without a message still needs a text.
       const msg = (rest.error as string | undefined) ?? "Worker error";
       console.error("[worker] task failed:", msg);
       const { stage } = rest;
@@ -194,7 +194,7 @@ function createWorker(): Worker {
     dismissCgContinuation();
     _cgTaskId = null;
     console.error("[worker] crashed:", e.message, e);
-    // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a worker that died without a message; this is the error path itself, not solver data
+    // A worker that died without a message still needs a text.
     const err = new Error(e.message ?? "Worker crashed");
     for (const p of _pending.values()) p.reject(err);
     _pending.clear();

@@ -240,8 +240,7 @@ export function createMixedModel(
   );
   // Every shell facet needs its thickness; a model without facets may omit
   // the field.
-  const thicknessCount =
-    mesh.thicknesses === undefined ? 0 : mesh.thicknesses.length;
+  const thicknessCount = (mesh.thicknesses ?? []).length;
   if (thicknessCount !== triangleCount)
     throw new Error(
       `coupled: ${thicknessCount} mesh.thicknesses for ${triangleCount} shell triangles — ` +
@@ -275,7 +274,7 @@ export function createMixedModel(
       requireIndices(coupling.solid, "coupling.solid", nodeCount),
       coupling.mpc,
       Uint32Array.from(coupling.dof_mask),
-      // eslint-disable-next-line kofem/no-silent-fallback -- weights are optional in the coupling set; absent means equal weights, as for solve_coupled
+      // Weights are optional in the coupling set; empty means equal weights, as for solve_coupled.
       coupling.weights ?? new Float64Array(0),
       requireNumber(coupling.relaxation, "coupling.relaxation"),
     );

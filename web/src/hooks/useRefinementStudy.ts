@@ -20,6 +20,7 @@ import type {
 import {
   levelSizes,
   checkLevelDisplacement,
+  checkLevelMaterials,
   nextLevelNodes,
   parseRefinementSettings,
   sizeLabel,
@@ -347,6 +348,7 @@ export function useRefinementStudy() {
             throw new Error(
               `Supports or loads did not follow onto the mesh at ${sizeLabel(sizes.max)} mm. ${get().remeshNotice ?? ""}`.trim(),
             );
+          checkLevelMaterials(get().properties, sizes.max);
         }
         const model = get();
         publish({

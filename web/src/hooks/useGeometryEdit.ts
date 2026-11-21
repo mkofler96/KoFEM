@@ -123,6 +123,8 @@ export function useGeometryEdit() {
           keepTools,
           reply.bodyCount,
         ),
+      // A Boolean's pieces are bodies of their own.
+      "bodies",
     );
   }
 
@@ -144,6 +146,8 @@ export function useGeometryEdit() {
       "repair_hinges",
       { repair },
       (reply) => reply.bodySources,
+      // Separating at a hinge makes the pieces bodies of their own.
+      "bodies",
     );
     if (ok) {
       const state = useModelStore.getState();

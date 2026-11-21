@@ -10,13 +10,17 @@
 //    numeric parse suggests the author believed it handles NaN (it does not).
 //
 // 2. With `checkValueDefaults: true` (enabled for solver-input/solver-result
-//    paths): any `??` / `||` whose right side fabricates a plausible *value* —
-//    a number, non-empty string, boolean, non-empty array/object literal,
-//    template literal, `new` expression, or an identifier named like a
-//    default (`DEFAULT_*`, `fallbackMaterial`, ...) — is flagged. Absence
-//    markers (`?? null`, `?? undefined`, `?? []`, `?? ""`, `?? {}`) stay
-//    allowed: they represent "no data" and flow into explicit emptiness
-//    checks instead of pretending data exists.
+//    paths): a default that fabricates a plausible *value* is flagged,
+//    however it is written: `x ?? d` / `x || d`, a destructuring or
+//    parameter default (`{ size = d }`), or a ternary that falls back when a
+//    value is absent (`prop ? prop.materialId : d`, KOF-432). A plausible
+//    value is a number, non-empty string, boolean, non-empty array/object
+//    literal, template literal, `new` expression, or an identifier named like
+//    a default (`DEFAULT_*`, `fallbackMaterial`, ...). Prose ("none shown")
+//    is a message that states the absence, not a value. Absence markers
+//    (`null`, `undefined`, `[]`, `""`, `{}`, an empty `new Set()` or
+//    `new Float64Array(0)`) stay allowed: they represent "no data" and flow
+//    into explicit emptiness checks instead of pretending data exists.
 //
 // A genuinely optional field may keep its default via
 //   // eslint-disable-next-line kofem/no-silent-fallback -- <why absence is legitimate here>
@@ -33,12 +37,36 @@ function isNumericParseCall(node) {
   );
 }
 
+// Text with a space is a message to the user ("unrecognised OS", `Mesh ready ·
+// ${n} nodes`): it states the absence instead of standing in for the data. A
+// one-word string ("step", "face") is a value.
+function isProse(text) {
+  return /\s/.test(text);
+}
+
+// `new Set()`, `new Map()`, `new Float64Array(0)`: "no data", like `[]`. An
+// empty object of another kind (`new Vector3()`) is a value.
+const COLLECTIONS = /^(Set|Map|WeakSet|WeakMap|Array|\w+Array)$/;
+function isEmptyCollection(node) {
+  const args = node.arguments;
+  return (
+    node.callee.type === "Identifier" &&
+    COLLECTIONS.test(node.callee.name) &&
+    (args.length === 0 ||
+      (args.length === 1 && args[0].type === "Literal" && args[0].value === 0))
+  );
+}
+
 // A right-hand side that fabricates a plausible value instead of marking
 // absence. `null`, `undefined`, `""`, `[]`, `{}` are absence markers.
 function isValueDefault(node) {
   switch (node.type) {
     case "Literal":
-      return node.value !== null && node.value !== "";
+      return (
+        node.value !== null &&
+        node.value !== "" &&
+        !(typeof node.value === "string" && isProse(node.value))
+      );
     case "UnaryExpression":
       return node.operator === "-" && node.argument.type === "Literal";
     case "ArrayExpression":
@@ -46,8 +74,9 @@ function isValueDefault(node) {
     case "ObjectExpression":
       return node.properties.length > 0;
     case "TemplateLiteral":
+      return !node.quasis.some((q) => isProse(q.value.cooked));
     case "NewExpression":
-      return true;
+      return !isEmptyCollection(node);
     case "Identifier":
       return node.name === "undefined"
         ? false
@@ -55,6 +84,87 @@ function isValueDefault(node) {
     default:
       return false;
   }
+}
+
+// What a presence check tests: a name or a property, optionally chained.
+function isPresenceOperand(node) {
+  return (
+    node.type === "Identifier" ||
+    node.type === "MemberExpression" ||
+    node.type === "ChainExpression"
+  );
+}
+
+function isAbsenceLiteral(node) {
+  return (
+    (node.type === "Literal" && node.value === null) ||
+    (node.type === "Identifier" && node.name === "undefined")
+  );
+}
+
+// The branch a ternary takes when the value it checks is absent, or null when
+// the ternary is no presence-check fallback: `x ? x.y : z`, `!x ? z : x[i]`,
+// `x !== undefined ? x : z` and `x == null ? z : x` all give z. It is one only
+// when the other branch reads the checked value itself, `x` or `x.y`; a flag
+// choosing between two values (`ok ? "check-ok" : "check-fail"`) or two
+// messages (`g ? \`Add face to ${g.name}\` : "New BC"`) is not.
+function absentBranch(node, source) {
+  const split = presenceSplit(node);
+  if (split === null) return null;
+  return readsValue(split.present, split.checked, source) ? split.absent : null;
+}
+
+// Strip what does not change which value an expression reads.
+function unwrap(node) {
+  let current = node;
+  while (
+    current.type === "ChainExpression" ||
+    current.type === "TSNonNullExpression" ||
+    current.type === "TSAsExpression"
+  )
+    current = current.expression;
+  return current;
+}
+
+// `a?.b` and `a.b` read the same value.
+function sameValue(a, b, source) {
+  const text = (node) =>
+    source.getText(unwrap(node)).replace(/\?\./g, ".").replace(/\s+/g, "");
+  return text(a) === text(b);
+}
+
+// Whether `expr` is `checked` or a property of it, at any depth.
+function readsValue(expr, checked, source) {
+  let current = unwrap(expr);
+  for (;;) {
+    if (sameValue(current, checked, source)) return true;
+    if (current.type !== "MemberExpression") return false;
+    current = unwrap(current.object);
+  }
+}
+
+function presenceSplit(node) {
+  const { test, consequent, alternate } = node;
+  if (isPresenceOperand(test))
+    return { checked: test, present: consequent, absent: alternate };
+  if (
+    test.type === "UnaryExpression" &&
+    test.operator === "!" &&
+    isPresenceOperand(test.argument)
+  )
+    return { checked: test.argument, present: alternate, absent: consequent };
+  if (test.type !== "BinaryExpression") return null;
+  const checked = isAbsenceLiteral(test.right)
+    ? test.left
+    : isAbsenceLiteral(test.left)
+      ? test.right
+      : null;
+  if (checked === null || !isPresenceOperand(checked)) return null;
+  if (test.operator === "!==" || test.operator === "!=")
+    return { checked, present: consequent, absent: alternate };
+  if (test.operator === "===" || test.operator === "==")
+    return { checked, present: alternate, absent: consequent };
+  return null;
 }
 
 export default {
@@ -88,7 +198,25 @@ export default {
     const { checkValueDefaults = false } = context.options[0] ?? {};
     const source = context.sourceCode;
 
+    const reportValueDefault = (node, fallback) =>
+      context.report({
+        node,
+        messageId: "valueDefault",
+        data: { fallback: `\`${source.getText(fallback)}\`` },
+      });
+
     return {
+      // `{ size = 20 }`, `[first = 1]`, `function f(size = 20)`.
+      AssignmentPattern(node) {
+        if (checkValueDefaults && isValueDefault(node.right))
+          reportValueDefault(node, node.right);
+      },
+      ConditionalExpression(node) {
+        if (!checkValueDefaults) return;
+        const absent = absentBranch(node, source);
+        if (absent !== null && isValueDefault(absent))
+          reportValueDefault(node, absent);
+      },
       LogicalExpression(node) {
         if (node.operator !== "||" && node.operator !== "??") return;
 
@@ -105,13 +233,8 @@ export default {
           return;
         }
 
-        if (checkValueDefaults && isValueDefault(node.right)) {
-          context.report({
-            node,
-            messageId: "valueDefault",
-            data: { fallback: `\`${source.getText(node.right)}\`` },
-          });
-        }
+        if (checkValueDefaults && isValueDefault(node.right))
+          reportValueDefault(node, node.right);
       },
     };
   },

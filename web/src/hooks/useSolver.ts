@@ -23,6 +23,8 @@ import {
 import {
   suppressionMismatch,
   suppressionMismatchMessage,
+  unconfirmedMaterialBodies,
+  unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
@@ -64,9 +66,14 @@ export function useSolver() {
   const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — a body left pointing at
   // a deleted material would fail in the solver with the same message.
-  const matOk =
+  const materialsExist =
     materials.length > 0 &&
     properties.every((p) => materials.some((m) => m.id === p.materialId));
+  // A body the mesh added was offered a material nobody chose (KOF-413).
+  const unconfirmedMaterial = unconfirmedMaterialMessage(
+    unconfirmedMaterialBodies(properties),
+  );
+  const matOk = materialsExist && unconfirmedMaterial === null;
   // The supports must hold every body against sliding and spinning (KOF-388):
   // the worker's rigid-body check, below, says which body is loose and how.
   const [unheld, setUnheld] = useState<string | null>(null);
@@ -258,11 +265,13 @@ export function useSolver() {
       matOk,
       materials.length === 0
         ? "No material assigned"
-        : !matOk
+        : !materialsExist
           ? "A body references a deleted material — reassign body materials"
-          : properties.length > 1
-            ? `Materials assigned · ${properties.length} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`
-            : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+          : unconfirmedMaterial !== null
+            ? unconfirmedMaterial
+            : properties.length > 1
+              ? `Materials assigned · ${properties.length} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`
+              : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
     ],
     [
       bcOk,
