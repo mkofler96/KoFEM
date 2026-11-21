@@ -289,10 +289,12 @@ test.describe("Full workflow showcase", () => {
 
     await page.getByRole("button", { name: /Run optimization/ }).click();
 
-    // Hand-off to the density Results view.
+    // Hand-off to the density Results view, which shows the density live while
+    // the run goes: wait for the finished run.
+    await expect(page.getByText("Run summary")).toBeVisible();
     await expect(page.getByText("Density threshold")).toBeVisible();
     await expect(page.getByTestId("density-colorbar")).toBeVisible();
-    await expect(page.getByTestId("convergence-plot")).toBeVisible();
+    await expect(page.getByTestId("topopt-view-chart")).toBeVisible();
 
     // A cutoff below 0.5 keeps the load-bearing material and lets the optimized
     // structure emerge from the design domain for the screenshot.

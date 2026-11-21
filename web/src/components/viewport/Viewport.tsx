@@ -11,6 +11,7 @@ import { ColorBar } from "./ColorBar";
 import { DensityColorBar } from "./DensityColorBar";
 import { EmptyState } from "./EmptyState";
 import { RefinementChart } from "./RefinementChart";
+import { TopOptChart } from "./TopOptChart";
 import { SampleGuide } from "./SampleGuide";
 import { useModelStore } from "../../store/modelStore";
 
@@ -48,6 +49,8 @@ export function Viewport() {
       {/* Results → Mesh refinement: the convergence chart in place of 3D.
           The canvas stays mounted underneath, so opening a level is instant. */}
       <RefinementChart />
+      {/* Results → Density on its chart: the optimization's convergence. */}
+      <TopOptChart />
 
       {/* Nothing loaded yet: the sample entry; then the sample's guide */}
       <EmptyState />

@@ -7,6 +7,7 @@
 // a density field — the final run in Results or the live one while optimizing.
 
 import { useModelStore } from "../../store/modelStore";
+import { topOptChartVisible } from "../../store/topOptSlice";
 import { densityColor } from "../../lib/densityField";
 import { useDisplayedDensity } from "./useDisplayedDensity";
 
@@ -25,8 +26,10 @@ const gradient = (() => {
 export function DensityColorBar() {
   const density = useDisplayedDensity();
   const threshold = useModelStore((s) => s.densityThreshold);
+  // The convergence chart covers the 3D view; its legend goes with it.
+  const chart = useModelStore(topOptChartVisible);
 
-  if (density === null) return null;
+  if (density === null || chart) return null;
 
   const ticks = [1, 0.75, 0.5, 0.25, 0];
 

@@ -71,19 +71,25 @@ test("TO results: density field renders, threshold reveals the shape, convergenc
 
   await page.getByRole("button", { name: /Run optimization/ }).click();
 
-  // Hand-off to Results with the density view.
+  // Hand-off to Results with the density view, live while the run goes; wait
+  // for the finished run.
+  await expect(page.getByText("Run summary")).toBeVisible();
   await expect(page.getByText("Density threshold")).toBeVisible();
 
   // The density field is on screen: its legend mounts only when a density run is
   // the active result in the Results view.
   await expect(page.getByTestId("density-colorbar")).toBeVisible();
 
-  // The convergence plot rendered from the returned history (at least one point).
-  const plot = page.getByTestId("convergence-plot");
+  // The convergence chart, drawn from the returned history in place of the 3D
+  // view (at least one point); then back to the density in 3D.
+  await page.getByTestId("topopt-view-chart").click();
+  const plot = page.getByTestId("topopt-chart");
   await expect(plot).toBeVisible();
   expect(Number(await plot.getAttribute("data-points"))).toBeGreaterThanOrEqual(
     1,
   );
+  await page.getByTestId("topopt-view-density").click();
+  await expect(page.getByTestId("density-colorbar")).toBeVisible();
 
   const total = await densityLength(page);
   expect(total).toBeGreaterThan(0);
@@ -131,8 +137,8 @@ test("TO results: density field renders, threshold reveals the shape, convergenc
   expect(volume).toBeGreaterThan(0);
 });
 
-// Live density during the run (KOF-240): while the optimizer runs, the Optimize
-// step draws each streamed iteration's density. Record every store update of the
+// Live density during the run (KOF-240): while the optimizer runs, Results →
+// Density draws each streamed iteration's density. Record every store update of the
 // live field before completion and check the viewport saw several iterations
 // and a changing visible-element count at a fixed cutoff — the shape emerging.
 test("TO live density: the viewport updates per iteration during the run @pipeline", async ({
@@ -178,8 +184,9 @@ test("TO live density: the viewport updates per iteration during the run @pipeli
   await page.getByRole("button", { name: /Run optimization/ }).click();
 
   // The cantilever optimizes in well under a second, too fast to catch the live
-  // panel on screen reliably, so the store subscription above is the record.
-  // Completion hands off to Results as before; the live field is cleared.
+  // view on screen reliably, so the store subscription above is the record.
+  // The run draws live on Results → Density, where it goes as it starts; the
+  // live field is cleared when it ends.
   await expect(page.getByText("Run summary")).toBeVisible();
 
   const seen = await page.evaluate(
@@ -191,7 +198,7 @@ test("TO live density: the viewport updates per iteration during the run @pipeli
       ).__liveSeen,
   );
   expect(seen.length).toBeGreaterThan(1);
-  expect(seen.every((s) => s.mode === "optimize")).toBe(true);
+  expect(seen.every((s) => s.mode === "results")).toBe(true);
   for (let i = 1; i < seen.length; i++)
     expect(seen[i].it).toBeGreaterThan(seen[i - 1].it);
   expect(new Set(seen.map((s) => s.visible)).size).toBeGreaterThan(1);

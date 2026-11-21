@@ -9,12 +9,13 @@
 // serialized; loading an analysis restores the settings but not a stale run.
 
 import type { TopOptHistoryEntry } from "../lib/solve/contracts.js";
-import type { SliceCreator } from "./modelStore";
+import type { ModelState, SliceCreator } from "./modelStore";
 import {
   raisedIterationLimit,
   type TopOptConvergence,
 } from "../lib/topOptConvergence";
-import { ensurePlot } from "./studySlice";
+import { ensurePlot, showPlot } from "./studySlice";
+import { endPickSessionOutside } from "./pickSlice";
 
 // The two objectives the panel offers: minimize compliance under a volume
 // fraction (KOF-230) or minimize volume under a compliance limit (KOF-235).
@@ -103,6 +104,24 @@ export const DEFAULT_STRESS_P: Record<StressAggregation, string> = {
   ks: "40",
 };
 
+export type TopOptView = "density" | "chart";
+
+// The centre shows the convergence chart in place of the 3D view: Results →
+// Density is open on its chart, with a run going or done.
+export function topOptChartVisible(s: ModelState): boolean {
+  if (
+    s.mode !== "results" ||
+    s.topOptView !== "chart" ||
+    (s.densityResult === null && !s.isOptimizing)
+  )
+    return false;
+  const { target } = s.treeSelection;
+  if (target.type !== "item" || target.kind !== "plot") return false;
+  return s.resultPlots.some(
+    (p) => p.id === target.id && p.source === "density",
+  );
+}
+
 // The design density of the iteration currently being streamed from a running
 // optimization (KOF-240). Transient: set per progress message, cleared when a
 // run starts, finishes or is cancelled — never persisted, never a "best so far".
@@ -119,6 +138,13 @@ export interface TopOptSlice {
   // A run asked for from outside the Optimize panel (KOF-412: "Run again" on
   // Results). The panel starts it when it mounts, and clears the request.
   topOptRunRequested: boolean;
+  // What the centre shows for Results → Density: the density in 3D (live
+  // while a run goes) or the convergence chart in place of the 3D view, like
+  // the mesh refinement study's.
+  topOptView: TopOptView;
+  // Why the last run failed, for whichever panel is open: the run hands off to
+  // Results as it starts, so the Optimize panel is gone by the time it fails.
+  topOptError: string | null;
 
   setTopOptMethod(method: TopOptMethod): void;
   setTopOptObjective(objective: TopOptObjective): void;
@@ -128,6 +154,11 @@ export interface TopOptSlice {
   setOptimizing(v: boolean): void;
   setDensityResult(result: DensityResult | null): void;
   setLiveDensity(live: LiveDensity | null): void;
+  setTopOptView(view: TopOptView): void;
+  setTopOptError(error: string | null): void;
+  // Open Results → Density, adding its plot when there is none yet: where a
+  // run goes as it starts.
+  showTopOptResult(): void;
   rerunTopOptWithMoreIterations(): void;
   clearTopOptRunRequest(): void;
 }
@@ -138,6 +169,8 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   densityResult: null,
   liveDensity: null,
   topOptRunRequested: false,
+  topOptView: "density",
+  topOptError: null,
 
   // Changing any setting makes an existing density stale — it was computed with
   // the previous setup. Clear it so the Optimize/Results nav steps no longer read
@@ -202,6 +235,27 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
       s.topOpt.maxIterations = String(raisedIterationLimit(run.iterations));
       s.densityResult = null;
       s.topOptRunRequested = true;
+    }),
+  setTopOptView: (view) =>
+    set((s) => {
+      s.topOptView = view;
+    }),
+  setTopOptError: (error) =>
+    set((s) => {
+      s.topOptError = error;
+    }),
+  showTopOptResult: () =>
+    set((s) => {
+      const plot = ensurePlot(s, "density");
+      s.mode = "results";
+      endPickSessionOutside(s, s.mode);
+      s.treeSelection = {
+        group: "results",
+        target: { type: "item", kind: "plot", id: plot.id },
+      };
+      // The view stays as the user left it: a rerun from the chart stays on
+      // the chart.
+      showPlot(s, plot);
     }),
   clearTopOptRunRequest: () =>
     set((s) => {

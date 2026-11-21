@@ -1,4 +1,5 @@
-/* The mesh refinement chart (KOF-401), in place of the 3D view. Colours come
+/* The study charts drawn in place of the 3D view: the mesh refinement study's
+   (KOF-401) and the topology optimization's convergence chart. Colours come
    from the panel's tokens (Panel.module.css, on :root). */
 
 .overlay {
@@ -155,4 +156,51 @@
   .card {
     padding: 12px;
   }
+}
+
+/* The optimization's chart: the true peak stress next to the aggregate the
+   constraint bounds, and the constraint's bound. */
+.lineSecondary {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.dot {
+  fill: var(--accent);
+}
+
+.bound {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.legendLine,
+.legendLineSecondary,
+.legendLineBound {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 2.5px solid var(--accent);
+}
+
+.legendLineSecondary {
+  border-top: 2px dashed var(--warn);
+}
+
+.legendLineBound {
+  border-top: 1.5px dashed var(--muted);
 }

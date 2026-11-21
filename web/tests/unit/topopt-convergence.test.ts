@@ -31,6 +31,7 @@ Object.assign(globalThis, {
 });
 
 const { useModelStore } = await import("../../src/store/modelStore");
+const { topOptChartVisible } = await import("../../src/store/topOptSlice");
 
 const run = (converged: boolean, iterations: number) => ({
   density: new Float64Array([0.2, 0.9]),
@@ -87,5 +88,64 @@ describe("the density result in the store", () => {
     expect(() =>
       useModelStore.getState().rerunTopOptWithMoreIterations(),
     ).toThrow("converged");
+  });
+});
+
+// The run hands off to Results at once, like the mesh refinement study: the
+// right panel switches between the density in 3D (live while the run goes)
+// and the convergence chart, which the centre draws in place of the 3D view.
+describe("the optimization's result view", () => {
+  beforeEach(() => {
+    const state = useModelStore.getState();
+    state.setDensityResult(null);
+    state.setOptimizing(false);
+    state.setTopOptError(null);
+  });
+
+  test("opening it shows Results → Density, in 3D", () => {
+    useModelStore.getState().showTopOptResult();
+    const state = useModelStore.getState();
+    expect(state.mode).toBe("results");
+    expect(state.activeResult).toBe("density");
+    const plot = state.resultPlots.find((p) => p.source === "density");
+    expect(plot).toBeDefined();
+    expect(state.treeSelection.target).toEqual({
+      type: "item",
+      kind: "plot",
+      id: plot?.id,
+    });
+    expect(state.topOptView).toBe("density");
+    expect(topOptChartVisible(state)).toBe(false);
+  });
+
+  test("the chart fills the centre while the run goes and after it", () => {
+    const store = useModelStore.getState();
+    store.showTopOptResult();
+    store.setTopOptView("chart");
+    // Nothing to chart before a run.
+    expect(topOptChartVisible(useModelStore.getState())).toBe(false);
+    store.setOptimizing(true);
+    expect(topOptChartVisible(useModelStore.getState())).toBe(true);
+    store.setOptimizing(false);
+    store.setDensityResult(run(true, 4));
+    expect(topOptChartVisible(useModelStore.getState())).toBe(true);
+    store.setTopOptView("density");
+    expect(topOptChartVisible(useModelStore.getState())).toBe(false);
+  });
+
+  test("the chart is the density plot's: another step or plot hides it", () => {
+    const store = useModelStore.getState();
+    store.showTopOptResult();
+    store.setTopOptView("chart");
+    store.setDensityResult(run(true, 4));
+    store.setMode("optimize");
+    expect(topOptChartVisible(useModelStore.getState())).toBe(false);
+  });
+
+  test("a failed run keeps its error for Results to show", () => {
+    useModelStore.getState().setTopOptError("Optimization error: boom");
+    expect(useModelStore.getState().topOptError).toBe(
+      "Optimization error: boom",
+    );
   });
 });

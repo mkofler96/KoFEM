@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { Study, TopOptNumericField } from "../../store/modelStore";
 import { useTopOpt, type FieldErrors } from "../../hooks/useTopOpt";
 import { resultUnit } from "../../lib/resultField";
-import { convergenceFromLogs } from "../../lib/topOptProgress";
-import { ConvergencePlot } from "./ConvergencePlot";
-import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LogSection } from "./LogSection";
 import { NotConvergedNotice } from "./NotConvergedNotice";
 import { PreflightChecks } from "./PreflightChecks";
@@ -75,7 +72,6 @@ export function OptimizePanel({
   const setStressConstraint = useModelStore((s) => s.setStressConstraint);
   const stressAggregation = useModelStore((s) => s.topOpt.stressAggregation);
   const setStressAggregation = useModelStore((s) => s.setStressAggregation);
-  const maxStressText = useModelStore((s) => s.topOpt.maxStress);
   const levelSet = method === "level_set";
   // The max-stress constraint is SIMP-only (KOF-236): its controls are hidden in
   // level-set mode, and useTopOpt neither validates nor sends it there.
@@ -103,37 +99,16 @@ export function OptimizePanel({
     ...modelChecks,
   ];
   const allOk = modelOk && staticCase !== null;
-  const liveDensity = useModelStore((s) => s.liveDensity);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // A run that stopped at its iteration limit (KOF-412) offers to run again
-  // with a higher one; Results asks for that run too, and this panel starts it.
+  // with a higher one; useTopOpt starts the requested run. The live density
+  // and the convergence chart are on Results → Density, where a run goes as
+  // it starts.
   const densityResult = useModelStore((s) => s.densityResult);
-  const runRequested = useModelStore((s) => s.topOptRunRequested);
   const rerunTopOptWithMoreIterations = useModelStore(
     (s) => s.rerunTopOptWithMoreIterations,
   );
-  useEffect(() => {
-    if (!runRequested) return;
-    // Take the request from the store, not from this render: StrictMode
-    // replays the effect with the same closure, which must not run twice.
-    const state = useModelStore.getState();
-    if (!state.topOptRunRequested) return;
-    state.clearTopOptRunRequest();
-    if (state.isOptimizing) return;
-    if (allOk) optimize();
-    else
-      setError(
-        "Could not run the optimization again: resolve the failed checks above first.",
-      );
-  });
-
-  // Live convergence curve, parsed from the streamed "[topopt] it N: …" log
-  // lines as they arrive. The density field streams separately (KOF-240) and is
-  // drawn in the viewport; its threshold slider is shown below during the run.
-  const livePoints = useMemo(() => convergenceFromLogs(logs), [logs]);
-  // The σ_allow line in the plot, when the entered limit is a usable number.
-  const stressLimit = stressOn ? Number(maxStressText) : NaN;
 
   return (
     <div className={styles.panel}>
@@ -353,32 +328,6 @@ export function OptimizePanel({
           >
             Cancel
           </button>
-        )}
-
-        {isOptimizing && liveDensity && (
-          <>
-            <div
-              className={styles.sectionLabel}
-              style={{ marginTop: 16 }}
-              data-testid="live-density-iteration"
-            >
-              Live density · iteration {liveDensity.it}
-            </div>
-            <DensityThresholdControl density={liveDensity.density} />
-          </>
-        )}
-
-        {livePoints.length > 0 && (
-          <>
-            <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-              Convergence
-            </div>
-            <ConvergencePlot
-              points={livePoints}
-              live={isOptimizing}
-              stressLimit={stressLimit}
-            />
-          </>
         )}
 
         <LogSection logs={logs} busy={isOptimizing} />
