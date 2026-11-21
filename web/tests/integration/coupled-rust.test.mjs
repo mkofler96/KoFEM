@@ -11,10 +11,12 @@
 // Models:
 //   - a hand-mixed store model built by buildCoupledEngineInputs: a block of
 //     two solid materials (per-body) with an explicit CTRIA3 wall standing on
-//     it, a clamp, a prescribed displacement, point forces, a moment on a
-//     shell node, a pressure on the block and a kinematic reference-point
-//     coupling loaded by a moment — and the same model with its wall in two
-//     shell materials (per-facet mesh.shell_attributes);
+//     it, a clamp, a prescribed displacement, point forces, a pressure on the
+//     block and a kinematic reference-point coupling loaded by a moment — and
+//     the same model with its wall in two shell materials (per-facet
+//     mesh.shell_attributes). A moment on a shell node is checked in Rust
+//     alone: the builder dropped it when the C++ results were stored
+//     (KOF-411);
 //   - the KOF-215 planar transition study (fixtures/shell-junction.mjs, the
 //     model of engine/tests/shell_solid_footprint_study.cpp): a 2 mm wall on
 //     a block, cut into a retained solid section and a shell, tied by shell
@@ -175,7 +177,10 @@ const near = (lhs, rhs) => Math.abs(lhs - rhs) < 1e-6;
 // its top along y = 10, x ∈ [0, 40], z ∈ [10, 40]. The wall's bottom edge
 // coincides with block nodes; the builder ties it to the block. With
 // `twoShellMaterials` the wall's x ≥ 20 half is its own aluminium body 4.
-function handMixedModel({ twoShellMaterials = false } = {}) {
+// `nodalMoment` adds a moment on a node: "shell" on a wall node, "solid" on a
+// block node. Neither is in the stored C++ results — the builder dropped
+// both when they were recorded (KOF-411).
+function handMixedModel({ twoShellMaterials = false, nodalMoment } = {}) {
   const nodes = [];
   const elements = [];
   const index = new Map();
@@ -264,9 +269,12 @@ function handMixedModel({ twoShellMaterials = false } = {}) {
       dof: 0,
       value: 120 / wallTop.length,
     })),
-    { nodeId: wallTop[0], dof: 3, value: 200 },
     { nodeId: reference, dof: 3, value: 5000 },
   ];
+  if (nodalMoment === "shell")
+    loads.push({ nodeId: wallTop[0], dof: 3, value: 200 });
+  if (nodalMoment === "solid")
+    loads.push({ nodeId: drive, dof: 4, value: 200 });
   // Pressure on the block's +y face.
   const pressureFaces = [];
   for (const element of elements) {
@@ -343,6 +351,37 @@ describe("Hand-mixed block + wall: two solid materials, clamp, drive, forces, mo
       both.rust.displacements,
     );
     expect(softer.relative).toBeGreaterThan(1e-2);
+  });
+
+  // KOF-411: a nodal moment on a shell node reaches that node's rotational
+  // DOF and moves the result; on a solid node it has nowhere to act and is
+  // refused. Both were dropped before.
+  test("a moment on a shell node is applied", async () => {
+    const withMoment = buildCoupledEngineInputs(
+      handMixedModel({ nodalMoment: "shell" }),
+      silent,
+    );
+    const added = Array.from(withMoment.bcs.load_dofs)
+      .map((dof, index) => ({ dof, value: withMoment.bcs.load_vals[index] }))
+      .filter(
+        ({ dof }) =>
+          !Array.from(inputs.bcs.load_dofs).includes(dof) && dof % 6 > 2,
+      );
+    expect(added).toEqual([{ dof: added[0].dof, value: 200 }]);
+    expect(added[0].dof % 6).toBe(3);
+    const turned = await solveInRust(withMoment);
+    expect(
+      maxDifference(turned.displacements, both.rust.displacements).relative,
+    ).toBeGreaterThan(1e-6);
+  });
+
+  test("a moment on a solid node is refused", () => {
+    expect(() =>
+      buildCoupledEngineInputs(
+        handMixedModel({ nodalMoment: "solid" }),
+        silent,
+      ),
+    ).toThrow(/carries a moment \(DOF 4 = 200\).*no rotational DOF/);
   });
 
   // Per-body shell materials: the wall in two bodies of steel and

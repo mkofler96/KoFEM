@@ -37,11 +37,20 @@ export interface Load {
 //   force    — total force vector, spread by the engine as a uniform traction
 //   pressure — scalar magnitude, applied as -p·n̂ (outward normal; + pushes in)
 //   traction — traction vector applied directly (not surfaced in the UI yet)
+//
+// `name` is the load group's, for errors that refer to the load.
+// `unmatchedSelections` counts the group's selections that span no loadable
+// face of the mesh (a stale pick after a re-mesh, an edge of a solid). Such a
+// load is kept, even with no faces at all, so the solve refuses it by name
+// (surfaceLoadRefusal) instead of dropping it, or putting its total on the
+// selections that did match (KOF-411).
 export interface SurfaceLoad {
   type: "force" | "pressure" | "traction";
   faces: number[][];
   force?: [number, number, number];
   pressure?: number;
+  name?: string;
+  unmatchedSelections?: number;
 }
 
 export function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
@@ -81,12 +90,53 @@ const TRIA_EDGE_INDICES = [
   [2, 0],
 ];
 
-// The element boundary faces lying on one loaded face: every element face whose
-// nodes all belong to the face's node set — triangles for tets (and shell
-// facets), quads for hexes. The engine matches these to its generated boundary
-// elements by vertex set (and ignores any interior faces that aren't
-// boundaries), so the load is integrated over the real surface, mesh type
-// regardless.
+// A face's vertex-set key: its node ids sorted, so any winding matches.
+export const faceKey = (ids: readonly number[]): string =>
+  [...ids].sort((a, b) => a - b).join(",");
+
+// The keys of every face a surface load can act on: a solid face owned by one
+// solid element (a face shared by two is inside the body, and the solid
+// solve's boundary integrator would not find it), every shell facet, and
+// every edge of a shell facet (a line load). The one definition the load
+// builder (rebuildSurfaceLoads) and the solve's check (surfaceLoadRefusal)
+// both use, so they cannot disagree on what is loadable.
+export function loadableFaceKeys(
+  elements: readonly { type: string; nodeIds: number[] }[],
+): Set<string> {
+  const solidOwners = new Map<string, number>();
+  const loadable = new Set<string>();
+  for (const el of elements) {
+    if (el.type === "CTRIA3") {
+      loadable.add(faceKey(el.nodeIds));
+      for (const edge of TRIA_EDGE_INDICES)
+        loadable.add(faceKey(edge.map((i) => el.nodeIds[i])));
+      continue;
+    }
+    const local =
+      el.type === "CTETRA"
+        ? TET_FACE_INDICES
+        : el.type === "CHEXA"
+          ? HEX_FACE_INDICES
+          : null;
+    if (!local) continue;
+    for (const lf of local) {
+      const key = faceKey(lf.map((i) => el.nodeIds[i]));
+      // eslint-disable-next-line kofem/no-silent-fallback -- counting face owners; 0 is the identity for a face seen for the first time
+      solidOwners.set(key, (solidOwners.get(key) ?? 0) + 1);
+    }
+  }
+  for (const [key, owners] of solidOwners) if (owners === 1) loadable.add(key);
+  return loadable;
+}
+
+// The element boundary faces lying on one loaded face: every loadable element
+// face (loadableFaceKeys) whose nodes all belong to the face's node set —
+// triangles for tets (and shell facets), quads for hexes. A face inside a
+// solid can have all its nodes on a picked face (a sliver tet on a curved
+// wall) and is left out: the solid solve would find no boundary face for it,
+// and the coupled solve would load it. The engine matches the rest to its
+// boundary elements by vertex set, so the load is integrated over the real
+// surface, mesh type regardless.
 //
 // A selection on a shell mesh can also be an EDGE — a polyline of nodes (e.g.
 // the pulled edge of a plate) that contains no whole facet. When no face
@@ -99,6 +149,7 @@ const TRIA_EDGE_INDICES = [
 function loadedFaces(
   face: { nodeIds: number[] },
   elements: Element[],
+  loadable: ReadonlySet<string>,
 ): number[][] {
   const nodeSet = new Set(face.nodeIds);
   const seen = new Set<string>();
@@ -116,8 +167,8 @@ function loadedFaces(
     for (const lf of local) {
       const verts = lf.map((i) => el.nodeIds[i]);
       if (!verts.every((v) => nodeSet.has(v))) continue;
-      const key = [...verts].sort((a, b) => a - b).join(",");
-      if (seen.has(key)) continue; // a boundary face is owned by one element
+      const key = faceKey(verts);
+      if (!loadable.has(key) || seen.has(key)) continue;
       seen.add(key);
       faces.push(verts);
     }
@@ -130,7 +181,7 @@ function loadedFaces(
     for (const le of TRIA_EDGE_INDICES) {
       const verts = le.map((i) => el.nodeIds[i]);
       if (!verts.every((v) => nodeSet.has(v))) continue;
-      const key = [...verts].sort((a, b) => a - b).join(",");
+      const key = faceKey(verts);
       if (seen.has(key)) continue;
       seen.add(key);
       edges.push(verts);
@@ -241,12 +292,15 @@ export function rebuildSurfaceLoads(
   couplingGroups: CouplingGroup[] = [],
 ): SurfaceLoad[] {
   const refPoints = referencePointIds(couplingGroups);
+  const loadable = loadableFaceKeys(elements);
   const result: SurfaceLoad[] = [];
   for (const g of loadGroups) {
     const kind = loadKind(g);
     if (kind === "moment") continue; // moments stay as equivalent point loads
     const faces: number[][] = [];
     const seen = new Set<string>();
+    let selections = 0;
+    let unmatchedSelections = 0;
     for (const f of g.faces) {
       // Nodal selections are rebuildLoads' half of the group: a reference point
       // belongs to no element and a picked point spans no face, so there is no
@@ -255,18 +309,28 @@ export function rebuildSurfaceLoads(
       // would make the split an accident of that function, and a change there
       // would either double-apply the load or drop it without a word.
       if (isNodalFace(f, refPoints)) continue;
-      for (const face of loadedFaces(f, elements)) {
-        const key = [...face].sort((a, b) => a - b).join(",");
+      selections++;
+      const spanned = loadedFaces(f, elements, loadable);
+      // A selection that spans no face would vanish from the load, and its
+      // share of a total force move to the other selections. Count it, for the
+      // solve to refuse (surfaceLoadRefusal).
+      if (spanned.length === 0) unmatchedSelections++;
+      for (const face of spanned) {
+        const key = faceKey(face);
         if (seen.has(key)) continue;
         seen.add(key);
         faces.push(face);
       }
     }
-    if (faces.length === 0) continue;
+    // A group of nodal selections only is rebuildLoads' alone. Any other group
+    // is kept, even with no faces, so it reaches the solve and is refused by
+    // name rather than skipped.
+    if (selections === 0) continue;
+    const named = { faces, name: g.name, unmatchedSelections };
     if (kind === "pressure") {
-      result.push({ type: "pressure", pressure: g.totalForce, faces });
+      result.push({ type: "pressure", pressure: g.totalForce, ...named });
     } else {
-      result.push({ type: "force", force: loadComponents(g), faces });
+      result.push({ type: "force", force: loadComponents(g), ...named });
     }
   }
   return result;

@@ -304,12 +304,10 @@ export function buildCoupledEngineInputs(
   };
   const refPoolIndices = new Set([...refIds].map((nodeId) => poolOf(nodeId)));
   const isRefPoint = (pi: number) => refPoolIndices.has(pi);
-  const dirichlet = coupledFixedDofs(
-    constraints,
-    poolOf,
-    (pi) => model.shellPoolIndex.has(pi),
-    isRefPoint,
-  );
+  const isShell = (pi: number) => model.shellPoolIndex.has(pi);
+  // Shell nodes and reference points carry rotations, and take a nodal moment.
+  const hasRotations = (pi: number) => isShell(pi) || isRefPoint(pi);
+  const dirichlet = coupledFixedDofs(constraints, poolOf, isShell, isRefPoint);
   // A clamped or driven shell node that also sits within coupling range of the
   // solid would be both constrained and a distributing-coupling dependent — the
   // engine refuses that (#377/KOF-210). The BC wins; drop the coupling on those
@@ -333,7 +331,7 @@ export function buildCoupledEngineInputs(
     loads,
     solidFacesOutward(surfaceLoads, elements, nodes, vid),
     poolOf,
-    isRefPoint,
+    hasRotations,
     nodes,
     vid,
   );
@@ -341,7 +339,7 @@ export function buildCoupledEngineInputs(
     loads,
     undefined,
     poolOf,
-    isRefPoint,
+    hasRotations,
     nodes,
     vid,
   );

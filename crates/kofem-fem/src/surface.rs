@@ -23,9 +23,10 @@
 //! (`engine/cpp/fem_bc_io.cpp`), so both solvers load a model identically:
 //!
 //! * a selected face matches a boundary face by its (sorted) vertex triple or
-//!   quadruple; duplicates count once, and faces that match nothing are
-//!   reported;
-//! * a load that matches no boundary face at all is refused;
+//!   quadruple, and duplicates count once;
+//! * a load with any selected face that matches no boundary face is refused
+//!   (KOF-411): MFEM skipped such faces, which spread a total force over a
+//!   smaller area than the user picked;
 //! * pressure p acts as the traction −p·n with n the outward unit normal;
 //! * a total force F is spread as the uniform traction F / A over the matched
 //!   area A, which must be positive (a quadrilateral's area integrated, as in
@@ -56,8 +57,6 @@ pub enum SurfaceLoadKind {
 pub struct SurfaceLoadReport {
     /// Distinct boundary faces the load acts on.
     pub matched: usize,
-    /// Selected faces that are not on the boundary (stale or interior).
-    pub unmatched: usize,
 }
 
 /// One boundary triangle: corners in the owning tet's order, outward
@@ -246,8 +245,8 @@ impl BoundaryFaces {
     /// triples and quadruples; `load` names the load in errors.
     ///
     /// # Errors
-    /// [`FemError::SurfaceLoadUnmatched`] when no selected face is on the
-    /// boundary, [`FemError::SurfaceLoadArea`] for a total force over zero
+    /// [`FemError::SurfaceLoadUnmatched`] when any selected face is not on
+    /// the boundary (the load is then not applied at all), [`FemError::SurfaceLoadArea`] for a total force over zero
     /// area, [`FemError::NonFinite`] for a non-finite load value,
     /// [`FemError::ForceLength`] when `forces` does not fit the mesh.
     pub fn apply(
@@ -286,16 +285,18 @@ impl BoundaryFaces {
             .filter_map(|&vertices| self.find_quad(vertices))
             .collect();
         let unmatched = selected - matched_triangles.len() - matched_quads.len();
+        // Also an empty selection: a load that would apply nothing.
+        if unmatched > 0 || selected == 0 {
+            return Err(FemError::SurfaceLoadUnmatched {
+                load,
+                unmatched,
+                selected,
+            });
+        }
         matched_triangles.sort_unstable();
         matched_triangles.dedup();
         matched_quads.sort_unstable();
         matched_quads.dedup();
-        if matched_triangles.is_empty() && matched_quads.is_empty() {
-            return Err(FemError::SurfaceLoadUnmatched {
-                load,
-                faces: selected,
-            });
-        }
         let area_vectors: Vec<[f64; 3]> = matched_triangles
             .iter()
             .map(|&index| self.area_vector(mesh, index))
@@ -361,7 +362,6 @@ impl BoundaryFaces {
         }
         Ok(SurfaceLoadReport {
             matched: matched_triangles.len() + matched_quads.len(),
-            unmatched,
         })
     }
 }
