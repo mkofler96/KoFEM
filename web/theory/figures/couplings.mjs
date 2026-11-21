@@ -59,20 +59,6 @@ const PANEL = 250;
 const X = scale([-REACH, REACH], [70, 610]);
 const PX = X(1) - X(0); // pixels per mm, both directions
 
-/** A zigzag break line from `from` to `to`: where the drawing is cut off. */
-function breakLine(from, to) {
-  const steps = 6;
-  const points = Array.from({ length: steps + 1 }, (_, k) => {
-    const t = k / steps;
-    const offset = k === 0 || k === steps ? 0 : k % 2 ? 4 : -4;
-    return [
-      from[0] + t * (to[0] - from[0]) + offset,
-      from[1] + t * (to[1] - from[1]),
-    ];
-  });
-  return polyline(points, "ink", 'style="stroke-width:1.1"');
-}
-
 /**
  * One panel of the section through the screw axis, around the hole, seen
  * from −y: the cut face with a structured grid, the back half of the bore
@@ -147,12 +133,14 @@ function sectionPanel(kind, top, heading) {
           ),
         );
       }
-  // Where the drawing is cut off, away from the hole.
+  // Where the drawing is cut off, away from the hole: a plain edge that
+  // follows the deformed grid.
   for (const j of [0, xs.length - 1])
     parts.push(
-      breakLine(
-        P(xs[j], t, u("section", zs.length - 1, j)),
-        P(xs[j], 0, u("section", 0, j)),
+      polyline(
+        zs.map((z, i) => P(xs[j], z, u("section", i, j))),
+        "ink",
+        'style="stroke-width:1.1"',
       ),
     );
   // The coupled ring on the cut, its nodes, and the legs from the point.
