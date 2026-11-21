@@ -361,7 +361,7 @@ export default {
         prescribed DOFs are collected
         (${codeSource("web/src/lib/solve/amg.ts", 353, "amg.ts")}), extended to the order-2 edge
         and face nodes of every boundary face whose corners are all held
-        (${codeSource("crates/kofem-fem/src/static_solve.rs", 200, "boundary-node extension")}) and
+        (${codeSource("crates/kofem-fem/src/static_solve.rs", 195, "boundary-node extension")}) and
         checked for conflicts
         (${codeSource("crates/kofem-fem/src/constraints.rs", 17, "conflict check")}).</li>
       <li><strong>Elimination.</strong> Prescribed columns move to the

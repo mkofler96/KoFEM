@@ -126,9 +126,8 @@ export default {
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
     <p><strong>The order-2 hex row solves the same clamp.</strong> The
-      ${codeSource("crates/kofem-fem/src/static_solve.rs", 87, "Dirichlet extension")}
-      holds every node of the fully fixed end face: its vertices, edge nodes
-      and Q2 face-centre nodes. Its extension on the coarsest grid lands next
+      support holds every node of the fully fixed end face: its vertices,
+      edge nodes and Q2 face-centre nodes. Its extension on the coarsest grid lands next
       to the finest order-1 mesh. One order-2 mesh still does not establish an
       order of convergence.</p>
     <p>The middle-region agreement checks a uniform stress invariant. It does

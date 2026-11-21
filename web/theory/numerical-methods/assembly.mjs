@@ -184,7 +184,7 @@ export default {
           <tr><th scope="row">Point loads</th><td>App</td><td>Added directly to the load vector at a vertex’s three DOFs
             (${codeSource("web/src/lib/solve/amg.ts", 380, "amg.ts")}).</td></tr>
           <tr><th scope="row">Supports</th><td>App, Rust</td><td>The app lists constrained DOFs; Rust extends them to the order-2 nodes of the supported faces and eliminates them
-            (${codeSource("crates/kofem-fem/src/static_solve.rs", 104, "static_solve.rs")}).</td></tr>
+            (${codeSource("crates/kofem-fem/src/static_solve.rs", 102, "static_solve.rs")}).</td></tr>
           <tr><th scope="row">Mixed solid–shell</th><td>Rust</td><td>The same order-1 solid matrix, combined with the shell facets through the coupling equations
             (${codeSource("crates/kofem-fem/src/coupled_static.rs", 406, "coupled_static.rs")}).</td></tr>
         </tbody>
