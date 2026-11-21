@@ -24,6 +24,7 @@ import { create } from "zustand";
 import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
+import { DEFAULT_REFINEMENT_INPUT } from "../lib/refinementStudy";
 import { bodiesLeftOutOfMesh } from "../lib/suppressBodies";
 import { AUTO_DEFORM_SCALE } from "../lib/deformScale";
 import {
@@ -246,6 +247,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextPlotId = s.resultPlots.length + 1;
       s.refinementStudy = null;
       s.refinementLevelShown = null;
+      s.refinementInput = { ...DEFAULT_REFINEMENT_INPUT };
       s.mode = a.mode;
       applyTreeSelection(s, modeSelection(a.mode, s));
       s.stepImportError = null;
@@ -321,6 +323,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextPlotId = 1;
       s.refinementStudy = null;
       s.refinementLevelShown = null;
+      s.refinementInput = { ...DEFAULT_REFINEMENT_INPUT };
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];

@@ -214,6 +214,10 @@ export function weldTies(
     log(
       `Tie "${report.name}": constrained ${report.nPaired} node(s) to the opposite surface, up to ${report.maxDistance.toFixed(4)} mm away${report.nShared > 0 ? `, ${report.nShared} already shared` : ""}`,
     );
+    if (report.nUncovered > 0)
+      log(
+        `Tie "${report.name}": ${report.nUncovered} node(s) left untied — the opposite surface covers less than half of the area around them`,
+      );
   }
 
   const vid = buildVertexIndexer(solveNodes);

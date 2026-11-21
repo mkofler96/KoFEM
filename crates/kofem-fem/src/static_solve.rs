@@ -9,8 +9,9 @@ use crate::amg::{
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::error::FemError;
-use crate::mesh::TetMesh;
+use crate::mesh::{ElementOrder, TetMesh};
 use crate::sparse::CsrMatrix;
+use crate::surface::BoundaryFaces;
 
 /// Which preconditioner the CG solve uses.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -48,8 +49,8 @@ pub struct PreparedStatic {
 }
 
 /// Solve K·u = f with the given DOFs (3·node + component) prescribed. On a
-/// quadratic mesh a condition on both ends of an edge extends to its edge
-/// node (see [`prepare_static`]).
+/// quadratic mesh a condition on every corner of a boundary face extends to
+/// the face's edge and face nodes (see [`prepare_static`]).
 /// `stiffness` is the matrix `assemble_stiffness` built for `mesh`; it is left
 /// unchanged, so it can serve further load cases.
 ///
@@ -85,15 +86,16 @@ pub fn solve_static(
 
 /// Check one load case and set it up for CG (see [`PreparedStatic`]).
 ///
-/// On a quadratic mesh, the MFEM engine's rule extends vertex conditions to
-/// the edge nodes: where both ends of an edge prescribe the same component,
-/// the edge node gets it too, at the mean of the two values — exact for a
-/// clamped face or a uniform or linear prescribed displacement. An edge with
-/// only one end constrained (the border of a support) stays free, and an edge
-/// node DOF the caller prescribes itself keeps the caller's value. The face
-/// and centre nodes of 27-node hexes get no condition: the MFEM engine leaves
-/// a hex face's centre DOF free as well, so a support on a hex face holds its
-/// corners and edge nodes only. Prescribe a face node explicitly to hold it.
+/// On a quadratic mesh, vertex conditions extend to the nodes of the
+/// supported boundary faces: where every corner of a boundary face (a tet
+/// triangle or a hex quadrilateral) prescribes the same component, its edge
+/// nodes get it too, at the mean of the edge's two ends, and a hex face node
+/// at the mean of the face's four corners — exact for a clamped face or a
+/// uniform or linear prescribed displacement. An edge through the interior
+/// stays free even when both its ends are held (where two supported faces
+/// meet, or across a wall supported on both sides), as does an edge with only
+/// one end constrained (the border of a support) and every hex centre node.
+/// A node DOF the caller prescribes itself keeps the caller's value.
 ///
 /// # Errors
 /// Malformed forces or constraints, a support or load on a vertex no element
@@ -135,7 +137,7 @@ pub fn prepare_static(
 
     let mut dofs = fixed_dofs.to_vec();
     let mut values = fixed_values.to_vec();
-    extend_to_edge_nodes(mesh, fixed_dofs, fixed_values, &mut dofs, &mut values);
+    extend_to_boundary_nodes(mesh, 3, fixed_dofs, fixed_values, &mut dofs, &mut values);
     // Hold every unused vertex at zero, after checking nothing loads it.
     for vertex in (0..mesh.vertex_count()).filter(|&vertex| !mesh.is_used(vertex)) {
         if forces[3 * vertex..3 * vertex + 3]
@@ -190,35 +192,55 @@ fn dof_number(node: usize, component: usize) -> u32 {
     dof
 }
 
-/// Append to `dofs`/`values` the edge-node conditions implied by the given
-/// vertex conditions (see [`prepare_static`]). Nothing on a linear mesh.
-pub(crate) fn extend_to_edge_nodes(
+/// Append to `dofs`/`values` the conditions the given vertex conditions imply
+/// for the edge and face nodes of the supported boundary faces (see
+/// [`prepare_static`]). DOFs are numbered `node_dofs`·node + component, with
+/// the translations as components 0–2; other components and DOFs out of range
+/// are left for the caller to check. Nothing on a linear mesh.
+pub(crate) fn extend_to_boundary_nodes(
     mesh: &TetMesh,
+    node_dofs: usize,
     fixed_dofs: &[u32],
     fixed_values: &[f64],
     dofs: &mut Vec<u32>,
     values: &mut Vec<f64>,
 ) {
-    if mesh.edges().is_empty() {
+    if mesh.order() == ElementOrder::Linear {
         return;
     }
-    // First value per node component; a conflicting second value is refused
-    // later by `Dirichlet::new`, so which one is kept does not matter.
+    // First value per node translation; a conflicting second value is refused
+    // later by the caller's constraint check, so which one is kept does not
+    // matter. Conditions added here go in too, so a node on several supported
+    // faces is extended once.
     let mut prescribed = vec![[None::<f64>; 3]; mesh.node_count()];
     for (&dof, &value) in fixed_dofs.iter().zip(fixed_values) {
-        let (node, component) = (dof as usize / 3, dof as usize % 3);
-        if let Some(slot) = prescribed.get_mut(node) {
+        let (node, component) = (dof as usize / node_dofs, dof as usize % node_dofs);
+        if let Some(slot) = prescribed.get_mut(node).filter(|_| component < 3) {
             slot[component].get_or_insert(value);
         }
     }
-    for (edge, &[first, second]) in mesh.edges().iter().enumerate() {
-        let node = mesh.vertex_count() + edge;
-        let (lhs, rhs) = (prescribed[first as usize], prescribed[second as usize]);
-        for (component, own) in prescribed[node].iter().enumerate() {
-            if let (None, Some(lhs), Some(rhs)) = (own, lhs[component], rhs[component]) {
-                dofs.push(dof_number(node, component));
-                values.push(f64::midpoint(lhs, rhs));
+    BoundaryFaces::new(mesh).for_each_higher_order_node(mesh, |corners, node, between| {
+        let node = node as usize;
+        for component in 0..3 {
+            let held = |vertex: &u32| prescribed[*vertex as usize][component];
+            if prescribed[node][component].is_some()
+                || !corners.iter().all(|vertex| held(vertex).is_some())
+            {
+                continue;
             }
+            let sum: f64 = between.iter().filter_map(held).sum();
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "an edge has two ends and a face four corners"
+            )]
+            let value = sum / between.len() as f64;
+            prescribed[node][component] = Some(value);
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "callers cap the node count so that every DOF fits in u32"
+            )]
+            dofs.push((node_dofs * node + component) as u32);
+            values.push(value);
         }
-    }
+    });
 }

@@ -78,6 +78,43 @@ function relativeDifference(reference, other, count) {
   return { peak, relative: difference / peak };
 }
 
+function largestMagnitude(values, count) {
+  let peak = 0;
+  for (let index = 0; index < count; index++)
+    peak = Math.max(peak, Math.abs(values[index]));
+  return peak;
+}
+
+// The relative von Mises difference over the elements with no supported
+// vertex, tets first, then hexes, as both solvers number them.
+function awayFromSupport(mesh, supported, reference, other) {
+  const held = new Set(supported);
+  const free = (corners) => corners.every((vertex) => !held.has(vertex));
+  const keep = [];
+  for (let tet = 0; tet < mesh.tets.length / 4; tet++)
+    keep.push(free(mesh.tets.slice(4 * tet, 4 * tet + 4)));
+  for (let hex = 0; hex < mesh.hexes.length / 8; hex++)
+    keep.push(free(mesh.hexes.slice(8 * hex, 8 * hex + 8)));
+  const pick = (values) =>
+    keep.flatMap((kept, index) => (kept ? [values[index]] : []));
+  const picked = pick(reference);
+  expect(
+    picked.length,
+    "some elements lie away from the support",
+  ).toBeGreaterThan(0);
+  return relativeDifference(picked, pick(other), picked.length);
+}
+
+// Rust reproduces the stored MFEM solve to solver precision.
+const EXACT = { motion: 1e-5, vonMises: 1e-4, stiffer: false };
+// An order-2 hex model with a clamped face (KOF-414). MFEM, whose results are
+// stored, left each clamped face's centre node free; Rust holds it, as a
+// clamp should, so the Rust field is stiffer than the stored one and differs
+// from it by a few per cent. The clamped elements' centre stress changes most
+// (the free face centre had relieved them), so von Mises is compared on the
+// elements away from the clamp.
+const HELD_FACE_NODES = { motion: 0.05, vonMises: 0.1, stiffer: true };
+
 // A box of Kuhn tets, as above, with its vertex positions and connectivity.
 function kuhnBox(length, width, height, divisionsX, divisionsY, divisionsZ) {
   const hexBox = boxHexMesh(
@@ -310,7 +347,8 @@ describe("quadratic tetrahedra", () => {
       for (let component = 0; component < 3; component++)
         loads[3 * vertex + component] += force[component];
     (bcs.surface_loads ?? []).forEach((load, index) => {
-      const unmatched = quadratic.addSurfaceLoad(
+      // Throws on a face off the boundary (KOF-411).
+      quadratic.addSurfaceLoad(
         loads,
         index,
         new Uint32Array(load.faces.flat()),
@@ -318,7 +356,6 @@ describe("quadratic tetrahedra", () => {
         load.type,
         new Float64Array([load.pressure]),
       );
-      expect(unmatched, `${name}: surface load ${index} fully matched`).toBe(0);
     });
 
     // MFEM stops at 1e-6 in its Gauss–Seidel-preconditioned norm, which on the
@@ -497,8 +534,18 @@ describe("hexahedra and mixed meshes", () => {
 
   // Solve `mesh` at `order` in Rust (converged AMG) and compare displacements
   // and von Mises stress with the MFEM `reference`. `bcs` is the MFEM payload;
-  // its surface-load faces are vertex triples or quadruples.
-  function compareSolid(name, mesh, order, materials, bcs, reference) {
+  // its surface-load faces are vertex triples or quadruples. `expected` says
+  // how close the two must be: EXACT, or HELD_FACE_NODES for an order-2 hex
+  // model.
+  function compareSolid(
+    name,
+    mesh,
+    order,
+    materials,
+    bcs,
+    reference,
+    expected = EXACT,
+  ) {
     const elementCount = mesh.tets.length / 4 + mesh.hexes.length / 8;
     expect(
       "error" in reference,
@@ -531,7 +578,8 @@ describe("hexahedra and mixed meshes", () => {
     bcs.surface_loads.forEach((load, index) => {
       const triangles = load.faces.filter((face) => face.length === 3);
       const quads = load.faces.filter((face) => face.length === 4);
-      const unmatched = solid.addSurfaceLoad(
+      // Throws on a face off the boundary (KOF-411).
+      solid.addSurfaceLoad(
         loads,
         index,
         new Uint32Array(triangles.flat()),
@@ -541,7 +589,6 @@ describe("hexahedra and mixed meshes", () => {
           load.type === "pressure" ? [load.pressure] : load.force,
         ),
       );
-      expect(unmatched, `${name}: surface load ${index} fully matched`).toBe(0);
     });
     const solution = solid.solve(
       new Uint32Array(dofs),
@@ -560,19 +607,24 @@ describe("hexahedra and mixed meshes", () => {
       nodal,
       3 * vertexCount,
     );
-    const vonMises = relativeDifference(
-      reference.von_mises,
-      stress,
-      elementCount,
-    );
+    const vonMises = expected.stiffer
+      ? awayFromSupport(mesh, bcs.fixed_vertices, reference.von_mises, stress)
+      : relativeDifference(reference.von_mises, stress, elementCount);
     expect(
       motion.relative,
       `${name} (order ${order}): displacements differ by ${motion.relative} relative`,
-    ).toBeLessThan(1e-5);
+    ).toBeLessThan(expected.motion);
     expect(
       vonMises.relative,
       `${name} (order ${order}): von Mises differs by ${vonMises.relative} relative`,
-    ).toBeLessThan(1e-4);
+    ).toBeLessThan(expected.vonMises);
+    if (expected.stiffer) {
+      const peak = largestMagnitude(nodal, 3 * vertexCount);
+      expect(
+        peak,
+        `${name} (order ${order}): holding the face nodes must stiffen the clamp`,
+      ).toBeLessThan(motion.peak);
+    }
     solid.free();
   }
 
@@ -621,7 +673,7 @@ describe("hexahedra and mixed meshes", () => {
   };
 
   test.each([1, 2])(
-    "distorted hex cantilever, order %i: Rust matches MFEM",
+    "distorted hex cantilever, order %i: Rust matches MFEM up to the clamp's face nodes",
     (order) => {
       const bcs = hexLoads(topQuads);
       compareSolid(
@@ -631,6 +683,7 @@ describe("hexahedra and mixed meshes", () => {
         [steel],
         bcs,
         solveReference(allHexes, order, [steel], bcs),
+        order === 2 ? HELD_FACE_NODES : EXACT,
       );
     },
   );
@@ -725,24 +778,28 @@ describe("hexahedra and mixed meshes", () => {
     test.each([
       [1, 1.6256e-3],
       [2, 2.7492e-3],
-    ])("order %i: Rust matches MFEM, peak |u| %d", (order, peak) => {
-      const reference = solveReference(wedgeBar, order, [steel], wedgeLoads);
-      compareSolid(
-        "collapsed (wedge) tip hex",
-        wedgeBar,
-        order,
-        [steel],
-        wedgeLoads,
-        reference,
-      );
-      const largest = Math.max(
-        ...Array.from(reference.displacements, Math.abs),
-      );
-      expect(
-        Math.abs(largest - peak),
-        `collapsed tip hex, order ${order}: MFEM max |u| ${largest}, expected ${peak}`,
-      ).toBeLessThan(1e-4 * peak);
-    });
+    ])(
+      "order %i: Rust matches MFEM up to the clamp's face nodes, peak |u| %d",
+      (order, peak) => {
+        const reference = solveReference(wedgeBar, order, [steel], wedgeLoads);
+        compareSolid(
+          "collapsed (wedge) tip hex",
+          wedgeBar,
+          order,
+          [steel],
+          wedgeLoads,
+          reference,
+          order === 2 ? HELD_FACE_NODES : EXACT,
+        );
+        const largest = Math.max(
+          ...Array.from(reference.displacements, Math.abs),
+        );
+        expect(
+          Math.abs(largest - peak),
+          `collapsed tip hex, order ${order}: MFEM max |u| ${largest}, expected ${peak}`,
+        ).toBeLessThan(1e-4 * peak);
+      },
+    );
   });
 
   // Malformed hexahedra are refused with the reason.

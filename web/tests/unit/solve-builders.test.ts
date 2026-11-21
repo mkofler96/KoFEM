@@ -168,8 +168,9 @@ test("coupled-form BCs and loads fold into the shell solver's form", () => {
     fixed_dofs: [{ vertex: 1, dofs: [0, 1] }],
     prescribed_dofs: [{ vertex: 2, dof: 2, value: 0.25 }],
   });
+  // DOF 9 is vertex 1's Rx: a shell vertex takes the moment (KOF-411).
   expect(coupledToShellPointLoads([6, 8, 6, 9], [1, 2, 3, 99])).toEqual([
-    { vertex: 1, force: [4, 0, 2] },
+    { vertex: 1, force: [4, 0, 2], moment: [99, 0, 0] },
   ]);
 });
 

@@ -5,6 +5,7 @@
 
 #include <emscripten.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <malloc.h>
 #include <stdexcept>
@@ -15,13 +16,17 @@ using emscripten::val;
 // ── Memory diagnostics ────────────────────────────────────────────────────────
 // Reports total WASM linear-memory size (grows with ALLOW_MEMORY_GROWTH) and
 // the approximate amount of that memory currently in-use by malloc.
+// Both are counted in 64 bits: the memory reaches 4 GB, which overflows a
+// signed 32-bit byte count at 2 GB and an unsigned one at 4 GB (KOF-425).
 void log_mem(const char* label) {
     struct mallinfo mi = mallinfo();
-    // HEAP8.length == current WASM linear-memory size in bytes.
-    int wasm_mb = EM_ASM_INT({ return HEAP8.length >> 20; });
+    constexpr uint64_t page_bytes = 65536;
+    const uint64_t wasm_bytes = static_cast<uint64_t>(__builtin_wasm_memory_size(0)) * page_bytes;
     // uordblks is bytes allocated by malloc (does not include mmap'd regions).
-    int used_mb = (int)((unsigned)mi.uordblks >> 20);
-    printf("[mem] %-44s  wasm=%d MB  alloc~%d MB\n", label, wasm_mb, used_mb);
+    const uint64_t used_bytes = static_cast<unsigned>(mi.uordblks);
+    printf("[mem] %-44s  wasm=%llu MB  alloc~%llu MB\n", label,
+           static_cast<unsigned long long>(wasm_bytes >> 20),
+           static_cast<unsigned long long>(used_bytes >> 20));
     fflush(stdout);
 }
 

@@ -99,6 +99,7 @@ export interface TieCouplingReport {
   nCoupled: number; // reference nodes that got a distributing coupling
   nPartners: number; // partner slots those references distribute onto
   nShared: number; // nodes the two surfaces already have in common
+  nUnmapped: number; // picked nodes with no node in the solved model, so not tied
   gap: number; // measured closest approach, 0 when never measured
   drop?: TieCouplingDrop;
   problem?: string;
@@ -245,6 +246,7 @@ interface RustCoupledResult {
   readonly tieCoupled: Uint32Array;
   readonly tiePartners: Uint32Array;
   readonly tieShared: Uint32Array;
+  readonly tieUnmapped: Uint32Array;
   readonly tieGap: Float64Array;
   readonly tieDropKind: string[];
   readonly tieDropSide: string[];
@@ -297,6 +299,7 @@ function tieReportsFrom(result: RustCoupledResult): TieCouplingReport[] {
   const coupled = result.tieCoupled,
     partners = result.tiePartners,
     shared = result.tieShared,
+    unmapped = result.tieUnmapped,
     gaps = result.tieGap,
     problems = result.tieProblems;
   return result.tieNames.map((name, index) => {
@@ -305,6 +308,7 @@ function tieReportsFrom(result: RustCoupledResult): TieCouplingReport[] {
       nCoupled: coupled[index],
       nPartners: partners[index],
       nShared: shared[index],
+      nUnmapped: unmapped[index],
       gap: gaps[index],
     };
     const drop = tieDrop(result, index);

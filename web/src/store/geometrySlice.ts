@@ -864,13 +864,24 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           before.stepSurface,
         ).nodesByFace,
       );
+      // A carried coupling's reference point is a node of the new mesh too.
+      const meshNodes = [...nodes, ...carried.referenceNodes];
+      s.nodes = meshNodes;
       s.bcGroups = carried.bcGroups;
       s.loadGroups = carried.loadGroups;
       s.tieGroups = carried.tieGroups;
-      s.couplingGroups = [];
+      s.couplingGroups = carried.couplingGroups;
       s.constraints = rebuildConstraints(carried.bcGroups);
-      s.loads = rebuildLoads(carried.loadGroups, nodes, []);
-      s.surfaceLoads = rebuildSurfaceLoads(carried.loadGroups, elements, []);
+      s.loads = rebuildLoads(
+        carried.loadGroups,
+        meshNodes,
+        carried.couplingGroups,
+      );
+      s.surfaceLoads = rebuildSurfaceLoads(
+        carried.loadGroups,
+        elements,
+        carried.couplingGroups,
+      );
       s.remeshNotice = remeshNotice(carried);
       s.result = null;
       // A mesh of its own is no refinement level.

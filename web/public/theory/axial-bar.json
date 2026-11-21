@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-14T22:41:15.519Z",
-  "sourceRevision": "b1f7b101f2713787e4afba17be57aead1ac2011c",
-  "fem": "fem-b2ad04c7c44b",
+  "generated": "2026-11-21T16:33:29.023Z",
+  "sourceRevision": "9d5e4f33d61bb9b93935dce5273e060b35ece086",
+  "fem": "fem-18a4c5175283",
   "command": "bun examples/validation/axial-bar-study.mjs --report",
   "setup": {
     "inputs": [
@@ -118,19 +118,19 @@
         2,
         2
       ],
-      "role": "diagnostic: Q2 clamp face-centre DOFs remain free",
+      "role": "order-2 check with the same fully fixed end",
       "order": 2,
       "elements": 40,
       "vertices": 99,
       "nodes": 525,
       "dofs": 1575,
-      "displacementMm": 0.4795494624291585,
-      "displacementErrorPct": 0.7053871101232956,
+      "displacementMm": 0.47401468378835027,
+      "displacementErrorPct": -0.45691640444643855,
       "stressSamples": 8,
-      "stressMeanMpa": 99.9999608897678,
-      "stressMinMpa": 99.9998129414492,
-      "stressMaxMpa": 100.00011044896343,
-      "stressWorstErrorPct": 0.00018705855079304
+      "stressMeanMpa": 99.99974135008094,
+      "stressMinMpa": 99.99950259545557,
+      "stressMaxMpa": 99.99997555171103,
+      "stressWorstErrorPct": 0.0004974045444328112
     }
   ]
 }

@@ -10,12 +10,16 @@
 // its surface triangles lie on which CAD face (surfaceFaceIds), so the entry is
 // re-resolved to the new mesh's nodes of the same face. An Edge entry picked on
 // the rim a shell collapsed a CAD face to (lib/shellRim) remembers that face
-// too, and is re-resolved to the face's rim on the new mesh. Everything else is
-// dropped and named, so the user knows exactly what to pick again:
+// too, and is re-resolved to the face's rim on the new mesh. A coupling's
+// surface follows its CAD faces the same way; its reference point, a node that
+// belongs to no element, is re-created on the new mesh at the coupling's point,
+// and a support or load picked on the old point is re-pointed to the new one
+// (KOF-422). Everything else is dropped and named, so the user knows exactly
+// what to pick again:
 //   - an edge or node pick, or a flood-fill face (no CAD face behind it)
 //   - a face the new mesh does not have on its surface — e.g. a wall the mesh
 //     idealised as a shell mid-surface since the pick
-//   - a coupling: its reference point was a node of the old mesh
+//   - a support or load on the reference point of a coupling that was dropped
 // The geometry must be the one the entries were picked on: a geometry edit
 // (split, import) renumbers the CAD faces and clears the groups itself.
 
@@ -25,12 +29,17 @@ import type {
   NamedLoadGroup,
 } from "../store/boundaryGroups";
 import type { CouplingGroup } from "../store/couplingSlice";
+import type { Node } from "../store/geometrySlice";
 import type { TieGroup } from "../store/tieSlice";
 
 export interface CarriedGroups {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
+  couplingGroups: CouplingGroup[];
+  // The reference point node of each carried coupling, numbered after the new
+  // mesh's nodes: the caller appends them to the mesh.
+  referenceNodes: Node[];
   // Entries re-resolved on the new mesh.
   kept: number;
   // One line per entry, group or coupling that could not be carried.
@@ -94,10 +103,32 @@ export function carryGroupsToMesh(
       : new Map<number, number[]>();
   const dropped: string[] = [];
   let kept = 0;
+  // Old reference point node → the coupling it belonged to, and its new node
+  // when the coupling came across.
+  const referencePoints = new Map<
+    number,
+    { coupling: string; newId: number | null }
+  >();
+  const pointOf = (entry: BcFaceEntry) =>
+    entry.nodeIds.length === 1
+      ? referencePoints.get(entry.nodeIds[0])
+      : undefined;
 
   const carry = (owner: string, entries: BcFaceEntry[]): BcFaceEntry[] => {
     const out: BcFaceEntry[] = [];
     for (const entry of entries) {
+      const point = pointOf(entry);
+      if (point !== undefined) {
+        if (point.newId === null) {
+          dropped.push(
+            `${owner} ${entry.label} (the reference point of ${point.coupling}, which was cleared)`,
+          );
+          continue;
+        }
+        out.push({ ...entry, nodeIds: [point.newId] });
+        kept++;
+        continue;
+      }
       const nodes =
         entry.cadFaceId === undefined
           ? undefined
@@ -113,6 +144,31 @@ export function carryGroupsToMesh(
     }
     return out;
   };
+
+  // Couplings first: a support or load on a reference point follows the point.
+  let nextNodeId =
+    [...nodeIds].reduce((highest, id) => Math.max(highest, id), -1) + 1;
+  const couplingGroups: CouplingGroup[] = [];
+  const referenceNodes: Node[] = [];
+  for (const coupling of groups.couplingGroups) {
+    const faces = carry(coupling.name, coupling.faces);
+    if (faces.length === 0) {
+      dropped.push(`${coupling.name} — nothing left to grip`);
+      referencePoints.set(coupling.refNodeId, {
+        coupling: coupling.name,
+        newId: null,
+      });
+      continue;
+    }
+    const refNodeId = nextNodeId++;
+    const [x, y, z] = coupling.point;
+    referenceNodes.push({ id: refNodeId, x, y, z });
+    referencePoints.set(coupling.refNodeId, {
+      coupling: coupling.name,
+      newId: refNodeId,
+    });
+    couplingGroups.push({ ...coupling, faces, refNodeId });
+  }
 
   const bcGroups: NamedBcGroup[] = [];
   for (const group of groups.bcGroups) {
@@ -135,12 +191,16 @@ export function carryGroupsToMesh(
       tieGroups.push({ ...tie, facesA, facesB });
     else dropped.push(`${tie.name} — a side has nothing left to tie`);
   }
-  for (const coupling of groups.couplingGroups)
-    dropped.push(
-      `${coupling.name} (its reference point was a node of the old mesh)`,
-    );
 
-  return { bcGroups, loadGroups, tieGroups, kept, dropped };
+  return {
+    bcGroups,
+    loadGroups,
+    tieGroups,
+    couplingGroups,
+    referenceNodes,
+    kept,
+    dropped,
+  };
 }
 
 // One sentence for the mesh panel: what came across, and what the user has to
@@ -151,9 +211,18 @@ export function remeshNotice(carried: CarriedGroups): string | null {
     carried.bcGroups.length +
     carried.loadGroups.length +
     carried.tieGroups.length;
+  const couplings = carried.couplingGroups.length;
+  const kept = [
+    ...(groups > 0
+      ? [`${groups} support/load/tie group${groups === 1 ? "" : "s"}`]
+      : []),
+    ...(couplings > 0
+      ? [`${couplings} coupling${couplings === 1 ? "" : "s"}`]
+      : []),
+  ];
   const keptText =
-    groups > 0
-      ? `Kept ${groups} support/load/tie group${groups === 1 ? "" : "s"} on their CAD faces.`
+    kept.length > 0
+      ? `Kept ${kept.join(" and ")} on their CAD faces.`
       : "No group could be kept on the new mesh.";
   if (carried.dropped.length === 0) return keptText;
   return `${keptText} Cleared — pick again: ${carried.dropped.join("; ")}.`;

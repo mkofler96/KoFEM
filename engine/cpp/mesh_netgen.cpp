@@ -28,6 +28,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <memory>
+#include <new>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -98,12 +100,83 @@ namespace nglib {
 #endif
 }
 
+// ── Ownership and out-of-memory reporting (KOF-425) ──────────────────────────
+namespace {
+
+#ifdef KOFEM_NETGEN_OCC
+// Free the Netgen geometry and mesh on every way out of generate_fem_mesh,
+// exceptions included: a std::bad_alloc from an Ng_* call used to leave both
+// allocated. Declare the geometry first, so the mesh, which refers to it, is
+// destroyed first.
+struct OccGeometryDeleter {
+    void operator()(nglib::Ng_OCC_Geometry* geom) const {
+        kofem_occ_geometry_delete(static_cast<void*>(geom));
+    }
+};
+struct NetgenMeshDeleter {
+    void operator()(nglib::Ng_Mesh* mesh) const { kofem_delete_mesh(static_cast<void*>(mesh)); }
+};
+using OccGeometryPtr = std::unique_ptr<nglib::Ng_OCC_Geometry, OccGeometryDeleter>;
+using NetgenMeshPtr  = std::unique_ptr<nglib::Ng_Mesh, NetgenMeshDeleter>;
+#endif
+
+// Records whether operator new failed while it is alive. Netgen's volume fill
+// catches the std::bad_alloc itself and returns no tetrahedra, or skips a
+// domain, so its result alone cannot tell running out of memory from a
+// geometry with nothing to fill.
+class AllocationFailureWatch {
+public:
+    AllocationFailureWatch() : previous_(std::set_new_handler(&record)) { failed_ = false; }
+    ~AllocationFailureWatch() { std::set_new_handler(previous_); }
+    AllocationFailureWatch(const AllocationFailureWatch&) = delete;
+    AllocationFailureWatch& operator=(const AllocationFailureWatch&) = delete;
+    AllocationFailureWatch(AllocationFailureWatch&&) = delete;
+    AllocationFailureWatch& operator=(AllocationFailureWatch&&) = delete;
+
+    [[nodiscard]] bool failed() const { return failed_; }
+
+private:
+    // operator new calls this when malloc returns null; it then fails as it
+    // would without a handler.
+    static void record() {
+        failed_ = true;
+        throw std::bad_alloc();
+    }
+
+    static inline bool failed_ = false;
+    std::new_handler previous_;
+};
+
+constexpr const char* out_of_memory_message =
+    "Meshing ran out of memory at this element size. Use a larger maximum "
+    "element size and mesh again.";
+
+val generate_fem_mesh_owned(const std::string& opts_json);
+
+} // namespace
+
 // ── Netgen: STEP → FEM surface mesh + tetrahedral volume mesh ────────────────
 //
 // Uses Netgen's native OCC geometry integration (KOFEM_NETGEN_OCC required).
 // Netgen reads the CAD topology directly, meshes edges and surfaces respecting
 // feature lines, then fills the volume — one call, proper FEM surface mesh.
+//
+// Running out of memory anywhere in it is reported as such. By the time the
+// std::bad_alloc reaches this catch, the geometry and mesh are freed, so the
+// message can be built.
 val generate_fem_mesh(const std::string& opts_json)
+{
+    try {
+        return generate_fem_mesh_owned(opts_json);
+    } catch (const std::bad_alloc&) {
+        log_mem("generate_fem_mesh: out of memory, geometry and mesh freed");
+        throw std::runtime_error(out_of_memory_message);
+    }
+}
+
+namespace {
+
+val generate_fem_mesh_owned(const std::string& opts_json)
 {
     if (!has_cached_shape())
         throw std::runtime_error(
@@ -161,8 +234,8 @@ val generate_fem_mesh(const std::string& opts_json)
     }
 
     log_mem("generate_fem_mesh: before OCC geometry build");
-    nglib::Ng_OCC_Geometry* geom =
-        (nglib::Ng_OCC_Geometry*)kofem_occ_geometry_from_shape(cached_shape());
+    OccGeometryPtr geom(
+        static_cast<nglib::Ng_OCC_Geometry*>(kofem_occ_geometry_from_shape(cached_shape())));
     if (!geom)
         throw std::runtime_error("OCCGeometry construction failed — check STEP geometry validity");
     log_mem("generate_fem_mesh: after OCC geometry build");
@@ -201,27 +274,22 @@ val generate_fem_mesh(const std::string& opts_json)
     mp.check_overlap              = 1;
     mp.check_overlapping_boundary = 1;
 
-    nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (mesh == nullptr) {
-        kofem_occ_geometry_delete(static_cast<void*>(geom));
+    NetgenMeshPtr mesh(nglib::Ng_NewMesh());
+    if (!mesh)
         throw std::runtime_error("Ng_NewMesh returned null");
-    }
 
     printf("[netgen] step 1/4: computing local mesh size from CAD curvature (maxh=%.2f)\n", max_size);
     fflush(stdout);
     log_mem("generate_fem_mesh: step 1 SetLocalMeshSize");
-    nglib::Ng_OCC_SetLocalMeshSize(geom, mesh, &mp);
+    nglib::Ng_OCC_SetLocalMeshSize(geom.get(), mesh.get(), &mp);
 
     printf("[netgen] step 2/4: meshing feature edges\n");
     fflush(stdout);
     log_mem("generate_fem_mesh: step 2 GenerateEdgeMesh");
-    nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
-    if (res != nglib::NG_OK) {
-        kofem_delete_mesh(static_cast<void*>(mesh));
-        kofem_occ_geometry_delete(static_cast<void*>(geom));
+    nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom.get(), mesh.get(), &mp);
+    if (res != nglib::NG_OK)
         throw std::runtime_error(
             "Ng_OCC_GenerateEdgeMesh failed (code " + std::to_string((int)res) + ")");
-    }
     printf("[netgen] step 2/4: edge mesh done\n");
     fflush(stdout);
     log_mem("generate_fem_mesh: step 2 done");
@@ -229,14 +297,11 @@ val generate_fem_mesh(const std::string& opts_json)
     printf("[netgen] step 3/4: meshing boundary surfaces (optsteps_2d=%d)\n", mp.optsteps_2d);
     fflush(stdout);
     log_mem("generate_fem_mesh: step 3 GenerateSurfaceMesh");
-    res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
-    if (res != nglib::NG_OK) {
-        kofem_delete_mesh(static_cast<void*>(mesh));
-        kofem_occ_geometry_delete(static_cast<void*>(geom));
+    res = nglib::Ng_OCC_GenerateSurfaceMesh(geom.get(), mesh.get(), &mp);
+    if (res != nglib::NG_OK)
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
-    }
-    printf("[netgen] step 3/4: surface mesh done — %d surface nodes\n", nglib::Ng_GetNP(mesh));
+    printf("[netgen] step 3/4: surface mesh done — %d surface nodes\n", nglib::Ng_GetNP(mesh.get()));
     fflush(stdout);
     log_mem("generate_fem_mesh: step 3 done");
 
@@ -252,7 +317,7 @@ val generate_fem_mesh(const std::string& opts_json)
     TopTools_IndexedMapOfShape shape_faces;
     TopExp::MapShapes(cached_shape(), TopAbs_FACE, shape_faces);
     std::vector<int> unmeshed;
-    for (const int id : kofem_unmeshed_faces(static_cast<void*>(geom))) {
+    for (const int id : kofem_unmeshed_faces(static_cast<void*>(geom.get()))) {
         const double width = face_width(TopoDS::Face(shape_faces(id)));
         if (width >= Precision::Confusion()) {
             unmeshed.push_back(id);
@@ -266,8 +331,6 @@ val generate_fem_mesh(const std::string& opts_json)
         printf("[netgen] %d faces could not be meshed; skipping the volume fill\n",
                (int)unmeshed.size());
         fflush(stdout);
-        kofem_delete_mesh(static_cast<void*>(mesh));
-        kofem_occ_geometry_delete(static_cast<void*>(geom));
         val unmeshed_result = val::object();
         unmeshed_result.set("overlaps", describe_unmeshed_faces(unmeshed, cached_shape()));
         return unmeshed_result;
@@ -283,21 +346,32 @@ val generate_fem_mesh(const std::string& opts_json)
            "(optsteps_3d=%d)\n", mp.optsteps_3d);
     fflush(stdout);
     log_mem("generate_fem_mesh: step 4 GenerateVolumeMesh");
-    res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
-    kofem_occ_geometry_delete(static_cast<void*>(geom));     // safe: volume fill complete
-    if (res != nglib::NG_OK) {
-        kofem_delete_mesh(static_cast<void*>(mesh));
+    bool fill_ran_out_of_memory = false;
+    {
+        const AllocationFailureWatch watch;
+        res = nglib::Ng_GenerateVolumeMesh(mesh.get(), &mp);
+        fill_ran_out_of_memory = watch.failed();
+    }
+    geom.reset();     // safe: volume fill complete
+    // Whatever the fill returned, a domain it gave up on for memory is missing
+    // from the mesh; generate_fem_mesh reports the std::bad_alloc.
+    if (fill_ran_out_of_memory) {
+        printf("[netgen] step 4/4: the volume fill ran out of memory\n");
+        fflush(stdout);
+        mesh.reset();
+        throw std::bad_alloc();
+    }
+    if (res != nglib::NG_OK)
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + "). "
             "The boundary mesh contains overlapping or self-intersecting elements "
             "that geometry healing could not repair — an analysis on such a mesh "
             "would be silently wrong. Check the CAD model for near-touching or "
             "self-intersecting surfaces and re-export.");
-    }
     log_mem("generate_fem_mesh: step 4 done");
 
-    int np = nglib::Ng_GetNP(mesh);
-    int ne = nglib::Ng_GetNE(mesh);
+    int np = nglib::Ng_GetNP(mesh.get());
+    int ne = nglib::Ng_GetNE(mesh.get());
     printf("[netgen] step 4/4: volume mesh done — %d nodes, %d tetrahedra\n", np, ne);
     fflush(stdout);
 
@@ -306,9 +380,8 @@ val generate_fem_mesh(const std::string& opts_json)
     // where the surface overlaps so the caller can show it and offer a repair.
     if (ne == 0) {
         const std::vector<KofemSurfaceTriangle> overlapping =
-            kofem_overlapping_surface_elements(static_cast<void*>(mesh));
+            kofem_overlapping_surface_elements(static_cast<void*>(mesh.get()));
         if (!overlapping.empty()) {
-            kofem_delete_mesh(static_cast<void*>(mesh));
             val overlap_result = val::object();
             overlap_result.set("overlaps", describe_mesh_overlaps(overlapping, cached_shape()));
             return overlap_result;
@@ -319,20 +392,18 @@ val generate_fem_mesh(const std::string& opts_json)
     // the boundary surfaces did not sew into a watertight solid (typical of
     // surface-only IGES — issue #276). Fail loudly rather than handing a
     // tetrahedron-free mesh to the solver, which can't analyse it.
-    if (ne == 0) {
-        kofem_delete_mesh(static_cast<void*>(mesh));
+    if (ne == 0)
         throw std::runtime_error(
             "Volume meshing produced 0 tetrahedra: the geometry has surfaces but "
             "no closed solid to fill. This usually means the CAD file (often IGES) "
             "stores only free surfaces that do not sew into a watertight body. "
             "Export the model as a solid (closed shell) and reload.");
-    }
 
     std::vector<double> out_verts;
     out_verts.reserve(3 * np);
     for (int i = 1; i <= np; ++i) {
         std::array<double, 3> pt;
-        nglib::Ng_GetPoint(mesh, i, pt.data());
+        nglib::Ng_GetPoint(mesh.get(), i, pt.data());
         out_verts.push_back(pt[0]);
         out_verts.push_back(pt[1]);
         out_verts.push_back(pt[2]);
@@ -342,7 +413,7 @@ val generate_fem_mesh(const std::string& opts_json)
     out_tets.reserve(4 * ne);
     for (int i = 1; i <= ne; ++i) {
         std::array<int, 4> tet;
-        nglib::Ng_GetVolumeElement(mesh, i, tet.data());
+        nglib::Ng_GetVolumeElement(mesh.get(), i, tet.data());
         out_tets.push_back(tet[0] - 1);
         out_tets.push_back(tet[1] - 1);
         out_tets.push_back(tet[2] - 1);
@@ -356,7 +427,7 @@ val generate_fem_mesh(const std::string& opts_json)
     out_body_ids.reserve(ne);
     for (int i = 1; i <= ne; ++i)
         out_body_ids.push_back(
-            kofem_volume_element_domain_index(static_cast<void*>(mesh), i));
+            kofem_volume_element_domain_index(static_cast<void*>(mesh.get()), i));
     printf("[netgen] %d bodies in volume mesh\n",
            (int)std::set<int>(out_body_ids.begin(), out_body_ids.end()).size());
     fflush(stdout);
@@ -368,24 +439,24 @@ val generate_fem_mesh(const std::string& opts_json)
     // matched each element against the nearest OCCT tessellation centroid, which
     // was O(elements × tessellation triangles) — minutes on complex parts — and
     // mis-assigned elements near face boundaries.
-    int nse = nglib::Ng_GetNSE(mesh);
+    int nse = nglib::Ng_GetNSE(mesh.get());
     std::vector<int> out_surf_tris;
     std::vector<int> out_surf_face_ids;
     out_surf_tris.reserve(3 * nse);
     out_surf_face_ids.reserve(nse);
     for (int i = 1; i <= nse; ++i) {
         std::array<int, 3> tri;
-        nglib::Ng_GetSurfaceElement(mesh, i, tri.data());
+        nglib::Ng_GetSurfaceElement(mesh.get(), i, tri.data());
         out_surf_tris.push_back(tri[0] - 1);
         out_surf_tris.push_back(tri[1] - 1);
         out_surf_tris.push_back(tri[2] - 1);
-        out_surf_face_ids.push_back(kofem_surface_element_face_index(static_cast<void*>(mesh), i));
+        out_surf_face_ids.push_back(kofem_surface_element_face_index(static_cast<void*>(mesh.get()), i));
     }
     printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
     fflush(stdout);
 
-    kofem_delete_mesh(static_cast<void*>(mesh));
+    mesh.reset();
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     // Flat typed arrays instead of JSON text (issue #166): xyz-interleaved
@@ -405,3 +476,5 @@ val generate_fem_mesh(const std::string& opts_json)
        "Rebuild the kofem-dependencies Docker image or pass -DUSE_NETGEN_OCC=ON to CMake."
 #endif
 }
+
+} // namespace

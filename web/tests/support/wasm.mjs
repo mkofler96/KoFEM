@@ -63,7 +63,22 @@ function readEngine() {
  */
 export async function loadEngine(options = {}) {
   const { create, wasmBinary } = await readEngine();
-  const { solves, ...engineOptions } = options;
+  const { solves, onMemory, ...engineOptions } = options;
+  // `onMemory` receives the instance's WebAssembly.Memory once it exists, for
+  // tests that watch or limit how the engine's heap grows.
+  if (onMemory)
+    engineOptions.instantiateWasm = (imports, receiveInstance) => {
+      WebAssembly.instantiate(wasmBinary, imports).then(({ instance }) => {
+        const memory = Object.values(instance.exports).find(
+          (value) => value instanceof WebAssembly.Memory,
+        );
+        if (!memory)
+          throw new Error("The C++ engine exports no WebAssembly.Memory");
+        onMemory(memory);
+        receiveInstance(instance);
+      });
+      return {};
+    };
   if (!solves)
     return create({
       wasmBinary,

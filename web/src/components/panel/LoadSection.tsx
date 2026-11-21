@@ -47,10 +47,10 @@ export function LoadSection({
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
   );
-  // A nodal MOMENT only reaches the solver on the pure-shell path
-  // (shellPointLoads carries DOFs 3..5). The solid and coupled assemblers give
-  // an ordinary mesh node three translations only and drop a rotational load,
-  // so on those a couple has to go through a coupling's reference point.
+  // A nodal MOMENT on an ordinary node is offered on the pure-shell path only
+  // (shellPointLoads carries DOFs 3..5). A solid node has three translations
+  // only, and the solve refuses a moment on one (KOF-411), so on a solid or
+  // mixed model a couple goes through a coupling's reference point.
   const isPureShell = useModelStore(
     (s) =>
       s.elements.length > 0 && s.elements.every((el) => el.type === "CTRIA3"),
@@ -137,9 +137,9 @@ export function LoadSection({
       createLoadGroup(faceEntries, 0, pressure, "pressure");
     } else {
       // A moment needs a rotational DOF to act on. A coupling's reference point
-      // has one on every solve path; an ordinary mesh node has one only on the
-      // pure-shell path (shellPointLoads carries DOFs 3..5), while the solid and
-      // coupled assemblers would drop it.
+      // has one on every solve path; an ordinary mesh node is offered one only
+      // on the pure-shell path (shellPointLoads carries DOFs 3..5). The solve
+      // refuses a moment on a solid node rather than drop it (KOF-411).
       if (
         loadKindSel === "moment" &&
         pickGeometry === "point" &&

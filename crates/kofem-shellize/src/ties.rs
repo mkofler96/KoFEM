@@ -53,6 +53,9 @@ pub struct TieCouplingReport {
     pub partners: usize,
     /// Nodes the two surfaces already share.
     pub shared: usize,
+    /// Picked vertices with no node in the solved pool (on a wall idealised
+    /// as shell), so the tie cannot reach them.
+    pub unmapped: usize,
     /// Measured closest approach, 0 when never measured.
     pub gap: f64,
     pub drop: Option<TieCouplingDrop>,
@@ -107,6 +110,8 @@ pub struct PoolTie {
     pub masters: Vec<usize>,
     pub refs: Vec<usize>,
     pub reach: f64,
+    /// Picked vertices of either surface that have no pool node.
+    pub unmapped: usize,
 }
 
 /// Distance from each ref node to its nearest master node, for the refs that
@@ -185,6 +190,7 @@ pub fn tie_couplings(
             coupled: 0,
             partners: 0,
             shared: shared.len(),
+            unmapped: tie.unmapped,
             gap: 0.0,
             drop: None,
         };
@@ -260,9 +266,10 @@ pub fn tie_couplings(
 }
 
 /// Map each connection's picked surfaces from store vertex indices onto pool
-/// nodes. A vertex with no pool node is skipped (on the auto-shell path the
-/// walls it covered became mid-surface nodes, which the seam ties); a surface
-/// left with no pool node at all is reported as a dropped tie.
+/// nodes. A vertex with no pool node cannot be tied (on the auto-shell path
+/// the walls it covered became mid-surface nodes, which the seam joins); it is
+/// counted in [`PoolTie::unmapped`] for the tie's report, and a surface left
+/// with no pool node at all is reported as a dropped tie.
 #[must_use]
 pub fn ties_to_pool(
     ties: &[TieSurfaces],
@@ -275,11 +282,17 @@ pub fn ties_to_pool(
             .collect()
     };
     ties.iter()
-        .map(|tie| PoolTie {
-            name: tie.name.clone(),
-            masters: to_pool(&tie.vertices_a),
-            refs: to_pool(&tie.vertices_b),
-            reach: tie.max_separation,
+        .map(|tie| {
+            let masters = to_pool(&tie.vertices_a);
+            let refs = to_pool(&tie.vertices_b);
+            let unmapped = tie.vertices_a.len() + tie.vertices_b.len() - masters.len() - refs.len();
+            PoolTie {
+                name: tie.name.clone(),
+                masters,
+                refs,
+                reach: tie.max_separation,
+                unmapped,
+            }
         })
         .collect()
 }

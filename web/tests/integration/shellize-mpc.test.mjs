@@ -366,6 +366,7 @@ describe("tie connections between solid bodies", () => {
       expect(report.nPartners).toBeGreaterThan(0);
       expect(Math.abs(report.gap - GAP)).toBeLessThan(1e-9);
       expect(report.drop).toBeUndefined();
+      expect(report.nUnmapped).toBe(0);
     });
 
     test("a tie that coupled is not a problem", () => {
@@ -448,6 +449,7 @@ describe("tie connections between solid bodies", () => {
       const report = orphan.tieReports[0];
       expect(report.drop?.kind).toBe("no-pool-nodes");
       expect(report.drop.side).toBe("B");
+      expect(report.nUnmapped).toBe(1);
       const problem = tieCouplingProblem(report);
       expect(problem).toContain('Tie "Stale pick"');
       // The side that has nothing is the side the sentence must say is empty —
@@ -456,6 +458,27 @@ describe("tie connections between solid bodies", () => {
       expect(problem).toContain(
         "picked surface B has no node in the solved model",
       );
+    });
+
+    // Picked nodes in no element of the solved model are counted, so the solve
+    // can say how many the tie could not reach; the rest still couple.
+    test("picked nodes with no node in the solved model are counted", () => {
+      const partial = buildExplicitCoupledModel(
+        verts,
+        solidTets,
+        [],
+        [],
+        tieOf(
+          "Partly stale",
+          surfaceA,
+          [...surfaceB, verts.length / 3 + 5, verts.length / 3 + 6],
+          Infinity,
+        ),
+      );
+      const report = partial.tieReports[0];
+      expect(report.nCoupled).toBe(surfaceB.length);
+      expect(report.nUnmapped).toBe(2);
+      expect(tieCouplingProblem(report)).toBeUndefined();
     });
 
     // Two surfaces that are the SAME nodes are already rigidly joined through the

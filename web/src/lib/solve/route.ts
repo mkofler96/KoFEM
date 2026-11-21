@@ -13,6 +13,7 @@ import {
   solidModelRefusal,
   shellOrderRefusal,
   shellTieRefusal,
+  surfaceLoadRefusal,
   topOptTieRefusal,
 } from "./refusals.js";
 
@@ -30,6 +31,12 @@ export type SolveRoute =
   | { path: "solid" };
 
 export function routeSolve(payload: SolveModel): SolveRoute {
+  // A load no path can apply in full is refused on every path (KOF-411).
+  const loadRefusal = surfaceLoadRefusal(
+    payload.elements,
+    payload.surfaceLoads,
+  );
+  if (loadRefusal !== null) throw new Error(loadRefusal);
   // Shell models route away from the all-solid path. A model that is ALL CTRIA3
   // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
   // solid elements solves via the coupled solid-shell solver (the shells are
@@ -108,6 +115,10 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   const shellElements = elements.filter((e) => e.type === "CTRIA3");
   const solidElements = elements.filter((e) => e.type !== "CTRIA3");
   const couplings = payload.couplings ?? [];
+
+  // A load no path can apply in full is refused here as by the solve (KOF-411).
+  const loadRefusal = surfaceLoadRefusal(elements, payload.surfaceLoads);
+  if (loadRefusal !== null) throw new Error(loadRefusal);
 
   // No optimizer applies a tie (C++ or Rust, any design domain): a tied
   // assembly would be optimized as separate parts.

@@ -3,15 +3,16 @@
 
 // Interactive result viewers for the Theory Guide. Every example's analysis
 // file opens unsolved, so examples/validation/run.mjs --report writes the
-// solved boundary surface of each case to examples/validation/surfaces/<id>.json;
-// generate.mjs turns it into public/theory/viewers/<id>.json, and
-// public/theory/viewer.js draws it with three.js. Without JavaScript or WebGL,
-// the example's own figure is shown.
+// solved boundary surface of each case next to its page's figure,
+// examples/gallery/site/<id>.result.json (examples/validation/lib/viewer.mjs);
+// generate.mjs turns the field of the example's figure into
+// public/theory/viewers/<id>.json, and public/theory/viewer.js draws it with
+// three.js. Without JavaScript or WebGL, the example's own figure is shown.
 
 import { readFileSync } from "node:fs";
 
 const repo = new URL("../../../", import.meta.url);
-const surfaces = new URL("examples/validation/surfaces/", repo);
+const site = new URL("examples/gallery/site/", repo);
 const caseRecords = JSON.parse(
   readFileSync(new URL("web/public/examples/results.json", repo), "utf8"),
 ).cases;
@@ -41,13 +42,15 @@ function figureMeta(id) {
 /** The viewer payload of one solved example: its surface from run.mjs. */
 export function viewerData(id) {
   const meta = figureMeta(id);
-  const surface = JSON.parse(
-    readFileSync(new URL(`${id}.json`, surfaces), "utf8"),
+  const solved = JSON.parse(
+    readFileSync(new URL(`${id}.result.json`, site), "utf8"),
   );
-  if (surface.id !== id || surface.field !== meta.field)
+  const field = solved.fields.find((f) => f.key === meta.field);
+  if (solved.id !== id || !field)
     throw new Error(
-      `${id}: the solved surface is "${surface.id}" / ${surface.field}, the figure shows ${meta.field}`,
+      `${id}: the solved surface is "${solved.id}" with ${solved.fields.map((f) => f.key).join(", ")}, the figure shows ${meta.field}`,
     );
+  const surface = { ...solved, values: field.values };
   const edges = new Set();
   const { triangles } = surface;
   for (let t = 0; t < triangles.length; t += 3)

@@ -11,6 +11,7 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 mod mixed;
+mod rigid_body;
 mod section;
 mod shell;
 mod shellize;
@@ -18,6 +19,7 @@ mod tie;
 mod topology;
 
 pub use mixed::MixedModel;
+pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;
 pub use shellize::{
     CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,
@@ -141,12 +143,11 @@ impl ElasticModel {
     /// selected hex faces as quadruples; `kind` is `"pressure"`
     /// (`values` = [p], positive pushing in), `"traction"` (force per area)
     /// or `"force"` (total force, spread over the faces' area). `load` names
-    /// the load in errors. Returns how many selected faces are not on the
-    /// boundary (stale or interior selections), for the caller to report.
+    /// the load in errors.
     ///
     /// # Errors
-    /// A malformed face list or value array, an unknown kind, or a load that
-    /// matches no boundary face or spreads a force over zero area.
+    /// A malformed face list or value array, an unknown kind, or a load with
+    /// a face off the boundary or a force spread over zero area.
     #[wasm_bindgen(js_name = addSurfaceLoad)]
     pub fn add_surface_load(
         &mut self,
@@ -156,7 +157,7 @@ impl ElasticModel {
         quadrilaterals: &[u32],
         kind: &str,
         values: &[f64],
-    ) -> Result<usize, JsError> {
+    ) -> Result<(), JsError> {
         if !triangles.len().is_multiple_of(3) {
             return Err(JsError::new(&format!(
                 "surface load {load}: {} triangle indices are not vertex triples",
@@ -210,7 +211,7 @@ impl ElasticModel {
         let boundary = self
             .boundary
             .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
-        let report = boundary
+        boundary
             .apply(
                 &self.mesh,
                 load,
@@ -220,7 +221,7 @@ impl ElasticModel {
                 forces,
             )
             .map_err(|error| to_js(&error))?;
-        Ok(report.unmatched)
+        Ok(())
     }
 
     /// Von Mises stress of every element (tets, then hexes), at its centre,
@@ -242,8 +243,8 @@ impl ElasticModel {
     }
 
     /// Solve K·u = f with the given DOFs (3·node + component) prescribed. On
-    /// a quadratic model, conditions on both ends of an edge extend to its
-    /// edge node, as in the MFEM engine.
+    /// a quadratic model, conditions on every corner of a boundary face extend
+    /// to the face's edge and face nodes (`kofem_fem::prepare_static`).
     ///
     /// # Errors
     /// Missing assembly, malformed constraints or forces, or a solve that
