@@ -11,6 +11,7 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 mod mixed;
+mod rigid_body;
 mod section;
 mod shell;
 mod shellize;
@@ -18,6 +19,7 @@ mod tie;
 mod topology;
 
 pub use mixed::MixedModel;
+pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;
 pub use shellize::{
     CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,

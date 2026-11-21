@@ -41,6 +41,9 @@ export type ErrorCategory =
   | "shell_idealisation_failure"
   // A solve path that does not take this model yet refuses it (KOF-418).
   | "unsupported_model"
+  // The supports leave a body free to slide or spin; refused before the
+  // solve (KOF-388). What the check misses still fails as numerical_failure.
+  | "unheld_body"
   // The solver or optimizer failed in a way no rule above recognises.
   | "solver_failure"
   // A WASM trap or abort: a code bug in the engine, not the visitor's model.
@@ -297,6 +300,8 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
     /does not support|cannot solve this model|solve with linear elements only|supports solid models only|the shell solver cannot apply|can be idealised as shells today|works on tetrahedral meshes only/i,
   ],
   ["shell_idealisation_failure", /Shell idealisation failed/i],
+  // Before numerical_failure: the rigid-body check (lib/solve/rigidBody.ts).
+  ["unheld_body", /can still (move along|rotate about)/i],
   [
     "numerical_failure",
     /did not converge|diverg|singular|NaN|ill-conditioned|zero pivot|not positive definite|rigid[- ]body|unconstrained/i,

@@ -111,6 +111,8 @@ pub enum FemError {
     CouplingInput { reason: String },
     #[error("tie constraints: {reason}")]
     Tie { reason: String },
+    #[error("rigid-body check: {reason}")]
+    RigidBodyInput { reason: String },
     #[error(
         "node {node} DOF {component} is eliminated by two couplings — a DOF can be eliminated \
          by only one constraint. Make one of them distributing, or pick surfaces that do not \

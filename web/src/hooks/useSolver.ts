@@ -67,7 +67,10 @@ export function useSolver() {
   const matOk =
     materials.length > 0 &&
     properties.every((p) => materials.some((m) => m.id === p.materialId));
-  const bcOk = constraints.length > 0;
+  // The supports must hold every body against sliding and spinning (KOF-388):
+  // the worker's rigid-body check, below, says which body is loose and how.
+  const [unheld, setUnheld] = useState<string | null>(null);
+  const bcOk = constraints.length > 0 && unheld === null;
   // Force/pressure loads now reach the solver as surface tractions, moments as
   // nodal forces — either kind makes the model loaded.
   const loadOk = loads.length > 0 || surfaceLoads.length > 0;
@@ -98,6 +101,59 @@ export function useSolver() {
       : null,
   );
   const allOk = meshOk && matOk && bcOk && drivingOk && routeRefusal === null;
+
+  // The refusal the solve would make for a loose body, checked in the worker on
+  // the model the route solves (KOF-388). Loads do not hold anything, so they
+  // are left out and changing one does not re-run the check.
+  useEffect(() => {
+    let current = true;
+    if (
+      nodes.length === 0 ||
+      constraints.length === 0 ||
+      routeRefusal !== null
+    ) {
+      setUnheld(null);
+      return;
+    }
+    sendToWorker<{ message: string | null }>("rigid_body_check", {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads: [],
+      surfaceLoads: [],
+      elementOrder,
+      tieGroups,
+      couplings: couplingGroups,
+      // A body marked Shell is checked on its idealisation, found from these.
+      surfaceTriangles,
+      surfaceFaceIds,
+    })
+      .then(({ message }) => {
+        if (current) setUnheld(message);
+      })
+      .catch((err: Error) => {
+        // The solve runs the same check and reports the failure itself.
+        console.error("[rigid-body check] failed:", err.message);
+        if (current) setUnheld(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [
+    nodes,
+    elements,
+    materials,
+    properties,
+    constraints,
+    elementOrder,
+    tieGroups,
+    couplingGroups,
+    surfaceTriangles,
+    surfaceFaceIds,
+    routeRefusal,
+  ]);
 
   // Linear tets on a thin wall give too-stiff results (KOF-274): check the
   // meshed model for walls spanned by too few elements.
@@ -210,9 +266,11 @@ export function useSolver() {
     ],
     [
       bcOk,
-      bcOk
-        ? `BCs applied · ${new Set(constraints.map((c) => c.nodeId)).size} nodes fixed`
-        : "No boundary conditions",
+      constraints.length === 0
+        ? "No boundary conditions"
+        : unheld !== null
+          ? unheld
+          : `BCs applied · ${new Set(constraints.map((c) => c.nodeId)).size} nodes fixed`,
     ],
     [
       drivingOk,

@@ -349,6 +349,15 @@ describe("buckets and categories", () => {
       'Shell idealisation failed: body 1 is marked "Shell" but no thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.',
       "shell_idealisation_failure",
     ],
+    // The rigid-body check refuses a loose body before the solve (KOF-388).
+    [
+      "Body 2 can still move along X and rotate about Z. Add a support or connect it to another body.",
+      "unheld_body",
+    ],
+    [
+      "Bodies 1 and 3 can still rotate about (0.71, 0.71, 0). Add supports or connect them to other bodies.",
+      "unheld_body",
+    ],
     ["something nobody anticipated", "unknown"],
   ])("error category of %p is %s", (message, category) => {
     expect(categorizeError(new Error(message))).toBe(category);
