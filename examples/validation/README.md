@@ -78,18 +78,18 @@ typed by hand. The list of examples, and their order, is `catalog.mjs`: these
 cases plus the showcases built by the generators in `examples/gallery/` (see
 its README), which write their own records.
 
-| Output                             | What it is                                                                  |
-| ---------------------------------- | --------------------------------------------------------------------------- |
-| `web/examples/index.html`          | the index at `/examples/`: every example with its figure, the results table |
-| `web/examples/<id>/index.html`     | one page per example: problem, derivation, model, results, discussion       |
-| `examples/gallery/site/<id>.vtu`   | each case as the app opens it: unsolved, on the static study                |
-| `examples/gallery/site/<id>.step`  | each case's STEP file, the one a user imports                               |
-| `examples/validation/surfaces/`    | each case's solved surface, for the Theory Guide's 3D viewer                |
-| `examples/gallery/site/<id>.png`   | each case's figure (`lib/render.mjs`), drawn from the same solve            |
-| `examples/gallery/site/<id>/`      | the page's diagrams and charts as image files (below); nothing else         |
-| `web/public/examples/results.json` | every number on the case pages, plus the engine id; linked as the raw data  |
-| `web/public/sitemap.xml`           | the block between the `examples` markers lists the index and every page     |
-| `REPORT.md`                        | the results table in Markdown                                               |
+| Output                             | What it is                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| `web/examples/index.html`          | the index at `/examples/`: every example with its figure, the results table    |
+| `web/examples/<id>/index.html`     | one page per example: problem, derivation, model, results, discussion          |
+| `examples/gallery/site/<id>.vtu`   | each case as the app opens it: unsolved, on the static study                   |
+| `examples/gallery/site/<id>.step`  | each case's STEP file, the one a user imports                                  |
+| `examples/gallery/site/<id>.png`   | each case's figure (`lib/render.mjs`), drawn from the same solve               |
+| `site/<id>.result.json`            | the solved surface with both fields, for the page's 3D view (`lib/viewer.mjs`) |
+| `examples/gallery/site/<id>/`      | the page's diagrams and charts as image files (below); nothing else            |
+| `web/public/examples/results.json` | every number on the case pages, plus the engine id; linked as the raw data     |
+| `web/public/sitemap.xml`           | the block between the `examples` markers lists the index and every page        |
+| `REPORT.md`                        | the results table in Markdown                                                  |
 
 Next to each `<id>.step`, `<id>.model.step` holds the geometry after the
 recipe's splits: the one the `.vtu`'s CAD faces refer to, which the app
@@ -141,7 +141,7 @@ files no figure produces any more.
 Every plain run compares itself with the committed `results.json` — each case's
 value to 1e-4 relative, its reference, band, mesh and inputs, and the read-out
 the app's Result summary shows — checks that each case's `.vtu` holds the case's
-model, and re-renders every page from the committed data and records, which
+model and its `.result.json` this run's solve, and re-renders every page from the committed data and records, which
 must match the committed HTML. It fails with the list of differences when any
 disagrees. So an engine change that moves a published number, or a text or
 layout change, fails CI until the pages are regenerated. The convergence

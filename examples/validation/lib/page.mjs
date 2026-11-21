@@ -20,7 +20,11 @@ import { fmt } from "./format.mjs";
 import { tex, texBlock } from "./tex.mjs";
 import { siteFooter, siteHeader } from "../../../web/site-layout.mjs";
 
-import { renderDocsPage as layout } from "../../../web/docs-layout.mjs";
+import {
+  RESULT_VIEWER_HEAD,
+  renderDocsPage as layout,
+} from "../../../web/docs-layout.mjs";
+import { FIELDS, viewerUrl } from "./viewer.mjs";
 
 const SITE = "https://kofem.org";
 const REPO = "https://github.com/mkofler96/KoFEM";
@@ -190,22 +194,24 @@ const DISCLAIMER = `<p class="note" data-testid="disclaimer">
 
 // ── The result figure ─────────────────────────────────────────────────────────
 
-const FIELD_NAMES = {
-  displacement: "Displacement magnitude |U|",
-  vonMises: "Von Mises stress",
-  density: "Element density",
-};
-
 const imagePath = (id) => `/examples/${id}.png`;
 
+// The colour bar and the field name carry data-legend, so the interactive
+// view (public/theory/viewer.js) can relabel them when the reader switches
+// fields.
 function fieldRange(fig) {
   const v = (x) => withUnit(minus(x.toPrecision(3)), fig.unit);
-  return `<span>${v(fig.min)}</span><span class="bar" aria-hidden="true"></span><span>${v(fig.max)}</span>`;
+  return `<span data-legend="min">${v(fig.min)}</span><span class="bar" aria-hidden="true"></span><span data-legend="max">${v(fig.max)}</span>`;
 }
 
+/**
+ * The solved model: the figure, which the interactive 3D view replaces once
+ * it has loaded (lib/viewer.mjs). Without JavaScript or WebGL the figure
+ * stays.
+ */
 function resultFigure(e) {
   const fig = e.figure;
-  const name = FIELD_NAMES[fig.field];
+  const name = FIELDS[fig.field]?.name;
   if (!name)
     throw new Error(`${e.id}: no name for figure field "${fig.field}"`);
   const shape =
@@ -213,10 +219,13 @@ function resultFigure(e) {
       ? `deformed shape, displacements drawn ${int(fig.deform)} times enlarged`
       : "undeformed shape";
   return `
-      <figure class="result">
-        <img src="${imagePath(e.id)}" width="${fig.width}" height="${fig.height}" alt="${esc(`${e.name}: ${name.toLowerCase()} on the ${shape}`)}" />
+      <figure class="result result-viewer" data-viewer="${viewerUrl(e.id)}" data-aspect="${fig.width} / ${fig.height}">
+        <div class="viewer-stage">
+          <img src="${imagePath(e.id)}" width="${fig.width}" height="${fig.height}" alt="${esc(`${e.name}: ${name.toLowerCase()} on the ${shape}`)}" />
+          <p class="viewer-hint" hidden></p>
+        </div>
         <div class="colorbar">${fieldRange(fig)}</div>
-        <figcaption>${esc(name)}, ${esc(shape)}. The result of running the model that Open in KoFEM loads.</figcaption>
+        <figcaption><span data-legend="name">${esc(name)}</span>, ${esc(shape)}. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>`;
 }
 
@@ -843,6 +852,7 @@ export function renderExamplePage(
     description: text.description,
     path: pageUrl(e.id),
     image: imagePath(e.id),
+    head: RESULT_VIEWER_HEAD,
     jsonLd: {
       "@context": "https://schema.org",
       "@graph": [

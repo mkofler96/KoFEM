@@ -15,12 +15,13 @@ steps (`examples/validation/lib/recipe.mjs`):
 
 - **Validation cases** (`examples/validation/cases/`), built and checked on
   every CI run. `bun run validate:report` (in `web/`) writes their `.vtu`,
-  `.step`, `.model.step` and `.png` here, the pages (`web/examples/`) and
+  `.step`, `.model.step`, `.png` and `.result.json` here, the pages (`web/examples/`) and
   `web/public/examples/results.json`.
 - **Showcases**, models without a closed-form answer, each built from its
   recipe in `recipes/` by a generator in this folder. A generator writes
-  `site/<id>.vtu`, `.step`, `.model.step`, `site/<id>.png` and
-  `showcase/<id>.json`, the numbers on its page.
+  `site/<id>.vtu`, `.step`, `.model.step`, `site/<id>.png`,
+  `site/<id>.result.json` (the page's 3D view) and `showcase/<id>.json`, the
+  numbers on its page.
 
 To regenerate everything, run the generators first, then the report, which
 renders every page from the case runs and the showcase records:
@@ -50,6 +51,13 @@ model.
 
 A page's figure is drawn by `examples/validation/lib/render.mjs` from the solved
 model, coloured as the app colours it, so the page needs no script or WebGL.
+Once the page has loaded, a 3D view of the same solved model takes the figure's
+place: rotate, zoom and switch between the displacement and von Mises fields
+(`web/public/theory/viewer.js`, which loads three.js only on pages that have a
+view). The report writes its data, the solved boundary surface with both
+fields, as `site/<id>.result.json` (`examples/validation/lib/viewer.mjs`); a
+showcase's generator writes its own. Without JavaScript or WebGL the figure
+stays.
 Its diagrams and charts are published as SVG and PNG files in `site/<id>/`
 (`web/figure-assets.mjs`; see `examples/validation/README.md`).
 

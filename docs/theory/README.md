@@ -77,8 +77,9 @@ automatically; powers of ten use `powerOfTen`. Characters a font lacks
 (for example ⁻⁶ or ∝) fail the build with the label to change.
 
 `resultViewer(id, { caption })` from `web/theory/viewers/index.mjs` embeds a
-solved public example in 3D: the generator extracts the boundary surface and
-the field of the example's own figure from `examples/gallery/site/<id>.vtu` into
+solved public example in 3D: the generator takes the field of the example's own
+figure from its solved surface, `examples/gallery/site/<id>.result.json` (the
+same file the example's page shows in 3D), into
 `web/public/theory/viewers/<id>.json`. `web/public/theory/viewer.js` draws it
 with three.js, served from `node_modules` at `/vendor/three/` (see
 `vite.config.ts`), and leaves the example's static figure in place without
