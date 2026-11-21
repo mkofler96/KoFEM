@@ -47,6 +47,9 @@ export interface Property {
   sourceBodyId?: number;
   // A suppressed body is not in the mesh, whatever its element type.
   suppressed?: boolean;
+  // On a CAD solid that is a region of a split body: the body number it
+  // belongs to (lib/regions.ts). Absent: the solid is a body of its own.
+  body?: number;
 }
 export interface Constraint {
   nodeId: number;

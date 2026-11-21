@@ -8,6 +8,7 @@ import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
 import {
   Couplings,
   ElasticModel,
+  freeRigidMotions,
   MixedModel,
   MortarSurface,
   ShellModel,
@@ -33,6 +34,7 @@ import type {
   SplitConeTipsPayload,
   RemoveFacesPayload,
   VolumeMeshPayload,
+  SolveModel,
   SolvePayload,
   TopOptPayload,
 } from "./solverTypes.js";
@@ -70,6 +72,12 @@ import {
 import { constraintTieCount } from "../lib/tie.js";
 import { solidModelRefusal } from "../lib/solve/refusals.js";
 import { tieWeighting } from "../lib/solve/tieMortar.js";
+import {
+  coupledRigidBodyInput,
+  modelRigidBodyInput,
+  unheldBodiesMessage,
+  type RigidBodyInput,
+} from "../lib/solve/rigidBody.js";
 import { expandTiedDisplacements, weldTies } from "../lib/solve/solid.js";
 import {
   optimizeCoupledInRust,
@@ -662,6 +670,7 @@ function solveMixed(
 // Rust solid solve does not take.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
+  refuseUnheldBodies(coupledRigidBodyInput(payload, inp), payload);
 
   self.postMessage({
     id,
@@ -794,9 +803,40 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   postSolveResult(id, { displacements, vonMises: result.vonMises });
 }
 
+// Refuse a model whose supports leave a body free to slide or spin, naming
+// the body and the motion, before the solve fails on it (KOF-388).
+function refuseUnheldBodies(
+  input: RigidBodyInput,
+  model: Pick<SolveModel, "properties">,
+): void {
+  const message = unheldBodiesMessage(
+    { freeRigidMotions },
+    input,
+    model.properties,
+  );
+  if (message !== null) throw new Error(message);
+}
+
+// The Solve panel's pre-check: the refusal the solve would make for a loose
+// body, or null. The coupled route is checked on its own inputs, where the
+// shells are joined to the solids; the others on the model as the user
+// defined it (the auto-shell route before its Shell bodies are idealised).
+function rigidBodyCheck(model: SolveModel): string | null {
+  // The builder's progress lines are the solve's to report, not the check's.
+  const quiet: SolveLog = () => undefined;
+  const input =
+    routeSolve(model).path === "coupled"
+      ? coupledRigidBodyInput(model, buildCoupledEngineInputs(model, quiet))
+      : modelRigidBodyInput(model);
+  return unheldBodiesMessage({ freeRigidMotions }, input, model.properties);
+}
+
 async function handleSolve(id: number, payload: SolvePayload) {
   const reason = amgReason(payload);
   const route = routeSolve(payload);
+  // The coupled route checks once it has built its inputs (handleMixedSolve).
+  if (route.path !== "coupled")
+    refuseUnheldBodies(modelRigidBodyInput(payload), payload);
   if (requestedSolver(payload) === "amg" && reason !== null) {
     const fallback = amgFallbackPreconditioner(route);
     self.postMessage({
@@ -887,6 +927,8 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
     self.postMessage({ id, log: topOptStartLog(payload, nElems, domain) });
 
   let result: TopOptRunResult;
+  if (domain !== "coupled")
+    refuseUnheldBodies(modelRigidBodyInput(payload), payload);
   if (domain === "shell") {
     // SIMP on the shell and coupled domains runs in Rust (KOF-310) on the
     // engine's own inputs; routeTopOpt has refused the level-set method.
@@ -901,6 +943,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
     );
   } else if (domain === "coupled") {
     const inp = buildCoupledEngineInputs(payload, logTo(id));
+    refuseUnheldBodies(coupledRigidBodyInput(payload, inp), payload);
     startLog(inp.solidElements.length + inp.shellElements.length);
     result = optimizeCoupledInRust(
       { MixedModel, Couplings, TopologySettings, TopologyRun },
@@ -1015,6 +1058,13 @@ function dispatchRequest({
         id,
         ok: true,
         findings: thinWallFindings(payload as ThinWallCheckInput),
+      });
+      return null;
+    case "rigid_body_check":
+      self.postMessage({
+        id,
+        ok: true,
+        message: rigidBodyCheck(payload as SolveModel),
       });
       return null;
     case "optimize_topology":
