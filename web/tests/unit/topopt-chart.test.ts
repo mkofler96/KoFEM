@@ -8,10 +8,14 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  chartAxis,
+  chartBound,
   chartFields,
+  chartStatus,
   topOptChartLayout,
   type TopOptChartBox,
 } from "../../src/lib/topOptChart";
+import { DEFAULT_TOPOPT_SETTINGS } from "../../src/store/topOptSlice";
 import type { ConvergencePoint } from "../../src/lib/topOptProgress";
 
 const BOX: TopOptChartBox = { left: 100, right: 500, top: 50, bottom: 250 };
@@ -81,5 +85,74 @@ describe("topOptChartLayout", () => {
     expect(() => topOptChartLayout(history, "stress", BOX, null)).toThrow(
       "stress",
     );
+  });
+});
+
+describe("chartBound", () => {
+  const settings = { ...DEFAULT_TOPOPT_SETTINGS, volumeFraction: "0.4" };
+
+  test("minimum compliance bounds the volume by its target", () => {
+    expect(chartBound("volume", settings)).toEqual({
+      name: "Target",
+      value: 0.4,
+    });
+    expect(chartBound("compliance", settings)).toBeNull();
+  });
+
+  test("minimum volume bounds the compliance by its limit, when one is set", () => {
+    const minVolume = {
+      ...settings,
+      objective: "min_volume" as const,
+      complianceLimit: "12",
+    };
+    expect(chartBound("compliance", minVolume)).toEqual({
+      name: "Limit",
+      value: 12,
+    });
+    expect(chartBound("volume", minVolume)).toBeNull();
+    expect(
+      chartBound("compliance", { ...minVolume, complianceLimit: "" }),
+    ).toBeNull();
+  });
+
+  test("a SIMP stress limit bounds the stress; the level set has none", () => {
+    const stressed = { ...settings, stressConstraint: true, maxStress: "250" };
+    expect(chartBound("stress", stressed)).toEqual({
+      name: "σ_allow",
+      value: 250,
+    });
+    expect(
+      chartBound("stress", { ...stressed, method: "level_set" as const }),
+    ).toBeNull();
+  });
+});
+
+describe("chartStatus", () => {
+  test("a running run counts its iterations against the limit", () => {
+    expect(chartStatus(true, null, "50", null)).toBe("Optimizing · starting");
+    expect(chartStatus(true, 12, "50", null)).toBe(
+      "Optimizing · iteration 12 of 50",
+    );
+  });
+
+  test("a finished run gives its verdict", () => {
+    expect(
+      chartStatus(false, 9, "50", { converged: true, iterations: 9 }),
+    ).toBe("Converged after 9 iterations");
+    expect(
+      chartStatus(false, 50, "50", { converged: false, iterations: 50 }),
+    ).toBe("Not converged: stopped at the 50-iteration limit");
+  });
+
+  test("no run, no status", () => {
+    expect(chartStatus(false, null, "50", null)).toBeNull();
+  });
+});
+
+describe("chartAxis", () => {
+  test("names each field's axis, the stress with its unit", () => {
+    expect(chartAxis("compliance", "MPa")).toBe("Compliance");
+    expect(chartAxis("volume", "MPa")).toBe("Volume fraction");
+    expect(chartAxis("stress", "MPa")).toBe("Von Mises stress (MPa)");
   });
 });

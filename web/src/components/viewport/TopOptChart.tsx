@@ -8,7 +8,10 @@ import { SMALL_SCREEN_QUERY } from "../../store/viewSlice";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useWorkerLogLines } from "../../hooks/useWorkerLogs";
 import {
+  chartAxis,
+  chartBound,
   chartFields,
+  chartStatus,
   topOptChartLayout,
   type TopOptChartField,
 } from "../../lib/topOptChart";
@@ -78,46 +81,18 @@ export function TopOptChart() {
   // A stress view left from a stress-bounded run falls back to compliance on
   // a run without stress, which has nothing else to show.
   const field = fields.includes(chosen) ? chosen : "compliance";
-  // The bound of the constraint on this field. Changing a setting clears the
-  // result, so the store's settings are the ones the run used.
-  const limit = (text: string) => {
-    const value = Number(text);
-    return text.trim() !== "" && Number.isFinite(value) ? value : null;
-  };
-  const simp = settings.method === "simp";
-  const bound =
-    field === "volume" && settings.objective === "min_compliance"
-      ? limit(settings.volumeFraction)
-      : field === "compliance" && settings.objective === "min_volume"
-        ? limit(settings.complianceLimit)
-        : field === "stress" && simp && settings.stressConstraint
-          ? limit(settings.maxStress)
-          : null;
-  const boundName =
-    field === "volume"
-      ? "Target"
-      : field === "compliance"
-        ? "Limit"
-        : "σ_allow";
-  const axis =
-    field === "compliance"
-      ? "Compliance"
-      : field === "volume"
-        ? "Volume fraction"
-        : `Von Mises stress (${resultUnit("Von Mises stress")})`;
+  const bound = chartBound(field, settings);
+  const axis = chartAxis(field, resultUnit("Von Mises stress"));
 
   const { width, height, box } = small ? NARROW : WIDE;
-  const layout = topOptChartLayout(points, field, box, bound);
-  const last = points[points.length - 1];
-  const status = isOptimizing
-    ? last === undefined
-      ? "Optimizing · starting"
-      : `Optimizing · iteration ${last.it} of ${settings.maxIterations}`
-    : densityResult === null
-      ? null
-      : densityResult.converged
-        ? `Converged after ${densityResult.iterations} iterations`
-        : `Not converged: stopped at the ${densityResult.iterations}-iteration limit`;
+  const layout = topOptChartLayout(points, field, box, bound?.value ?? null);
+  const last = points.at(-1);
+  const status = chartStatus(
+    isOptimizing,
+    last === undefined ? null : last.it,
+    settings.maxIterations,
+    densityResult,
+  );
   const range = layout.range;
   const ticks =
     range === null
@@ -273,7 +248,7 @@ export function TopOptChart() {
                 {bound !== null && (
                   <span>
                     <span className={css.legendLineBound} />
-                    {boundName} {format(bound)}
+                    {bound.name} {format(bound.value)}
                   </span>
                 )}
               </div>

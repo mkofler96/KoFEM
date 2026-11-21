@@ -7,6 +7,8 @@
 // the constraint on that field as a line. Pure, so the component only draws.
 
 import type { ConvergencePoint } from "./topOptProgress";
+import type { TopOptConvergence } from "./topOptConvergence";
+import type { TopOptSettingsState } from "../store/topOptSlice";
 
 export type TopOptChartField = "compliance" | "volume" | "stress";
 
@@ -109,4 +111,57 @@ export function topOptChartLayout(
     range: { min, max },
     boundY: bound === null ? null : yOf(bound),
   };
+}
+
+// The bound of the run's constraint on a field, drawn as a dashed line: the
+// volume target of minimum compliance, the compliance limit of minimum
+// volume, or a SIMP run's stress limit. Changing a setting clears the result,
+// so the settings are the ones the run used.
+export function chartBound(
+  field: TopOptChartField,
+  settings: TopOptSettingsState,
+): { name: string; value: number } | null {
+  const text =
+    field === "volume" && settings.objective === "min_compliance"
+      ? settings.volumeFraction
+      : field === "compliance" && settings.objective === "min_volume"
+        ? settings.complianceLimit
+        : field === "stress" &&
+            settings.method === "simp" &&
+            settings.stressConstraint
+          ? settings.maxStress
+          : null;
+  if (text === null || text.trim() === "") return null;
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  const name =
+    field === "volume"
+      ? "Target"
+      : field === "compliance"
+        ? "Limit"
+        : "σ_allow";
+  return { name, value };
+}
+
+// The chart's header: the running count, or the finished run's verdict.
+export function chartStatus(
+  running: boolean,
+  lastIteration: number | null,
+  maxIterations: string,
+  result: TopOptConvergence | null,
+): string | null {
+  if (running)
+    return lastIteration === null
+      ? "Optimizing · starting"
+      : `Optimizing · iteration ${lastIteration} of ${maxIterations}`;
+  if (result === null) return null;
+  return result.converged
+    ? `Converged after ${result.iterations} iterations`
+    : `Not converged: stopped at the ${result.iterations}-iteration limit`;
+}
+
+export function chartAxis(field: TopOptChartField, stressUnit: string): string {
+  if (field === "compliance") return "Compliance";
+  if (field === "volume") return "Volume fraction";
+  return `Von Mises stress (${stressUnit})`;
 }
