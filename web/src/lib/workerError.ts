@@ -17,6 +17,8 @@ export const FAILURE_STAGES = [
   "meshing",
   // Collapsing Shell bodies to a mid-surface mesh after meshing.
   "shell_idealisation",
+  // A static solve or a topology optimization, from routing to result (KOF-418).
+  "solving",
 ] as const;
 export type FailureStage = (typeof FAILURE_STAGES)[number];
 
@@ -38,6 +40,18 @@ class StageFailure extends Error {
 export function inStage<T>(stage: FailureStage, run: () => T): T {
   try {
     return run();
+  } catch (err) {
+    throw new StageFailure(stage, err);
+  }
+}
+
+/** `inStage` for an asynchronous step: a rejection is tagged with the step. */
+export async function inStageAsync<T>(
+  stage: FailureStage,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
   } catch (err) {
     throw new StageFailure(stage, err);
   }

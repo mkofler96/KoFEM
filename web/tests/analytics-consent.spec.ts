@@ -253,11 +253,14 @@ test.describe("workflow events", () => {
     const after = await gaEvents(page);
     const started = after.find((e) => e.name === "solve_started");
     const completed = after.find((e) => e.name === "solve_completed");
+    // Each names the example, so a failing one can be found (KOF-418).
     expect(started?.params).toEqual({
       workflow: "example",
+      example_id: "axial-bar",
       analysis_type: "static",
     });
     expect(completed?.params.workflow).toBe("example");
+    expect(completed?.params.example_id).toBe("axial-bar");
     expect(completed?.params.duration_bucket).toMatch(/^[a-z0-9_]+$/);
     expect(
       after.find((e) => e.name === "results_viewed")?.params.workflow,
@@ -280,6 +283,27 @@ test.describe("workflow events", () => {
       events.find((e) => e.name === "example_loaded")?.params.example_id,
     ).toBe("wall-bracket");
     expect(events.map((e) => e.name)).not.toContain("geometry_import_success");
+  });
+
+  test("a mesh failure on the sample names it (KOF-418)", async ({ page }) => {
+    await withAnalytics(page);
+    await setConsent(page, "granted");
+    await page.goto("/app/");
+    await page.getByRole("button", { name: "Try a sample simulation" }).click();
+    await expect.poll(() => eventNames(page)).toContain("example_loaded");
+
+    // A size the mesher refuses fails before Netgen runs.
+    await page.getByTestId("max-element-size").fill("0");
+    await page.getByRole("button", { name: /Generate mesh/ }).click();
+    await expect.poll(() => eventNames(page)).toContain("mesh_failed");
+    const failed = (await gaEvents(page)).find((e) => e.name === "mesh_failed");
+    expect(failed?.params).toEqual({
+      workflow: "example",
+      example_id: "wall-bracket",
+      model_type: "solid",
+      duration_bucket: "lt_1s",
+      error_category: "invalid_input",
+    });
   });
 
   test("CAD import: failure and success are told apart, nothing about the file is sent @pipeline", async ({

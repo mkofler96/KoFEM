@@ -13,9 +13,18 @@ import {
   durationBucket,
   modelType,
   resetAnalyticsForTests,
+  setWorkflow,
   track,
   trackOnce,
+  workflowParams,
 } from "../../src/lib/analytics.ts";
+import {
+  shellCouplingRefusal,
+  shellOrderRefusal,
+  shellTieRefusal,
+  solidModelRefusal,
+  topOptTieRefusal,
+} from "../../src/lib/solve/refusals.ts";
 import { WorkerTaskError } from "../../src/lib/workerError.ts";
 
 // A window with just what the loader and the utility touch.
@@ -317,6 +326,29 @@ describe("buckets and categories", () => {
       "tessellation_failure",
     ],
     ["mixed solve: the model has no shell element", "invalid_input"],
+    // Stopping at the CG prompt ends the solve on purpose (KOF-418).
+    ["Solve stopped by user. The partial result was discarded.", "cancelled"],
+    // A solve path that does not take the model refuses it by name (KOF-418).
+    [
+      "Topology optimization: the level-set method supports solid models only, but this model has 12 shell (CTRIA3) element(s) — use SIMP for shell and coupled models.",
+      "unsupported_model",
+    ],
+    [
+      "Topology optimization: the level-set method does not support couplings yet, but this model has 1 — remove them or use SIMP.",
+      "unsupported_model",
+    ],
+    [
+      'Bodies 1, 2 are all marked "Shell", but one body per model can be idealised as shells today. Keep one of them Shell and set the others to Solid.',
+      "unsupported_model",
+    ],
+    [
+      'Body 1 is marked "Shell", but the mesh has 40 hexahedral element(s), and shell idealisation works on tetrahedral meshes only. Mesh with tetrahedra, or set the body to Solid.',
+      "unsupported_model",
+    ],
+    [
+      'Shell idealisation failed: body 1 is marked "Shell" but no thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.',
+      "shell_idealisation_failure",
+    ],
     ["something nobody anticipated", "unknown"],
   ])("error category of %p is %s", (message, category) => {
     expect(categorizeError(new Error(message))).toBe(category);
@@ -332,12 +364,35 @@ describe("buckets and categories", () => {
     ["meshing", "mesher_failure"],
     ["shell_idealisation", "shell_idealisation_failure"],
     ["geometry_import", "import_failure"],
+    // A Rust solver or optimizer error no rule knows (KOF-418).
+    ["solving", "solver_failure"],
   ])("an unrecognised failure in step %s is %s", (stage, category) => {
     const err = new WorkerTaskError(
       "Standard_Failure: BRep_API: command not done",
       stage,
     );
     expect(categorizeError(err)).toBe(category);
+  });
+
+  // Every refusal a solve path raises is a model it does not take yet, not an
+  // unknown failure (KOF-418).
+  test.each([
+    ["tie", shellTieRefusal([{ name: "Tie1" }])],
+    ["topology tie", topOptTieRefusal([{ name: "Tie1" }, { name: "Pin" }])],
+    ["element order", shellOrderRefusal(2)],
+    ["shell coupling", shellCouplingRefusal(1)],
+    [
+      "solid model",
+      solidModelRefusal("it supports tetrahedral and hexahedral meshes only"),
+    ],
+    [
+      "solid model, shells",
+      solidModelRefusal("it does not support shell-only models"),
+    ],
+  ])("the %s refusal is unsupported_model", (_name, message) => {
+    expect(categorizeError(new WorkerTaskError(message, "solving"))).toBe(
+      "unsupported_model",
+    );
   });
 
   test("a recognised message wins over the step it failed in", () => {
@@ -360,5 +415,48 @@ describe("buckets and categories", () => {
     expect(modelType([{ type: "CTETRA" }])).toBe("solid");
     expect(modelType([{ type: "CTRIA3" }])).toBe("shell");
     expect(modelType([{ type: "CTRIA3" }, { type: "CTETRA" }])).toBe("mixed");
+  });
+});
+
+// Mesh and solve events name the example they ran on, so a failing example can
+// be found (KOF-418). A CAD import or a saved file has no example id to send.
+describe("workflow parameters", () => {
+  test("an example's workflow carries its id", () => {
+    fresh("granted");
+    setWorkflow("example", "wall-bracket");
+    expect(workflowParams()).toEqual({
+      workflow: "example",
+      example_id: "wall-bracket",
+    });
+  });
+
+  test("a later CAD import drops the example id", () => {
+    fresh("granted");
+    setWorkflow("example", "wall-bracket");
+    setWorkflow("cad_import");
+    expect(workflowParams()).toEqual({ workflow: "cad_import" });
+  });
+
+  test("a mesh failure on an example reaches gtag with the example id", () => {
+    fresh("granted");
+    setWorkflow("example", "plate-with-hole");
+    track("mesh_failed", {
+      ...workflowParams(),
+      model_type: "solid",
+      duration_bucket: "5_15s",
+      error_category: "engine_crash",
+    });
+    expect(sent.at(-1)?.params).toEqual({
+      workflow: "example",
+      example_id: "plate-with-hole",
+      model_type: "solid",
+      duration_bucket: "5_15s",
+      error_category: "engine_crash",
+    });
+  });
+
+  test("the example workflow without an id is refused", () => {
+    fresh("granted");
+    expect(() => setWorkflow("example", "")).toThrow(/example id/);
   });
 });

@@ -39,6 +39,10 @@ export type ErrorCategory =
   // OCCT could not triangulate the shape.
   | "tessellation_failure"
   | "shell_idealisation_failure"
+  // A solve path that does not take this model yet refuses it (KOF-418).
+  | "unsupported_model"
+  // The solver or optimizer failed in a way no rule above recognises.
+  | "solver_failure"
   // A WASM trap or abort: a code bug in the engine, not the visitor's model.
   | "engine_crash"
   // The worker itself died or answered nothing usable.
@@ -53,6 +57,11 @@ export type ModelType = "solid" | "shell" | "mixed";
 export type AnalysisType = "static" | "topology";
 // "other": a file refused for not being STEP or IGES.
 type ImportFormat = CadFormat | "other";
+// How the model got here, and which example it is when it is one (KOF-418).
+export interface WorkflowParams {
+  workflow: Workflow;
+  example_id?: string;
+}
 
 export interface AnalyticsEvents {
   solver_opened: {
@@ -73,30 +82,26 @@ export interface AnalyticsEvents {
   };
   example_loaded: { example_id: string; duration_bucket: DurationBucket };
   example_load_failed: { example_id: string; error_category: ErrorCategory };
-  mesh_completed: {
-    workflow: Workflow;
+  mesh_completed: WorkflowParams & {
     model_type: ModelType;
     duration_bucket: DurationBucket;
   };
-  mesh_failed: {
-    workflow: Workflow;
+  mesh_failed: WorkflowParams & {
     model_type: ModelType;
     duration_bucket: DurationBucket;
     error_category: ErrorCategory;
   };
-  solve_started: { workflow: Workflow; analysis_type: AnalysisType };
-  solve_completed: {
-    workflow: Workflow;
+  solve_started: WorkflowParams & { analysis_type: AnalysisType };
+  solve_completed: WorkflowParams & {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
   };
-  solve_failed: {
-    workflow: Workflow;
+  solve_failed: WorkflowParams & {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
     error_category: ErrorCategory;
   };
-  results_viewed: { workflow: Workflow };
+  results_viewed: WorkflowParams;
   // The feedback dialog was opened from the top bar, then the email or the
   // GitHub path taken. No parameters, so nothing to register in GA4; what the
   // user then writes stays in their email or on GitHub.
@@ -130,6 +135,7 @@ let pending: [string, Record<string, string>][] = [];
 let listening = false;
 let lastHitAt: number | null = null;
 let workflow: Workflow = "none";
+let exampleId: string | null = null;
 const sentOnce = new Set<AnalyticsEventName>();
 
 function consent(): ConsentState | undefined {
@@ -208,12 +214,23 @@ export function consentBanner(): HTMLElement | null {
   return document.getElementById("kofem-cookie-consent");
 }
 
-/** How the model now in the workspace got there; tags later mesh/solve events. */
-export function setWorkflow(w: Workflow): void {
+/**
+ * How the model now in the workspace got there; tags later mesh/solve events.
+ * An example names its public gallery id, so a failing example can be found.
+ */
+export function setWorkflow(w: "example", id: string): void;
+export function setWorkflow(w: Exclude<Workflow, "example">): void;
+export function setWorkflow(w: Workflow, id?: string): void {
+  if (w === "example" && !id)
+    throw new Error("setWorkflow: the example workflow needs an example id");
   workflow = w;
+  exampleId = w === "example" && id ? id : null;
 }
-export function currentWorkflow(): Workflow {
-  return workflow;
+/** The workflow parameters of a mesh, solve or results event. */
+export function workflowParams(): WorkflowParams {
+  return exampleId === null
+    ? { workflow }
+    : { workflow, example_id: exampleId };
 }
 
 export function durationBucket(ms: number): DurationBucket {
@@ -242,8 +259,9 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
     "file_unreadable",
     /NotReadableError|NotFoundError|requested file .*could not be/i,
   ],
-  // resetWorker() rejects what was in flight: the visitor started over.
-  ["cancelled", /Worker reset/i],
+  // resetWorker() rejects what was in flight: the visitor started over. Or
+  // they stopped the solve at the CG iteration-limit prompt.
+  ["cancelled", /Worker reset|Solve stopped by user/i],
   ["engine_unavailable", /engine failed to load/i],
   [
     "engine_crash",
@@ -272,6 +290,13 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
     /Ng_\w+ failed|Ng_NewMesh|NgException|Geomsearch|hash-position|OCCGeometry construction failed/i,
   ],
   ["tessellation_failure", /BRepMesh\w* .*failed|produced no triangles/i],
+  // Before numerical_failure and invalid_input: the refusals of
+  // lib/solve/refusals.ts, amg.ts, route.ts and autoShell.ts (KOF-418).
+  [
+    "unsupported_model",
+    /does not support|cannot solve this model|solve with linear elements only|supports solid models only|the shell solver cannot apply|can be idealised as shells today|works on tetrahedral meshes only/i,
+  ],
+  ["shell_idealisation_failure", /Shell idealisation failed/i],
   [
     "numerical_failure",
     /did not converge|diverg|singular|NaN|ill-conditioned|zero pivot|not positive definite|rigid[- ]body|unconstrained/i,
@@ -288,6 +313,7 @@ const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
   meshing: "mesher_failure",
   shell_idealisation: "shell_idealisation_failure",
   geometry_import: "import_failure",
+  solving: "solver_failure",
 };
 
 /** Map an error to a fixed category. The message itself stays in the browser. */
@@ -317,5 +343,6 @@ export function resetAnalyticsForTests(): void {
   pending = [];
   lastHitAt = null;
   workflow = "none";
+  exampleId = null;
   sentOnce.clear();
 }

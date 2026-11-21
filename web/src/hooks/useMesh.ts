@@ -13,10 +13,10 @@ import { useWorkerLogs } from "./useWorkerLogs";
 import { measureTessellation } from "../lib/meshSizing";
 import {
   categorizeError,
-  currentWorkflow,
   modelType,
   startTimer,
   track,
+  workflowParams,
   type DurationBucket,
   type ErrorCategory,
   type ModelType,
@@ -83,7 +83,7 @@ export function useMesh() {
     duration_bucket: DurationBucket,
   ) {
     track("mesh_failed", {
-      workflow: currentWorkflow(),
+      ...workflowParams(),
       model_type: requestedModelType,
       duration_bucket,
       error_category,
@@ -132,7 +132,7 @@ export function useMesh() {
       const { mesh } = reply;
       applyVolumeMesh(applyMeshResult, mesh, sizes);
       track("mesh_completed", {
-        workflow: currentWorkflow(),
+        ...workflowParams(),
         model_type: modelType(mesh.elements),
         duration_bucket: elapsed(),
       });

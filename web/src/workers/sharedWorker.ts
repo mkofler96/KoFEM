@@ -81,6 +81,13 @@ function applyEngineStatus(status: EngineStatusMessage) {
   }
 }
 
+/** What a request in flight rejects with when resetWorker ends it. */
+export class WorkerResetError extends Error {
+  constructor() {
+    super("Worker reset — restart your operation");
+  }
+}
+
 function createWorker(): Worker {
   const worker = new Worker(new URL("./solver.worker.ts", import.meta.url), {
     type: "module",
@@ -265,8 +272,7 @@ export function resetWorker(): void {
     _worker.terminate();
     _worker = null;
   }
-  for (const p of _pending.values())
-    p.reject(new Error("Worker reset — restart your operation"));
+  for (const p of _pending.values()) p.reject(new WorkerResetError());
   _pending.clear();
   startEngine();
 }

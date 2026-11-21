@@ -79,7 +79,7 @@ export async function openExample(
     store.setStepBytes(stepBytes);
     clearWorkerLogs();
     useExampleLoad.setState({ opened: { id, name: analysis.modelName } });
-    setWorkflow("example");
+    setWorkflow("example", id);
     track("example_loaded", {
       example_id: id,
       duration_bucket: elapsed(),
