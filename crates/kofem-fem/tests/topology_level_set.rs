@@ -344,3 +344,82 @@ fn ill_posed_settings_are_refused() {
         ..base_settings()
     }));
 }
+
+/// Each setting is refused at the edge of its range, for that setting's own
+/// reason, and the closed ends of the ranges are still accepted.
+#[test]
+fn settings_out_of_range_are_refused_at_their_bounds() {
+    let refusal = |settings: LevelSetSettings| match run(&settings) {
+        Ok(_) => panic!("settings {settings:?} were accepted"),
+        Err(error) => error.to_string(),
+    };
+    let refused_for = |settings: LevelSetSettings, reason: &str| {
+        let message = refusal(settings);
+        assert!(
+            message.contains(reason),
+            "expected a refusal containing {reason:?}, got {message:?}"
+        );
+    };
+    let volume_fraction = "the volume fraction must be in (0, 1]";
+    let tolerance = "the tolerance must be finite and positive";
+    let volume_step = "the volume step must be in (0, 1]";
+    let emin_rel = "the stiffness floor emin_rel must be in (0, 1)";
+
+    refused_for(
+        LevelSetSettings {
+            volume_fraction: 1.0 + 1e-9,
+            ..base_settings()
+        },
+        volume_fraction,
+    );
+    refused_for(
+        LevelSetSettings {
+            volume_fraction: f64::NAN,
+            ..base_settings()
+        },
+        volume_fraction,
+    );
+    for value in [0.0, -0.01, f64::INFINITY, f64::NAN] {
+        refused_for(
+            LevelSetSettings {
+                tolerance: value,
+                ..base_settings()
+            },
+            tolerance,
+        );
+    }
+    for value in [0.0, 1.0 + 1e-9, 1.5, f64::NAN] {
+        refused_for(
+            LevelSetSettings {
+                volume_step: value,
+                ..base_settings()
+            },
+            volume_step,
+        );
+    }
+    for value in [0.0, 1.0, f64::NAN] {
+        refused_for(
+            LevelSetSettings {
+                emin_rel: value,
+                ..base_settings()
+            },
+            emin_rel,
+        );
+    }
+
+    // The closed ends: full material and a whole-range volume step.
+    for settings in [
+        LevelSetSettings {
+            volume_fraction: 1.0,
+            max_iterations: 1,
+            ..base_settings()
+        },
+        LevelSetSettings {
+            volume_step: 1.0,
+            max_iterations: 1,
+            ..base_settings()
+        },
+    ] {
+        run(&settings).unwrap_or_else(|error| panic!("{settings:?} was refused: {error}"));
+    }
+}

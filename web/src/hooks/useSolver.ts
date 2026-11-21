@@ -16,9 +16,9 @@ import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
-  currentWorkflow,
   startTimer,
   track,
+  workflowParams,
 } from "../lib/analytics";
 import {
   suppressionMismatch,
@@ -137,9 +137,9 @@ export function useSolver() {
   function solve() {
     setRunning(true);
     clearLogs();
-    const workflow = currentWorkflow();
+    const workflow = workflowParams();
     const elapsed = startTimer();
-    track("solve_started", { workflow, analysis_type: "static" });
+    track("solve_started", { ...workflow, analysis_type: "static" });
     const payload = solvePayload({
       nodes,
       elements,
@@ -164,7 +164,7 @@ export function useSolver() {
       .then(({ displacements, vonMises }) => {
         setResult({ displacements, vonMises });
         track("solve_completed", {
-          workflow,
+          ...workflow,
           analysis_type: "static",
           duration_bucket: elapsed(),
         });
@@ -174,7 +174,7 @@ export function useSolver() {
         console.error("[solve] solver failed:", err.message);
         setError(`Solver error: ${err.message}`);
         track("solve_failed", {
-          workflow,
+          ...workflow,
           analysis_type: "static",
           duration_bucket: elapsed(),
           error_category: categorizeError(err),

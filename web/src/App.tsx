@@ -15,9 +15,9 @@ import { SMALL_SCREEN_QUERY } from "./store/viewSlice";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { isExampleId, openExample } from "./lib/examples";
 import {
-  currentWorkflow,
   durationBucket,
   track,
+  workflowParams,
   trackOnce,
 } from "./lib/analytics";
 import styles from "./App.module.css";
@@ -52,7 +52,7 @@ function useWorkflowAnalytics() {
       s.mode === "results" && (Boolean(s.result) || Boolean(s.densityResult)),
   );
   useEffect(() => {
-    if (inResults) track("results_viewed", { workflow: currentWorkflow() });
+    if (inResults) track("results_viewed", workflowParams());
   }, [inResults]);
 }
 

@@ -9,6 +9,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   inStage,
+  inStageAsync,
   splitStage,
   WorkerTaskError,
 } from "../../src/lib/workerError.ts";
@@ -46,6 +47,23 @@ describe("inStage and splitStage (worker side)", () => {
       stage: "geometry_reload",
       error: 1234,
     });
+  });
+
+  // A solve runs asynchronously (it can pause at the CG prompt), so its step
+  // must tag a rejection as well as a throw (KOF-418).
+  test("an asynchronous step that rejects names the step", async () => {
+    const original = new Error("PCG breakdown: p'Ap = 0");
+    let caught: unknown;
+    try {
+      await inStageAsync("solving", () => Promise.reject(original));
+    } catch (err) {
+      caught = err;
+    }
+    expect(splitStage(caught)).toEqual({ stage: "solving", error: original });
+  });
+
+  test("an asynchronous step that succeeds returns its value", async () => {
+    expect(await inStageAsync("solving", () => Promise.resolve(7))).toBe(7);
   });
 
   test("an error outside any step has no step", () => {

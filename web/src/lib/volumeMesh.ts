@@ -17,7 +17,11 @@ import {
   type Node,
   type Property,
 } from "../store/geometrySlice";
-import { resetWorker, sendToWorker } from "../workers/sharedWorker";
+import {
+  resetWorker,
+  sendToWorker,
+  WorkerResetError,
+} from "../workers/sharedWorker";
 import { regionMaxSizes, solidName } from "./regions";
 import type { ModelState } from "../store/modelStore";
 
@@ -78,9 +82,13 @@ export type VolumeMeshReply =
   | { kind: "mesh"; mesh: VolumeMesh }
   | { kind: "overlaps"; overlaps: MeshOverlap[] };
 
-// Mesh the geometry at `sizes`. Resets the worker after Netgen ran (both on a
-// mesh and on an overlap refusal): Netgen's Ng_Init() installs global C++
-// state in the engine module, and later engine calls get a clean instance.
+// Mesh the geometry at `sizes`. Resets the worker after Netgen ran, on a mesh,
+// an overlap refusal or a failure: Netgen's Ng_Init() installs global C++
+// state in the engine module, and later engine calls get a clean instance. A
+// failed mesh must not be retried in the same module either: one that ran out
+// of memory leaks the Netgen mesh and OCC geometry, and every retry there
+// fails, ending in Aborted() (KOF-418). A mesh ended by resetWorker() itself
+// (New model) already has a fresh worker, which must survive.
 export async function runVolumeMesh(
   input: VolumeMeshInput,
 ): Promise<VolumeMeshReply> {
@@ -103,7 +111,7 @@ export async function runVolumeMesh(
   const suppressedBodyIds = properties
     .filter((p) => isCadBody(p) && p.suppressed)
     .map((p) => p.id);
-  const reply = await sendToWorker<
+  const request = sendToWorker<
     | {
         nodes: Node[];
         elements: Element[];
@@ -131,6 +139,10 @@ export async function runVolumeMesh(
       .map((p) => p.id),
     suppressedBodyIds,
     properties,
+  });
+  const reply = await request.catch((err: unknown) => {
+    if (!(err instanceof WorkerResetError)) resetWorker();
+    throw err;
   });
   resetWorker();
   if ("overlaps" in reply)

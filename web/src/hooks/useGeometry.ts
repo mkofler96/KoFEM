@@ -96,7 +96,7 @@ export function useGeometry() {
       // One property per body (#353), all solid until the user says otherwise.
       setBodies(bodyCount);
       if (exampleId) {
-        setWorkflow("example");
+        setWorkflow("example", exampleId);
         track("example_loaded", {
           example_id: exampleId,
           duration_bucket: elapsed(),
