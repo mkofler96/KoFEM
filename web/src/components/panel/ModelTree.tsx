@@ -36,6 +36,13 @@ const KIND_DOT: Partial<Record<TreeItemKind, string>> = {
 // it is regenerated from its own entry and "+ Add" goes.
 const SINGLE_ITEM_GROUPS: TreeGroup[] = ["mesh"];
 
+// Boundary objects the user made, so the tree offers to delete them on hover
+// (KOF-423). Interfaces come from the geometry and stay.
+type DeletableKind = "bc" | "load" | "tie" | "coupling";
+const DELETABLE_KINDS: TreeItemKind[] = ["bc", "load", "tie", "coupling"];
+const isDeletable = (kind: TreeItemKind): kind is DeletableKind =>
+  DELETABLE_KINDS.includes(kind);
+
 // Analysis objects carry the hollow square instead of a dot.
 const SQUARE_KINDS: TreeItemKind[] = ["mesh", "study", "plot"];
 
@@ -59,6 +66,37 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
+// The cross at a boundary object's row end: shown while the row is hovered or
+// the cross has keyboard focus, and always on touch screens.
+function DeleteButton({
+  testId,
+  label,
+  onClick,
+}: {
+  testId: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={styles.rowDelete}
+      data-testid={testId}
+      title="Delete"
+      aria-label={`Delete ${label}`}
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+        <path
+          d="M2.5 2.5l5 5M7.5 2.5l-5 5"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
 // Vertical model tree: collapsible dividers (Geometry, Materials, …), each
 // listing the objects it holds and a "+ Add" entry. Picking
 // an entry opens its editor in the properties panel on the right.
@@ -76,6 +114,10 @@ export function ModelTree() {
   );
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
   const setBodiesHidden = useModelStore((s) => s.setBodiesHidden);
+  const deleteBcGroup = useModelStore((s) => s.deleteBcGroup);
+  const deleteLoadGroup = useModelStore((s) => s.deleteLoadGroup);
+  const deleteTieGroup = useModelStore((s) => s.deleteTieGroup);
+  const deleteCouplingGroup = useModelStore((s) => s.deleteCouplingGroup);
   const items = useTreeItems();
   const [collapsed, setCollapsed] = useState<TreeGroup[]>([]);
 
@@ -91,6 +133,19 @@ export function ModelTree() {
     target.type === "item" &&
     target.kind === kind &&
     target.id === id;
+  // Delete a boundary object; the panel showing it goes back to "+ Add".
+  function deleteItem(kind: DeletableKind, itemId: number) {
+    if (isItem("boundary", kind, itemId))
+      selectTreeNode(addSelection("boundary"));
+    const remove = {
+      bc: deleteBcGroup,
+      load: deleteLoadGroup,
+      tie: deleteTieGroup,
+      coupling: deleteCouplingGroup,
+    }[kind];
+    remove(itemId);
+  }
+
   const isAdd = (group: TreeGroup) =>
     selection.group === group && target.type === "add";
 
@@ -190,7 +245,9 @@ export function ModelTree() {
                     isBody && solids.every((s) => suppressedIds.has(s));
                   return entry({
                     key: `${item.kind}:${item.id}`,
-                    rowClass,
+                    rowClass: isDeletable(item.kind)
+                      ? styles.rowWithDelete
+                      : rowClass,
                     active: isItem(id, item.kind, item.id),
                     testId: `tree-${item.kind}-${item.id}`,
                     onClick: () =>
@@ -222,21 +279,33 @@ export function ModelTree() {
                     detail: suppressed ? "suppressed" : item.detail,
                     dimmed: hidden || suppressed || inactive,
                     nested: item.nested,
-                    trailing: isBody && !suppressed && (
-                      <button
-                        className={`${styles.eye} ${hidden ? styles.eyeOff : ""}`}
-                        data-testid={`tree-eye-${item.kind}-${item.id}`}
-                        title={hidden ? "Show" : "Hide"}
-                        aria-label={`${hidden ? "Show" : "Hide"} ${item.label}`}
-                        aria-pressed={hidden}
+                    trailing: isDeletable(item.kind) ? (
+                      <DeleteButton
+                        testId={`tree-delete-${item.kind}-${item.id}`}
+                        label={item.label}
                         onClick={() =>
-                          solids.length === 1
-                            ? toggleBodyVisibility(solids[0])
-                            : setBodiesHidden(solids, !hidden)
+                          isDeletable(item.kind) &&
+                          deleteItem(item.kind, item.id)
                         }
-                      >
-                        {hidden ? EYE_OFF_ICON : EYE_ICON}
-                      </button>
+                      />
+                    ) : (
+                      isBody &&
+                      !suppressed && (
+                        <button
+                          className={`${styles.eye} ${hidden ? styles.eyeOff : ""}`}
+                          data-testid={`tree-eye-${item.kind}-${item.id}`}
+                          title={hidden ? "Show" : "Hide"}
+                          aria-label={`${hidden ? "Show" : "Hide"} ${item.label}`}
+                          aria-pressed={hidden}
+                          onClick={() =>
+                            solids.length === 1
+                              ? toggleBodyVisibility(solids[0])
+                              : setBodiesHidden(solids, !hidden)
+                          }
+                        >
+                          {hidden ? EYE_OFF_ICON : EYE_ICON}
+                        </button>
+                      )
                     ),
                   });
                 })}
