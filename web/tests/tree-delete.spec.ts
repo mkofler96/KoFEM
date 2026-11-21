@@ -52,6 +52,28 @@ test("hovering a support shows its delete button, which deletes only that suppor
   expect(await groupIds(page)).toEqual({ bc: [], load: [loadId] });
 });
 
+test("the delete cross sits inside the row's highlight, also while it is hovered", async ({
+  page,
+}) => {
+  await bootstrapCantilever(page);
+  const unhovered = await bcEntry(page).evaluate(
+    (el) => getComputedStyle(el).backgroundColor,
+  );
+
+  await bcEntry(page).hover();
+  const row = await bcEntry(page).boundingBox();
+  const cross = await bcDelete(page).boundingBox();
+  if (!row || !cross) throw new Error("tree row or delete cross not laid out");
+  expect(cross.x).toBeGreaterThanOrEqual(row.x);
+  expect(cross.x + cross.width).toBeLessThanOrEqual(row.x + row.width);
+  expect(cross.y).toBeGreaterThanOrEqual(row.y);
+  expect(cross.y + cross.height).toBeLessThanOrEqual(row.y + row.height);
+
+  // Moving onto the cross keeps the row highlighted around it.
+  await bcDelete(page).hover();
+  await expect(bcEntry(page)).not.toHaveCSS("background-color", unhovered);
+});
+
 test("deleting the open entry sends the panel back to Add", async ({
   page,
 }) => {

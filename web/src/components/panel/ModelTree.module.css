@@ -258,32 +258,58 @@
   border-left-width: 1px;
 }
 
-/* Delete cross at a boundary object's row end (KOF-423): hidden until the row
-   is hovered or the cross has keyboard focus; always shown where there is no
-   hover (touch screens). */
+/* Delete cross at a boundary object's row end (KOF-423), drawn inside the
+   row's highlight: the row reserves room for it at its right end and stays
+   highlighted while the cross is hovered. Hidden until the row is hovered or
+   the cross has keyboard focus; always shown where there is no hover (touch
+   screens). */
+.rowWithDelete {
+  position: relative;
+}
+
+.rowWithDelete .node {
+  padding-right: 30px;
+}
+
+.rowWithDelete:hover .node {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.rowWithDelete:hover .nodeActive {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .rowDelete {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
-  margin-left: 2px;
   padding: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   background: none;
   color: var(--muted-2);
   cursor: pointer;
   opacity: 0;
 }
 
-.entryRow:hover .rowDelete,
+.rowWithDelete:hover .rowDelete,
 .rowDelete:focus-visible {
   opacity: 1;
 }
 
-.rowDelete:hover {
-  background: var(--hover);
+.rowWithDelete:has(.nodeActive) .rowDelete {
+  color: var(--accent);
+}
+
+.rowDelete:hover,
+.rowWithDelete:has(.nodeActive) .rowDelete:hover {
   color: var(--warn);
 }
 

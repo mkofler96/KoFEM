@@ -245,7 +245,9 @@ export function ModelTree() {
                     isBody && solids.every((s) => suppressedIds.has(s));
                   return entry({
                     key: `${item.kind}:${item.id}`,
-                    rowClass,
+                    rowClass: isDeletable(item.kind)
+                      ? styles.rowWithDelete
+                      : rowClass,
                     active: isItem(id, item.kind, item.id),
                     testId: `tree-${item.kind}-${item.id}`,
                     onClick: () =>
