@@ -551,32 +551,36 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     return "";
   };
   // An interior face: one of the first tet's faces shared with another tet.
-  const faceKey = (face) => [...face].sort((a, b) => a - b).join();
-  const owners = new Map();
-  for (const element of model.elements)
-    for (const face of [
-      [0, 1, 2],
-      [0, 1, 3],
-      [0, 2, 3],
-      [1, 2, 3],
-    ]) {
-      const key = faceKey(face.map((corner) => element.nodeIds[corner]));
-      owners.set(key, (owners.get(key) ?? 0) + 1);
-    }
-  const interior = [0, 1, 2, 3]
-    .map((skip) => model.elements[0].nodeIds.filter((_, at) => at !== skip))
-    .find((face) => owners.get(faceKey(face)) === 2);
+  // A function, not a value: the model is loaded in beforeAll.
+  const interiorFace = () => {
+    const faceKey = (face) => [...face].sort((a, b) => a - b).join();
+    const owners = new Map();
+    for (const element of model.elements)
+      for (const face of [
+        [0, 1, 2],
+        [0, 1, 3],
+        [0, 2, 3],
+        [1, 2, 3],
+      ]) {
+        const key = faceKey(face.map((corner) => element.nodeIds[corner]));
+        owners.set(key, (owners.get(key) ?? 0) + 1);
+      }
+    const interior = [0, 1, 2, 3]
+      .map((skip) => model.elements[0].nodeIds.filter((_, at) => at !== skip))
+      .find((face) => owners.get(faceKey(face)) === 2);
+    expect(interior).toBeDefined();
+    return interior;
+  };
 
   test("a surface load selecting only interior faces is refused", async () => {
-    expect(interior).toBeDefined();
-    expect(await refusalOf([interior])).toMatch(
+    expect(await refusalOf([interiorFace()])).toMatch(
       /surface load 0: 1 of the 1 selected face\(s\) are not on the mesh boundary/,
     );
   });
 
   test("a surface load with one interior face among boundary faces is refused, not concentrated", async () => {
     const loaded = model.surfaceLoads[0].faces;
-    expect(await refusalOf([...loaded, interior])).toMatch(
+    expect(await refusalOf([...loaded, interiorFace()])).toMatch(
       new RegExp(
         `surface load 0: 1 of the ${loaded.length + 1} selected face\\(s\\) are not on the mesh boundary`,
       ),
