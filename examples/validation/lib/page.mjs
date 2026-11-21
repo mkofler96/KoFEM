@@ -515,7 +515,7 @@ export function renderIndexPage(data, allEntries) {
   const entries = contentsOrder(allEntries);
   const benchmarks = entries.filter((e) => e.kind === "case");
   const passed = benchmarks.filter((e) => e.pass).length;
-  const description = `Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization.`;
+  const description = `Free finite element examples that open and solve in your browser. Each validation case is compared with a known result from theory or the literature.`;
 
   const item = (e) => {
     const line = hasReference(e)
@@ -569,7 +569,7 @@ export function renderIndexPage(data, allEntries) {
       also run in CI on every change.</p>`;
 
   return layout({
-    title: "Examples and validation | KoFEM",
+    title: "FEM examples and benchmarks with known answers | KoFEM",
     description,
     path: "/examples/",
     image: imagePath(entries[0].id),
@@ -848,7 +848,11 @@ export function renderExamplePage(
   const content = assets.extract(body, { page: e.id });
 
   return layout({
-    title: `${e.name} | KoFEM examples`,
+    // A search result shows the <title>; `searchTitle` leads it with the
+    // phrase people search for (KOF-333) while the page keeps its name.
+    title: text.searchTitle
+      ? `${text.searchTitle} | KoFEM`
+      : `${e.name} | KoFEM examples`,
     description: text.description,
     path: pageUrl(e.id),
     image: imagePath(e.id),

@@ -141,10 +141,12 @@ function frame(slug, sectionList, body) {
     </div>${siteFooter()}`;
 }
 
-function page({ title, description, path, body, article = false }) {
+// A search result shows the <title>; `searchTitle` leads it with the phrase
+// people search for (KOF-333) while the page keeps its short heading.
+function page({ title, searchTitle, description, path, body, article = false }) {
   const head = `<link href="/theory.css" rel="stylesheet" />${body.includes('class="result-viewer"') ? `\n    ${RESULT_VIEWER_HEAD}` : ""}`;
   return renderDocsPage({
-    title: `${title} | KoFEM Theory Guide`,
+    title: searchTitle ? `${searchTitle} | KoFEM` : `${title} | KoFEM Theory Guide`,
     description,
     path,
     generatedBy: "web/theory/generate.mjs (cd web && bun run theory:generate)",
@@ -203,8 +205,9 @@ export function renderTheoryPages() {
       "theory/index.html",
       page({
         title: "Theory Guide",
+        searchTitle: "FEM theory guide with worked examples",
         description:
-          "Connected articles explaining KoFEM’s physical assumptions, mathematics and numerical methods, from coherent units to verification of a static solid study.",
+          "How finite element analysis works, from units and linear elasticity to elements, assembly, solvers, shells and topology optimization, with worked examples.",
         path: "/theory/",
         body: frame(
           null,
@@ -223,6 +226,11 @@ export function renderTheoryPages() {
       throw new Error(
         `${article.slug}: a TeX \\; spacing command lost its backslash; write "\\\\;" in the source`,
       );
+    // The page heading comes from the topic title in content.mjs.
+    if (/<h1[\s>]/.test(article.body))
+      throw new Error(
+        `${article.slug}: the article body has its own <h1>; the generator writes the heading from content.mjs`,
+      );
     const topic = topics[index];
     // Keep the reading path continuous while planned topics remain in the contents.
     const previous = topics.slice(0, index).findLast(published);
@@ -234,6 +242,7 @@ export function renderTheoryPages() {
       `theory/${topic.slug}/index.html`,
       page({
         title: topic.title,
+        searchTitle: article.searchTitle,
         description: article.description,
         path: articleUrl(topic),
         article: true,

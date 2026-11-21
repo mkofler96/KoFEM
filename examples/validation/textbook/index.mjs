@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Page text for every example, /examples/<id>/, keyed by id. Each entry:
-// description (meta), opens (optional: what Open in KoFEM opens, if not the
+// description (meta), searchTitle (optional: the search-result title, if not
+// the example's name), opens (optional: what Open in KoFEM opens, if not the
 // model ready to run), figure (the sketch), intro, theory (optional, with an
 // optional theoryTitle), model (notes on the finite element model), results
 // (optional; replaces the default results table), discussion and references.

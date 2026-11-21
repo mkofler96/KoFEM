@@ -11,8 +11,9 @@ const symbol = (id, expression, label) =>
 
 export default {
   slug: "foundations/what-is-fem",
+  searchTitle: "What is FEM? The finite element method explained",
   description:
-    "What the finite element method is: a body divided into elements and nodes, unknown displacements at the nodes, one linear system, and the modelling choices and consistent units that make the answer meaningful.",
+    "What the finite element method (FEM) is in engineering: a part cut into elements and nodes, unknown displacements, one linear system, and how to trust it.",
   sections: [
     ["idea", "The idea: divide and assemble"],
     ["from-cad", "From CAD geometry to a result"],

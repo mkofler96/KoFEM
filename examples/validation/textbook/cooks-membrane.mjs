@@ -7,8 +7,9 @@ import { cookFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
 
 export default {
+  searchTitle: "Cook's membrane: FEM benchmark vs reference",
   description:
-    "Cook's membrane, the tapered-panel benchmark for skewed elements in bending and shear: setup, reference value, mesh convergence and KoFEM's result.",
+    "Cook's membrane, the tapered-panel benchmark for distorted elements in bending and shear: setup, reference deflection, mesh convergence and KoFEM's result.",
   figure: () => cookFigure(),
   intro: () => `
         <p>Cook's membrane (1974) is a tapered panel, clamped on one edge and

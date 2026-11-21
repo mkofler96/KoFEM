@@ -8,8 +8,9 @@ import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "solid-mechanics/linear-elasticity",
+  searchTitle: "Linear elasticity for FEM: strain, stress, E and ν",
   description:
-    "The small-strain, isotropic linear-elastic solid: displacement, strain, stress and traction, the relations between E, ν and the Lamé constants, a uniaxial check with units, and where the model stops applying.",
+    "Small-strain linear elasticity: displacement, strain and stress, how E, ν and the Lamé constants relate, a worked uniaxial check, and the model's limits.",
   sections: [
     ["assumptions", "Assumptions and scope"],
     ["displacement-and-strain", "From displacement to small strain"],

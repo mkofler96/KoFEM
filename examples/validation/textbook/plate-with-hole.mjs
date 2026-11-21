@@ -25,8 +25,9 @@ function p2Errors(study) {
 }
 
 export default {
+  searchTitle: "Plate with a hole: FEM vs Kirsch solution",
   description:
-    "Kirsch's plate with a hole: stress concentration Kt = 3, Howland's 3.14 for a strip of finite width, and KoFEM's peak stress as the Results panel shows it.",
+    "Stress concentration at a hole in a plate under tension: Kirsch's Kt = 3, Howland's 3.14 for a finite strip, and KoFEM's peak stress, solved in a browser.",
   figure: () => plateFigure({ model: "strip" }),
   intro: () => `
         <p>A small circular hole in a plate under tension raises the stress at
