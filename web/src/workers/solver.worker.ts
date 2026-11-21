@@ -846,7 +846,7 @@ function densityStreamer(id: number) {
 function postDensityResult(id: number, result: TopOptRunResult) {
   self.postMessage({
     id,
-    log: `Topology optimization complete: ${result.density.length} element densities over ${result.history.length} iteration(s)`,
+    log: `Topology optimization complete: ${result.density.length} element densities over ${result.history.length} iteration(s), ${result.converged ? "converged" : "not converged — stopped at the iteration limit"}`,
   });
   // The level set (method "level_set") is one value per vertex; the solid
   // path indexes vertices in payload node order (buildVertexIndexer), so it
@@ -860,6 +860,8 @@ function postDensityResult(id: number, result: TopOptRunResult) {
       density: result.density,
       levelSet: result.levelSet,
       history: result.history,
+      converged: result.converged,
+      iterations: result.iterations,
     },
     transfer,
   );

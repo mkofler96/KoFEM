@@ -82,3 +82,12 @@ export function useWorkerLogs(channel: "mesh" | "solve" | "optimize") {
 
   return { logs, clearLogs };
 }
+
+// A channel's lines, read only: for a view that draws from a log (the
+// optimization's convergence chart) without owning the worker's single
+// log-callback slot, which stays with the open panel.
+export function useWorkerLogLines(
+  channel: "mesh" | "solve" | "optimize",
+): WorkerLogEntry[] {
+  return useWorkerLogStore((s) => s.channels[channel] ?? NO_LOGS);
+}

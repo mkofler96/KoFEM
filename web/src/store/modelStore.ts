@@ -110,6 +110,7 @@ export type {
   TopOptNumericField,
   DensityResult,
   LiveDensity,
+  TopOptView,
 } from "./topOptSlice";
 export { DEFAULT_TOPOPT_SETTINGS } from "./topOptSlice";
 export type { LoadDisplay, ViewRepr } from "./viewSlice";

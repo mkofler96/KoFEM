@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { useModelStore } from "../store/modelStore";
 import type {
   TopOptNumericField,
@@ -167,6 +167,11 @@ function parseSettings(state: TopOptSettingsState): {
 // optimize_topology is one blocking WASM call, so a running optimization is
 // cancelled by terminating the worker (resetWorker), which discards the
 // in-flight run and its live density — no best-so-far is kept.
+// Set by cancel, read when the cancelled run's promise rejects: the terminated
+// worker rejects it, and that rejection is no failure to report. Module-level,
+// as one run is in flight at a time and any panel may cancel it.
+let cancelled = false;
+
 export function useTopOpt() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -185,13 +190,12 @@ export function useTopOpt() {
   const setOptimizing = useModelStore((s) => s.setOptimizing);
   const setDensityResult = useModelStore((s) => s.setDensityResult);
   const setLiveDensity = useModelStore((s) => s.setLiveDensity);
-  const setMode = useModelStore((s) => s.setMode);
-  const [error, setError] = useState<string | null>(null);
+  const showTopOptResult = useModelStore((s) => s.showTopOptResult);
+  // In the store, not the component: the run hands off to Results as it
+  // starts, so the panel that started it is gone by the time it fails.
+  const error = useModelStore((s) => s.topOptError);
+  const setError = useModelStore((s) => s.setTopOptError);
   const { logs, clearLogs } = useWorkerLogs("optimize");
-  // Distinguishes a user cancel (terminate the worker) from a genuine failure:
-  // the terminate rejects the in-flight promise, and that rejection must not
-  // surface as an error banner.
-  const cancelledRef = useRef(false);
 
   // A body suppressed or restored after meshing makes the mesh a different
   // assembly from the model — solving it would analyse the wrong one.
@@ -292,8 +296,12 @@ export function useTopOpt() {
       return;
     }
     setError(null);
-    cancelledRef.current = false;
+    cancelled = false;
     setOptimizing(true);
+    // Straight to Results → Density, as the mesh refinement study goes to its
+    // chart: the density streams there live, and the panel switches to the
+    // convergence chart.
+    showTopOptResult();
     clearLogs();
     setLiveDensity(null);
     setProgressCallback(({ it, density }) => setLiveDensity({ it, density }));
@@ -304,6 +312,8 @@ export function useTopOpt() {
       density: Float64Array;
       levelSet?: Float64Array;
       history: TopOptHistoryEntry[];
+      converged: boolean;
+      iterations: number;
     }>("optimize_topology", {
       nodes,
       elements,
@@ -316,18 +326,17 @@ export function useTopOpt() {
       couplings: couplingGroups,
       settings: { ...settings, passive: passiveElements(elements, properties) },
     })
-      .then(({ density, levelSet, history }) => {
-        setDensityResult({ density, levelSet, history });
+      .then(({ density, levelSet, history, converged, iterations }) => {
+        setDensityResult({ density, levelSet, history, converged, iterations });
         track("solve_completed", {
           ...workflow,
           analysis_type: "topology",
           duration_bucket: elapsed(),
         });
-        setMode("results");
       })
       .catch((err) => {
         // A cancel terminated the worker; the resulting rejection is expected.
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         console.error("[topopt] optimization failed:", err.message);
         setError(`Optimization error: ${err.message}`);
         track("solve_failed", {
@@ -345,7 +354,7 @@ export function useTopOpt() {
   }
 
   function cancel() {
-    cancelledRef.current = true;
+    cancelled = true;
     // Terminate the worker to abort the blocking optimize_topology call; the
     // next run recreates it (the mesh travels in the payload, so nothing needs
     // reloading into the fresh module).
@@ -360,6 +369,24 @@ export function useTopOpt() {
     (
       window as Window & { __kofemTriggerOptimize?: () => void }
     ).__kofemTriggerOptimize = optimize;
+  });
+
+  // A run asked for from a panel ("Run again with 2N iterations", KOF-412):
+  // start it here. The request is taken from the store, not from this render:
+  // StrictMode replays the effect with the same closure, and the Optimize
+  // panel and Results may both hold this hook — one run, not one per caller.
+  const runRequested = useModelStore((s) => s.topOptRunRequested);
+  useEffect(() => {
+    if (!runRequested) return;
+    const state = useModelStore.getState();
+    if (!state.topOptRunRequested) return;
+    state.clearTopOptRunRequest();
+    if (state.isOptimizing) return;
+    if (allOk) optimize();
+    else
+      setError(
+        "Could not run the optimization again: resolve the failed pre-flight checks on the Optimize panel first.",
+      );
   });
 
   const stressSummary = topOpt.stressConstraint

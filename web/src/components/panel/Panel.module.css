@@ -1017,6 +1017,18 @@
   line-height: 1;
 }
 
+/* A result to read with care (KOF-412: an optimization that did not
+   converge): the warning text, then the action that resolves it. */
+.warnNotice {
+  padding: 8px 12px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
 /* ── Empty state ────────────────────────────────────────────── */
 
 .empty {

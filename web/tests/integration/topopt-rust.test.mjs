@@ -400,6 +400,32 @@ const LEVEL_SET_SETTINGS = {
 const largestDifference = (lhs, rhs) =>
   Math.max(...Array.from(lhs, (value, index) => Math.abs(value - rhs[index])));
 
+// KOF-412: a run that stops at its iteration cap says so, rather than
+// returning its design as if it were the optimum.
+describe("solid topology optimization reports whether it converged", () => {
+  test("a SIMP run capped before it settles is not converged", () => {
+    const rust = optimizeInRust(mbb(), { ...MBB_SETTINGS, maxIterations: 3 });
+    expect(rust.converged).toBe(false);
+    expect(rust.iterations).toBe(3);
+  });
+
+  test("a SIMP run that settles is converged, before its cap", () => {
+    const rust = optimizeInRust(mbb(), MBB_SETTINGS);
+    expect(rust.converged).toBe(true);
+    expect(rust.iterations).toBe(rust.history.length);
+    expect(rust.iterations).toBeLessThan(MBB_SETTINGS.maxIterations);
+  });
+
+  test("a level-set run capped before it settles is not converged", () => {
+    const rust = optimizeInRust(mbb(), {
+      ...LEVEL_SET_SETTINGS,
+      maxIterations: 3,
+    });
+    expect(rust.converged).toBe(false);
+    expect(rust.iterations).toBe(3);
+  });
+});
+
 describe("level-set topology optimization: Rust against the C++ engine", () => {
   // Both paths reach the same design; the bisection on the volume can flip a
   // boundary element a few iterations earlier or later, so the histories are

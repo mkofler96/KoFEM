@@ -5,8 +5,9 @@ import { useModelStore } from "../../store/modelStore";
 
 // The density field the viewport should draw, or null for none. Two sources:
 // the final run in Results when it is the active result (KOF-233), and the
-// iteration streamed from a running optimization on the Optimize step
-// (KOF-240). The scene and the density legend share this so they never disagree.
+// iteration streamed from a running optimization (KOF-240) — on Results →
+// Density, where a run goes as it starts, or on the Optimize step. The scene
+// and the density legend share this so they never disagree.
 export function useDisplayedDensity(): Float64Array | null {
   const mode = useModelStore((s) => s.mode);
   const activeResult = useModelStore((s) => s.activeResult);
@@ -16,7 +17,8 @@ export function useDisplayedDensity(): Float64Array | null {
 
   if (mode === "results" && activeResult === "density" && densityResult)
     return densityResult.density;
-  if (mode === "optimize" && isOptimizing && liveDensity)
-    return liveDensity.density;
+  const live =
+    mode === "optimize" || (mode === "results" && activeResult === "density");
+  if (live && isOptimizing && liveDensity) return liveDensity.density;
   return null;
 }

@@ -212,8 +212,15 @@ test("Optimize panel: max-stress constraint @pipeline", async ({ page }) => {
 
   await runButton.click();
   await expect(page.getByTestId("topopt-final-max-stress")).toBeVisible();
-  await expect(page.getByTestId("convergence-max-stress")).toBeVisible();
-  await expect(page.getByTestId("convergence-stress-limit")).toHaveCount(1);
+  // The convergence chart draws the true peak next to the aggregate the
+  // constraint bounds, and σ_allow as a line.
+  await page.getByTestId("topopt-view-chart").click();
+  await page
+    .getByTestId("topopt-chart")
+    .getByRole("button", { name: "Stress" })
+    .click();
+  await expect(page.getByTestId("topopt-chart-max-stress")).toBeVisible();
+  await expect(page.getByTestId("topopt-chart-bound")).toHaveCount(1);
 
   // The level-set method has no stress constraint: its toggle disappears, and
   // the pre-flight summary drops the limit (it is neither validated nor sent).
