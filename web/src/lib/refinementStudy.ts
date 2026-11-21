@@ -49,9 +49,9 @@ export const DEFAULT_REFINEMENT_INPUT: RefinementSettingsInput = {
 
 // The ratios the panel offers, gentle to steep.
 export const REFINEMENT_RATIOS: { value: number; label: string }[] = [
-  { value: Math.SQRT2, label: "√2 (halves the size every 2 levels)" },
+  { value: Math.SQRT2, label: "√2 ≈ 1.41" },
   { value: 1.5, label: "1.5" },
-  { value: 2, label: "2 (halves the size every level)" },
+  { value: 2, label: "2 (halves the size)" },
 ];
 
 // A peak stress that grows by more than this fraction at every refinement is
