@@ -9,6 +9,7 @@
 
 import {
   assessConvergence,
+  percentLabel,
   type RefinementSettings,
   type StudyLevel,
 } from "./refinementStudy";
@@ -121,4 +122,17 @@ export function chartLayout(
     referenceY: reference === null ? null : yOf(reference),
     range: { min, max },
   };
+}
+
+// The band's caption: the value it is centred on and the study's target.
+// Null when the layout has no band (the stress view).
+export function bandLabel(
+  layout: ChartLayout,
+  tolerance: number,
+): string | null {
+  if (layout.reference === null) return null;
+  const target = `±${percentLabel(tolerance)} %`;
+  return layout.extrapolated
+    ? `Extrapolated ${layout.reference.toPrecision(4)} mm · ${target}`
+    : `${target} of the finest level`;
 }

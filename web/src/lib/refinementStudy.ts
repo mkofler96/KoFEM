@@ -290,7 +290,7 @@ export function checkLevelDisplacement(
 }
 
 // A fraction as a percentage the way the user typed it: 2, 0.5.
-function percentLabel(fraction: number): string {
+export function percentLabel(fraction: number): string {
   return String(Number((fraction * 100).toPrecision(3)));
 }
 

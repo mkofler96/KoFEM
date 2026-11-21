@@ -5,7 +5,11 @@
 // KOF-401): where each level lands, and the band the verdict is judged by.
 
 import { describe, expect, test } from "bun:test";
-import { chartLayout, type ChartBox } from "../../src/lib/refinementChart";
+import {
+  bandLabel,
+  chartLayout,
+  type ChartBox,
+} from "../../src/lib/refinementChart";
 import {
   DEFAULT_REFINEMENT_SETTINGS,
   levelSizes,
@@ -146,5 +150,32 @@ describe("chartLayout", () => {
     );
     expect(layout.band?.low).toBeCloseTo(1.1 * 0.95, 9);
     expect(layout.band?.high).toBeCloseTo(1.1 * 1.05, 9);
+  });
+});
+
+// The band's label names the study's own target, not the default.
+describe("bandLabel", () => {
+  test("an extrapolated band names the value and the target", () => {
+    const layout = chartLayout(
+      [
+        level(0, 1000, 2 - 0.5),
+        level(1, 2800, 2 - 0.25),
+        level(2, 8000, 2 - 0.125),
+      ],
+      "displacement",
+      box,
+      { ...settings, ratio: 2, tolerance: 0.05 },
+    );
+    expect(bandLabel(layout, 0.05)).toBe("Extrapolated 2.000 mm · ±5 %");
+  });
+
+  test("a band around the finest level says so, with the target", () => {
+    const layout = chartLayout(
+      [level(0, 1000, 1.0), level(1, 2800, 1.1)],
+      "displacement",
+      box,
+      { ...settings, tolerance: 0.005 },
+    );
+    expect(bandLabel(layout, 0.005)).toBe("±0.5 % of the finest level");
   });
 });
