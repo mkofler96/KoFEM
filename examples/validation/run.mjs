@@ -56,7 +56,8 @@ import {
   writeModelStep,
 } from "./lib/model-step.mjs";
 import { engineId, femModuleId } from "./lib/provenance.mjs";
-import { resultFigure } from "./lib/render.mjs";
+import { viewerFile, viewerPayload } from "./lib/viewer.mjs";
+import { ISO_VIEW, resultFigure } from "./lib/render.mjs";
 import { renderExamplePage, renderIndexPage } from "./lib/page.mjs";
 import { ORDER, SITE_DIR, catalog } from "./catalog.mjs";
 import {
@@ -77,8 +78,6 @@ const SITEMAP = join(repo, "web/public/sitemap.xml");
 const SITE = "https://kofem.org";
 const DATA = join(repo, "web/public/examples/results.json");
 const REPORT = join(here, "REPORT.md");
-// Solved surfaces of the cases, for the Theory Guide's 3D viewers.
-const SURFACE_DIR = join(here, "surfaces");
 
 // A published FE value counts as current when a fresh run reproduces it to
 // this relative tolerance — tighter than the page's five significant digits.
@@ -167,26 +166,30 @@ async function studyLevel(caseId, level, order) {
   return { fe: build.fe, mesh: buildMeshStats(build) };
 }
 
-// The solved boundary of a case for the Theory Guide's 3D viewer
-// (web/theory/viewers): its analysis file opens unsolved, so the viewer reads
-// the solve from here: the surface vertices only, rounded as the viewer
-// rounds them.
-function solvedSurfaceJson(id, field, surface) {
-  const round = (v, digits) => Number(v.toPrecision(digits));
-  const index = new Map();
-  const out = { id, field, positions: [], displacements: [], values: [] };
-  const triangles = surface.triangles.map((v) => {
-    if (!index.has(v)) {
-      index.set(v, index.size);
-      for (let k = 0; k < 3; k++) {
-        out.positions.push(round(surface.positions[3 * v + k], 7));
-        out.displacements.push(round(surface.displacements[3 * v + k], 5));
-      }
-      out.values.push(round(surface.scalars[v], 5));
-    }
-    return index.get(v);
-  });
-  return JSON.stringify({ ...out, triangles }) + "\n";
+// A case's figure settings, its solved boundary coloured by the figure's
+// field, and the interactive view's payload for it (lib/viewer.mjs): the same
+// boundary with both fields, the figure's first, at the figure's view and
+// enlargement `deform`.
+function caseSurface(run) {
+  const fig = run.c.figure ?? {};
+  const field = fig.field ?? "displacement";
+  const vonMises = nodalVonMises(run.build);
+  const surface = buildResultSurface(
+    run.build,
+    field,
+    field === "vonMises" ? vonMises : null,
+  );
+  const payload = (deform) =>
+    viewerPayload(
+      run.c.id,
+      surface,
+      {
+        displacement: buildResultSurface(run.build, "displacement").scalars,
+        vonMises: Array.from(vonMises),
+      },
+      { field, deform, view: fig.view ?? ISO_VIEW, focus: fig.focus },
+    );
+  return { fig, field, surface, payload };
 }
 const failed = rows.filter((r) => !r.pass).length;
 
@@ -206,26 +209,17 @@ const rel = (p) => relative(repo, p);
 const vtuPath = (id) => join(SITE_DIR, `${id}.vtu`);
 const pngPath = (id) => join(SITE_DIR, `${id}.png`);
 const stepPath = (id) => join(SITE_DIR, `${id}.step`);
-const surfacePath = (id) => join(SURFACE_DIR, `${id}.json`);
 
 if (only) process.exit(failed ? 1 : 0);
 
 if (report) {
-  // ── Analysis files, STEP files, figures, solved surfaces ───────────────────
-  mkdirSync(SURFACE_DIR, { recursive: true });
+  // ── Analysis files, STEP files, figures, interactive views ──────────────────
   for (const run of runs) {
     const { c, row } = run;
-    const fig = c.figure ?? {};
-    const field = fig.field ?? "displacement";
     writeFileSync(vtuPath(c.id), buildAnalysisFile(run.build, c.name));
     writeFileSync(stepPath(c.id), run.build.stepText);
     writeModelStep(modelStepPath(SITE_DIR, c.id), run.build.stepBytes);
-    const surface = buildResultSurface(
-      run.build,
-      field,
-      field === "vonMises" ? nodalVonMises(run.build) : null,
-    );
-    writeFileSync(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface));
+    const { fig, field, surface, payload } = caseSurface(run);
     const { png, meta } = resultFigure(surface, {
       field,
       unit: fig.unit ?? (field === "vonMises" ? "MPa" : "mm"),
@@ -234,6 +228,7 @@ if (report) {
       focus: fig.focus,
     });
     writeFileSync(pngPath(c.id), png);
+    writeFileSync(viewerFile(SITE_DIR, c.id), payload(meta.deform));
     row.figure = meta;
   }
 
@@ -308,7 +303,7 @@ if (report) {
         stale.map((s) => `  • ${s}`).join("\n") +
         `\nRegenerate the pages and commit the result:\n` +
         `  cd web && bun run validate:report   (validate:pages if only page text or figures changed)\n` +
-        `  git add web/examples web/public/examples/results.json web/public/sitemap.xml examples/gallery/site examples/gallery/showcase examples/validation/surfaces examples/validation/REPORT.md`,
+        `  git add web/examples web/public/examples/results.json web/public/sitemap.xml examples/gallery/site examples/gallery/showcase examples/validation/REPORT.md`,
     );
     process.exit(1);
   }
@@ -420,24 +415,18 @@ async function checkPublished() {
       out.push(
         `${rel(model)} differs from case "${c.id}"'s geometry after its splits`,
       );
-    const fig = c.figure ?? {};
-    const field = fig.field ?? "displacement";
-    const surface = buildResultSurface(
-      run.build,
-      field,
-      field === "vonMises" ? nodalVonMises(run.build) : null,
-    );
-    if (!same(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface)))
-      out.push(`${rel(surfacePath(c.id))} differs from this run's solve`);
+    // The interactive view shows this run's solve, enlarged as the figure.
+    const view = viewerFile(SITE_DIR, c.id);
+    const figure = published.cases.find((p) => p.id === c.id)?.figure;
+    if (!figure) out.push(`${c.name}: the page has no figure`);
+    else if (!same(view, caseSurface(run).payload(figure.deform)))
+      out.push(`${rel(view)} differs from this run's solve`);
   }
-  // A solved surface no case writes is left over from one.
-  if (existsSync(SURFACE_DIR))
-    for (const name of readdirSync(SURFACE_DIR))
-      if (!runs.some((run) => `${run.c.id}.json` === name))
-        out.push(`${rel(join(SURFACE_DIR, name))} belongs to no case`);
+  // Every page has its figure and its interactive view (a showcase's
+  // generator writes both).
   for (const id of ORDER)
-    if (!existsSync(pngPath(id)))
-      out.push(`${rel(pngPath(id))} does not exist`);
+    for (const file of [pngPath(id), viewerFile(SITE_DIR, id)])
+      if (!existsSync(file)) out.push(`${rel(file)} does not exist`);
   // The committed HTML must be what the current sources render from the
   // committed data, so a text or layout change cannot ship without the pages.
   const { pages, assets } = renderPages(published);

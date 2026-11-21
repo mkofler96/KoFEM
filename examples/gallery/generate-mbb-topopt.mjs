@@ -20,6 +20,8 @@
 //   mbb-beam-topopt.png        — the figure on /examples/mbb-beam-topopt/: the
 //                                OPTIMIZED design, the boundary of every tet
 //                                with density ≥ 0.5;
+//   mbb-beam-topopt.result.json — the same design for the page's interactive
+//                                3D view (validation/lib/viewer.mjs);
 //   showcase/mbb-beam-topopt.json — the numbers on that page: settings, the
 //                                compliance history, the mesh, and `fe`, the
 //                                final compliance the Results panel shows.
@@ -49,6 +51,7 @@ import { F, H, L, LOAD_PAD, PAD, T } from "./recipes/mbb-beam-topopt.mjs";
 import { buildFromRecipe } from "../validation/lib/pipeline.mjs";
 import { buildAnalysisFile } from "../validation/lib/app-model.mjs";
 import { resultFigure } from "../validation/lib/render.mjs";
+import { viewerFile, viewerPayload } from "../validation/lib/viewer.mjs";
 import { writeShowcase } from "../validation/catalog.mjs";
 import {
   modelStepPath,
@@ -130,6 +133,7 @@ for (const { face, count } of owners.values()) {
     triangles.push(local.get(v));
   }
 }
+const VIEW = [-0.3, -0.25, -1];
 const { png, meta: figure } = resultFigure(
   {
     positions,
@@ -137,7 +141,16 @@ const { png, meta: figure } = resultFigure(
     scalars: magnitudes,
     triangles,
   },
-  { field: "density", unit: "", view: [-0.3, -0.25, -1], deform: false },
+  { field: "density", unit: "", view: VIEW, deform: false },
+);
+writeFileSync(
+  viewerFile(outDir, ID),
+  viewerPayload(
+    ID,
+    { positions, triangles },
+    { density: magnitudes },
+    { field: "density", deform: 0, view: VIEW },
+  ),
 );
 
 writeFileSync(join(outDir, `${ID}.step`), build.stepText);
@@ -206,5 +219,5 @@ writeShowcase(
 console.log(
   `${ID}: ${nNodes} nodes, ${nTets} tets; ${history.length} it in ${seconds.toFixed(1)} s, ` +
     `compliance ${c0.toFixed(1)} → ${cN.toFixed(1)}, volume ${volN.toFixed(4)}, ` +
-    `${nSolid} solid / ${nVoid} void → ${ID}.{step,model.step,vtu,png} + showcase/${ID}.json`,
+    `${nSolid} solid / ${nVoid} void → ${ID}.{step,model.step,vtu,png,result.json} + showcase/${ID}.json`,
 );

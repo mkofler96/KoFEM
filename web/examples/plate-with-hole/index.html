@@ -47,7 +47,7 @@
               "https://kofem.org/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png",
               "https://kofem.org/examples/plate-with-hole/plate-with-hole-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-13",
+            "dateModified": "2026-11-21",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -777,6 +777,9 @@
           document.documentElement.setAttribute("data-theme", "dark");
       } catch (e) {}
     </script>
+    <link href="/result-viewer.css" rel="stylesheet" />
+    <script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
+    <script type="module" src="/theory/viewer.js"></script>
   </head>
   <body>
     <header class="site-navigation">
@@ -872,10 +875,13 @@
         accurately.</p>
       </div>
       
-      <figure class="result">
-        <img src="/examples/plate-with-hole.png" width="1200" height="720" alt="Plate with a hole: von mises stress on the undeformed shape" />
-        <div class="colorbar"><span>27.9&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span>313&nbsp;MPa</span></div>
-        <figcaption>Von Mises stress, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
+      <figure class="result result-viewer" data-viewer="/examples/plate-with-hole.result.json" data-aspect="1200 / 720">
+        <div class="viewer-stage">
+          <img src="/examples/plate-with-hole.png" width="1200" height="720" alt="Plate with a hole: von mises stress on the undeformed shape" />
+          <p class="viewer-hint" hidden></p>
+        </div>
+        <div class="colorbar"><span data-legend="min">27.9&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">313&nbsp;MPa</span></div>
+        <figcaption><span data-legend="name">Von Mises stress</span>, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -966,7 +972,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 2 mm maximum element size: 13,522 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>27,705 nodes, 83,115 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-45b08a9e444e); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-22391462c75d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3606d8ab1090</td></tr>
         </table>
       </div>
         <p>The strip is symmetric about <math><mi>x</mi><mo>=</mo><mn>0</mn></math>, about <math><mi>y</mi><mo>=</mo><mn>0</mn></math>

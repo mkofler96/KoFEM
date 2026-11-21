@@ -1013,6 +1013,16 @@ const THEME_SWITCH = `
         show();
       })();`;
 
+/**
+ * What a page with an interactive result viewer adds to its head: the
+ * viewer's styles, three.js from /vendor/three/ (see vite.config.ts) through an
+ * import map, and public/theory/viewer.js, which replaces each
+ * figure.result-viewer's static figure with the solved model in 3D.
+ */
+export const RESULT_VIEWER_HEAD = `<link href="/result-viewer.css" rel="stylesheet" />
+    <script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
+    <script type="module" src="/theory/viewer.js"></script>`;
+
 /** A complete static page. */
 export function renderDocsPage({
   title,
@@ -1021,6 +1031,7 @@ export function renderDocsPage({
   image,
   jsonLd,
   body,
+  head = "",
   generatedBy = "examples/validation/run.mjs --report",
 }) {
   const url = `${SITE}${path}`;
@@ -1077,7 +1088,7 @@ ${JSON.stringify(jsonLd, null, 2)
         if (localStorage.getItem("${THEME_KEY}") === "dark")
           document.documentElement.setAttribute("data-theme", "dark");
       } catch (e) {}
-    </script>
+    </script>${head ? `\n    ${head}` : ""}
   </head>
   <body>
     ${body}
