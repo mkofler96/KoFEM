@@ -12,7 +12,7 @@ import type {
   Element,
   Node,
   Property,
-  SolvePayload,
+  SolveModel,
 } from "../../workers/solverTypes.js";
 import type { ShellMesh } from "./contracts.js";
 import { coupledMaterials } from "../coupledMaterials.js";
@@ -152,7 +152,7 @@ function shellBodiesAre(shellBodyIds: Set<number>): string {
 // A Shell body is never solved as solid, so a model the idealisation cannot
 // take is refused with the reason (KOF-352).
 function tetShellizeInput(
-  payload: SolvePayload,
+  payload: SolveModel,
   shellBodyIds: Set<number>,
 ): {
   tetElements: Element[];
@@ -451,6 +451,12 @@ export interface AutoCoupledSolve {
   coupling: EngineCoupling;
   bcs: EngineCoupledBcs;
   matJson: string;
+  // The body (property id) of each pool tet and shell facet, and the pool
+  // nodes that carry rotations (shell nodes, reference points): what the
+  // rigid-body check reads (lib/solve/rigidBody.ts).
+  tetBodies: number[];
+  triangleBodies: number[];
+  rotationalPool: number[];
   mapResult: (result: {
     displacements: Float64Array;
     von_mises_tets: Float64Array;
@@ -465,7 +471,7 @@ export interface AutoCoupledSolve {
 // idealised (tetShellizeInput) or a body is marked Shell but carries no
 // detectable thin wall.
 export function prepareAutoCoupledSolve(
-  payload: SolvePayload,
+  payload: SolveModel,
   shellBodyIds: Set<number>,
   log: SolveLog,
 ): AutoCoupledSolve | null {
@@ -591,6 +597,18 @@ export function prepareAutoCoupledSolve(
     coupling: engineCoupling(coupling),
     bcs: engineCoupledBcs(dirichlet, nodalLoads),
     matJson,
+    // buildCoupledModel keeps every tet but the shelled body's wall tets, in
+    // order, and every facet is the shelled body's.
+    tetBodies: tetElements
+      .filter(
+        (el, idx) => !(el.propertyId === shells.shellBody && wallTets.has(idx)),
+      )
+      .map((el) => el.propertyId),
+    triangleBodies: Array.from(
+      { length: model.triangles.length / 3 },
+      () => shells.shellBody,
+    ),
+    rotationalPool: [...model.shellPool, ...refPoolIndices],
     mapResult: (result) => ({
       displacements: mapCoupledDisplacements(
         result.displacements,
@@ -636,7 +654,7 @@ export interface PureShellSolve {
 // is never silently ignored — and when the model has a tie, which the shell
 // solver cannot apply.
 export function preparePureShellSolve(
-  payload: SolvePayload,
+  payload: SolveModel,
   shellBodyIds: Set<number>,
   log: SolveLog,
 ): PureShellSolve {
@@ -774,7 +792,7 @@ export type AutoShellSolve =
 // the body and the reason when neither applies — a Shell body is never solved
 // as solid (KOF-352).
 export function prepareAutoShellSolve(
-  payload: SolvePayload,
+  payload: SolveModel,
   shellBodyIds: Set<number>,
   log: SolveLog,
 ): AutoShellSolve {

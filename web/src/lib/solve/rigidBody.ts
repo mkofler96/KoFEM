@@ -10,23 +10,33 @@
 // this module builds its input from a model and words its answer. Two inputs:
 //
 //   modelRigidBodyInput   — the store model: elements, supports, ties and
-//                           couplings as the user defined them. For the solid,
-//                           shell and auto-shell paths (the auto-shell path is
-//                           checked on the solid model the user sees, before
-//                           its Shell bodies are idealised).
+//                           couplings as the user defined them. For the solid
+//                           and shell paths, and a pure auto-shell solve (one
+//                           body, all of it Shell).
 //   coupledRigidBodyInput — the coupled solve's own inputs, where shells and
 //                           solids are separate node sets joined by couplings
 //                           the builder derives from proximity. Only these
 //                           show whether a shell reaches the solid it stands on.
+//                           autoCoupledRigidBodyInput reads the same from the
+//                           auto-shell route's coupled solve.
+//
+// routedRigidBodyInput picks the input the route a model takes calls for.
 
 import type {
   Constraint,
-  Element,
   Node,
   Property,
   SolveModel,
 } from "../../workers/solverTypes.js";
-import type { CoupledEngineInputs } from "./coupled.js";
+import {
+  buildCoupledEngineInputs,
+  type CoupledEngineInputs,
+  type EngineCoupledBcs,
+  type EngineCoupling,
+  type SolveLog,
+} from "./coupled.js";
+import { prepareAutoShellSolve, type AutoCoupledSolve } from "./autoShell.js";
+import type { SolveRoute } from "./route.js";
 import { bodyMembership, tieSides, type TieDefinition } from "../tie.js";
 import {
   coupledNodeIds,
@@ -214,21 +224,32 @@ export function modelRigidBodyInput(
   return input.build(positionsOf(nodes), rotational, fixed);
 }
 
-// The rigid-body input of the coupled solve's inputs: its pool of solid,
-// shell and reference-point nodes, its tets and shell facets (labelled by the
-// store element they came from), every coupling it will apply — the user's,
-// the ties, and the shell-to-solid joins it derived — and its essential BCs.
-export function coupledRigidBodyInput(
-  model: Pick<SolveModel, "nodes" | "couplings">,
-  inputs: Pick<
-    CoupledEngineInputs,
-    "mesh" | "coupling" | "bcs" | "model" | "solidElements" | "shellElements"
-  >,
-): RigidBodyInput {
-  const { mesh, coupling, bcs, solidElements, shellElements } = inputs;
+// A coupled solve's model: a pool of solid, shell and reference-point nodes,
+// its tets and shell facets with the body each came from, every coupling it
+// applies (the user's, the ties, the shell-to-solid joins it derived) and its
+// essential BCs (6·pool + dof).
+interface PooledModel {
+  vertices: Float64Array;
+  tets: Int32Array;
+  triangles: Int32Array;
+  tetBodies: number[];
+  triangleBodies: number[];
+  rotationalPool: Iterable<number>;
+  coupling: Pick<EngineCoupling, "ref" | "offsets" | "solid" | "dof_mask">;
+  bcs: Pick<EngineCoupledBcs, "fixed_dofs" | "prescribed_dofs">;
+}
+
+function pooledRigidBodyInput(model: PooledModel): RigidBodyInput {
+  const { coupling, bcs } = model;
   const input = new InputBuilder();
-  addPooledElements(input, mesh.tets, 4, solidElements, "solid tets");
-  addPooledElements(input, mesh.triangles, 3, shellElements, "shell facets");
+  addPooledElements(input, model.tets, 4, model.tetBodies, "solid tets");
+  addPooledElements(
+    input,
+    model.triangles,
+    3,
+    model.triangleBodies,
+    "shell facets",
+  );
   for (let k = 0; k < coupling.ref.length; k++)
     input.link(
       [coupling.ref[k]],
@@ -237,19 +258,7 @@ export function coupledRigidBodyInput(
       ),
       coupling.dof_mask[k],
     );
-  const vid = buildVertexIndexer(model.nodes);
-  const rotational = new Set(inputs.model.shellPoolIndex);
-  for (const nodeId of referencePointIds(model.couplings ?? [])) {
-    const pool = inputs.model.poolOfVertex.get(
-      vid(nodeId, "Coupling reference point"),
-    );
-    if (pool === undefined)
-      throw new Error(
-        `Coupling reference point ${nodeId} is not part of the coupled model — the model is inconsistent`,
-      );
-    rotational.add(pool);
-  }
-  return input.build(mesh.vertices, rotational, [
+  return input.build(model.vertices, model.rotationalPool, [
     ...bcs.fixed_dofs,
     ...bcs.prescribed_dofs,
   ]);
@@ -259,19 +268,98 @@ function addPooledElements(
   input: InputBuilder,
   connectivity: Int32Array,
   size: number,
-  elements: Element[],
+  bodies: number[],
   what: string,
 ): void {
-  if (connectivity.length !== size * elements.length)
+  if (connectivity.length !== size * bodies.length)
     throw new Error(
-      `The coupled model has ${connectivity.length / size} ${what} for ${elements.length} store elements — the model is inconsistent`,
+      `The coupled model has ${connectivity.length / size} ${what} but ${bodies.length} bodies for them — the model is inconsistent`,
     );
-  elements.forEach((element, index) =>
+  bodies.forEach((body, index) =>
     input.element(
       Array.from(connectivity.subarray(size * index, size * (index + 1))),
-      element.propertyId,
+      body,
     ),
   );
+}
+
+// The rigid-body input of the coupled solve's inputs. Its tets and facets are
+// the store's solid and shell elements, in order.
+export function coupledRigidBodyInput(
+  model: Pick<SolveModel, "nodes" | "couplings">,
+  inputs: Pick<
+    CoupledEngineInputs,
+    "mesh" | "coupling" | "bcs" | "model" | "solidElements" | "shellElements"
+  >,
+): RigidBodyInput {
+  const vid = buildVertexIndexer(model.nodes);
+  const rotationalPool = new Set(inputs.model.shellPoolIndex);
+  for (const nodeId of referencePointIds(model.couplings ?? [])) {
+    const pool = inputs.model.poolOfVertex.get(
+      vid(nodeId, "Coupling reference point"),
+    );
+    if (pool === undefined)
+      throw new Error(
+        `Coupling reference point ${nodeId} is not part of the coupled model — the model is inconsistent`,
+      );
+    rotationalPool.add(pool);
+  }
+  return pooledRigidBodyInput({
+    vertices: inputs.mesh.vertices,
+    tets: inputs.mesh.tets,
+    triangles: inputs.mesh.triangles,
+    tetBodies: inputs.solidElements.map((element) => element.propertyId),
+    triangleBodies: inputs.shellElements.map((element) => element.propertyId),
+    rotationalPool,
+    coupling: inputs.coupling,
+    bcs: inputs.bcs,
+  });
+}
+
+// The rigid-body input of the auto-shell route's coupled solve, where the
+// Shell body's walls have become shells joined to the solid bodies.
+export function autoCoupledRigidBodyInput(
+  solve: AutoCoupledSolve,
+): RigidBodyInput {
+  return pooledRigidBodyInput({
+    vertices: solve.mesh.vertices,
+    tets: solve.mesh.tets,
+    triangles: solve.mesh.triangles,
+    tetBodies: solve.tetBodies,
+    triangleBodies: solve.triangleBodies,
+    rotationalPool: solve.rotationalPool,
+    coupling: solve.coupling,
+    bcs: solve.bcs,
+  });
+}
+
+// The rigid-body input of the model a route solves: the coupled solve's own
+// inputs where the route builds them (only there are shells joined to
+// solids), the model as the user defined it otherwise.
+export function routedRigidBodyInput(
+  model: SolveModel,
+  route: SolveRoute,
+  log: SolveLog,
+): RigidBodyInput {
+  switch (route.path) {
+    case "coupled":
+      return coupledRigidBodyInput(model, buildCoupledEngineInputs(model, log));
+    case "auto-shell": {
+      const prepared = prepareAutoShellSolve(model, route.shellBodyIds, log);
+      return prepared.kind === "coupled"
+        ? autoCoupledRigidBodyInput(prepared.solve)
+        : modelRigidBodyInput(model);
+    }
+    case "shell":
+    case "solid":
+      return modelRigidBodyInput(model);
+    default: {
+      const unhandled: never = route;
+      throw new Error(
+        `rigid-body check: unhandled route ${JSON.stringify(unhandled)}`,
+      );
+    }
+  }
 }
 
 // The loose pieces of a model, from the Rust check.
@@ -378,26 +466,31 @@ export function freeMotionMessage(
   properties: Property[],
 ): string | null {
   if (components.length === 0) return null;
-  const named = new Set<number>();
-  const sentences = new Set<string>();
+  // Pieces that can make the same motion share a sentence: the plate and the
+  // block it is joined to, or two loose parts alike.
+  const bodiesByMotion = new Map<string, Set<number>>();
   for (const component of components) {
-    const numbers = [
-      ...new Set(
-        component.labels.map((label) => bodyNumber(properties, label)),
-      ),
-    ].sort((a, b) => a - b);
+    const phrase = motionPhrase(component);
+    let numbers = bodiesByMotion.get(phrase);
+    if (!numbers) bodiesByMotion.set(phrase, (numbers = new Set()));
+    for (const label of component.labels)
+      numbers.add(bodyNumber(properties, label));
+  }
+  const named = new Set<number>();
+  const sentences = [...bodiesByMotion].map(([phrase, numberSet]) => {
+    const numbers = [...numberSet].sort((a, b) => a - b);
     for (const number of numbers) named.add(number);
     const who =
       numbers.length === 1
         ? `Body ${numbers[0]}`
         : `Bodies ${listed(numbers.map(String))}`;
-    sentences.add(`${who} can still ${motionPhrase(component)}.`);
-  }
+    return `${who} can still ${phrase}.`;
+  });
   const advice =
     named.size === 1
       ? "Add a support or connect it to another body."
       : "Add supports or connect them to other bodies.";
-  return `${[...sentences].join(" ")} ${advice}`;
+  return `${sentences.join(" ")} ${advice}`;
 }
 
 // The check and its words in one call: the refusal, or null when every body

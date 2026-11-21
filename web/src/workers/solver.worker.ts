@@ -73,8 +73,10 @@ import { constraintTieCount } from "../lib/tie.js";
 import { solidModelRefusal } from "../lib/solve/refusals.js";
 import { tieWeighting } from "../lib/solve/tieMortar.js";
 import {
+  autoCoupledRigidBodyInput,
   coupledRigidBodyInput,
   modelRigidBodyInput,
+  routedRigidBodyInput,
   unheldBodiesMessage,
   type RigidBodyInput,
 } from "../lib/solve/rigidBody.js";
@@ -714,6 +716,12 @@ async function handleAutoShellSolve(
   // The auto-shell progress lines have always gone to the shared log (id 0).
   const log = logTo(0);
   const prepared = prepareAutoShellSolve(payload, shellBodyIds, log);
+  refuseUnheldBodies(
+    prepared.kind === "coupled"
+      ? autoCoupledRigidBodyInput(prepared.solve)
+      : modelRigidBodyInput(payload),
+    payload,
+  );
   const fields =
     prepared.kind === "coupled"
       ? prepared.solve.mapResult(await solveMixed(prepared.solve, payload, log))
@@ -818,24 +826,23 @@ function refuseUnheldBodies(
 }
 
 // The Solve panel's pre-check: the refusal the solve would make for a loose
-// body, or null. The coupled route is checked on its own inputs, where the
-// shells are joined to the solids; the others on the model as the user
-// defined it (the auto-shell route before its Shell bodies are idealised).
+// body, or null, on the model the route solves.
 function rigidBodyCheck(model: SolveModel): string | null {
-  // The builder's progress lines are the solve's to report, not the check's.
+  // The builders' progress lines are the solve's to report, not the check's.
   const quiet: SolveLog = () => undefined;
-  const input =
-    routeSolve(model).path === "coupled"
-      ? coupledRigidBodyInput(model, buildCoupledEngineInputs(model, quiet))
-      : modelRigidBodyInput(model);
-  return unheldBodiesMessage({ freeRigidMotions }, input, model.properties);
+  return unheldBodiesMessage(
+    { freeRigidMotions },
+    routedRigidBodyInput(model, routeSolve(model), quiet),
+    model.properties,
+  );
 }
 
 async function handleSolve(id: number, payload: SolvePayload) {
   const reason = amgReason(payload);
   const route = routeSolve(payload);
-  // The coupled route checks once it has built its inputs (handleMixedSolve).
-  if (route.path !== "coupled")
+  // The coupled and auto-shell routes check the model they build, where the
+  // shells are joined to the solids (handleMixedSolve, handleAutoShellSolve).
+  if (route.path === "solid" || route.path === "shell")
     refuseUnheldBodies(modelRigidBodyInput(payload), payload);
   if (requestedSolver(payload) === "amg" && reason !== null) {
     const fallback = amgFallbackPreconditioner(route);

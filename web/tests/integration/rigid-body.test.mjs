@@ -10,9 +10,11 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import {
   coupledRigidBodyInput,
   modelRigidBodyInput,
+  routedRigidBodyInput,
   unheldBodiesMessage,
 } from "../../src/lib/solve/rigidBody.ts";
 import { buildCoupledEngineInputs } from "../../src/lib/solve/coupled.ts";
+import { routeSolve } from "../../src/lib/solve/route.ts";
 import { loadFem } from "../support/wasm.mjs";
 
 let fem = null;
@@ -216,7 +218,7 @@ describe("solid models", () => {
         ],
       }),
     ).toBe(
-      `Body 1 ${FREE_IN_ALL_SIX} Body 2 ${FREE_IN_ALL_SIX} ` +
+      `Bodies 1 and 2 ${FREE_IN_ALL_SIX} ` +
         "Add supports or connect them to other bodies.",
     );
   });
@@ -340,6 +342,153 @@ describe("mixed shell and solid models", () => {
   test("a wall that does not reach the block is named", () => {
     expect(message(mixed(5))).toBe(
       `Body 2 ${FREE_IN_ALL_SIX} ${ONE_BODY_ADVICE}`,
+    );
+  });
+});
+
+describe("a body marked Shell, idealised at solve time", () => {
+  // A 20×20×0.5 plate (body 1, marked Shell) cantilevering off a 16×20×16
+  // block (body 2), as in auto-shell.spec.ts. The plate touches the block only
+  // through duplicated nodes: as solid meshes they are apart, and only the
+  // idealisation joins the shell to the block.
+  const plateOnBlock = (constraintsOf) => {
+    const nodes = [];
+    const elements = [];
+    const grid = (origin, cells, step, body) => {
+      const base = nodes.length;
+      const id = (i, j, k) =>
+        base + i + (cells[0] + 1) * (j + (cells[1] + 1) * k) + 1;
+      for (let k = 0; k <= cells[2]; k++)
+        for (let j = 0; j <= cells[1]; j++)
+          for (let i = 0; i <= cells[0]; i++)
+            nodes.push({
+              id: id(i, j, k),
+              x: origin[0] + i * step[0],
+              y: origin[1] + j * step[1],
+              z: origin[2] + k * step[2],
+            });
+      for (let k = 0; k < cells[2]; k++)
+        for (let j = 0; j < cells[1]; j++)
+          for (let i = 0; i < cells[0]; i++) {
+            const corner = [0, 1, 2, 3, 4, 5, 6, 7].map((bits) =>
+              id(i + (bits & 1), j + ((bits >> 1) & 1), k + ((bits >> 2) & 1)),
+            );
+            for (const tet of KUHN)
+              elements.push({
+                id: elements.length + 1,
+                type: "CTETRA",
+                nodeIds: tet.map((c) => corner[c]),
+                propertyId: body,
+              });
+          }
+    };
+    grid([0, 0, 0], [4, 4, 1], [5, 5, 0.5], 1);
+    grid([-6, 0, -16], [4, 4, 4], [4, 5, 4], 2);
+    // Boundary triangles, wound outward, with a face id per box plane.
+    const faces = new Map();
+    for (const element of elements)
+      for (const corners of [
+        [0, 1, 2, 3],
+        [0, 1, 3, 2],
+        [0, 2, 3, 1],
+        [1, 2, 3, 0],
+      ]) {
+        const tri = corners.slice(0, 3).map((c) => element.nodeIds[c]);
+        const key = [...tri].sort((a, b) => a - b).join(",");
+        if (faces.has(key)) faces.delete(key);
+        else
+          faces.set(key, {
+            tri,
+            opposite: element.nodeIds[corners[3]],
+            body: element.propertyId,
+          });
+      }
+    const planes = [
+      [1, "z", 0.5],
+      [1, "z", 0],
+      [1, "x", 0],
+      [1, "x", 20],
+      [1, "y", 0],
+      [1, "y", 20],
+      [2, "z", 0],
+      [2, "z", -16],
+      [2, "x", -6],
+      [2, "x", 10],
+      [2, "y", 0],
+      [2, "y", 20],
+    ];
+    const at = (id) => nodes[id - 1];
+    const surfaceTriangles = [];
+    const surfaceFaceIds = [];
+    for (const { tri, opposite, body } of faces.values()) {
+      const [pa, pb, pc, po] = [...tri, opposite].map(at);
+      const ab = [pb.x - pa.x, pb.y - pa.y, pb.z - pa.z];
+      const ac = [pc.x - pa.x, pc.y - pa.y, pc.z - pa.z];
+      const normal = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+      ];
+      const inward =
+        normal[0] * (po.x - pa.x) +
+          normal[1] * (po.y - pa.y) +
+          normal[2] * (po.z - pa.z) >
+        0;
+      surfaceTriangles.push(inward ? [tri[0], tri[2], tri[1]] : tri);
+      const face = planes.findIndex(
+        ([plane, axis, value]) =>
+          plane === body && tri.every((id) => near(at(id)[axis], value)),
+      );
+      if (face < 0) throw new Error("a boundary face lies on no box plane");
+      surfaceFaceIds.push(face + 1);
+    }
+    return {
+      nodes,
+      elements,
+      materials: [STEEL],
+      properties: [
+        { id: 1, materialId: 1, discretization: "shell" },
+        { id: 2, materialId: 1, discretization: "solid" },
+      ],
+      constraints: constraintsOf(nodes),
+      loads: [],
+      surfaceLoads: [],
+      couplings: [],
+      tieGroups: [],
+      surfaceTriangles,
+      surfaceFaceIds,
+    };
+  };
+  const fixWhere = (predicate, dofs) => (nodes) =>
+    nodes
+      .filter(predicate)
+      .flatMap((n) => dofs.map((dof) => ({ nodeId: n.id, dof })));
+  const message = (model) => {
+    const route = routeSolve(model);
+    expect(route.path).toBe("auto-shell");
+    return unheldBodiesMessage(
+      fem,
+      routedRigidBodyInput(model, route, silent),
+      model.properties,
+    );
+  };
+
+  test("a plate held only through its join to a clamped block is held", () => {
+    expect(
+      message(plateOnBlock(fixWhere((n) => near(n.z, -16), [0, 1, 2]))),
+    ).toBeNull();
+  });
+
+  test("a block held only through the plate is held", () => {
+    expect(
+      message(plateOnBlock(fixWhere((n) => near(n.x, 20), [0, 1, 2]))),
+    ).toBeNull();
+  });
+
+  test("a plate and block that slide together are named together", () => {
+    expect(message(plateOnBlock(fixWhere((n) => near(n.x, 20), [2])))).toBe(
+      "Bodies 1 and 2 can still move along X and Y, and rotate about Y and Z. " +
+        "Add supports or connect them to other bodies.",
     );
   });
 });

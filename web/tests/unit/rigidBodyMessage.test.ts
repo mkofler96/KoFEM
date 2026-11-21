@@ -74,6 +74,18 @@ describe("freeMotionMessage", () => {
     );
   });
 
+  test("names pieces that can make the same motion in one sentence", () => {
+    expect(
+      freeMotionMessage(
+        [loose([1], [ALONG_X], [ALONG_Z]), loose([2], [ALONG_X], [ALONG_Z])],
+        bodies,
+      ),
+    ).toBe(
+      "Bodies 1 and 2 can still move along X and rotate about Z. " +
+        "Add supports or connect them to other bodies.",
+    );
+  });
+
   test("names regions and idealised shells by the body they belong to", () => {
     const properties = [
       { id: 1, materialId: 1, body: 1 },

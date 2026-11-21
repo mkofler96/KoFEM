@@ -126,6 +126,9 @@ export function useSolver() {
       elementOrder,
       tieGroups,
       couplings: couplingGroups,
+      // A body marked Shell is checked on its idealisation, found from these.
+      surfaceTriangles,
+      surfaceFaceIds,
     })
       .then(({ message }) => {
         if (current) setUnheld(message);
@@ -147,6 +150,8 @@ export function useSolver() {
     elementOrder,
     tieGroups,
     couplingGroups,
+    surfaceTriangles,
+    surfaceFaceIds,
     routeRefusal,
   ]);
 
