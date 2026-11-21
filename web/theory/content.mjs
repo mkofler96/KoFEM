@@ -45,6 +45,11 @@ export const topics = [
     "numerical-methods/loads-and-constraints",
     "Loads and constraints",
   ],
+  [
+    "Numerical methods",
+    "numerical-methods/couplings",
+    "Kinematic and distributing couplings",
+  ],
   ["Numerical methods", "numerical-methods/linear-solve", "Linear solve"],
   ["Results", "results/displacement-and-stress", "Displacement and stress"],
   [

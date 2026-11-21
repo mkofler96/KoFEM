@@ -535,6 +535,27 @@ fn a_distributing_coupling_spreads_force_and_moment_as_their_equivalent_nodal_lo
     assert_balances("moment", reaction_moment, moment, 4000.0);
 }
 
+/// A gap tie can make a node of one face follow a straight row of nodes of
+/// the other, off that row (KOF-410). The node only needs its translation,
+/// which the row measures; the spin about the row it cannot measure carries
+/// nothing across. A free point on such a row is refused (below), since a
+/// moment about the row could not reach the model.
+#[test]
+fn a_mesh_node_tied_to_a_straight_row_of_nodes_solves() {
+    let (model, _, _, fixed) = tip_coupled_cantilever();
+    let cell = LENGTH / 8.0;
+    let reference = model.node_at([LENGTH, 0.0, 0.0]);
+    let row =
+        model.nodes_where(|node| (node[0] - (LENGTH - cell)).abs() < 1e-9 && node[2].abs() < 1e-9);
+    assert!(row.len() >= 3);
+    let mut forces = vec![0.0; model.dof_count()];
+    forces[dof(model.node_at([LENGTH, HEIGHT, HEIGHT]), 2)] = -100.0;
+    let solution = model
+        .solve(&[distributing(reference, row)], &fixed, &forces, amg())
+        .expect("a tie node on a straight row solves");
+    assert!(solution.dofs.iter().all(|value| value.is_finite()));
+}
+
 #[test]
 fn multigrid_and_gauss_seidel_agree_on_a_coupled_model() {
     let (model, point, tip, fixed) = tip_coupled_cantilever();
@@ -617,8 +638,7 @@ fn modelling_errors_are_named() {
         }
     );
 
-    // A distributing coupling needs three nodes that do not lie on one line
-    // with the point.
+    // A distributing coupling needs nodes that do not all lie on one line.
     let edge = model.nodes_where(|node| {
         (node[0] - LENGTH).abs() < 1e-9 && (node[2] - HEIGHT / 2.0).abs() < 1e-9
     });

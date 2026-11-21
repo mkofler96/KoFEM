@@ -29,6 +29,7 @@ import equilibriumAndWeakForm from "./solid-mechanics/equilibrium-and-weak-form.
 import elementsAndQuadrature from "./numerical-methods/elements-and-quadrature.mjs";
 import assembly from "./numerical-methods/assembly.mjs";
 import loadsAndConstraints from "./numerical-methods/loads-and-constraints.mjs";
+import couplings from "./numerical-methods/couplings.mjs";
 import linearSolve from "./numerical-methods/linear-solve.mjs";
 import displacementAndStress from "./results/displacement-and-stress.mjs";
 import interpretationAndConvergence from "./results/interpretation-and-convergence.mjs";
@@ -53,6 +54,7 @@ const articles = [
   elementsAndQuadrature,
   assembly,
   loadsAndConstraints,
+  couplings,
   linearSolve,
   displacementAndStress,
   interpretationAndConvergence,

@@ -12,8 +12,15 @@ import intro from "./intro.mjs";
 import mechanics from "./mechanics.mjs";
 import numerics from "./numerics.mjs";
 import applications from "./applications.mjs";
+import couplings from "./couplings.mjs";
 
-const all = [...intro, ...mechanics, ...numerics, ...applications];
+const all = [
+  ...intro,
+  ...mechanics,
+  ...numerics,
+  ...applications,
+  ...couplings,
+];
 
 export const figures = new Map();
 for (const definition of all) {

@@ -64,6 +64,10 @@ export function Viewport() {
         events={pickingEvents}
         camera={{ position: [5, 5, 5], fov: 45 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
+        // Materials clip at the result section plane (KOF-390).
+        onCreated={({ gl }) => {
+          gl.localClippingEnabled = true;
+        }}
         style={{
           background: "#f0f2f5",
           cursor: pickMode || splitPicking ? "crosshair" : "default",

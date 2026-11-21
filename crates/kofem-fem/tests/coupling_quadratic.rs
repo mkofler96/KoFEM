@@ -6,8 +6,11 @@
 //!
 //! * an edge whose two ends a kinematic coupling grips joins that coupling,
 //!   so the surface stays rigid between its corners;
-//! * a distributing coupling keeps its corner nodes, as on linear elements,
-//!   and so transfers its point's force and moment exactly as there;
+//! * a plain distributing coupling (a tie's node-to-patch coupling) keeps
+//!   its corner nodes, as on linear elements, and so transfers its point's
+//!   force and moment exactly as there (a distributing coupling over a
+//!   picked surface weights the face's edge nodes by area instead, see
+//!   `coupling_surface.rs`);
 //! * an edge node whose two ends follow couplings in a component follows
 //!   their mean in it (the linear interpolation along the edge);
 //! * vertex supports extend to edge nodes as in the uncoupled solve.

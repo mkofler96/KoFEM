@@ -105,3 +105,27 @@ export function resultViewer(id, { caption }) {
         <a href="/app/?example=${id}">Open in KoFEM</a></figcaption>
     </figure>`;
 }
+
+// Solved models of the Theory articles themselves (not public examples):
+// their capture program writes the payload and a static figure to
+// public/theory/viewers/<id>.{json,png}. The payload may carry its
+// tetrahedra, a default section and a coupling's legs; viewer.js then offers
+// the section cut.
+const solvedRecords = JSON.parse(
+  readFileSync(new URL("web/public/theory/couplings.json", repo), "utf8"),
+).viewers;
+
+/** An interactive viewer of a Theory article's own solved model. */
+export function solvedViewer(id, { caption }) {
+  const record = solvedRecords[id];
+  if (!record) throw new Error(`No recorded theory viewer "${id}"`);
+  const [min, max] = record.range;
+  return `<figure class="result-viewer" data-viewer="${viewerUrl(id)}" id="viewer-${id}">
+      <div class="viewer-stage">
+        <img src="/theory/viewers/${id}.png" width="${record.width}" height="${record.height}" alt="${record.title}: von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
+        <div class="viewer-legend" aria-hidden="true"><span>${formatValue(max)} MPa</span><span class="viewer-bar"></span><span>${formatValue(min)} MPa</span></div>
+        <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
+      </div>
+      <figcaption><strong>${record.title}.</strong> ${caption} Displacements enlarged ${record.deformScale}×.</figcaption>
+    </figure>`;
+}

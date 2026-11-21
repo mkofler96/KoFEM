@@ -11,6 +11,7 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 mod mixed;
+mod section;
 mod shell;
 mod shellize;
 mod tie;
@@ -461,8 +462,9 @@ pub struct Couplings {
 impl Couplings {
     /// `kinds[k]`: the engine's `mpc` codes — 0 distributing (RBE3), 1 relaxed
     /// shell-to-solid MPC with rotation transfer `relaxation`, 2 kinematic
-    /// (RBE2), 3 shell footprint; 1 and 3 tie shells to solids and need shell
-    /// elements. `dof_masks[k]`: the DOFs (bits 0..5) a kinematic coupling
+    /// (RBE2), 3 shell footprint, 4 distributing over a surface (RBE3 whose
+    /// nodes the solve weights by their share of the picked faces' area);
+    /// 1 and 3 tie shells to solids and need shell elements. `dof_masks[k]`: the DOFs (bits 0..5) a kinematic coupling
     /// ties. `weights`: one per coupled node, or empty for equal weights.
     ///
     /// # Errors
@@ -514,10 +516,11 @@ impl Couplings {
                     dof_mask: u8::try_from(dof_masks[index] & 0x3f).unwrap_or(0),
                 },
                 3 => CouplingKind::ShellFootprint,
+                4 => CouplingKind::DistributingSurface,
                 code => {
                     return Err(JsError::new(&format!(
                         "coupling {index}: unknown kind {code} (0 distributing, 1 relaxed MPC, \
-                         2 kinematic, 3 shell footprint)"
+                         2 kinematic, 3 shell footprint, 4 distributing over a surface)"
                     )))
                 }
             };

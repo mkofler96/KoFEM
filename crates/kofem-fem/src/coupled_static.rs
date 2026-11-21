@@ -30,11 +30,14 @@
 //!   whose ends the coupling both grips (a chord through the solid) joins
 //!   too; on the rigid body its ends already move with, its midpoint
 //!   following that motion is consistent;
-//! * a distributing coupling keeps its corner nodes, as on linear elements:
-//!   it then transfers its point's force and moment exactly as it does
-//!   there. Adding edge nodes would move their weighted centroid off the
-//!   point (the app places it at the corners' centroid), and the RBE3
-//!   equations, which take the point as that centroid, would add a moment;
+//! * a distributing coupling over a surface (a picked face, see
+//!   [`CouplingKind::DistributingSurface`]) weights its nodes by their share
+//!   of the surface's area, the nodal shares of a uniform pressure: on a
+//!   quadratic face those sit on the edge nodes, so the coupling grips them
+//!   and not the corners. A centred force is then exactly a uniform traction
+//!   on the surface, on linear and quadratic faces alike;
+//! * any other distributing coupling (a tie's node-to-patch coupling) keeps
+//!   the nodes and weights it names;
 //! * an edge node whose two ends follow couplings in a translation, and that
 //!   no coupling grips itself, follows their mean in it — the linear
 //!   interpolation along the edge, e.g. across the face of a tie;
@@ -44,16 +47,19 @@
 //! Shell facets join linear tetrahedra only, as in the engine's coupled
 //! solve: a quadratic mesh with shells is refused.
 
+use std::collections::BTreeMap;
+
 use crate::amg::{Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::coupling::{Coupling, CouplingConstraints, CouplingKind, DOFS_PER_NODE};
 use crate::error::FemError;
 use crate::incomplete_cholesky::IncompleteCholesky;
-use crate::mesh::{ElementOrder, TetMesh};
+use crate::mesh::{cross, dot, sub, ElementOrder, TetMesh};
 use crate::shell::{ShellMesh, SHELL_NODE_DOFS};
 use crate::sparse::CsrMatrix;
 use crate::static_solve::{PreconditionerChoice, PreparedStatic};
+use crate::surface::BoundaryFaces;
 use crate::LevelInfo;
 
 /// "No reduced unknown" in [`CoupledReduction`]'s slot table.
@@ -420,6 +426,7 @@ pub fn prepare_mixed_static(
         }
         check_shell_part(mesh, part)?;
     }
+    let couplings = &surface_couplings(mesh, shell, couplings)?;
     let solid_used: Vec<bool> = (0..mesh.node_count())
         .map(|node| mesh.is_used(node))
         .collect();
@@ -437,6 +444,15 @@ pub fn prepare_mixed_static(
             coupling.kind,
             CouplingKind::ShellFootprint | CouplingKind::Tie { .. }
         ) {
+            continue;
+        }
+        // So is a gap tie's distributing reference: a node of the other face,
+        // which only its translation joins. A free point, which no element
+        // uses, carries rotations a moment can load.
+        if coupling.kind == CouplingKind::Distributing
+            && solid_used.get(coupling.reference).copied().unwrap_or(false)
+            && !shell_used.get(coupling.reference).copied().unwrap_or(false)
+        {
             continue;
         }
         if let Some(flag) = has_rotation.get_mut(coupling.reference) {
@@ -954,6 +970,87 @@ fn reduced_stiffness(
         }
     }
     Ok(matrix)
+}
+
+/// Each surface coupling as the distributing coupling it stands for (see
+/// [`CouplingKind::DistributingSurface`]), every other coupling unchanged.
+/// A surface coupling's weights are its nodes' shares of the area of the
+/// boundary triangles whose corners it names, and of the shell facets whose
+/// corners it names; a named node on no such face carries no area and drops
+/// out.
+///
+/// # Errors
+/// [`FemError::Coupling`] for a coupled node out of range, or a surface
+/// coupling whose nodes include no whole face.
+fn surface_couplings(
+    mesh: &TetMesh,
+    shell: Option<ShellPart<'_>>,
+    couplings: &[Coupling],
+) -> Result<Vec<Coupling>, FemError> {
+    if !couplings
+        .iter()
+        .any(|coupling| coupling.kind == CouplingKind::DistributingSurface)
+    {
+        return Ok(couplings.to_vec());
+    }
+    let boundary = BoundaryFaces::new(mesh);
+    let mut member = vec![false; mesh.node_count()];
+    couplings
+        .iter()
+        .enumerate()
+        .map(|(index, coupling)| {
+            if coupling.kind != CouplingKind::DistributingSurface {
+                return Ok(coupling.clone());
+            }
+            let fail = |reason: String| FemError::Coupling {
+                coupling: index,
+                reason,
+            };
+            for &node in &coupling.nodes {
+                let flag = member.get_mut(node).ok_or_else(|| {
+                    fail(format!(
+                        "coupled node {node} is out of range (the model has {} nodes)",
+                        mesh.node_count()
+                    ))
+                })?;
+                *flag = true;
+            }
+            let grips = |vertex: u32| member[vertex as usize];
+            let mut shares: BTreeMap<usize, f64> =
+                boundary.area_shares(mesh, grips).into_iter().collect();
+            if let Some(part) = shell {
+                for (facet, corners) in part.mesh.triangles().iter().enumerate() {
+                    if !corners.iter().all(|&corner| grips(corner)) {
+                        continue;
+                    }
+                    let [first, second, third] = part.mesh.corners(facet);
+                    let doubled = cross(sub(second, first), sub(third, first));
+                    let share = dot(doubled, doubled).sqrt() / 6.0;
+                    for &corner in corners {
+                        *shares.entry(corner as usize).or_insert(0.0) += share;
+                    }
+                }
+            }
+            for &node in &coupling.nodes {
+                member[node] = false;
+            }
+            if shares.is_empty() {
+                return Err(fail(
+                    "its nodes include no whole face of the boundary, so there is no surface \
+                     area to weight them by — pick the faces of a surface, or make the \
+                     coupling kinematic"
+                        .into(),
+                ));
+            }
+            let (nodes, weights) = shares.into_iter().unzip();
+            Ok(Coupling {
+                reference: coupling.reference,
+                nodes,
+                weights,
+                kind: CouplingKind::Distributing,
+            })
+        })
+        .collect()
 }
 
 /// On a quadratic mesh, each kinematic coupling with every edge node whose two

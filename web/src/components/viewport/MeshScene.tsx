@@ -24,6 +24,8 @@ import { GeometryLayer } from "./GeometryLayer";
 import { FitCamera } from "./FitCamera";
 import { FemMeshLayer } from "./FemMeshLayer";
 import { ResultsColormap } from "./ResultsColormap";
+import { SectionLayer } from "./SectionLayer";
+import { useResultSection } from "./useResultSection";
 import { DensityField } from "./DensityField";
 import { BoundaryConditionLayer } from "./BoundaryConditionLayer";
 import { SampleGuideTargets } from "./SampleGuideTargets";
@@ -130,11 +132,6 @@ export function MeshScene() {
     );
   };
 
-  const hasStepTessellation = !!stepSurface && stepSurface.triangles.length > 0;
-  if (nodes.length === 0 && !hasStepTessellation) {
-    return null;
-  }
-
   // A density field replaces the deformed static result: the final run when it
   // is the active result in Results (KOF-233), or the live iteration while an
   // optimization runs on the Optimize step (KOF-240).
@@ -146,6 +143,18 @@ export function MeshScene() {
   // even though the solved `result` is still held in the store. A density run
   // takes precedence over a static result when it is the active one.
   const showResult = !!result && mode === "results" && !showDensity;
+  // The section plane as drawn (KOF-390): it clips the result surface and its
+  // edges, and SectionLayer fills the cut.
+  const section = useResultSection(showResult, deformScale);
+  const clippingPlanes = useMemo(
+    () => (section ? [section.clip] : []),
+    [section],
+  );
+
+  const hasStepTessellation = !!stepSurface && stepSurface.triangles.length > 0;
+  if (nodes.length === 0 && !hasStepTessellation) {
+    return null;
+  }
 
   // Hovering a row in the Bodies panel highlights that body, which only the
   // coloured CAD tessellation can show — the FEM surface is one neutral colour.
@@ -204,6 +213,7 @@ export function MeshScene() {
         deformScale={deformScale}
         showResult={showResult}
         onFacePick={onFacePick}
+        clippingPlanes={clippingPlanes}
       />
       {/* The deformed surface only places probes: face picks match clicks
           against undeformed nodes and live on Supports & Loads (KOF-407). */}
@@ -212,8 +222,10 @@ export function MeshScene() {
           topology={topology}
           deformScale={deformScale}
           onFacePick={probing ? onProbePick : undefined}
+          clippingPlanes={clippingPlanes}
         />
       )}
+      {section && <SectionLayer topology={topology} section={section} />}
       {showResult && (
         <ProbeLayer deformScale={deformScale} modelSize={modelSize} />
       )}

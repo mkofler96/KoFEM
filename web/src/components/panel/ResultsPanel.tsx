@@ -34,6 +34,7 @@ import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { LegendRangeControls } from "./LegendRangeControls";
+import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
 import styles from "./Panel.module.css";
 
@@ -581,6 +582,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         </select>
 
         <DeformScaleControl />
+
+        <SectionControls field={resultType} />
 
         {stats && (
           <>

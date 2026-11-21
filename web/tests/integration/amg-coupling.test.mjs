@@ -6,12 +6,14 @@
 // read the SAME inputs, built by the app's own buildCoupledEngineInputs from a
 // store-shaped model, exactly as the solver worker does.
 //
-// Cases: kinematic and distributing couplings loaded by forces and moments at
-// the reference point, a fixed kinematic reference point (a bolted root), a
-// rigid point-to-point connection between two separately meshed beams, a tie
-// across a gap together with a coupling, and a Netgen mesh of the wall
-// bracket — with two materials, prescribed displacements and surface loads
-// along the way. Then quadratic elements, against the MFEM solid solve at
+// Cases: a kinematic coupling loaded by a force and moments at the reference
+// point, a fixed kinematic reference point (a bolted root) and a rigid
+// point-to-point connection between two separately meshed beams — with two
+// materials, prescribed displacements and surface loads along the way. A
+// distributing coupling weights its nodes by area, which the stored C++
+// results did not: it is checked against the uniform traction it stands for,
+// a tie across a gap against the beam without the cut, and a Netgen mesh of
+// the wall bracket with both kinds by the two Rust preconditioners. Then quadratic elements, against the MFEM solid solve at
 // order 2 (the engine's coupled solve is linear only, see below), and what
 // AMG refuses: a hinged point-to-point joint, which leaves a mechanism (the
 // MFEM path's Gauss–Seidel CG still converges on it when the load does not
@@ -400,6 +402,51 @@ function tiedAcrossGap() {
   return model;
 }
 
+// The same cantilever without the cut: one beam of the tied model's full
+// length, the materials split where the cut was. A tie across a gap stands
+// for this beam, so it must be about as stiff.
+function uncutBeam() {
+  const model = emptyModel();
+  const far = 2 * LENGTH + 0.5;
+  addBeam(model, { x0: 0, length: far, height: HEIGHT, nx: 18, split: LENGTH });
+  const tipIds = idsWhere(model, (node) => near(node.x, far));
+  const point = addPoint(model, far, HEIGHT / 2, HEIGHT / 2);
+  model.couplings = [
+    {
+      name: "Tip",
+      kind: "distributing",
+      dofs: [0, 1, 2, 3, 4, 5],
+      refNodeId: point,
+      faces: [{ nodeIds: tipIds }],
+    },
+  ];
+  model.constraints = clampAll(idsWhere(model, (node) => near(node.x, 0)));
+  model.loads = [
+    { nodeId: point, dof: 2, value: -600 },
+    { nodeId: point, dof: 4, value: 15000 },
+  ];
+  return model;
+}
+
+// The largest displacement of a model solved in Rust alone.
+async function peakDisplacement(model) {
+  const inputs = buildCoupledEngineInputs(model, discard);
+  const raw = await solveCoupledSolidInRust(
+    fem,
+    inputs,
+    1,
+    "amg",
+    undefined,
+    neverAsk,
+    discard,
+  );
+  const { displacements } = mapMixedResult(model, inputs.model, raw);
+  return displacements.reduce(
+    (peak, value) => Math.max(peak, Math.abs(value)),
+    0,
+  );
+}
+
 // The wall bracket meshed by Netgen at `maxElementSize` (mm), as a store
 // model with two materials (split halfway along its length), and the helpers
 // the cases pick nodes with.
@@ -526,14 +573,8 @@ describe("linear elements", () => {
       "Kinematic coupling: force and moment at the reference point",
       () => tipCoupled("kinematic").model,
     ],
-    [
-      "Distributing coupling: force and moment at the reference point, plus a pressure",
-      distributingWithPressure,
-    ],
     ["A clamped kinematic reference point holds the root", boltedRoot],
     ["A rigid point-to-point connection between two beams", rigidJoint],
-    ["A tie across a gap together with a coupling", tiedAcrossGap],
-    ["Wall bracket (Netgen mesh) with two couplings", bracketWithTwoCouplings],
   ])("%s", (_label, buildModel) => {
     let outcome = null;
     beforeAll(async () => {
@@ -561,6 +602,105 @@ describe("linear elements", () => {
   });
 });
 
+// A distributing coupling weights each node of the surface it grips by its
+// share of the surface's area, so the stored C++ results, which weighted
+// every node equally, are no reference for it. Its defining property is: a
+// force at the centre of the surface is that force spread over the surface
+// as a uniform traction.
+
+// The model in Rust at order 1 with the given preconditioner.
+async function solveLinear(model, method) {
+  const inputs = buildCoupledEngineInputs(model, discard);
+  const raw = await solveCoupledSolidInRust(
+    fem,
+    inputs,
+    1,
+    method,
+    undefined,
+    neverAsk,
+    discard,
+  );
+  return mapMixedResult(model, inputs.model, raw);
+}
+
+describe("Distributing coupling: a force at the centre of the face, plus a pressure", () => {
+  test("is the same force spread over the face as a uniform traction", async () => {
+    const force = [800, -3000, 0];
+    const pointLoad = distributingWithPressure();
+    const point = pointLoad.couplings[0].refNodeId;
+    pointLoad.loads = force.map((value, dof) => ({
+      nodeId: point,
+      dof,
+      value,
+    }));
+    // The same model with the force on the face instead; the coupling, now
+    // unloaded, adds no stiffness.
+    const spread = distributingWithPressure();
+    spread.loads = [];
+    spread.surfaceLoads = [
+      ...spread.surfaceLoads,
+      {
+        type: "force",
+        faces: facesWhere(spread, (node) => near(node.x, LENGTH)),
+        force,
+      },
+    ];
+    const difference = maxDifference(
+      (await solveLinear(spread, "amg")).displacements,
+      (await solveLinear(pointLoad, "amg")).displacements,
+    );
+    expect(difference.peak).toBeGreaterThan(0);
+    expect(difference.relative).toBeLessThan(1e-5);
+  });
+});
+
+describe("Wall bracket (Netgen mesh) with two couplings", () => {
+  let model = null;
+  beforeAll(async () => {
+    model = await bracketWithTwoCouplings();
+  });
+
+  test("AMG accepts the model", () => {
+    expect(
+      amgUnavailableReason({
+        elements: model.elements,
+        properties: model.properties,
+        elementOrder: 1,
+        couplingCount: model.couplings.length,
+      }),
+    ).toBeNull();
+  });
+
+  test("AMG and Gauss–Seidel give the same field", async () => {
+    const amg = await solveLinear(model, "amg");
+    const gaussSeidel = await solveLinear(model, "gauss-seidel");
+    const displacement = maxDifference(
+      gaussSeidel.displacements,
+      amg.displacements,
+    );
+    expect(displacement.peak).toBeGreaterThan(0);
+    expect(displacement.relative).toBeLessThan(1e-5);
+    expect(
+      maxDifference(gaussSeidel.vonMises, amg.vonMises).relative,
+    ).toBeLessThan(1e-4);
+  });
+});
+
+// A gap tie joins the two beams with distributing couplings: each node of
+// one face follows the rigid motion of the patch of the other face around it,
+// carried across to where the node is. The C++ engine measured that motion at
+// the patch's centroid instead, which welded the cut stiff (KOF-410): its
+// stored result for this model is 0.18 mm at the tip, against 0.45 mm for the
+// uncut beam, so it is no reference here. The beam without the cut is.
+describe("A tie across a gap together with a coupling", () => {
+  test("is as stiff as the beam without the cut", async () => {
+    const tied = await peakDisplacement(tiedAcrossGap());
+    const uncut = await peakDisplacement(uncutBeam());
+    expect(uncut).toBeGreaterThan(0);
+    expect(Math.abs(tied - uncut) / uncut).toBeLessThan(0.05);
+  });
+});
+
 // ── Quadratic elements ────────────────────────────────────────────────────────
 //
 // The engine's coupled solve has linear tets only, so a coupled quadratic model
@@ -569,10 +709,11 @@ describe("linear elements", () => {
 // grips as a rigid body — exactly the clamp or the prescribed rigid
 // displacement MFEM applies to those vertices and extends to their edge nodes —
 // so the two are one discrete problem and must agree to solver precision. A
-// distributing point loaded by a force stands for that force spread over the
-// face; it puts the load on the face's corner nodes in equal shares (as on
-// linear elements) rather than as a uniform traction, which only changes the
-// field near the face (Saint-Venant), so away from it the two agree closely.
+// distributing point loaded by a force at the centre of the face it grips
+// stands for that force spread over the face: it weights each node by its
+// share of the face's area (on a quadratic face, the edge nodes), so it is
+// exactly the uniform traction MFEM applies, and the two agree to solver
+// precision too.
 
 const QUADRATIC = 2;
 
@@ -877,14 +1018,14 @@ describe("quadratic elements", () => {
     );
   });
 
-  describe("Quadratic: a force at a distributing point against the same force spread over the face", () => {
-    let peak = 0;
-    let difference = 0;
-    let tipRust = null;
-    let tipMfem = null;
+  describe("Quadratic: a force at a distributing point is the same force spread over the face", () => {
+    let outcome = null;
     beforeAll(async () => {
-      // A force at a distributing point on the tip face, against the same
-      // total force spread over the face as a surface load.
+      // A force at a distributing point at the centre of the tip face,
+      // against the same total force spread over the face as a surface
+      // load. The coupling weights each node by its share of the face's
+      // area, on the edge nodes of the quadratic faces, so the two are one
+      // discrete problem.
       const model = emptyModel();
       addBeam(model, {
         x0: 0,
@@ -920,39 +1061,16 @@ describe("quadratic elements", () => {
           force,
         },
       ];
-      const rust = await solveQuadraticCoupled(model);
-      const mfem = solveMfemQuadratic(spread);
-      // Away from the loaded face (x ≤ 3L/4) the fields agree.
-      spread.nodes.forEach((node, index) => {
-        if (node.x > 0.75 * LENGTH) return;
-        for (let axis = 0; axis < 3; axis++) {
-          peak = Math.max(peak, Math.abs(mfem.displacements[3 * index + axis]));
-          difference = Math.max(
-            difference,
-            Math.abs(
-              mfem.displacements[3 * index + axis] -
-                rust.displacements[3 * index + axis],
-            ),
-          );
-        }
-      });
-      const mean = (field) =>
-        tip.reduce((sum, nodeId) => sum + field[3 * (nodeId - 1000) + 2], 0) /
-        tip.length;
-      tipRust = mean(rust.displacements);
-      tipMfem = mean(mfem.displacements);
+      outcome = await compareQuadratic(model, spread);
     });
 
-    test("away from the face, the displacements agree within 0.5%", () => {
-      expect(peak).toBeGreaterThan(0);
-      expect(difference / peak).toBeLessThan(5e-3);
+    test("displacements agree everywhere, the loaded face included", () => {
+      expect(outcome.displacement.peak).toBeGreaterThan(0);
+      expect(outcome.displacement.relative).toBeLessThan(1e-5);
     });
 
-    test("the mean tip deflection agrees within 0.5%", () => {
-      expect(
-        Math.abs(tipRust - tipMfem),
-        `${tipRust} against ${tipMfem}`,
-      ).toBeLessThan(5e-3 * Math.abs(tipMfem));
+    test("von Mises stresses agree", () => {
+      expect(outcome.stress.relative).toBeLessThan(1e-4);
     });
   });
 });

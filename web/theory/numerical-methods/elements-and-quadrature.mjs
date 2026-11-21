@@ -327,7 +327,7 @@ export default {
         (${codeSource("crates/kofem-fem/src/surface.rs", 229, "surface.rs")};
         ${mfemSource("fem/lininteg.cpp", 387, "MFEM face rule")} for quadrilaterals).</li>
       <li>The mixed solid–shell solve reuses this solid stiffness at order 1
-        (${codeSource("crates/kofem-fem/src/coupled_static.rs", 406, "coupled_static.rs")}).</li>
+        (${codeSource("crates/kofem-fem/src/coupled_static.rs", 412, "coupled_static.rs")}).</li>
     </ul>
     <p>How these element contributions combine into one system is explained in
       <a href="/theory/numerical-methods/assembly/">Assembly</a>.</p>

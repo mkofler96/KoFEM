@@ -35,6 +35,15 @@ export interface LegendRange {
   max: number;
 }
 
+// The section plane of Results (KOF-390): normal to x, y or z (axis 0, 1, 2)
+// at `position`, a fraction 0…1 of the model's extent along the axis as drawn,
+// keeping the part below it, or above it when `flipped`.
+export interface ResultSection {
+  axis: 0 | 1 | 2;
+  position: number;
+  flipped: boolean;
+}
+
 // Which pipeline produced the result currently on display. Both a static solve
 // (`result`) and a topology-optimization run (`densityResult`) hand off to
 // Results, and a model can carry both at once (solve, then optimize). This
@@ -75,6 +84,16 @@ export interface ResultsSlice {
   probing: boolean;
   // Whether the min and max probes mark where the plotted field peaks.
   showExtremeProbes: boolean;
+  // The section plane, or null for the whole model.
+  section: ResultSection | null;
+  // Whether Results shows the min and max of the field on the cut.
+  showSectionRange: boolean;
+  // The min and max of the plotted field on the cut, as the viewport's
+  // section layer measured it; null with no section or nothing cut.
+  sectionRange: LegendRange | null;
+  // Why the section could not be drawn (the Rust module failed to load, or
+  // the cut refused its input), or null.
+  sectionError: string | null;
 
   setResult(result: SolverResult): void;
   setResultType(t: ResultType): void;
@@ -84,6 +103,10 @@ export interface ResultsSlice {
   setLegendRange(range: LegendRange | null): void;
   setProbing(on: boolean): void;
   setShowExtremeProbes(on: boolean): void;
+  setSection(section: ResultSection | null): void;
+  setShowSectionRange(on: boolean): void;
+  setSectionRange(range: LegendRange | null): void;
+  setSectionError(message: string | null): void;
   addProbe(
     point: [number, number, number],
     anchor: { cadFaceId: number } | { triangle: [number, number, number] },
@@ -111,6 +134,10 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   nextProbeId: 1,
   probing: false,
   showExtremeProbes: true,
+  section: null,
+  showSectionRange: false,
+  sectionRange: null,
+  sectionError: null,
 
   setResult: (result) =>
     set((s) => {
@@ -164,6 +191,38 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setShowExtremeProbes: (on) =>
     set((s) => {
       s.showExtremeProbes = on;
+    }),
+  setSection: (section) =>
+    set((s) => {
+      if (
+        section !== null &&
+        !(
+          [0, 1, 2].includes(section.axis) &&
+          Number.isFinite(section.position) &&
+          section.position >= 0 &&
+          section.position <= 1
+        )
+      )
+        throw new Error(
+          `section needs axis 0, 1 or 2 and a position in [0, 1], got axis ${section.axis}, position ${section.position}`,
+        );
+      s.section = section;
+      if (section === null) {
+        s.sectionRange = null;
+        s.sectionError = null;
+      }
+    }),
+  setShowSectionRange: (on) =>
+    set((s) => {
+      s.showSectionRange = on;
+    }),
+  setSectionRange: (range) =>
+    set((s) => {
+      s.sectionRange = range;
+    }),
+  setSectionError: (message) =>
+    set((s) => {
+      s.sectionError = message;
     }),
   addProbe: (point, anchor) =>
     set((s) => {

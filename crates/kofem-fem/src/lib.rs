@@ -26,6 +26,7 @@ pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
 pub mod mortar;
+pub mod section;
 pub mod shell;
 pub mod sparse;
 pub mod static_solve;
@@ -49,6 +50,7 @@ pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};
 pub use mortar::{mortar_weights, MortarFace, MortarRow};
+pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
     assemble_shell_stiffness, prepare_shell_static, shell_translations, shell_von_mises,
     solve_shell_static, PreparedShell, ShellMesh, ShellPreconditioner, ShellSolution,

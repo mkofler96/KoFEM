@@ -12,8 +12,9 @@
 //! one-pass reduction `K_r = TᵀKT` needs.
 //!
 //! * Distributing (RBE3): the reference node's six DOFs are dependent — the
-//!   weighted mean translation of the coupled nodes and their weighted
-//!   least-squares rotation. It adds no stiffness, so the coupled surface
+//!   weighted least-squares rigid motion of the coupled nodes, fitted about
+//!   their weighted centroid and carried to the reference point, wherever it
+//!   sits. It adds no stiffness, so the coupled surface
 //!   stays flexible, but the point can only be loaded, never fixed or driven.
 //! * Kinematic (RBE2): the coupled nodes are dependent and follow the
 //!   reference node as a rigid body, `u_i = u_R + θ_R × r_i`. The point stays
@@ -42,8 +43,18 @@ pub const ALL_DOFS: u8 = 0x3f;
 /// How a coupling joins its reference node to its coupled nodes.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CouplingKind {
-    /// RBE3: the reference node follows the weighted mean of the coupled nodes.
+    /// RBE3: the reference node follows the weighted least-squares rigid
+    /// motion of the coupled nodes, measured at the reference point.
     Distributing,
+    /// RBE3 over a surface: a distributing coupling whose coupled nodes are
+    /// the vertices of a picked surface, each weighted by its share of the
+    /// surface's area — the nodal shares of a uniform pressure. On linear
+    /// faces that is A/3 per corner; on quadratic faces the corners get
+    /// nothing and each edge node A/3, so the coupling grips the edge nodes.
+    /// The coupled solve derives the weights from the boundary faces whose
+    /// corners the coupling names and turns it into a [`Self::Distributing`]
+    /// coupling; [`CouplingConstraints::build`] takes only the latter.
+    DistributingSurface,
     /// RBE2: the coupled nodes follow the reference node rigidly. Bit c of
     /// `dof_mask` ties DOF c (0..2 translations, 3..5 rotations) of every
     /// coupled node. A rotation bit only acts on a coupled node that has
@@ -107,7 +118,8 @@ impl CouplingConstraints {
     /// [`FemError::Coupling`] for an out-of-range or repeated node, too few
     /// coupled nodes, bad weights, a kinematic coupling that ties nothing, or
     /// a distributing patch whose rotation cannot be measured (nodes on one
-    /// line through the reference point); [`FemError::CouplingDofConflict`] for a DOF two couplings
+    /// line, when the reference node has rotations; no extent at all
+    /// otherwise); [`FemError::CouplingDofConflict`] for a DOF two couplings
     /// both eliminate.
     pub fn build(
         points: &[[f64; 3]],
@@ -156,7 +168,15 @@ impl CouplingConstraints {
                     constraints.add_kinematic(points, coupling, dof_mask, has_rotation, &fail)?;
                 }
                 CouplingKind::Distributing => {
-                    constraints.add_distributing(points, coupling, &fail)?;
+                    constraints.add_distributing(points, coupling, has_rotation, &fail)?;
+                }
+                CouplingKind::DistributingSurface => {
+                    return Err(fail(
+                        "its surface weights have not been derived from the mesh: the \
+                         coupled solve turns a surface coupling into a weighted \
+                         distributing one"
+                            .into(),
+                    ));
                 }
                 CouplingKind::RelaxedMpc { relaxation } => {
                     constraints.add_relaxed_mpc(points, coupling, relaxation, &fail)?;
@@ -227,56 +247,90 @@ impl CouplingConstraints {
         &mut self,
         points: &[[f64; 3]],
         coupling: &Coupling,
+        has_rotation: &[bool],
         fail: &impl Fn(String) -> FemError,
     ) -> Result<(), FemError> {
         let weights = patch_weights(coupling, "distributing", fail)?;
         let total: f64 = weights.iter().sum();
         let origin = points[coupling.reference];
+        // Fit the rigid motion about the weighted centroid c, where Σ wᵢ dᵢ = 0
+        // drops the translation out of the least-squares rotation, then carry
+        // it to the reference point R. Fitting about R itself would be off by
+        // the lever arm c − R whenever the point is not at the centroid
+        // (KOF-410): a force there would lose its moment, a moment there would
+        // arrive scaled.
+        let mut centroid = [0.0; 3];
+        for (&node, &weight) in coupling.nodes.iter().zip(&weights) {
+            for (axis, value) in centroid.iter_mut().enumerate() {
+                *value += weight / total * points[node][axis];
+            }
+        }
         let offsets: Vec<[f64; 3]> = coupling
             .nodes
             .iter()
-            .map(|&node| sub(points[node], origin))
+            .map(|&node| sub(points[node], centroid))
             .collect();
-        // S = Σ wᵢ rᵢ and the weighted inertia H = Σ wᵢ (|rᵢ|² I − rᵢ rᵢᵀ).
-        let mut moment = [0.0; 3];
+        // The weighted inertia about the centroid, H = Σ wᵢ (|dᵢ|² I − dᵢ dᵢᵀ).
         let mut inertia = [[0.0; 3]; 3];
         for (offset, &weight) in offsets.iter().zip(&weights) {
             let squared = dot(*offset, *offset);
             for row in 0..3 {
-                moment[row] += weight * offset[row];
                 for column in 0..3 {
                     let identity = if row == column { squared } else { 0.0 };
                     inertia[row][column] += weight * (identity - offset[row] * offset[column]);
                 }
             }
         }
-        let inverse = invert(&inertia).ok_or_else(|| {
-            fail(
-                "the coupled nodes lie on one line through the reference point, so no rotation \
-                 can be measured from them — pick a surface, or make the coupling kinematic"
-                    .into(),
-            )
-        })?;
-        let skew_moment = skew(moment);
+        let inverse = match invert(&inertia) {
+            Some(inverse) => inverse,
+            // A solid node (a gap tie's) has no rotations: only its translation
+            // is tied, and the spin about the patch's line, which the patch
+            // cannot measure, is taken as zero — the least-squares fit of least
+            // norm. A point with rotations could be loaded by a moment about
+            // that line, which the patch could not carry.
+            None if !has_rotation[coupling.reference] => line_pseudo_inverse(&offsets, &weights)
+                .ok_or_else(|| {
+                    fail(format!(
+                        "every coupled node sits at one point, so the patch has no extent to \
+                         follow (reference node {})",
+                        coupling.reference
+                    ))
+                })?,
+            None => {
+                return Err(fail(
+                    "the coupled nodes lie on one line, so no rotation can be measured from \
+                     them — pick a surface, or make the coupling kinematic"
+                        .into(),
+                ))
+            }
+        };
+        // U_R = U_c + Θ × (R − c) = U_c − [R − c]× Θ.
+        let lever = skew(sub(origin, centroid));
         let mut rows = <[Vec<(usize, f64)>; DOFS_PER_NODE]>::default();
         for ((&node, offset), &weight) in coupling.nodes.iter().zip(&offsets).zip(&weights) {
             let share = weight / total;
-            // U_R = Σ (wᵢ/W) uᵢ.
-            for (component, row) in rows.iter_mut().take(3).enumerate() {
-                row.push((DOFS_PER_NODE * node + component, share));
-            }
-            // Θ_R = H⁻¹ · Σ (wᵢ [rᵢ]× − (wᵢ/W) [S]×) uᵢ.
-            let skew_offset = skew(*offset);
-            let mut inner = [[0.0; 3]; 3];
-            for row in 0..3 {
-                for column in 0..3 {
-                    inner[row][column] =
-                        weight * skew_offset[row][column] - share * skew_moment[row][column];
+            // Θ_R = H⁻¹ · Σ wᵢ [dᵢ]× uᵢ.
+            let mut inner = skew(*offset);
+            for line in &mut inner {
+                for value in line.iter_mut() {
+                    *value *= weight;
                 }
             }
-            let map = multiply(&inverse, &inner);
+            let spin = multiply(&inverse, &inner);
+            let carried = multiply(&lever, &spin);
+            for (component, row) in rows.iter_mut().take(3).enumerate() {
+                for (target, &coefficient) in carried[component].iter().enumerate() {
+                    let identity = if target == component { share } else { 0.0 };
+                    let value = identity - coefficient;
+                    // A point at the centroid has no lever arm: keep its rows
+                    // to the plain weighted mean.
+                    if target == component || value != 0.0 {
+                        row.push((DOFS_PER_NODE * node + target, value));
+                    }
+                }
+            }
             for (axis, row) in rows.iter_mut().skip(3).enumerate() {
-                for (component, &coefficient) in map[axis].iter().enumerate() {
+                for (component, &coefficient) in spin[axis].iter().enumerate() {
                     row.push((DOFS_PER_NODE * node + component, coefficient));
                 }
             }
@@ -698,6 +752,37 @@ fn multiply(lhs: &[[f64; 3]; 3], rhs: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
         }
     }
     out
+}
+
+/// Pseudo-inverse of the weighted inertia of a patch on one line, about its
+/// centroid: with the scatter `C = Σ wᵢ dᵢ dᵢᵀ = s·a aᵀ` along the unit
+/// direction a, the inertia is `s (I − a aᵀ)` and its pseudo-inverse
+/// `(I − a aᵀ) / s`. `None` when the patch has no extent (s = 0).
+fn line_pseudo_inverse(offsets: &[[f64; 3]], weights: &[f64]) -> Option<[[f64; 3]; 3]> {
+    let mut scatter = [[0.0; 3]; 3];
+    for (offset, &weight) in offsets.iter().zip(weights) {
+        for row in 0..3 {
+            for column in 0..3 {
+                scatter[row][column] += weight * offset[row] * offset[column];
+            }
+        }
+    }
+    let spread = scatter[0][0] + scatter[1][1] + scatter[2][2];
+    if !(spread.is_finite() && spread > 0.0) {
+        return None;
+    }
+    // The row of the largest diagonal entry is s·a_k·a: the direction, up to sign.
+    let largest = (0..3).max_by(|&lhs, &rhs| scatter[lhs][lhs].total_cmp(&scatter[rhs][rhs]))?;
+    let length = norm(scatter[largest]);
+    let direction = scatter[largest].map(|value| value / length);
+    let mut out = [[0.0; 3]; 3];
+    for (row, line) in out.iter_mut().enumerate() {
+        for (column, value) in line.iter_mut().enumerate() {
+            let identity = if row == column { 1.0 } else { 0.0 };
+            *value = (identity - direction[row] * direction[column]) / spread;
+        }
+    }
+    Some(out)
 }
 
 /// Inverse of a symmetric positive semi-definite 3×3 matrix, or `None` when
