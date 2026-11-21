@@ -47,4 +47,26 @@ describe("a constraint tie between surfaces that share a vertex", () => {
       expect(constraint.masterIds).not.toContain(constraint.slaveId);
     }
   });
+
+  test("counts the nodes the mortar weights leave untied", () => {
+    // The master face covers too little of node 5's multiplier support, so
+    // the mortar weights give it no row: it is reported, not dropped silently.
+    const { constraints, reports } = tieConstraints(nodes, elements, [tie], {
+      kind: "mortar",
+      weights: () =>
+        new Map([
+          [4, { masterIds: [0, 1, 2], weights: [0.5, 0.5, 0], coverage: 1 }],
+        ]),
+    });
+    expect(constraints.map((constraint) => constraint.slaveId)).toEqual([4]);
+    expect(reports[0].nPaired).toBe(1);
+    expect(reports[0].nUncovered).toBe(1);
+  });
+
+  test("leaves nothing uncovered when every node is tied", () => {
+    const { reports } = tieConstraints(nodes, elements, [tie], {
+      kind: "projection",
+    });
+    expect(reports[0].nUncovered).toBe(0);
+  });
 });

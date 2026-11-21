@@ -541,6 +541,66 @@ fn seam_and_tie_couplings() {
     explicit_model_rebuilds_shell_solid_couplings(&model);
 }
 
+/// A tie surface picked partly on a wall that becomes a shell: the vertices
+/// left with no solid pool node are counted on the tie's report, not dropped
+/// silently, and the rest of the tie still couples.
+#[test]
+fn tie_vertices_without_a_pool_node_are_counted() {
+    let mesh = boxes(&[
+        BoxSpec {
+            min: [0.0, 0.0, 0.0],
+            max: [40.0, 20.0, 10.0],
+            cells: [40, 4, 2],
+            body: 1,
+            face_base: 0,
+        },
+        BoxSpec {
+            min: [19.0, 0.0, 10.0],
+            max: [21.0, 20.0, 40.0],
+            cells: [2, 4, 6],
+            body: 2,
+            face_base: 10,
+        },
+        BoxSpec {
+            min: [0.0, 0.0, -12.0],
+            max: [40.0, 20.0, -2.0],
+            cells: [8, 4, 2],
+            body: 3,
+            face_base: 20,
+        },
+    ]);
+    let shells = extract(&mesh, 15.0, Some(vec![2]));
+    let wall_tets = shell_body_tets(&mesh, &shells).expect("covered");
+    let points = mesh.vertices();
+    let on_wall: Vec<usize> = (0..points.len())
+        .filter(|&vertex| points[vertex][2] > 10.0 + 1e-9)
+        .collect();
+    assert!(
+        !on_wall.is_empty(),
+        "the shelled wall has vertices above the block"
+    );
+    let mut vertices_a: Vec<usize> = (0..points.len())
+        .filter(|&vertex| points[vertex][2] == 0.0)
+        .collect();
+    vertices_a.extend(&on_wall);
+    let options = CouplingOptions {
+        ties: vec![TieSurfaces {
+            name: "gap".to_owned(),
+            vertices_a,
+            vertices_b: (0..points.len())
+                .filter(|&vertex| points[vertex][2] == -2.0)
+                .collect(),
+            max_separation: f64::INFINITY,
+        }],
+        ..CouplingOptions::default()
+    };
+    let model = build_coupled_model(&mesh, &shells, &wall_tets, &options).expect("model");
+    let report = &model.tie_reports[0];
+    assert!(report.coupled > 0);
+    assert_eq!(report.unmapped, on_wall.len());
+    assert!(report.problem().is_none());
+}
+
 /// The same model, stored as explicit elements, gets the same shell/solid
 /// couplings (no tie in this call, so only those remain).
 fn explicit_model_rebuilds_shell_solid_couplings(model: &kofem_shellize::CoupledModel) {
@@ -613,6 +673,7 @@ fn tie_problem_sentences() {
         coupled: 0,
         partners: 0,
         shared: 0,
+        unmapped: 0,
         gap: 0.0,
         drop: Some(drop),
     };
