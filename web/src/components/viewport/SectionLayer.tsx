@@ -89,6 +89,7 @@ export function SectionLayer({ topology, section }: SectionLayerProps) {
         section,
       );
       // The legend's scale: manual limits if set, else the whole model's range.
+      // eslint-disable-next-line kofem/no-silent-fallback -- a null legend range is the Auto setting: the scale spans the model's results
       const scale = legendRange !== null ? legendRange : { min, max };
       return {
         ...geometry,

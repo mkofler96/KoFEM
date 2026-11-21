@@ -478,7 +478,7 @@ export async function solveCoupledSolidInRust(
       Uint32Array.from(coupling.solid),
       Int32Array.from(coupling.mpc),
       Uint32Array.from(coupling.dof_mask),
-      // eslint-disable-next-line kofem/no-silent-fallback -- weights are optional in the coupling set; absent means equal weights, as for solve_coupled
+      // Weights are optional in the coupling set; empty means equal weights, as for solve_coupled.
       coupling.weights ?? new Float64Array(0),
       coupling.relaxation,
     );

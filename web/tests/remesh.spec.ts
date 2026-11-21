@@ -45,7 +45,12 @@ test("re-mesh succeeds after the worker is reset (issue #250)", async ({
       }
     ).__kofem;
     const u8 = new Uint8Array(bytes);
-    const opts = { bytes: u8, maxElementSize: 20, minElementSize: 2 };
+    const opts = {
+      bytes: u8,
+      format: "step",
+      maxElementSize: 20,
+      minElementSize: 2,
+    };
 
     // Import + first mesh.
     await k.sendToWorker("parse_step", { bytes: u8 });
@@ -170,4 +175,46 @@ test("re-meshing without the original STEP shows an actionable banner (issue #25
   await expect(page.getByTestId("meshing-error")).toContainText(
     "original STEP file is no longer available",
   );
+});
+
+// KOF-432: a mesh request missing its max element size, or STEP/IGES bytes
+// missing their format, is refused naming the field. It used to mesh at 20 mm
+// and read the bytes as STEP.
+test("volume_mesh without a max element size or a format names what is missing", async ({
+  page,
+}) => {
+  await page.goto("/app/", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(
+    () => !!(window as Window & { __kofem?: unknown }).__kofem,
+  );
+
+  const stepBytes = Array.from(fs.readFileSync(STEP_FILE));
+  const messages = await page.evaluate(async (bytes) => {
+    const k = (
+      window as Window & {
+        __kofem: {
+          sendToWorker: (t: string, p: unknown) => Promise<unknown>;
+          resetWorker: () => void;
+        };
+      }
+    ).__kofem;
+    const u8 = new Uint8Array(bytes);
+    const failure = async (payload: unknown) => {
+      // A fresh worker has no geometry, so the bytes are read again.
+      k.resetWorker();
+      try {
+        await k.sendToWorker("volume_mesh", payload);
+        return null;
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
+    };
+    return {
+      size: await failure({ bytes: u8, format: "step", minElementSize: 2 }),
+      format: await failure({ bytes: u8, maxElementSize: 20 }),
+    };
+  }, stepBytes);
+
+  expect(messages.size).toMatch(/max_element_size/);
+  expect(messages.format).toMatch(/format/);
 });

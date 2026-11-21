@@ -112,6 +112,8 @@ export function TieSection({
       const faceEntries = toFaceEntries(
         allPickedFaces,
         tieFaces(targetTieGroup, pickTieSide).length,
+        // A tie joins surfaces: its picks are faces.
+        "face",
       );
       for (const faceEntry of faceEntries)
         addFaceToTieGroup(targetTieGroup.id, pickTieSide, faceEntry);
@@ -137,8 +139,8 @@ export function TieSection({
       searchDistance = parsed;
     }
     createTieGroup(
-      toFaceEntries(facesA, 0),
-      toFaceEntries(facesB, 0),
+      toFaceEntries(facesA, 0, "face"),
+      toFaceEntries(facesB, 0, "face"),
       extent,
       searchDistance,
       method,
@@ -193,7 +195,11 @@ export function TieSection({
             ))}
           </div>
 
-          <PickedFaceList faces={allPickedFaces} onRemove={removePickedFace} />
+          <PickedFaceList
+            faces={allPickedFaces}
+            onRemove={removePickedFace}
+            geometry="face"
+          />
 
           {!targetTieGroup && (
             <>

@@ -392,7 +392,13 @@ function flushCoverage(): void {
 }
 
 function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
-  const { bytes, format = "step", maxElementSize = 20.0 } = payload;
+  const { bytes, maxElementSize } = payload;
+  // Every mesh request states its size (KOF-432): a missing one is an error,
+  // not a 20 mm mesh nobody asked for.
+  if (maxElementSize === undefined)
+    throw new Error(
+      "volume_mesh: max_element_size is missing from the request",
+    );
 
   // Floor the curvature-driven local element size at maxElementSize/10 by
   // default.  Without a floor, Netgen refines every fillet to ~radius/2
@@ -422,6 +428,11 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     if (!bytes)
       throw new Error(
         "volume_mesh: no STEP geometry is loaded and no STEP bytes were provided to reload it — re-import the STEP file before meshing",
+      );
+    const { format } = payload;
+    if (format === undefined)
+      throw new Error(
+        "volume_mesh: the format of the geometry bytes (step or iges) is missing from the request",
       );
     self.postMessage({
       id,

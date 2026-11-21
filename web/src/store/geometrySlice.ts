@@ -707,14 +707,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (
-    bytes,
-    tessellation,
-    bodyCount,
-    bodySources,
-    piecesAs = "bodies",
-  ) =>
+  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources, piecesAs) =>
     set((s) => {
+      // Where the pieces of one solid go is the edit's to say (KOF-432).
+      if (bodySources && piecesAs === undefined)
+        throw new Error(
+          "Geometry edit: body sources given without saying whether the pieces of a solid become regions or bodies",
+        );
       if (!s.stepBytes || !s.stepSurface)
         throw new Error(
           "Cannot apply a geometry edit: no geometry is loaded to edit",

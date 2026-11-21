@@ -85,6 +85,7 @@ export function surfaceLoadRefusal(
         ? `Load "${load.name}"`
         : `Surface load ${index + 1}`;
     const stale =
+      // eslint-disable-next-line kofem/no-silent-fallback -- counted only for loads rebuilt from groups (boundaryRebuild); a load built from faces directly has no selection that can have gone stale
       load.unmatchedSelections !== undefined ? load.unmatchedSelections : 0;
     if (stale > 0 || load.faces.length === 0) {
       const counted =
