@@ -15,14 +15,19 @@ const memory = new Map<string, string>();
 Object.assign(globalThis, {
   localStorage: {
     getItem: (k: string) => memory.get(k) ?? null,
-    setItem: (k: string, v: string) => void memory.set(k, v),
-    removeItem: (k: string) => void memory.delete(k),
+    setItem: (k: string, v: string) => {
+      memory.set(k, v);
+    },
+    removeItem: (k: string) => {
+      memory.delete(k);
+    },
   },
   window: Object.assign(globalThis, {
     matchMedia: () => ({
       matches: false,
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      // The theme never changes in a test, so nobody needs to hear of it.
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
     }),
   }),
 });
