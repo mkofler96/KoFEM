@@ -115,11 +115,17 @@ export default {
       point become, at node ${tex("i")},</p>
     ${equation("\\mathbf{f}_i = \\frac{w_i}{W} \\mathbf{F} + w_i \\left(\\mathbf{H}^{−1} \\mathbf{M}_c\\right) × \\mathbf{d}_i, \\quad \\mathbf{M}_c = \\mathbf{M} + (\\mathbf{x}_R − \\mathbf{x}_c) × \\mathbf{F}.", "Each node takes its weight's share of the force, plus a share of the moment about the centroid that grows linearly with its offset; that moment includes the force's lever arm from the point to the centroid")}
     <p>These nodal forces are statically equivalent to the load on the point,
-      lever arm included. With equal weights the force is shared equally per
-      node, which is a uniform pressure only on a uniform mesh, and a moment
-      is shared in proportion to each node's distance from the centroid. The
-      fit needs nodes that do not all lie on one line: a straight row of
-      nodes cannot measure a spin about itself.</p>
+      lever arm included. The weights decide how the force is shared. KoFEM
+      weights each node by its share of the surface's area: the nodal shares
+      of a uniform pressure, ${tex("A/3")} per corner of a linear triangle and
+      ${tex("A/3")} per edge node of a quadratic one, whose corners take none.
+      A force at the centroid is then exactly a uniform pressure on the
+      surface, whatever the mesh. With equal weights per node it would be a
+      uniform pressure only on a uniform mesh: a node on the edge of the
+      surface, with half an inner node's area, would be pushed twice as hard
+      for its area, and on quadratic faces the load would sit on the corners
+      alone. The fit needs nodes that do not all lie on one line: a straight
+      row of nodes cannot measure a spin about itself.</p>
 
     <h2 id="screw">Example: a screw head on a plate</h2>
     <p>A steel plate ${2 * screw.model.halfWidth} × ${2 * screw.model.halfWidth}
@@ -160,21 +166,22 @@ export default {
     <p>The kinematic coupling presses the ring in as a flat, rigid punch.
       The plate is stiffer under it — the point moves
       ${percent(kin.pointDeflection, dist.pointDeflection).replace("−", "")}
-      less — and the stress collects where the rigid punch ends, at the edge
-      of the ring. The distributing coupling lets the ring dish, deepest at
-      the hole, where the plate has no material beside it to carry the load.
-      Its equal nodal shares push the nodes there as hard as the outer ones,
-      so its stress peaks at the hole edge. A real head lies between the two:
-      stiffer than the plate, but not rigid, and in contact rather than
-      bonded.</p>
+      less — and the stress collects where the rigid punch ends, at the
+      ring's outer edge: ${fixed(kin.peakNearHead, 0)} MPa, the highest of
+      the two. The distributing coupling presses the ring with what amounts
+      to a uniform pressure. The ring dishes, deepest at the hole, where the
+      plate has no material beside it to carry the load, and the stress is
+      highest at the hole, ${fixed(dist.peakNearHead, 0)} MPa, with no peak
+      at the ring's edge. A real head lies between the two: stiffer than the
+      plate, but not rigid, and in contact rather than bonded.</p>
     <p>Cut each model through the screw axis and look square on to the cut,
       as in the drawing above, to see the stress inside the plate. Both use
       one colour scale. With the kinematic coupling the stress peaks at the
       ring's outer edge, where the rigid ring meets the free top face. With
-      the distributing coupling it peaks at the hole edge.</p>
+      the distributing coupling it is highest at the hole.</p>
     <div class="viewer-pair">
       ${solvedViewer("coupling-screw-kinematic", { caption: "The ring is held rigid; the stress peaks at its outer edge, where the rigid ring meets the free surface." })}
-      ${solvedViewer("coupling-screw-distributing", { caption: "The ring deforms with the plate; the stress peaks at the hole edge." })}
+      ${solvedViewer("coupling-screw-distributing", { caption: "The ring deforms with the plate; the stress is highest at the hole, with no peak at the ring's edge." })}
     </div>
 
     <h2 id="cantilever">Example: a coupled bar end</h2>
@@ -256,24 +263,29 @@ export default {
       starts at the centre of the selection; for a cylindrical selection the
       ends of its axis are offered too, and any position can be typed in
       (${codeSource("web/src/lib/coupling.ts", 321, "reference point options")}).
-      All coupled nodes have equal weights.</p>
+      The solve weights each coupled node of a distributing coupling by its
+      share of the picked faces' area
+      (${codeSource("crates/kofem-fem/src/surface.rs", 216, "area shares")}),
+      on a quadratic mesh on the faces' edge nodes
+      (${codeSource("crates/kofem-fem/src/coupled_static.rs", 985, "surface couplings")}).</p>
     <p>The Rust solver writes each coupling as dependent degrees of freedom:
-      ${codeSource("crates/kofem-fem/src/coupling.rs", 178, "kinematic")}
+      ${codeSource("crates/kofem-fem/src/coupling.rs", 195, "kinematic")}
       couplings make the coupled nodes dependent;
-      ${codeSource("crates/kofem-fem/src/coupling.rs", 229, "distributing")}
+      ${codeSource("crates/kofem-fem/src/coupling.rs", 246, "distributing")}
       couplings make the point dependent, fitted about the centroid and
       carried to the point as above
-      (${codeSource("crates/kofem-fem/src/coupling.rs", 290, "the carry")}). A
+      (${codeSource("crates/kofem-fem/src/coupling.rs", 307, "the carry")}). A
       distributing coupling whose nodes lie on one line is refused when its
       point has rotations; a gap tie's node, which only needs its
       translation, follows the part of the motion such a row can measure
-      (${codeSource("crates/kofem-fem/src/coupled_static.rs", 442, "rotation flags")}).
+      (${codeSource("crates/kofem-fem/src/coupled_static.rs", 449, "rotation flags")}).
       The coupled solid solve then reduces the system as described in
       <a href="/theory/shells/solid-coupling/#reduction">solid–shell
       coupling</a>.</p>
     <p>Ties across a gap use distributing couplings too: each node of one
       surface is the point of a coupling to the patch of the other surface
-      around it (${codeSource("crates/kofem-shellize/src/ties.rs", 153, "tie couplings")}).
+      around it (${codeSource("crates/kofem-shellize/src/ties.rs", 153, "tie couplings")}),
+      with equal weights: the patch is a few nearby nodes, not a surface.
       Its node is never at the patch's centroid, so carrying the fitted motion
       to the node, rotation included, is what makes such a tie transmit
       bending.</p>
@@ -285,9 +297,10 @@ export default {
       <li>Both couplings are bonded and linear: no contact, no gap opening,
         no friction, no preload. A screw's clamping force is a load on the
         point here, not a bolt pretension.</li>
-      <li>Weights are equal per node. On a graded mesh a distributing
-        coupling then loads the fine region more per area than the coarse
-        one.</li>
+      <li>A distributing coupling weights its nodes by the area of the whole
+        faces it grips. A picked node that belongs to no such face carries no
+        area and takes no load; a selection of nodes with no whole face
+        between them is refused.</li>
       <li>Stresses within about one characteristic size of the coupled
         surface reflect the coupling, not the part it replaces.</li>
       <li>A distributing point can be loaded but not supported; support a

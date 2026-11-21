@@ -873,11 +873,17 @@
       point become, at node <span class="math-nowrap"><math><mi>i</mi></math>,</span></p>
     <div class="equation" tabindex="0" role="region" aria-label="Each node takes its weight's share of the force, plus a share of the moment about the centroid that grows linearly with its offset; that moment includes the force's lever arm from the point to the centroid; scroll horizontally if needed"><math display="block"><msub><mi mathvariant="bold" class="math-bold">f</mi><mi>i</mi></msub><mo>=</mo><mfrac><mrow><msub><mi>w</mi><mi>i</mi></msub></mrow><mrow><mi>W</mi></mrow></mfrac><mi mathvariant="bold" class="math-bold">F</mi><mo>+</mo><msub><mi>w</mi><mi>i</mi></msub><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><msup><mi mathvariant="bold" class="math-bold">H</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><msub><mi mathvariant="bold" class="math-bold">M</mi><mi>c</mi></msub><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>×</mo><msub><mi mathvariant="bold" class="math-bold">d</mi><mi>i</mi></msub><mo>,</mo><mspace width="1em"/><msub><mi mathvariant="bold" class="math-bold">M</mi><mi>c</mi></msub><mo>=</mo><mi mathvariant="bold" class="math-bold">M</mi><mo>+</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi mathvariant="bold" class="math-bold">x</mi><mi>R</mi></msub><mo>−</mo><msub><mi mathvariant="bold" class="math-bold">x</mi><mi>c</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>×</mo><mi mathvariant="bold" class="math-bold">F</mi><mo lspace="0" rspace="0">.</mo></math></div>
     <p>These nodal forces are statically equivalent to the load on the point,
-      lever arm included. With equal weights the force is shared equally per
-      node, which is a uniform pressure only on a uniform mesh, and a moment
-      is shared in proportion to each node's distance from the centroid. The
-      fit needs nodes that do not all lie on one line: a straight row of
-      nodes cannot measure a spin about itself.</p>
+      lever arm included. The weights decide how the force is shared. KoFEM
+      weights each node by its share of the surface's area: the nodal shares
+      of a uniform pressure, <math><mi>A</mi><mo lspace="0" rspace="0">/</mo><mn>3</mn></math> per corner of a linear triangle and
+      <math><mi>A</mi><mo lspace="0" rspace="0">/</mo><mn>3</mn></math> per edge node of a quadratic one, whose corners take none.
+      A force at the centroid is then exactly a uniform pressure on the
+      surface, whatever the mesh. With equal weights per node it would be a
+      uniform pressure only on a uniform mesh: a node on the edge of the
+      surface, with half an inner node's area, would be pushed twice as hard
+      for its area, and on quadratic faces the load would sit on the corners
+      alone. The fit needs nodes that do not all lie on one line: a straight
+      row of nodes cannot measure a spin about itself.</p>
 
     <h2 id="screw">Example: a screw head on a plate</h2>
     <p>A steel plate 32 × 32
@@ -899,38 +905,39 @@
     </figure>
     <div class="table-wrap" tabindex="0" role="region" aria-label="The screw head on the plate, by coupling; scroll horizontally if needed"><table>
     <caption>The screw head on the plate, by coupling</caption><thead><tr><th scope="col"></th><th scope="col">Kinematic (RBE2)</th><th scope="col">Distributing (RBE3)</th></tr></thead>
-    <tbody><tr><th scope="row">Deflection of the point</th><td>0.58 µm</td><td>0.77 µm</td></tr><tr><th scope="row">Ring's departure from a rigid motion</th><td>0 µm</td><td>0.79 µm</td></tr><tr><th scope="row">Peak von Mises stress within r = 16 mm</th><td>46 MPa</td><td>74 MPa</td></tr></tbody></table></div>
+    <tbody><tr><th scope="row">Deflection of the point</th><td>0.58 µm</td><td>0.68 µm</td></tr><tr><th scope="row">Ring's departure from a rigid motion</th><td>0 µm</td><td>0.40 µm</td></tr><tr><th scope="row">Peak von Mises stress within r = 16 mm</th><td>46 MPa</td><td>34 MPa</td></tr></tbody></table></div>
     <p>The kinematic coupling presses the ring in as a flat, rigid punch.
       The plate is stiffer under it — the point moves
-      25.0 %
-      less — and the stress collects where the rigid punch ends, at the edge
-      of the ring. The distributing coupling lets the ring dish, deepest at
-      the hole, where the plate has no material beside it to carry the load.
-      Its equal nodal shares push the nodes there as hard as the outer ones,
-      so its stress peaks at the hole edge. A real head lies between the two:
-      stiffer than the plate, but not rigid, and in contact rather than
-      bonded.</p>
+      15.1 %
+      less — and the stress collects where the rigid punch ends, at the
+      ring's outer edge: 46 MPa, the highest of
+      the two. The distributing coupling presses the ring with what amounts
+      to a uniform pressure. The ring dishes, deepest at the hole, where the
+      plate has no material beside it to carry the load, and the stress is
+      highest at the hole, 34 MPa, with no peak
+      at the ring's edge. A real head lies between the two: stiffer than the
+      plate, but not rigid, and in contact rather than bonded.</p>
     <p>Cut each model through the screw axis and look square on to the cut,
       as in the drawing above, to see the stress inside the plate. Both use
       one colour scale. With the kinematic coupling the stress peaks at the
       ring's outer edge, where the rigid ring meets the free top face. With
-      the distributing coupling it peaks at the hole edge.</p>
+      the distributing coupling it is highest at the hole.</p>
     <div class="viewer-pair">
       <figure class="result-viewer" data-viewer="/theory/viewers/coupling-screw-kinematic.json" id="viewer-coupling-screw-kinematic">
       <div class="viewer-stage">
         <img src="/theory/viewers/coupling-screw-kinematic.png" width="900" height="288" alt="Screw head, kinematic (RBE2): von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>74.3 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>46 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
-      <figcaption><strong>Screw head, kinematic (RBE2).</strong> The ring is held rigid; the stress peaks at its outer edge, where the rigid ring meets the free surface. Displacements enlarged 500×.</figcaption>
+      <figcaption><strong>Screw head, kinematic (RBE2).</strong> The ring is held rigid; the stress peaks at its outer edge, where the rigid ring meets the free surface. Displacements enlarged 1000×.</figcaption>
     </figure>
       <figure class="result-viewer" data-viewer="/theory/viewers/coupling-screw-distributing.json" id="viewer-coupling-screw-distributing">
       <div class="viewer-stage">
         <img src="/theory/viewers/coupling-screw-distributing.png" width="900" height="288" alt="Screw head, distributing (RBE3): von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>74.3 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>46 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
-      <figcaption><strong>Screw head, distributing (RBE3).</strong> The ring deforms with the plate; the stress peaks at the hole edge. Displacements enlarged 500×.</figcaption>
+      <figcaption><strong>Screw head, distributing (RBE3).</strong> The ring deforms with the plate; the stress is highest at the hole, with no peak at the ring's edge. Displacements enlarged 1000×.</figcaption>
     </figure>
     </div>
 
@@ -944,9 +951,9 @@
       100 N·m.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="The cantilever's tip, by coupling, against beam and torsion theory; scroll horizontally if needed"><table>
     <caption>The cantilever's tip, by coupling, against beam and torsion theory</caption><thead><tr><th scope="col"></th><th scope="col">Kinematic (RBE2)</th><th scope="col">Distributing (RBE3)</th><th scope="col">Theory</th></tr></thead>
-    <tbody><tr><th scope="row">Tip deflection under the force</th><td>0.9524 mm</td><td>0.9526 mm</td><td>0.9524 mm (bending), 0.9598 mm (with shear)</td></tr><tr><th scope="row">Twist of the tip face</th><td>10.946 mrad (−0.6 %)</td><td>11.167 mrad (+1.5 %)</td><td>11.007 mrad (Saint-Venant)</td></tr><tr><th scope="row">Twist 20 mm from the tip</th><td>9.862 mrad</td><td>9.862 mrad</td><td></td></tr></tbody></table></div>
+    <tbody><tr><th scope="row">Tip deflection under the force</th><td>0.9524 mm</td><td>0.9525 mm</td><td>0.9524 mm (bending), 0.9598 mm (with shear)</td></tr><tr><th scope="row">Twist of the tip face</th><td>10.946 mrad (−0.6 %)</td><td>10.998 mrad (−0.1 %)</td><td>11.007 mrad (Saint-Venant)</td></tr><tr><th scope="row">Twist 20 mm from the tip</th><td>9.862 mrad</td><td>9.862 mrad</td><td></td></tr></tbody></table></div>
     <p>Under the force the two couplings give the same deflection, within
-      0.01 %:
+      0.00 %:
       the tip face of a bent bar barely deforms, so holding it rigid changes
       almost nothing. The clamped root, which also stops the section's
       lateral contraction, keeps both a little below the beam value with
@@ -959,11 +966,11 @@
       actually zero. One section depth from the tip both bars twist alike,
       and along the bar their largest stresses lie on one curve:</p>
     <figure class="theory-figure full" id="figure-coupling-torsion-decay">
-      <a href="/theory/figures/coupling-torsion-decay.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/coupling-torsion-decay.svg" type="image/svg+xml" /><img src="/theory/figures/coupling-torsion-decay.png" width="640" height="325" alt="The largest element von Mises stress in each five-millimetre slice of a square bar in torsion, plotted against the distance from the clamped root. The kinematic and distributing curves lie on top of each other along the bar and part only in the last ten millimetres before the coupled tip, where the distributing coupling's stress rises well above the Saint-Venant value and the kinematic coupling's falls below it." loading="lazy" decoding="async" /></picture></a>
+      <a href="/theory/figures/coupling-torsion-decay.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/coupling-torsion-decay.svg" type="image/svg+xml" /><img src="/theory/figures/coupling-torsion-decay.png" width="640" height="325" alt="The largest element von Mises stress in each five-millimetre slice of a square bar in torsion, plotted against the distance from the clamped root. The kinematic and distributing curves lie on top of each other along the bar and part only in the last ten millimetres before the coupled tip, where the distributing coupling's stress rises above the value along the bar and the kinematic coupling's falls below it." loading="lazy" decoding="async" /></picture></a>
       <figcaption>The largest element stress in each 5 mm slice of the twisted bar. The element values are taken at element centres, a little inside the surface where Saint-Venant's maximum sits.</figcaption>
     </figure>
     <p>In the last slice the distributing coupling reaches
-      166 MPa and the kinematic one
+      98 MPa and the kinematic one
       82 MPa; along the middle of the bar
       both read 93 MPa. This is Saint-Venant's
       principle: two statically equivalent loads differ only within about one
@@ -972,7 +979,7 @@
       <figure class="result-viewer" data-viewer="/theory/viewers/coupling-torsion-kinematic.json" id="viewer-coupling-torsion-kinematic">
       <div class="viewer-stage">
         <img src="/theory/viewers/coupling-torsion-kinematic.png" width="900" height="309" alt="Bar in torsion, kinematic (RBE2): von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>126 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>92.1 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
       <figcaption><strong>Bar in torsion, kinematic (RBE2).</strong> The tip face is held rigid. Displacements enlarged 100×.</figcaption>
@@ -980,7 +987,7 @@
       <figure class="result-viewer" data-viewer="/theory/viewers/coupling-torsion-distributing.json" id="viewer-coupling-torsion-distributing">
       <div class="viewer-stage">
         <img src="/theory/viewers/coupling-torsion-distributing.png" width="900" height="309" alt="Bar in torsion, distributing (RBE3): von Mises stress on the solved model, cut by a section plane, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>126 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>92.1 MPa</span><span class="viewer-bar"></span><span>0 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
       <figcaption><strong>Bar in torsion, distributing (RBE3).</strong> The tip face warps; the corners take the torque. Displacements enlarged 100×.</figcaption>
@@ -1009,24 +1016,29 @@
       starts at the centre of the selection; for a cylindrical selection the
       ends of its axis are offered too, and any position can be typed in
       (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/web/src/lib/coupling.ts#L321">reference point options</a>).
-      All coupled nodes have equal weights.</p>
+      The solve weights each coupled node of a distributing coupling by its
+      share of the picked faces' area
+      (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/surface.rs#L216">area shares</a>),
+      on a quadratic mesh on the faces' edge nodes
+      (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupled_static.rs#L985">surface couplings</a>).</p>
     <p>The Rust solver writes each coupling as dependent degrees of freedom:
-      <a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupling.rs#L178">kinematic</a>
+      <a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupling.rs#L195">kinematic</a>
       couplings make the coupled nodes dependent;
-      <a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupling.rs#L229">distributing</a>
+      <a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupling.rs#L246">distributing</a>
       couplings make the point dependent, fitted about the centroid and
       carried to the point as above
-      (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupling.rs#L290">the carry</a>). A
+      (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupling.rs#L307">the carry</a>). A
       distributing coupling whose nodes lie on one line is refused when its
       point has rotations; a gap tie's node, which only needs its
       translation, follows the part of the motion such a row can measure
-      (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupled_static.rs#L442">rotation flags</a>).
+      (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-fem/src/coupled_static.rs#L449">rotation flags</a>).
       The coupled solid solve then reduces the system as described in
       <a href="/theory/shells/solid-coupling/#reduction">solid–shell
       coupling</a>.</p>
     <p>Ties across a gap use distributing couplings too: each node of one
       surface is the point of a coupling to the patch of the other surface
-      around it (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-shellize/src/ties.rs#L153">tie couplings</a>).
+      around it (<a href="https://github.com/mkofler96/KoFEM/blob/e30299bcb482db14591d3abafecc7bbe7de18967/crates/kofem-shellize/src/ties.rs#L153">tie couplings</a>),
+      with equal weights: the patch is a few nearby nodes, not a surface.
       Its node is never at the patch's centroid, so carrying the fitted motion
       to the node, rotation included, is what makes such a tie transmit
       bending.</p>
@@ -1038,9 +1050,10 @@
       <li>Both couplings are bonded and linear: no contact, no gap opening,
         no friction, no preload. A screw's clamping force is a load on the
         point here, not a bolt pretension.</li>
-      <li>Weights are equal per node. On a graded mesh a distributing
-        coupling then loads the fine region more per area than the coarse
-        one.</li>
+      <li>A distributing coupling weights its nodes by the area of the whole
+        faces it grips. A picked node that belongs to no such face carries no
+        area and takes no load; a selection of nodes with no whole face
+        between them is refused.</li>
       <li>Stresses within about one characteristic size of the coupled
         surface reflect the coupling, not the part it replaces.</li>
       <li>A distributing point can be loaded but not supported; support a

@@ -460,7 +460,7 @@ export default [
   {
     id: "coupling-torsion-decay",
     title: "Largest stress along a bar twisted through a coupled end face",
-    alt: "The largest element von Mises stress in each five-millimetre slice of a square bar in torsion, plotted against the distance from the clamped root. The kinematic and distributing curves lie on top of each other along the bar and part only in the last ten millimetres before the coupled tip, where the distributing coupling's stress rises well above the Saint-Venant value and the kinematic coupling's falls below it.",
+    alt: "The largest element von Mises stress in each five-millimetre slice of a square bar in torsion, plotted against the distance from the clamped root. The kinematic and distributing curves lie on top of each other along the bar and part only in the last ten millimetres before the coupled tip, where the distributing coupling's stress rises above the value along the bar and the kinematic coupling's falls below it.",
     width: 640,
     height: 325,
     body: torsionDecay(),

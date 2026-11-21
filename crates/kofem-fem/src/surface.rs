@@ -32,6 +32,8 @@
 //!   MFEM, with the order-4 rule: 3² points);
 //! * overlapping loads simply add up.
 
+use std::collections::BTreeMap;
+
 use crate::element::{quad_face_shape, square_rule};
 use crate::error::FemError;
 use crate::mesh::{
@@ -202,6 +204,28 @@ impl BoundaryFaces {
         let doubled = cross(sub(second, first), sub(third, first));
         let inward = dot(doubled, sub(points[face.opposite as usize], first)) > 0.0;
         doubled.map(|component| if inward { -0.5 } else { 0.5 } * component)
+    }
+
+    /// Each node's share of the area of the boundary triangles whose three
+    /// corners all satisfy `grips`: A/3 per loaded node of each triangle (its
+    /// corners on a linear mesh, its edge nodes on a quadratic one — the
+    /// nodal shares of a uniform pressure, see the module notes), summed per
+    /// node and sorted by node. Quadrilaterals take no part: couplings, which
+    /// ask for these shares, grip tetrahedra only.
+    #[must_use]
+    pub fn area_shares(&self, mesh: &TetMesh, grips: impl Fn(u32) -> bool) -> Vec<(usize, f64)> {
+        let mut shares: BTreeMap<usize, f64> = BTreeMap::new();
+        for (index, face) in self.triangles.iter().enumerate() {
+            if !face.corners.iter().all(|&corner| grips(corner)) {
+                continue;
+            }
+            let vector = self.area_vector(mesh, index);
+            let third = dot(vector, vector).sqrt() / 3.0;
+            for node in face.loaded {
+                *shares.entry(node as usize).or_insert(0.0) += third;
+            }
+        }
+        shares.into_iter().collect()
     }
 
     /// Area of boundary quadrilateral `index`, integrated with the 3²-point

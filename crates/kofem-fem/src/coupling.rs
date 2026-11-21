@@ -46,6 +46,15 @@ pub enum CouplingKind {
     /// RBE3: the reference node follows the weighted least-squares rigid
     /// motion of the coupled nodes, measured at the reference point.
     Distributing,
+    /// RBE3 over a surface: a distributing coupling whose coupled nodes are
+    /// the vertices of a picked surface, each weighted by its share of the
+    /// surface's area — the nodal shares of a uniform pressure. On linear
+    /// faces that is A/3 per corner; on quadratic faces the corners get
+    /// nothing and each edge node A/3, so the coupling grips the edge nodes.
+    /// The coupled solve derives the weights from the boundary faces whose
+    /// corners the coupling names and turns it into a [`Self::Distributing`]
+    /// coupling; [`CouplingConstraints::build`] takes only the latter.
+    DistributingSurface,
     /// RBE2: the coupled nodes follow the reference node rigidly. Bit c of
     /// `dof_mask` ties DOF c (0..2 translations, 3..5 rotations) of every
     /// coupled node. A rotation bit only acts on a coupled node that has
@@ -160,6 +169,14 @@ impl CouplingConstraints {
                 }
                 CouplingKind::Distributing => {
                     constraints.add_distributing(points, coupling, has_rotation, &fail)?;
+                }
+                CouplingKind::DistributingSurface => {
+                    return Err(fail(
+                        "its surface weights have not been derived from the mesh: the \
+                         coupled solve turns a surface coupling into a weighted \
+                         distributing one"
+                            .into(),
+                    ));
                 }
                 CouplingKind::RelaxedMpc { relaxation } => {
                     constraints.add_relaxed_mpc(points, coupling, relaxation, &fail)?;

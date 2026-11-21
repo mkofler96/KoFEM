@@ -61,10 +61,15 @@ export interface CouplingDefinition {
 // All six DOFs — what a coupling with no explicit mask ties.
 export const ALL_DOFS = [0, 1, 2, 3, 4, 5];
 
-// Engine `mpc` kind code (solve_coupled): 0 distributing RBE3, 2 kinematic RBE2.
-// 1 is the shell-to-solid relaxed MPC, which is not a user-declared coupling.
+// Coupling kind code of the coupled solve (kofem-wasm `Couplings`): a
+// user-declared coupling grips a picked surface, so it is 2 kinematic RBE2 or
+// 4 distributing RBE3 over a surface, whose nodes the solve weights by their
+// share of the surface's area (the nodal shares of a uniform pressure). 0 is
+// the plain distributing coupling with equal weights, 1 the shell-to-solid
+// relaxed MPC and 3 the shell footprint; the solve's own connections use
+// those.
 export function couplingMpcCode(kind: CouplingKind): number {
-  return kind === "kinematic" ? 2 : 0;
+  return kind === "kinematic" ? 2 : 4;
 }
 
 // Bit c of the engine's dof_mask selects DOF c of every coupled node.

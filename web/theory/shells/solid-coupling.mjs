@@ -123,7 +123,7 @@ export default {
         [
           "Distributing, RBE3 style (kind 0)",
           "The reference follows the patch’s weighted least-squares rigid motion, fitted about the patch centroid and carried to the reference point, rotation included.",
-          'Allows patch deformation; the dependent reference can be loaded, but cannot be directly fixed or driven. Automatic partner sets use equal weights. See <a href="/theory/numerical-methods/couplings/">kinematic and distributing couplings</a>.',
+          'Allows patch deformation; the dependent reference can be loaded, but cannot be directly fixed or driven. A picked surface weights its nodes by area; automatic partner sets use equal weights. See <a href="/theory/numerical-methods/couplings/">kinematic and distributing couplings</a>.',
         ],
         [
           "Kinematic, RBE2 style (kind 2)",
@@ -276,13 +276,13 @@ export default {
     <ol class="refs">
       <li>${source("crates/kofem-shellize/src/transition.rs", 79, "three-thickness retained section")},
         ${source("crates/kofem-shellize/src/footprint.rs", 185, "physical footprint detection")},
-        ${codeSource("crates/kofem-fem/src/coupling.rs", 384, "footprint equations")},
-        ${codeSource("crates/kofem-fem/src/coupling.rs", 540, "chain resolution")} and
-        ${codeSource("crates/kofem-fem/src/coupled_static.rs", 851, "constraint reduction")}
+        ${codeSource("crates/kofem-fem/src/coupling.rs", 438, "footprint equations")},
+        ${codeSource("crates/kofem-fem/src/coupling.rs", 594, "chain resolution")} and
+        ${codeSource("crates/kofem-fem/src/coupled_static.rs", 657, "constraint reduction")}
         in the Rust mixed solve, driven by
         ${codeSource("web/src/lib/solve/coupledRust.ts", 1, "coupledRust.ts")}.</li>
-      <li>${codeSource("crates/kofem-fem/src/coupling.rs", 292, "relaxed seam MPC")},
-        ${codeSource("crates/kofem-fem/src/coupling.rs", 226, "distributing equations")},
+      <li>${codeSource("crates/kofem-fem/src/coupling.rs", 346, "relaxed seam MPC")},
+        ${codeSource("crates/kofem-fem/src/coupling.rs", 246, "distributing equations")},
         ${source("crates/kofem-shellize/src/ties.rs", 153, "coupled surface ties")},
         ${source("web/src/lib/solve/solid.ts", 101, "solid tie welding")},
         ${source("web/src/lib/solve/coupled.ts", 39, "app relaxation setting")},
