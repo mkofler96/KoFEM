@@ -183,6 +183,36 @@ impl BoundaryFaces {
         self.triangles.is_empty() && self.quads.is_empty()
     }
 
+    /// Visit every higher-order node on the boundary of a quadratic mesh, once
+    /// per boundary face it sits on, as `visit(face corners, node, between)`:
+    /// each edge node of a face with the edge's two ends, and each hex face
+    /// node with the face's four corners. `between` are the vertices whose
+    /// mean the node lies at on a straight-sided face. Nothing on a linear
+    /// mesh.
+    pub(crate) fn for_each_higher_order_node(
+        &self,
+        mesh: &TetMesh,
+        mut visit: impl FnMut(&[u32], u32, &[u32]),
+    ) {
+        if mesh.order() == ElementOrder::Linear {
+            return;
+        }
+        for face in &self.triangles {
+            let corners = face.corners;
+            for (&node, [first, second]) in face.loaded.iter().zip([[0, 1], [1, 2], [0, 2]]) {
+                visit(&corners, node, &[corners[first], corners[second]]);
+            }
+        }
+        for face in &self.quads {
+            let corners = face.corners;
+            for side in 0..4 {
+                let ends = [corners[side], corners[(side + 1) % 4]];
+                visit(&corners, face.nodes[4 + side], &ends);
+            }
+            visit(&corners, face.nodes[8], &corners);
+        }
+    }
+
     fn find_triangle(&self, vertices: [u32; 3]) -> Option<usize> {
         let key = sorted(vertices);
         self.triangles

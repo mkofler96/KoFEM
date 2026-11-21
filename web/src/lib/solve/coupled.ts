@@ -151,6 +151,10 @@ export function reportTieCouplings(
         ? `Tie "${report.name}": already joined through ${report.nShared} shared node(s)`
         : `Tie "${report.name}": ${report.nCoupled} distributing coupling(s) onto ${report.nPartners} partner node(s) across a ${report.gap.toFixed(4)} mm gap${report.nShared > 0 ? `, ${report.nShared} node(s) already shared` : ""}`,
     );
+    if (report.nUnmapped > 0)
+      log(
+        `Tie "${report.name}": ${report.nUnmapped} picked node(s) left untied — they are not in the solved model, for example on a wall idealised as shell`,
+      );
   }
 }
 

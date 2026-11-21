@@ -1133,8 +1133,9 @@
         (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/web/src/hooks/useSolver.ts#L58">useSolver.ts</a>).</li>
       <li><strong>Constraint collection.</strong> Fixed, per-component and
         prescribed DOFs are collected
-        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L353">amg.ts</a>), extended to order-2 edge nodes
-        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/static_solve.rs#L195">edge extension</a>) and
+        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L353">amg.ts</a>), extended to the order-2 edge
+        and face nodes of every boundary face whose corners are all held
+        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/static_solve.rs#L195">boundary-node extension</a>) and
         checked for conflicts
         (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/constraints.rs#L17">conflict check</a>).</li>
       <li><strong>Elimination.</strong> Prescribed columns move to the

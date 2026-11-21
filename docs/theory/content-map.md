@@ -77,8 +77,8 @@ regression fixture. It exercises material stiffness, a fixed support, a face
 force converted to work-equivalent traction, assembly, solve, and displacement
 recovery. The additional `examples/validation/axial-bar-study.mjs` checks unsmoothed
 centre von Mises values in the fixed 400–600 mm middle region against 100 MPa.
-It adds three order-1 meshes and one diagnostic Q2 hex row; the latter leaves
-support face-centre DOFs free and is not an equivalent-clamp order study.
+It adds three order-1 meshes and one Q2 hex row with the same clamp, face-centre
+DOFs included; one order-2 mesh does not establish an order of convergence.
 This does **not** verify general stress recovery, bending, complete quadratic
 constraints, shells, coupling, or optimization; those claims need their own
 examples. Full-precision evidence lives in `web/public/theory/axial-bar.json`.

@@ -75,7 +75,8 @@ export interface MortarRow {
 
 // Dual mortar weights of the slave faces' nodes over the master faces within
 // `limit` (Infinity for the whole surface), by slave node id. A node the master
-// surface covers less than half of has no row and is not tied.
+// surface covers less than half of has no row and is not tied; the tie's report
+// counts it (ConstraintTieReport.nUncovered).
 export type MortarWeights = (
   slaveFaces: MortarFace[],
   masterFaces: MortarFace[],
@@ -87,6 +88,14 @@ export type MortarWeights = (
 // the projection, whose links end where each node projects.
 export type TieWeighting =
   { kind: "projection" } | { kind: "mortar"; weights: MortarWeights };
+
+// What one constraint tie did. `nUncovered` counts the slave nodes within
+// reach that the mortar weights left untied, because the master surface covers
+// less than half of their multiplier support (the ragged edge of a partial
+// contact); the solve says so rather than dropping them silently.
+export interface ConstraintTieReport extends TieReport {
+  nUncovered: number;
+}
 
 interface Triangle {
   ids: [number, number, number];
@@ -383,9 +392,9 @@ export function tieConstraints(
   ties: TieDefinition[],
   weighting: TieWeighting,
   taken: ReadonlySet<number> = new Set(),
-): { constraints: TieConstraint[]; reports: TieReport[] } {
+): { constraints: TieConstraint[]; reports: ConstraintTieReport[] } {
   const constraints: TieConstraint[] = [];
-  const reports: TieReport[] = [];
+  const reports: ConstraintTieReport[] = [];
   if (ties.length === 0) return { constraints, reports };
 
   const nodeById = new Map<number, TieNode>();
@@ -406,11 +415,12 @@ export function tieConstraints(
     };
 
     const { a, b, nShared } = tieSides(tie, bodyOf);
-    const report: TieReport = {
+    const report: ConstraintTieReport = {
       name: tie.name,
       nPaired: 0,
       nShared,
       maxDistance: 0,
+      nUncovered: 0,
     };
     reports.push(report);
     if (a.length === 0 || b.length === 0) continue;
@@ -462,7 +472,10 @@ export function tieConstraints(
         // A node at the ragged edge of a partial contact, whose multiplier
         // support the master surface barely covers, is not tied.
         const row = mortar.get(slaveId);
-        if (!row) continue;
+        if (!row) {
+          report.nUncovered++;
+          continue;
+        }
         masterIds = row.masterIds;
         weights = row.weights;
       } else {

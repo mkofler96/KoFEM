@@ -467,6 +467,51 @@ fn vertex_supports_reach_the_edge_nodes_in_a_coupled_quadratic_solve() {
     }
 }
 
+/// A wall one cell thick, every vertex held: the coupled solve, like the
+/// uncoupled one, holds the edge nodes of the supported faces only, so the
+/// edge nodes through the wall's interior stay free and carry their load.
+#[test]
+fn vertex_supports_skip_interior_edge_nodes_in_a_coupled_quadratic_solve() {
+    let size = [LENGTH, LENGTH, HEIGHT / 4.0];
+    let wall = box_mesh([2, 2, 1], size, steel());
+    let mesh = wall
+        .mesh
+        .with_order(ElementOrder::Quadratic)
+        .expect("valid mesh");
+    let model = Model {
+        stiffness: assemble_stiffness(&mesh),
+        mesh,
+    };
+    let on_boundary = |point: [f64; 3]| {
+        (0..3).any(|axis| point[axis].abs() < 1e-9 || (point[axis] - size[axis]).abs() < 1e-9)
+    };
+    let fixed: Vec<(usize, f64)> = (0..model.mesh.vertex_count())
+        .flat_map(|node| (0..3).map(move |axis| (six(node, axis), 0.0)))
+        .collect();
+    let interior: Vec<usize> = (model.mesh.vertex_count()..model.mesh.node_count())
+        .filter(|&node| !on_boundary(model.point(node)))
+        .collect();
+    assert!(
+        !interior.is_empty(),
+        "the wall has edges through its interior"
+    );
+    let mut forces = vec![0.0; model.coupled_dof_count()];
+    for &node in &interior {
+        forces[six(node, 2)] = 1.0;
+    }
+    let coupled = model
+        .coupled(&[], &fixed, &forces)
+        .expect("the held wall solves");
+    for node in model.mesh.vertex_count()..model.mesh.node_count() {
+        let motion = coupled.dofs[six(node, 2)];
+        if interior.contains(&node) {
+            assert!(motion > 0.0, "interior edge node {node} is held: {motion}");
+        } else {
+            assert!(motion == 0.0, "boundary edge node {node} moved: {motion}");
+        }
+    }
+}
+
 #[test]
 fn an_edge_node_between_two_coupled_vertices_follows_their_mean() {
     // Bars [0, L] and [L, 2L] meshed apart, joined node to node in u_x: each

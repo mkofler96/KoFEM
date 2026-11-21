@@ -197,8 +197,8 @@ fn linear_field_is_reproduced_exactly_from_vertex_conditions() {
 /// quadratic and needs no body force, so with every boundary node prescribed
 /// (edge nodes included, at their exact — not mean — values) the interior is
 /// reproduced exactly and the centre stress is `σ_xx = E·κ·z`. Interior edges
-/// that join two boundary vertices would take the mean by the edge-node rule,
-/// so they are prescribed at their exact values too.
+/// that join two boundary vertices lie on no boundary face, so the support
+/// rule leaves them free and they solve to the exact field too.
 #[test]
 fn pure_bending_field_is_reproduced_exactly() {
     let size = [3.0, 2.0, 2.0];
@@ -214,14 +214,8 @@ fn pure_bending_field_is_reproduced_exactly() {
     };
     let mut dofs = Vec::new();
     let mut values = Vec::new();
-    let vertex_on_boundary =
-        |vertex: u32| on_boundary(mesh.vertices()[vertex as usize], built.size);
     for (node, point) in mesh.node_coordinates().iter().enumerate() {
-        let joins_boundary = node >= mesh.vertex_count() && {
-            let [first, second] = mesh.edges()[node - mesh.vertex_count()];
-            vertex_on_boundary(first) && vertex_on_boundary(second)
-        };
-        if on_boundary(*point, built.size) || joins_boundary {
+        if on_boundary(*point, built.size) {
             for (component, value) in field(*point).into_iter().enumerate() {
                 dofs.push((3 * node + component) as u32);
                 values.push(value);
@@ -424,6 +418,41 @@ fn assert_clamp_holds_its_edge_nodes(mesh: &TetMesh, displacements: &[f64]) {
         }
     }
     assert!(clamped_edges > 0 && leaving_edges > 0);
+}
+
+/// A wall one cell thick with every vertex held, as a support on both of its
+/// faces holds it: the edges through the wall's interior join two held
+/// vertices but lie on no supported face, so their edge nodes stay free and
+/// carry a load; the edge nodes on the boundary are held.
+#[test]
+fn a_support_holds_the_edge_nodes_of_its_faces_only() {
+    let size = [2.0, 2.0, 0.25];
+    let built = quadratic([2, 2, 1], size);
+    let mesh = &built.mesh;
+    let dofs: Vec<u32> = (0..3 * mesh.vertex_count()).map(|dof| dof as u32).collect();
+    let values = vec![0.0; dofs.len()];
+    let interior: Vec<usize> = (mesh.vertex_count()..mesh.node_count())
+        .filter(|&node| !on_boundary(mesh.node_coordinates()[node], size))
+        .collect();
+    assert!(
+        !interior.is_empty(),
+        "the wall has edges through its interior"
+    );
+    let mut forces = vec![0.0; mesh.dof_count()];
+    for &node in &interior {
+        forces[3 * node + 2] = 1.0;
+    }
+    let stiffness = assemble_stiffness(mesh);
+    let solution =
+        solve_static(mesh, &stiffness, &dofs, &values, &forces, SETTINGS, GS).expect("solves");
+    for node in mesh.vertex_count()..mesh.node_count() {
+        let motion = solution.displacements[3 * node + 2];
+        if interior.contains(&node) {
+            assert!(motion > 0.0, "interior edge node {node} is held: {motion}");
+        } else {
+            assert!(motion == 0.0, "boundary edge node {node} moved: {motion}");
+        }
+    }
 }
 
 /// A prescribed displacement on both ends of an edge carries over to its edge

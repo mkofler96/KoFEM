@@ -243,8 +243,8 @@ impl ElasticModel {
     }
 
     /// Solve K·u = f with the given DOFs (3·node + component) prescribed. On
-    /// a quadratic model, conditions on both ends of an edge extend to its
-    /// edge node, as in the MFEM engine.
+    /// a quadratic model, conditions on every corner of a boundary face extend
+    /// to the face's edge and face nodes (`kofem_fem::prepare_static`).
     ///
     /// # Errors
     /// Missing assembly, malformed constraints or forces, or a solve that

@@ -439,7 +439,8 @@ impl From<&CouplingSet> for CouplingArrays {
     }
 }
 
-/// What each tie connection contributed, one entry per connection. A drop is
+/// What each tie connection contributed, one entry per connection, with the
+/// count of picked vertices it could not reach (no node in the pool). A drop is
 /// encoded as its kind (`""` when the tie coupled), its surface side (`""`
 /// unless the kind is `no-pool-nodes`) and three numbers whose meaning follows
 /// the kind: out-of-reach (searched, 0, 0), beyond-search-distance (gap,
@@ -451,6 +452,7 @@ struct TieReports {
     coupled: Vec<u32>,
     partners: Vec<u32>,
     shared: Vec<u32>,
+    unmapped: Vec<u32>,
     gap: Vec<f64>,
     drop_kind: Vec<String>,
     drop_side: Vec<String>,
@@ -495,6 +497,7 @@ impl From<&[TieCouplingReport]> for TieReports {
             wire.coupled.push(index_u32(report.coupled));
             wire.partners.push(index_u32(report.partners));
             wire.shared.push(index_u32(report.shared));
+            wire.unmapped.push(index_u32(report.unmapped));
             wire.gap.push(report.gap);
             wire.drop_kind.push(kind.to_owned());
             wire.drop_side.push(side.to_owned());
@@ -558,6 +561,12 @@ macro_rules! coupling_and_tie_getters {
             #[must_use]
             pub fn tie_shared(&self) -> Vec<u32> {
                 self.ties.shared.clone()
+            }
+            /// Picked vertices of each tie with no node in the solved model.
+            #[wasm_bindgen(getter, js_name = tieUnmapped)]
+            #[must_use]
+            pub fn tie_unmapped(&self) -> Vec<u32> {
+                self.ties.unmapped.clone()
             }
             #[wasm_bindgen(getter, js_name = tieGap)]
             #[must_use]
