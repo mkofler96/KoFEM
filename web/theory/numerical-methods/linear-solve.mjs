@@ -268,7 +268,7 @@ export default {
     <h2 id="implementation">KoFEM implementation</h2>
     <p>KoFEM’s solid solve runs in its Rust finite-element module.</p>
     <ul>
-      <li>${codeSource("crates/kofem-fem/src/static_solve.rs", 102, "prepare_static")}
+      <li>${codeSource("crates/kofem-fem/src/static_solve.rs", 104, "prepare_static")}
         eliminates the constraints and builds the chosen preconditioner;
         ${codeSource("crates/kofem-fem/src/amg.rs", 4, "the multigrid")} and
         ${codeSource("crates/kofem-fem/src/amg.rs", 87, "the Gauss–Seidel sweep")}

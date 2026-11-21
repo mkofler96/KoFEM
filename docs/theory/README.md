@@ -115,9 +115,8 @@ exact source revision in the evidence. Do not widen a band just to make a change
 number pass. Tolerances belong to the measured quantity and reference model;
 the bar’s 2% extension band accommodates a fully clamped 3D end absent from the
 1D formula. Its 0.5% stress band applies to every unsmoothed centre sample in
-the fixed 400–600 mm region. The Q2 hex row is diagnostic because the existing
-constraint extension leaves face-centre DOFs free; it is not evidence for order
-convergence with the same clamp.
+the fixed 400–600 mm region. The Q2 hex row solves the same clamp, face-centre
+DOFs included; one order-2 mesh is not evidence for an order of convergence.
 
 From the repository root, with the engine (for meshing the public case) and
 the Rust module built:

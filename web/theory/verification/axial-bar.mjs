@@ -101,7 +101,7 @@ export default {
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar mesh and order comparison; scroll horizontally if needed">
       <table><caption>Executed WebAssembly solves; stress error is the worst sample in the middle region</caption>
         <thead><tr><th scope="col">Grid</th><th scope="col">Order</th><th scope="col">DOFs</th><th scope="col">Extension<br />(mm)</th><th scope="col">Error<br />(%)</th><th scope="col">Mean von Mises<br />(MPa)</th><th scope="col">Worst stress<br />error (%)</th></tr></thead>
-        <tbody>${runs.map((run) => `<tr><th scope="row">${run.grid.join(" × ")}${run === baseline ? "<br /><small>baseline</small>" : ""}</th><td>${run.order}${run.order === 2 ? "<br /><small>diagnostic</small>" : ""}</td><td>${run.dofs}</td><td>${number(run.displacementMm, 7)}</td><td>${number(run.displacementErrorPct, 4)}</td><td>${number(run.stressMeanMpa, 8)}</td><td>${number(run.stressWorstErrorPct, 4)}</td></tr>`).join("")}</tbody>
+        <tbody>${runs.map((run) => `<tr><th scope="row">${run.grid.join(" × ")}${run === baseline ? "<br /><small>baseline</small>" : ""}</th><td>${run.order}${run.order === 2 ? "<br /><small>same clamp</small>" : ""}</td><td>${run.dofs}</td><td>${number(run.displacementMm, 7)}</td><td>${number(run.displacementErrorPct, 4)}</td><td>${number(run.stressMeanMpa, 8)}</td><td>${number(run.stressWorstErrorPct, 4)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
     <p>Displacement error is ${tex("100(δ_h-δ)/δ")}; stress error is the largest
@@ -125,13 +125,12 @@ export default {
       contraction and differs from the analytical bar, so refinement alone
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
-    <p><strong>The order-2 hex row is diagnostic.</strong> Currently,
-      ${codeSource("crates/kofem-fem/src/static_solve.rs", 86, "Dirichlet extension")}
-      constrains vertices and edge nodes but leaves Q2 face-centre nodes free.
-      That support differs from a fully clamped face. Its extension therefore
-      cannot establish order convergence for the same boundary-value problem,
-      even though both readouts fall inside the stated bands. The app’s
-      tetrahedral meshes do not have Q2 face-centre DOFs.</p>
+    <p><strong>The order-2 hex row solves the same clamp.</strong> The
+      ${codeSource("crates/kofem-fem/src/static_solve.rs", 87, "Dirichlet extension")}
+      holds every node of the fully fixed end face: its vertices, edge nodes
+      and Q2 face-centre nodes. Its extension on the coarsest grid lands next
+      to the finest order-1 mesh. One order-2 mesh still does not establish an
+      order of convergence.</p>
     <p>The middle-region agreement checks a uniform stress invariant. It does
       not verify stress sign, individual tensor components, clamp peaks,
       material interfaces, curved geometry, bending, shells or coupling.
