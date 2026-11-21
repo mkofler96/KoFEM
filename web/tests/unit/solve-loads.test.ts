@@ -163,14 +163,14 @@ test("surface loads superpose with point forces and reference-point moments afte
     force: [0, 0, -12],
     faces: [[100, 101, 104]],
   };
+  const pool = (nodeId: number) => (nodeId === 104 ? 0 : poolOf(nodeId));
   const mapped = coupledLoads(
     [
       { nodeId: 100, dof: 2, value: 5 },
       { nodeId: 101, dof: 5, value: 7 },
-      { nodeId: 104, dof: 5, value: 99 },
     ],
     [load, load],
-    (nodeId) => (nodeId === 104 ? 0 : poolOf(nodeId)),
+    pool,
     (pi) => pi === 1,
     posOf,
   );
@@ -183,7 +183,16 @@ test("surface loads superpose with point forces and reference-point moments afte
   expect(sumAt(2)).toBe(-11);
   expect(sumAt(8)).toBe(-8);
   expect(sumAt(11)).toBe(7);
-  expect(sumAt(5)).toBe(0);
+  // A moment on a node without rotations is refused, not dropped (KOF-411).
+  expect(() =>
+    coupledLoads(
+      [{ nodeId: 104, dof: 5, value: 99 }],
+      [load],
+      pool,
+      (pi) => pi === 1,
+      posOf,
+    ),
+  ).toThrow(/Node 104 carries a moment \(DOF 5 = 99\)/);
 });
 
 for (const [label, load, error] of [

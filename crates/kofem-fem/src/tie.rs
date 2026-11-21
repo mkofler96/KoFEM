@@ -46,7 +46,7 @@ use crate::coupling::{Coupling, CouplingKind, DOFS_PER_NODE};
 use crate::error::FemError;
 use crate::mesh::{local_edge, local_hex_edge, ElementOrder, TetMesh, FACES_OF_HEX};
 use crate::sparse::CsrMatrix;
-use crate::static_solve::{extend_to_edge_nodes, PreconditionerChoice, PreparedStatic};
+use crate::static_solve::{extend_to_boundary_nodes, PreconditionerChoice, PreparedStatic};
 
 /// Shape functions sum to one exactly; this only absorbs the round-off of
 /// computing them in the caller.
@@ -795,7 +795,7 @@ pub fn prepare_tied_static(
     let ties = node_ties(mesh, ties)?;
     let mut dofs = fixed_dofs.to_vec();
     let mut values = fixed_values.to_vec();
-    extend_to_edge_nodes(mesh, fixed_dofs, fixed_values, &mut dofs, &mut values);
+    extend_to_boundary_nodes(mesh, 3, fixed_dofs, fixed_values, &mut dofs, &mut values);
     let mut prescribed = vec![false; dof_count];
     for &dof in &dofs {
         prescribed[dof as usize] = true;

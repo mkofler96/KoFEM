@@ -6,6 +6,8 @@
 // than solve a different model; the panels show the same words before the run.
 
 import type { TieDefinition } from "../tie.js";
+import type { Element, SurfaceLoad } from "../../workers/solverTypes.js";
+import { faceKey, loadableFaceKeys } from "../../store/boundaryRebuild.js";
 
 // `tie "Tie1"`, or `2 ties ("Tie1", "Pin")`.
 function namedTies(ties: TieDefinition[]): string {
@@ -59,4 +61,54 @@ export function shellCouplingRefusal(couplingCount: number): string {
 // solvers that once took these left the engine (KOF-309).
 export function solidModelRefusal(reason: string): string {
   return `The solver cannot solve this model: ${reason}.`;
+}
+
+// A surface load the solve cannot apply in full (KOF-411): a selection that
+// spans no face of the mesh, or a face that is not on the mesh boundary (nor
+// a shell facet or a shell edge). Applying the rest would put a total force
+// on a smaller area than the user picked, or drop the load, while the result
+// looks plausible. Every solve path and the optimizer route through here, so
+// none can apply such a load (routeSolve, routeTopOpt).
+//
+// Checked on the store payload rather than in the Rust module: the Solve
+// panel runs this routing on the main thread, which does not load the Rust
+// module, and the shell paths build no solid boundary in Rust at all.
+export function surfaceLoadRefusal(
+  elements: readonly Element[],
+  surfaceLoads: readonly SurfaceLoad[] | undefined,
+): string | null {
+  if (!surfaceLoads || surfaceLoads.length === 0) return null;
+  const loadable = loadableFaceKeys(elements);
+  for (const [index, load] of surfaceLoads.entries()) {
+    const name =
+      load.name !== undefined
+        ? `Load "${load.name}"`
+        : `Surface load ${index + 1}`;
+    const stale =
+      load.unmatchedSelections !== undefined ? load.unmatchedSelections : 0;
+    if (stale > 0 || load.faces.length === 0) {
+      const counted =
+        stale === 1
+          ? "1 of its selections matches"
+          : `${stale} of its selections match`;
+      const what =
+        load.faces.length === 0
+          ? "so it would apply no load at all"
+          : "so its total would act on the other selections alone";
+      return (
+        `${name}: ${stale > 0 ? counted : "its selection matches"} no face of the ` +
+        `current mesh, ${what}. Re-pick the load on faces of the mesh.`
+      );
+    }
+    const off = load.faces.filter(
+      (face) => !loadable.has(faceKey(face)),
+    ).length;
+    if (off > 0)
+      return (
+        `${name}: ${off} of its ${load.faces.length} faces ${off === 1 ? "is" : "are"} ` +
+        "not on the mesh boundary, so the rest would carry the whole load. Re-pick " +
+        "the load on faces of the mesh."
+      );
+  }
+  return null;
 }

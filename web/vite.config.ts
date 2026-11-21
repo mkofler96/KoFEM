@@ -57,9 +57,10 @@ const STATIC_PAGES = [
 // (web/Dockerfile).
 const GALLERY_SITE = htmlEntry("../examples/gallery/site/");
 
-// three.js for the Theory Guide's result viewers (public/theory/viewer.js),
-// served from the installed package rather than a CDN: an import map on those
-// pages maps "three" to /vendor/three/. The app bundles its own copy.
+// three.js for the result viewers of the Theory Guide and the example pages
+// (public/theory/viewer.js), served from the installed package rather than a
+// CDN: an import map on those pages maps "three" to /vendor/three/. The app
+// bundles its own copy.
 const THREE_VENDOR: Record<string, string> = {
   "three.module.min.js": htmlEntry(
     "./node_modules/three/build/three.module.min.js",
@@ -96,6 +97,8 @@ const GALLERY_TYPES: Record<string, string> = {
   ".step": "application/octet-stream",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  // <id>.result.json, the page's interactive 3D view.
+  ".json": "application/json",
 };
 
 // Where an address of the retired /validation/ pages now lives, or null for

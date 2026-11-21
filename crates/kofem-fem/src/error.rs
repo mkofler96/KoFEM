@@ -85,10 +85,15 @@ pub enum FemError {
     #[error("CG settings are invalid: {reason}")]
     InvalidSettings { reason: &'static str },
     #[error(
-        "surface load {load}: none of the {faces} selected face(s) is on the mesh boundary, \
-         so the load would apply no force at all — a stale face selection after a remesh?"
+        "surface load {load}: {unmatched} of the {selected} selected face(s) are not on the \
+         mesh boundary, so they would carry no load and the rest would carry it all — a \
+         stale face selection after a remesh?"
     )]
-    SurfaceLoadUnmatched { load: usize, faces: usize },
+    SurfaceLoadUnmatched {
+        load: usize,
+        unmatched: usize,
+        selected: usize,
+    },
     #[error(
         "surface load {load}: the selected faces have a total area of {area}, so a total \
          force cannot be spread over them"
@@ -111,6 +116,8 @@ pub enum FemError {
     CouplingInput { reason: String },
     #[error("tie constraints: {reason}")]
     Tie { reason: String },
+    #[error("rigid-body check: {reason}")]
+    RigidBodyInput { reason: String },
     #[error(
         "node {node} DOF {component} is eliminated by two couplings — a DOF can be eliminated \
          by only one constraint. Make one of them distributing, or pick surfaces that do not \

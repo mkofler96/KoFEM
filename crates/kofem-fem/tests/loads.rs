@@ -72,7 +72,7 @@ fn pressure_pushes_along_the_inward_normal() {
             &mut forces,
         )
         .expect("applies");
-    assert_eq!(report.unmatched, 0);
+    assert_eq!(report.matched, side(&built, 0, built.size[0]).len());
     assert!(close(resultant(&forces), [-10.0, 0.0, 0.0]));
     // The bottom (z = 0) has outward normal −z and area 4·2.
     let mut bottom = vec![0.0; forces.len()];
@@ -121,16 +121,13 @@ fn total_force_and_traction_have_the_right_resultant() {
 }
 
 #[test]
-fn duplicates_count_once_and_interior_faces_are_reported() {
+fn duplicates_count_once() {
     let built = box_mesh([2, 1, 1], [2.0, 1.0, 1.0], steel());
     let boundary = BoundaryFaces::new(&built.mesh);
     let mut end = side(&built, 0, 2.0);
     let first = end[0];
     // The same face again, listed in another order.
     end.push([first[2], first[0], first[1]]);
-    // An interior face: the plane x = 1 between the two cubes.
-    let interior = side(&built, 0, 1.0);
-    end.push(interior[0]);
     let mut forces = vec![0.0; 3 * built.vertices.len()];
     let report = boundary
         .apply(
@@ -143,8 +140,42 @@ fn duplicates_count_once_and_interior_faces_are_reported() {
         )
         .expect("applies");
     assert_eq!(report.matched, side(&built, 0, 2.0).len());
-    assert_eq!(report.unmatched, 1);
     assert!(close(resultant(&forces), [6.0, 0.0, 0.0]));
+}
+
+/// A selected face off the boundary (interior, or stale after a remesh) is
+/// refused, not skipped: skipping it would spread a total force over the
+/// faces that did match, a smaller area than the user picked (KOF-411).
+#[test]
+fn faces_off_the_boundary_are_refused() {
+    let built = box_mesh([2, 1, 1], [2.0, 1.0, 1.0], steel());
+    let boundary = BoundaryFaces::new(&built.mesh);
+    let mut end = side(&built, 0, 2.0);
+    // An interior face: the plane x = 1 between the two cubes.
+    let interior = side(&built, 0, 1.0);
+    end.push(interior[0]);
+    let mut forces = vec![0.0; 3 * built.vertices.len()];
+    assert_eq!(
+        boundary
+            .apply(
+                &built.mesh,
+                2,
+                &end,
+                &[],
+                SurfaceLoadKind::Force([6.0, 0.0, 0.0]),
+                &mut forces,
+            )
+            .err(),
+        Some(FemError::SurfaceLoadUnmatched {
+            load: 2,
+            unmatched: 1,
+            selected: end.len(),
+        })
+    );
+    assert!(
+        forces.iter().all(|&value| value == 0.0),
+        "a refused load adds no force"
+    );
 
     assert_eq!(
         boundary
@@ -159,7 +190,8 @@ fn duplicates_count_once_and_interior_faces_are_reported() {
             .err(),
         Some(FemError::SurfaceLoadUnmatched {
             load: 3,
-            faces: interior.len()
+            unmatched: interior.len(),
+            selected: interior.len(),
         })
     );
 }

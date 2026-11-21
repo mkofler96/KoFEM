@@ -58,6 +58,14 @@ const maxDifference = (lhs, rhs) => {
   return { peak, relative: difference / peak };
 };
 
+// How far an order-2 solve may differ from the stored MFEM one (KOF-414).
+// MFEM extended a support to every edge node between two held vertices, those
+// through the interior too, and to no hex face node. Rust holds the edge and
+// face nodes of the supported faces only, so the two fields differ near the
+// supports by a few per cent (more in the stress of an element on a clamped
+// hex face); the crate tests pin the rule itself.
+const ORDER_2_SUPPORT_RULE = { motion: 0.05, vonMises: 0.1 };
+
 // Mesh the wall bracket at `maxElementSize` (mm) and build the store model on
 // it: the same bodies, supports and loads at any mesh size.
 async function bracketModel(maxElementSize) {
@@ -372,6 +380,8 @@ describe("wall bracket: Rust AMG against MFEM", () => {
           elements: [
             { id: 1, type: "CTRIA3", nodeIds: [1, 2, 3], propertyId: 1 },
           ],
+          // The solid model's loaded faces are not on this facet (KOF-411).
+          surfaceLoads: [],
         }),
       ).toBe("incomplete-cholesky");
     });
@@ -411,6 +421,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
 
   // Both solvers add the edge nodes themselves and extend the supports to them;
   // the prescribed displacement, roller and both surface loads all reach them.
+  // They differ in which edge nodes a support holds (ORDER_2_SUPPORT_RULE).
   // On a coarser mesh, since MFEM's Gauss–Seidel CG is slow at order 2.
   describe("quadratic elements: the same model at order 2", () => {
     let mfemQuadratic = null;
@@ -456,7 +467,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       );
     });
 
-    test("displacements agree with MFEM", () => {
+    test("displacements agree with MFEM up to the support rule", () => {
       const difference = maxDifference(
         mfemQuadratic.displacements,
         amgQuadratic.displacements,
@@ -464,10 +475,10 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       expect(
         difference.relative,
         `order 2: displacements differ by ${difference.relative} relative`,
-      ).toBeLessThan(1e-5);
+      ).toBeLessThan(ORDER_2_SUPPORT_RULE.motion);
     });
 
-    test("von Mises stresses agree with MFEM", () => {
+    test("von Mises stresses agree with MFEM up to the support rule", () => {
       const difference = maxDifference(
         mfemQuadratic.von_mises,
         amgQuadratic.vonMises,
@@ -475,7 +486,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       expect(
         difference.relative,
         `order 2: von Mises stresses differ by ${difference.relative} relative`,
-      ).toBeLessThan(1e-4);
+      ).toBeLessThan(ORDER_2_SUPPORT_RULE.vonMises);
     });
   });
 
@@ -524,24 +535,16 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     });
   });
 
-  test("a surface load selecting only interior or stale faces is refused, as in MFEM", async () => {
-    const loaded = model.surfaceLoads[0].faces;
-    let refusal = "";
+  // MFEM refused a load none of whose faces is on the boundary, and skipped
+  // the faces off it otherwise, spreading a total force over the rest. Rust
+  // refuses both (KOF-411).
+  const refusalOf = async (faces) => {
     try {
       await solveSolidInRust(
         fem,
         {
           ...model,
-          surfaceLoads: [
-            {
-              type: "pressure",
-              faces: [model.elements[0].nodeIds.slice(0, 3)].filter(
-                (face) =>
-                  !loaded.some((candidate) => candidate.join() === face.join()),
-              ),
-              pressure: 1,
-            },
-          ],
+          surfaceLoads: [{ type: "force", faces, force: [0, 0, -100] }],
         },
         1,
         "amg",
@@ -552,11 +555,45 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         ignoreProgress,
       );
     } catch (error) {
-      refusal = String(error);
+      return String(error);
     }
-    // The first tet's first face is interior on almost every mesh; if it happens
-    // to be on the boundary the load is simply applied, which is also correct.
-    if (refusal !== "") expect(refusal).toMatch(/no force at all/);
+    return "";
+  };
+  // An interior face: one of the first tet's faces shared with another tet.
+  // A function, not a value: the model is loaded in beforeAll.
+  const interiorFace = () => {
+    const faceKey = (face) => [...face].sort((a, b) => a - b).join();
+    const owners = new Map();
+    for (const element of model.elements)
+      for (const face of [
+        [0, 1, 2],
+        [0, 1, 3],
+        [0, 2, 3],
+        [1, 2, 3],
+      ]) {
+        const key = faceKey(face.map((corner) => element.nodeIds[corner]));
+        owners.set(key, (owners.get(key) ?? 0) + 1);
+      }
+    const interior = [0, 1, 2, 3]
+      .map((skip) => model.elements[0].nodeIds.filter((_, at) => at !== skip))
+      .find((face) => owners.get(faceKey(face)) === 2);
+    expect(interior).toBeDefined();
+    return interior;
+  };
+
+  test("a surface load selecting only interior faces is refused", async () => {
+    expect(await refusalOf([interiorFace()])).toMatch(
+      /surface load 0: 1 of the 1 selected face\(s\) are not on the mesh boundary/,
+    );
+  });
+
+  test("a surface load with one interior face among boundary faces is refused, not concentrated", async () => {
+    const loaded = model.surfaceLoads[0].faces;
+    expect(await refusalOf([...loaded, interiorFace()])).toMatch(
+      new RegExp(
+        `surface load 0: 1 of the ${loaded.length + 1} selected face\\(s\\) are not on the mesh boundary`,
+      ),
+    );
   });
 
   // A budget of 5 iterations runs out long before convergence while the residual
@@ -645,6 +682,15 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     ["CHEXA + CTETRA beam", true],
   ])("%s", (_name, tetRoot) => {
     const store = beamModel(tetRoot);
+    // Whether each element, in solve order (tets first, then hexes), has a
+    // node on the clamp x = 0.
+    const xOf = new Map(store.nodes.map((node) => [node.id, node.x]));
+    const clamped = [
+      ...store.elements.filter((element) => element.type === "CTETRA"),
+      ...store.elements.filter((element) => element.type === "CHEXA"),
+    ].map((element) =>
+      element.nodeIds.some((id) => Math.abs(xOf.get(id)) < 1e-9),
+    );
 
     test("AMG accepts hexahedra", () => {
       expect(
@@ -670,6 +716,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       );
     });
 
+    // Order 2 up to the support rule (ORDER_2_SUPPORT_RULE).
     test.each([1, 2])("order %i agrees with MFEM", async (order) => {
       const beamVid = buildVertexIndexer(store.nodes);
       const beamInputs = buildSolidEngineInputs(store, beamVid);
@@ -702,18 +749,27 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         reference.von_mises.length,
       );
       const motion = maxDifference(reference.displacements, rust.displacements);
-      const vonMises = maxDifference(reference.von_mises, rust.vonMises);
+      // At order 2 the clamped hexes' centre stress changes most (MFEM's free
+      // face centre relieved them), so compare the elements off the clamp.
+      const offClamp = (values) =>
+        order === 2 ? values.filter((_, index) => !clamped[index]) : values;
+      const vonMises = maxDifference(
+        offClamp(reference.von_mises),
+        offClamp(rust.vonMises),
+      );
       expect(beamLog.join("\n"), "the solve log names the hexahedra").toMatch(
         /hexahedra/,
       );
+      const bound =
+        order === 2 ? ORDER_2_SUPPORT_RULE : { motion: 1e-5, vonMises: 1e-4 };
       expect(
         motion.relative,
         `displacements differ by ${motion.relative} relative`,
-      ).toBeLessThan(1e-5);
+      ).toBeLessThan(bound.motion);
       expect(
         vonMises.relative,
         `von Mises differs by ${vonMises.relative} relative`,
-      ).toBeLessThan(1e-4);
+      ).toBeLessThan(bound.vonMises);
     });
   });
 });

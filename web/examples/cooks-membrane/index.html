@@ -46,7 +46,7 @@
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png",
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-13",
+            "dateModified": "2026-11-21",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -776,6 +776,9 @@
           document.documentElement.setAttribute("data-theme", "dark");
       } catch (e) {}
     </script>
+    <link href="/result-viewer.css" rel="stylesheet" />
+    <script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
+    <script type="module" src="/theory/viewer.js"></script>
   </head>
   <body>
     <header class="site-navigation">
@@ -870,10 +873,13 @@
         lose accuracy when distorted.</p>
       </div>
       
-      <figure class="result">
-        <img src="/examples/cooks-membrane.png" width="1200" height="900" alt="Cook's membrane: displacement magnitude |u| on the deformed shape, displacements drawn 0.2 times enlarged" />
-        <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>31.4&nbsp;mm</span></div>
-        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 0.2 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
+      <figure class="result result-viewer" data-viewer="/examples/cooks-membrane.result.json" data-aspect="1200 / 900">
+        <div class="viewer-stage">
+          <img src="/examples/cooks-membrane.png" width="1200" height="900" alt="Cook's membrane: displacement magnitude |u| on the deformed shape, displacements drawn 0.2 times enlarged" />
+          <p class="viewer-hint" hidden></p>
+        </div>
+        <div class="colorbar"><span data-legend="min">0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span data-legend="max">31.4&nbsp;mm</span></div>
+        <figcaption><span data-legend="name">Displacement magnitude |U|</span>, deformed shape, displacements drawn 0.2 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -949,7 +955,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 2 mm maximum element size: 2,697 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,711 nodes, 17,133 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-45b08a9e444e); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-22391462c75d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3606d8ab1090</td></tr>
         </table>
       </div>
         <p>KoFEM is a 3-D solver, so the panel is a slab of thickness

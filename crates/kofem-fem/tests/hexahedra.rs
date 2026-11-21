@@ -182,7 +182,8 @@ fn quad_side(mesh: &TetMesh, axis: usize, value: f64) -> Vec<[u32; 4]> {
 }
 
 /// Every DOF of the vertices on the plane `axis` = `value` — what a support
-/// in the app prescribes; the solve extends it to edge nodes only.
+/// in the app prescribes; the solve extends it to the edge and face nodes of
+/// the held faces.
 fn clamp(mesh: &TetMesh, axis: usize, value: f64) -> Vec<u32> {
     clamp_nodes(mesh.vertices(), axis, value)
 }
@@ -427,47 +428,61 @@ fn pure_bending_field_is_reproduced_exactly_on_quadratic_hexes() {
     }
 }
 
-/// Order 2 extends vertex conditions to edge nodes only, as the MFEM engine
-/// does: a face node of a clamped face stays free.
+/// Order 2 extends vertex conditions to the edge and face nodes of every
+/// boundary face whose corners are all held: a clamped face is held at its
+/// centre too, and a face pulled uniformly moves uniformly, with no dimple at
+/// its face nodes.
 #[test]
-fn vertex_conditions_reach_edge_nodes_but_not_face_nodes() {
-    let grid = grid([2, 1, 1], [2.0, 1.0, 1.0], false);
+fn vertex_conditions_reach_the_edge_and_face_nodes_of_a_held_face() {
+    let size = [2.0, 1.0, 1.0];
+    let grid = grid([2, 1, 1], size, false);
     let mesh = hex_mesh(&grid, ElementOrder::Quadratic);
-    let dofs = clamp(&mesh, 0, 0.0);
-    let values = vec![0.0; dofs.len()];
+    let pull = 0.01;
+    let mut dofs = clamp(&mesh, 0, 0.0);
+    let mut values = vec![0.0; dofs.len()];
+    for (vertex, point) in mesh.vertices().iter().enumerate() {
+        if (point[0] - size[0]).abs() < 1e-12 {
+            dofs.push((3 * vertex) as u32);
+            values.push(pull);
+        }
+    }
     let mut forces = vec![0.0; mesh.dof_count()];
     BoundaryFaces::new(&mesh)
         .apply(
             &mesh,
             0,
             &[],
-            &quad_side(&mesh, 0, 2.0),
-            SurfaceLoadKind::Force([0.0, 0.0, -100.0]),
+            &quad_side(&mesh, 0, size[0]),
+            SurfaceLoadKind::Pressure(50.0),
             &mut forces,
         )
         .expect("applies");
     let stiffness = assemble_stiffness(&mesh);
     let solution =
         solve_static(&mesh, &stiffness, &dofs, &values, &forces, SETTINGS, GS).expect("solves");
-    let points = mesh.node_coordinates();
     let first_face = mesh.vertex_count() + mesh.edges().len();
-    for (node, point) in points.iter().enumerate() {
-        if point[0].abs() > 1e-12 {
-            continue;
-        }
+    let mut face_nodes = 0;
+    for (node, point) in mesh.node_coordinates().iter().enumerate() {
         let motion = &solution.displacements[3 * node..3 * node + 3];
-        if node < first_face {
+        if point[0].abs() < 1e-12 {
             assert!(
                 motion.iter().all(|&value| value == 0.0),
-                "clamped vertex or edge node {node} moved: {motion:?}"
+                "clamped node {node} moved: {motion:?}"
+            );
+        } else if (point[0] - size[0]).abs() < 1e-12 {
+            assert!(
+                (motion[0] - pull).abs() < 1e-12,
+                "pulled node {node} is at {} instead of {pull}",
+                motion[0]
             );
         } else {
-            assert!(
-                motion.iter().any(|&value| value != 0.0),
-                "the clamped face's centre node {node} is free, as in MFEM"
-            );
+            continue;
+        }
+        if node >= first_face {
+            face_nodes += 1;
         }
     }
+    assert_eq!(face_nodes, 2, "one face node on each end");
 }
 
 #[test]
@@ -478,12 +493,31 @@ fn surface_force_on_linear_quadrilaterals_goes_a_quarter_to_each_corner() {
     let faces = quad_side(&mesh, 0, size[0]);
     assert_eq!(faces.len(), 4);
     let mut forces = vec![0.0; mesh.dof_count()];
-    // A duplicate and an interior face: counted once, and reported.
+    // A duplicate counts once; an interior face is refused (KOF-411).
     let mut selection = faces.clone();
     selection.push(faces[0]);
+    let boundary = BoundaryFaces::new(&mesh);
     let interior = quad_side(&mesh, 0, 1.0)[0];
-    selection.push(interior);
-    let report = BoundaryFaces::new(&mesh)
+    let mut with_interior = selection.clone();
+    with_interior.push(interior);
+    assert_eq!(
+        boundary
+            .apply(
+                &mesh,
+                0,
+                &[],
+                &with_interior,
+                SurfaceLoadKind::Force([0.0, 0.0, -400.0]),
+                &mut forces,
+            )
+            .err(),
+        Some(FemError::SurfaceLoadUnmatched {
+            load: 0,
+            unmatched: 1,
+            selected: with_interior.len(),
+        })
+    );
+    let report = boundary
         .apply(
             &mesh,
             0,
@@ -494,7 +528,6 @@ fn surface_force_on_linear_quadrilaterals_goes_a_quarter_to_each_corner() {
         )
         .expect("applies");
     assert_eq!(report.matched, 4);
-    assert_eq!(report.unmatched, 1);
     // Four equal faces: −100 each, −25 per face corner.
     for (vertex, point) in mesh.vertices().iter().enumerate() {
         let faces_here = faces

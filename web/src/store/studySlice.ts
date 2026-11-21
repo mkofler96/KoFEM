@@ -8,7 +8,13 @@
 
 import type { ModelState, SliceCreator } from "./modelStore";
 import type { ActiveResult, ResultType } from "./resultsSlice";
-import { studyFingerprint, type StudyLevel } from "../lib/refinementStudy";
+import {
+  DEFAULT_REFINEMENT_INPUT,
+  studyFingerprint,
+  type RefinementSettings,
+  type RefinementSettingsInput,
+  type StudyLevel,
+} from "../lib/refinementStudy";
 import { endPickSessionOutside } from "./pickSlice";
 
 export type StudyKind = "static" | "topopt" | "refinement";
@@ -101,6 +107,7 @@ export type RefinementLevelSnapshot = Pick<
   | "bcGroups"
   | "loadGroups"
   | "tieGroups"
+  | "couplingGroups"
   | "constraints"
   | "loads"
   | "surfaceLoads"
@@ -109,6 +116,9 @@ export type RefinementLevelSnapshot = Pick<
 
 export interface RefinementStudyRun {
   status: "running" | "done" | "failed";
+  // The settings the study ran with: its verdict is judged by them, whatever
+  // the panel holds since.
+  settings: RefinementSettings;
   // What the study is doing right now; null once it has ended.
   step: string | null;
   // What the level being worked on is at, for its row; null once ended.
@@ -152,6 +162,9 @@ export interface StudySlice {
   refinementStudy: RefinementStudyRun | null;
   // The level the centre shows in 3D, or null for the convergence chart.
   refinementLevelShown: number | null;
+  // The study's settings as typed (KOF-424); parsed and checked when it runs
+  // (parseRefinementSettings).
+  refinementInput: RefinementSettingsInput;
 
   addStudy(kind: StudyKind, staticId?: number): number;
   setStudyStatic(id: number, staticId: number): void;
@@ -160,6 +173,10 @@ export interface StudySlice {
   setPlotField(id: number, field: ResultType): void;
   deleteResultPlot(id: number): void;
   setRefinementStudy(run: RefinementStudyRun | null): void;
+  setRefinementSetting(
+    field: keyof RefinementSettingsInput,
+    value: string,
+  ): void;
   // Open the refinement study's result under Results, adding its plot when
   // there is none yet.
   showRefinementResult(): void;
@@ -175,6 +192,7 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
   nextPlotId: 1,
   refinementStudy: null,
   refinementLevelShown: null,
+  refinementInput: { ...DEFAULT_REFINEMENT_INPUT },
 
   addStudy: (kind, staticId) => {
     if (isDerivedKind(kind)) {
@@ -241,6 +259,10 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
     set((s) => {
       s.refinementStudy = run;
       s.refinementLevelShown = null;
+    }),
+  setRefinementSetting: (field, value) =>
+    set((s) => {
+      s.refinementInput[field] = value;
     }),
   showRefinementLevel: (level) => {
     const run = get().refinementStudy;

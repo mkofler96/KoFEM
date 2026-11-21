@@ -47,6 +47,9 @@ export interface Property {
   sourceBodyId?: number;
   // A suppressed body is not in the mesh, whatever its element type.
   suppressed?: boolean;
+  // On a CAD solid that is a region of a split body: the body number it
+  // belongs to (lib/regions.ts). Absent: the solid is a body of its own.
+  body?: number;
 }
 export interface Constraint {
   nodeId: number;
@@ -64,11 +67,16 @@ export interface Load {
 //   force    — total force vector spread as a uniform traction over the face
 //   pressure — scalar magnitude applied as -p·n̂ (outward normal; + pushes in)
 //   traction — traction vector applied directly
+// `name` (the load group's) and `unmatchedSelections` (selections that span no
+// face of the mesh) let the solve refuse a load it cannot apply in full, by
+// name (surfaceLoadRefusal, KOF-411).
 export interface SurfaceLoad {
   type: "force" | "pressure" | "traction";
   faces: number[][];
   force?: [number, number, number];
   pressure?: number;
+  name?: string;
+  unmatchedSelections?: number;
 }
 export interface ParseStepPayload {
   bytes: Uint8Array;

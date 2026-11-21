@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderDocsPage } from "../docs-layout.mjs";
+import { RESULT_VIEWER_HEAD, renderDocsPage } from "../docs-layout.mjs";
 import { siteHeader, siteFooter } from "../site-layout.mjs";
 import { topics, topicAnchor, articleUrl } from "./content.mjs";
 import { figures, figureFiles, figureUrl } from "./figures/index.mjs";
@@ -141,15 +141,10 @@ function frame(slug, sectionList, body) {
     </div>${siteFooter()}`;
 }
 
-// Pages with an interactive result viewer load three.js from /vendor/three/
-// (see vite.config.ts) through an import map, then public/theory/viewer.js.
-const viewerHead = `<script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
-    <script type="module" src="/theory/viewer.js"></script>`;
-
 // A search result shows the <title>; `searchTitle` leads it with the phrase
 // people search for (KOF-333) while the page keeps its short heading.
 function page({ title, searchTitle, description, path, body, article = false }) {
-  const head = `<link href="/theory.css" rel="stylesheet" />${body.includes('class="result-viewer"') ? `\n    ${viewerHead}` : ""}`;
+  const head = `<link href="/theory.css" rel="stylesheet" />${body.includes('class="result-viewer"') ? `\n    ${RESULT_VIEWER_HEAD}` : ""}`;
   return renderDocsPage({
     title: searchTitle ? `${searchTitle} | KoFEM` : `${title} | KoFEM Theory Guide`,
     description,

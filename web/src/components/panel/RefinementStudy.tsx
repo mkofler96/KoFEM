@@ -4,10 +4,12 @@
 import type { ReactNode } from "react";
 import {
   assessConvergence,
-  REFINEMENT_LEVELS,
+  REFINEMENT_RATIOS,
   sizeLabel,
   studyFingerprint,
   verdictLine,
+  type RefinementFieldErrors,
+  type RefinementSettingsInput,
 } from "../../lib/refinementStudy";
 import type { RefinementStudyRun, Study } from "../../store/studySlice";
 import { RESULT_TYPES, useModelStore } from "../../store/modelStore";
@@ -16,7 +18,6 @@ import { useEngineGate } from "../../store/engineStore";
 import { useSolver } from "../../hooks/useSolver";
 import { useRefinementStudy } from "../../hooks/useRefinementStudy";
 import { LogSection } from "./LogSection";
-import { PreflightChecks } from "./PreflightChecks";
 import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
 
@@ -37,8 +38,45 @@ function percent(fraction: number): string {
   return `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct).toFixed(1)} %`;
 }
 
-// The study under Studies: the static case's readiness, the plan and the one
-// button. Run hands off to Results, where the study's progress shows.
+// One typed setting with its inline validation message. The value is the raw
+// text (parsed in useRefinementStudy), so an invalid field shows its error and
+// blocks the run instead of falling back to a default.
+function SettingField({
+  field,
+  label,
+  errors,
+}: {
+  field: Exclude<keyof RefinementSettingsInput, "ratio">;
+  label: string;
+  errors: RefinementFieldErrors;
+}) {
+  const value = useModelStore((s) => s.refinementInput[field]);
+  const setSetting = useModelStore((s) => s.setRefinementSetting);
+  const err = errors[field];
+  return (
+    <>
+      <div className={styles.formRow}>
+        <label className={styles.formLabel}>{label}</label>
+        <input
+          className={styles.formInput}
+          type="text"
+          inputMode="decimal"
+          value={value}
+          aria-label={label}
+          aria-invalid={err !== undefined}
+          data-testid={`refinement-${field}`}
+          onChange={(e) => setSetting(field, e.target.value)}
+        />
+      </div>
+      {err && <div className={styles.fieldError}>{err}</div>}
+    </>
+  );
+}
+
+// The study under Studies: its settings and the one button. The static case's
+// own checks are not repeated: a static study that solves is ready to refine,
+// and one that does not says why on its own panel. Run hands off to Results,
+// where the study's progress shows.
 export function RefinementStudyPanel({
   staticCase,
   header,
@@ -49,27 +87,56 @@ export function RefinementStudyPanel({
   footer: ReactNode;
 }) {
   const { isRunning, allOk, checks, elementOrder, logs } = useSolver();
-  const { run, refusal, plannedSizes, start } = useRefinementStudy();
+  const { run, refusal, settingsErrors, plannedSizes, start } =
+    useRefinementStudy();
+  const ratio = useModelStore((s) => s.refinementInput.ratio);
+  const setSetting = useModelStore((s) => s.setRefinementSetting);
   const engine = useEngineGate();
   const running = run?.status === "running";
+  const notReady = checks.find(([ok]) => !ok);
   const blocked =
-    staticCase === null ? "Pick the static study to refine." : refusal;
+    staticCase === null
+      ? "Pick the static study to refine."
+      : !allOk && notReady !== undefined
+        ? `${staticCase.name} is not ready to solve: ${notReady[1]}.`
+        : refusal;
+  const settingsOk = Object.keys(settingsErrors).length === 0;
 
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         {header}
-        <PreflightChecks checks={checks} />
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Study settings
         </div>
-        <div className={styles.statRow}>
-          <span className={styles.statKey}>Levels</span>
-          <span className={styles.statVal}>
-            {REFINEMENT_LEVELS} · each √2 finer
-          </span>
+        <SettingField field="levels" label="Levels" errors={settingsErrors} />
+        <div className={styles.formRow}>
+          <label className={styles.formLabel} htmlFor="refinement-ratio">
+            Refine by
+          </label>
+          <select
+            id="refinement-ratio"
+            className={styles.formSelect}
+            data-testid="refinement-ratio"
+            value={ratio}
+            onChange={(e) => setSetting("ratio", e.target.value)}
+          >
+            {REFINEMENT_RATIOS.map((r) => (
+              <option key={r.value} value={String(r.value)}>
+                {r.label}
+              </option>
+            ))}
+          </select>
         </div>
+        {settingsErrors.ratio && (
+          <div className={styles.fieldError}>{settingsErrors.ratio}</div>
+        )}
+        <SettingField
+          field="tolerance"
+          label="Target error (%)"
+          errors={settingsErrors}
+        />
         <div className={styles.statRow}>
           <span className={styles.statKey}>Element order</span>
           <span className={styles.statVal}>
@@ -82,7 +149,13 @@ export function RefinementStudyPanel({
         <button
           className={styles.solveBtn}
           data-testid="refinement-study-run"
-          disabled={!allOk || isRunning || engine.blocked || blocked !== null}
+          disabled={
+            !allOk ||
+            isRunning ||
+            engine.blocked ||
+            blocked !== null ||
+            !settingsOk
+          }
           title={engine.reason}
           onClick={start}
         >
@@ -95,7 +168,7 @@ export function RefinementStudyPanel({
         ) : (
           plannedSizes !== null &&
           !running && (
-            <div className={own.hint}>
+            <div className={own.hint} data-testid="refinement-study-plan">
               Solves at {listSizes(plannedSizes)} mm and checks that the result
               settles.
             </div>
@@ -194,8 +267,8 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
     (s) => run.status !== "running" && studyFingerprint(s) !== run.fingerprint,
   );
   const done = run.status === "done" && run.levels.length >= 2;
-  const assessment = done ? assessConvergence(run.levels) : null;
-  const line = done ? verdictLine(run.levels) : null;
+  const assessment = done ? assessConvergence(run.levels, run.settings) : null;
+  const line = done ? verdictLine(run.levels, run.settings) : null;
 
   return (
     <div className={own.result}>

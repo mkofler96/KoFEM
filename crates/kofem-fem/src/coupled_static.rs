@@ -41,8 +41,9 @@
 //! * an edge node whose two ends follow couplings in a translation, and that
 //!   no coupling grips itself, follows their mean in it — the linear
 //!   interpolation along the edge, e.g. across the face of a tie;
-//! * where both ends of an edge are fixed or prescribed in a translation,
-//!   the edge node gets the mean of the two values.
+//! * where every corner of a boundary face is fixed or prescribed in a
+//!   translation, the face's edge nodes get the mean of their two ends, as
+//!   in the uncoupled solve; an edge through the interior stays free.
 //!
 //! Shell facets join linear tetrahedra only, as in the engine's coupled
 //! solve: a quadratic mesh with shells is refused.
@@ -58,7 +59,7 @@ use crate::incomplete_cholesky::IncompleteCholesky;
 use crate::mesh::{cross, dot, sub, ElementOrder, TetMesh};
 use crate::shell::{ShellMesh, SHELL_NODE_DOFS};
 use crate::sparse::CsrMatrix;
-use crate::static_solve::{PreconditionerChoice, PreparedStatic};
+use crate::static_solve::{extend_to_boundary_nodes, PreconditionerChoice, PreparedStatic};
 use crate::surface::BoundaryFaces;
 use crate::LevelInfo;
 
@@ -474,7 +475,7 @@ pub fn prepare_mixed_static(
     }
     let mut matrix = reduced_stiffness(&reduction, &parts, blocks.points.len())?;
     let mut rhs = reduced_load(&reduction, forces)?;
-    let (fixed_dofs, fixed_values) = supports_with_edge_nodes(mesh, fixed_dofs, fixed_values);
+    let (fixed_dofs, fixed_values) = supports_with_boundary_nodes(mesh, fixed_dofs, fixed_values);
     let mut prescribed = reduced_constraints(&reduction, &fixed_dofs, &fixed_values)?;
     let held_nodes = hold_unstiffened(&reduction, &blocks, &matrix, &rhs, &mut prescribed)?;
     let (dofs, values): (Vec<u32>, Vec<f64>) = prescribed
@@ -1120,42 +1121,26 @@ fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coup
         .collect()
 }
 
-/// The caller's supports plus, on a quadratic mesh, the translations of every
-/// edge node whose two ends prescribe the same component, at the mean of the
-/// two values — the rule of the uncoupled solve (`prepare_static`). An edge
-/// node DOF the caller prescribes keeps the caller's value. DOFs out of range
-/// pass through for `reduced_constraints` to refuse.
-fn supports_with_edge_nodes(
+/// The caller's supports plus, on a quadratic mesh, the translations they
+/// imply for the edge and face nodes of the supported boundary faces — the
+/// rule of the uncoupled solve (`prepare_static`). A node DOF the caller
+/// prescribes keeps the caller's value. DOFs out of range pass through for
+/// `reduced_constraints` to refuse.
+fn supports_with_boundary_nodes(
     mesh: &TetMesh,
     fixed_dofs: &[u32],
     fixed_values: &[f64],
 ) -> (Vec<u32>, Vec<f64>) {
     let mut dofs = fixed_dofs.to_vec();
     let mut values = fixed_values.to_vec();
-    if mesh.edges().is_empty() {
-        return (dofs, values);
-    }
-    // First value per node translation; a conflicting second value is refused
-    // by `reduced_constraints`, so which one is kept here does not matter.
-    let mut prescribed = vec![[None::<f64>; 3]; mesh.node_count()];
-    for (&dof, &value) in fixed_dofs.iter().zip(fixed_values) {
-        let (node, component) = (dof as usize / DOFS_PER_NODE, dof as usize % DOFS_PER_NODE);
-        if component < 3 {
-            if let Some(slot) = prescribed.get_mut(node) {
-                slot[component].get_or_insert(value);
-            }
-        }
-    }
-    for (edge, &[first, second]) in mesh.edges().iter().enumerate() {
-        let node = mesh.vertex_count() + edge;
-        let (lhs, rhs) = (prescribed[first as usize], prescribed[second as usize]);
-        for (component, own) in prescribed[node].iter().enumerate() {
-            if let (None, Some(lhs), Some(rhs)) = (own, lhs[component], rhs[component]) {
-                dofs.push(to_u32(DOFS_PER_NODE * node + component));
-                values.push(f64::midpoint(lhs, rhs));
-            }
-        }
-    }
+    extend_to_boundary_nodes(
+        mesh,
+        DOFS_PER_NODE,
+        fixed_dofs,
+        fixed_values,
+        &mut dofs,
+        &mut values,
+    );
     (dofs, values)
 }
 

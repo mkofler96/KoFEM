@@ -4,7 +4,9 @@
 // Unit test for carrying supports, loads and ties over to a new mesh
 // (src/lib/remeshGroups.ts): an entry picked as a whole CAD face is re-resolved
 // to the new mesh's nodes of that face; edge/node/flood-fill picks, faces the
-// new mesh has no surface for, and couplings are dropped and named.
+// new mesh has no surface for are dropped and named. A coupling on whole CAD
+// faces follows them, with its reference point re-created as a node of the new
+// mesh and the supports and loads on that point re-pointed to it (KOF-422).
 
 import { describe, expect, test } from "bun:test";
 import { carryGroupsToMesh, remeshNotice } from "../../src/lib/remeshGroups.ts";
@@ -183,10 +185,8 @@ describe("what is dropped is named", () => {
     expect(named).toContain("Tie2 — a side has nothing left to tie");
   });
 
-  test("couplings are dropped and named", () => {
-    expect(named).toContain(
-      "Coupling1 (its reference point was a node of the old mesh)",
-    );
+  test("a coupling with no surface to grip is dropped and named", () => {
+    expect(named).toContain("Coupling1 — nothing left to grip");
   });
 });
 
@@ -266,6 +266,102 @@ describe("a shell rim", () => {
     expect(rim.loadGroups).toHaveLength(0);
     expect(rim.dropped).toContain(
       "Pull Edge 1 (CAD face 2 is not on the new mesh's shell rim)",
+    );
+  });
+});
+
+// A coupling on CAD face 1 with its reference point at node 500 of the old
+// mesh, a load and a support on that point, and a second coupling on a
+// flood-fill pick that cannot follow, with a support on its point.
+const couplingGroups = {
+  bcGroups: [
+    {
+      id: 1,
+      name: "Hold",
+      dofs: [3, 4, 5],
+      value: 0,
+      faces: [face(1, "Point 1", undefined, [500], "point")],
+    },
+    {
+      id: 2,
+      name: "Orphan",
+      dofs: [0],
+      value: 0,
+      faces: [face(2, "Point 1", undefined, [501], "point")],
+    },
+  ],
+  loadGroups: [
+    {
+      id: 1,
+      name: "Torque",
+      dof: 3,
+      totalForce: 100,
+      kind: "moment",
+      faces: [face(3, "Point 1", undefined, [500], "point")],
+    },
+  ],
+  tieGroups: [],
+  couplingGroups: [
+    {
+      id: 1,
+      name: "Coupling1",
+      kind: "kinematic",
+      dofs: [0, 1, 2],
+      refNodeId: 500,
+      point: [5, 6, 7],
+      faces: [face(4, "Face 1", 1)],
+    },
+    {
+      id: 2,
+      name: "Coupling2",
+      kind: "distributing",
+      dofs: [0, 1, 2, 3, 4, 5],
+      refNodeId: 501,
+      point: [0, 0, 0],
+      faces: [face(5, "Face 1")],
+    },
+  ],
+};
+describe("a coupling on whole CAD faces", () => {
+  const moved = carryGroupsToMesh(
+    couplingGroups,
+    surfaceTriangles,
+    surfaceFaceIds,
+    nodeIds,
+  );
+  const coupling = moved.couplingGroups.find((c) => c.name === "Coupling1");
+
+  test("follows its CAD face onto the new mesh", () => {
+    expect(coupling?.faces[0].nodeIds).toEqual([10, 11, 12, 13]);
+    expect(coupling?.kind).toBe("kinematic");
+    expect(coupling?.dofs).toEqual([0, 1, 2]);
+  });
+
+  test("gets a reference point node of its own on the new mesh, at its point", () => {
+    // The new mesh's highest node id is 31, so the point is node 32.
+    expect(coupling?.refNodeId).toBe(32);
+    expect(moved.referenceNodes).toEqual([{ id: 32, x: 5, y: 6, z: 7 }]);
+  });
+
+  test("the support and the load on its reference point follow the point", () => {
+    expect(moved.bcGroups.map((g) => g.name)).toEqual(["Hold"]);
+    expect(moved.bcGroups[0].faces[0].nodeIds).toEqual([32]);
+    expect(moved.loadGroups[0].faces[0].nodeIds).toEqual([32]);
+    expect(moved.loadGroups[0].faces[0].geometry).toBe("point");
+  });
+
+  test("a coupling on a pick that cannot follow is dropped with what was on its point", () => {
+    expect(moved.couplingGroups).toHaveLength(1);
+    expect(moved.dropped).toContain("Coupling2 Face 1 (not a whole CAD face)");
+    expect(moved.dropped).toContain("Coupling2 — nothing left to grip");
+    expect(moved.dropped).toContain(
+      "Orphan Point 1 (the reference point of Coupling2, which was cleared)",
+    );
+  });
+
+  test("the notice counts the coupling it kept", () => {
+    expect(remeshNotice(moved)).toStartWith(
+      "Kept 2 support/load/tie groups and 1 coupling on their CAD faces.",
     );
   });
 });

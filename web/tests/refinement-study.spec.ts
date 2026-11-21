@@ -249,3 +249,159 @@ test("a model without geometry refuses the study before it starts", async ({
     "geometry",
   );
 });
+
+type CouplingStore = {
+  getState(): {
+    nodes: { id: number }[];
+    loadGroups: {
+      id: number;
+      faces: { cadFaceId?: number; nodeIds: number[]; label: string }[];
+    }[];
+    couplingGroups: {
+      name: string;
+      refNodeId: number;
+      faces: { cadFaceId?: number }[];
+    }[];
+    deleteLoadGroup(id: number): void;
+    createCouplingGroup(
+      faces: {
+        label: string;
+        nodeIds: number[];
+        geometry: "face";
+        cadFaceId: number;
+      }[],
+      point: [number, number, number],
+      kind: "kinematic" | "distributing",
+      dofs: number[],
+    ): void;
+    createLoadGroup(
+      faces: { label: string; nodeIds: number[]; geometry: "point" }[],
+      dof: number,
+      totalForce: number,
+      kind: "force",
+      components: [number, number, number],
+    ): void;
+  };
+};
+
+// KOF-422: a coupling on a whole CAD face follows the study onto every level.
+// The tip load is moved onto the reference point of a coupling that grips the
+// tip face; each level re-creates the point as a node of its mesh and the load
+// stays on it.
+test("a coupling and the load on its reference point follow every level @pipeline", async ({
+  page,
+}) => {
+  await openExample(page);
+  await openTree(page, "mesh");
+  await page.getByTestId("max-element-size").fill(String(MESH));
+  await page.getByTestId("min-element-size").fill(String(MESH / 10));
+  await page.evaluate(() => {
+    const store = (window as unknown as { __kofemStore: CouplingStore })
+      .__kofemStore;
+    const tip = store.getState().loadGroups[0];
+    const face = tip.faces[0];
+    if (face.cadFaceId === undefined) throw new Error("tip is no CAD face");
+    store.getState().deleteLoadGroup(tip.id);
+    store.getState().createCouplingGroup(
+      [
+        {
+          label: face.label,
+          nodeIds: face.nodeIds,
+          geometry: "face",
+          cadFaceId: face.cadFaceId,
+        },
+      ],
+      [220, 20, 10],
+      "distributing",
+      [0, 1, 2, 3, 4, 5],
+    );
+    const ref = store.getState().couplingGroups[0].refNodeId;
+    store
+      .getState()
+      .createLoadGroup(
+        [{ label: "Point 1", nodeIds: [ref], geometry: "point" }],
+        1,
+        -1000,
+        "force",
+        [0, -1000, 0],
+      );
+  });
+
+  await openTree(page, "refinement");
+  await expect(page.getByTestId("refinement-study-refusal")).toHaveCount(0);
+  await page.getByTestId("refinement-levels").fill("2");
+  await page.getByTestId("refinement-study-run").click();
+
+  const rows = page.getByTestId("refinement-study-level");
+  await expect(page.getByTestId("refinement-study-verdict")).toBeVisible();
+  await expect(page.getByTestId("refinement-study-error")).toHaveCount(0);
+  await expect(rows).toHaveCount(2);
+  const levels = await rows.evaluateAll((trs) =>
+    trs.map((tr) => ({
+      nodes: Number(tr.getAttribute("data-nodes")),
+      maxDisplacement: Number(tr.getAttribute("data-max-displacement")),
+    })),
+  );
+  expect(levels[1].nodes).toBeGreaterThan(levels[0].nodes);
+  for (const l of levels) expect(l.maxDisplacement).toBeGreaterThan(0);
+
+  // On the finest mesh the coupling still grips the tip face, its reference
+  // point is a node of that mesh, and the load sits on it.
+  const after = await page.evaluate(() => {
+    const st = (
+      window as unknown as { __kofemStore: CouplingStore }
+    ).__kofemStore.getState();
+    const coupling = st.couplingGroups[0];
+    return {
+      couplings: st.couplingGroups.length,
+      faces: coupling.faces.map((f) => f.cadFaceId !== undefined),
+      refIsNode: st.nodes.some((n) => n.id === coupling.refNodeId),
+      loadOnRef: st.loadGroups[0].faces[0].nodeIds[0] === coupling.refNodeId,
+    };
+  });
+  expect(after).toEqual({
+    couplings: 1,
+    faces: [true],
+    refIsNode: true,
+    loadOnRef: true,
+  });
+});
+
+// KOF-424: the study's settings are the user's: the number of levels, how much
+// finer each is and the target error. The static case's checks are not
+// repeated here.
+test("the levels, the ratio and the target are editable settings @pipeline", async ({
+  page,
+}) => {
+  await openExample(page);
+  await openTree(page, "mesh");
+  await page.getByTestId("max-element-size").fill(String(MESH));
+  await page.getByTestId("min-element-size").fill(String(MESH / 10));
+  await openTree(page, "refinement");
+
+  await expect(page.getByText("Pre-flight check")).toHaveCount(0);
+  const plan = page.getByTestId("refinement-study-plan");
+  await expect(plan).toHaveText(
+    "Solves at 16, 11.3 and 8 mm and checks that the result settles.",
+  );
+
+  await page.getByTestId("refinement-levels").fill("4");
+  await page.getByTestId("refinement-ratio").selectOption("2");
+  await expect(plan).toHaveText(
+    "Solves at 16, 8, 4 and 2 mm and checks that the result settles.",
+  );
+
+  const run = page.getByTestId("refinement-study-run");
+  await expect(run).toBeEnabled();
+  await page.getByTestId("refinement-levels").fill("9");
+  await expect(
+    page.getByText("Levels is a whole number from 2 to 6."),
+  ).toBeVisible();
+  await expect(run).toBeDisabled();
+  await page.getByTestId("refinement-levels").fill("3");
+  await page.getByTestId("refinement-tolerance").fill("0");
+  await expect(page.getByText("The target is 0.1 to 20 %.")).toBeVisible();
+  await expect(run).toBeDisabled();
+  await page.getByTestId("refinement-tolerance").fill("5");
+  await expect(run).toBeEnabled();
+});

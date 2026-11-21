@@ -739,6 +739,7 @@
       } catch (e) {}
     </script>
   <link href="/theory.css" rel="stylesheet" />
+    <link href="/result-viewer.css" rel="stylesheet" />
     <script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
     <script type="module" src="/theory/viewer.js"></script>
   </head>
@@ -850,7 +851,7 @@
 
     <h2 id="pipeline">Trace the complete solve</h2>
     <ol>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/b1f7b101f2713787e4afba17be57aead1ac2011c/examples/validation/axial-bar-study.mjs#L38">The study’s model builder</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/9d5e4f33d61bb9b93935dce5273e060b35ece086/examples/validation/axial-bar-study.mjs#L38">The study’s model builder</a>
         takes the public case’s inputs and makes a structured hex volume mesh,
         material, support and end-force group.
         The baseline is order 1 on a 20 × 4 × 4 grid: 320 elements,
@@ -890,7 +891,7 @@
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar mesh and order comparison; scroll horizontally if needed">
       <table><caption>Executed WebAssembly solves; stress error is the worst sample in the middle region</caption>
         <thead><tr><th scope="col">Grid</th><th scope="col">Order</th><th scope="col">DOFs</th><th scope="col">Extension<br />(mm)</th><th scope="col">Error<br />(%)</th><th scope="col">Mean von Mises<br />(MPa)</th><th scope="col">Worst stress<br />error (%)</th></tr></thead>
-        <tbody><tr><th scope="row">10 × 2 × 2</th><td>1</td><td>297</td><td>0.4717635</td><td>-0.9297</td><td>100.00109</td><td>0.003512</td></tr><tr><th scope="row">20 × 4 × 4<br /><small>baseline</small></th><td>1</td><td>1575</td><td>0.4735772</td><td>-0.5488</td><td>99.999992</td><td>0.00005298</td></tr><tr><th scope="row">40 × 8 × 8</th><td>1</td><td>9963</td><td>0.4743261</td><td>-0.3915</td><td>100</td><td>0.00001409</td></tr><tr><th scope="row">10 × 2 × 2</th><td>2<br /><small>diagnostic</small></td><td>1575</td><td>0.4795495</td><td>0.7054</td><td>99.999961</td><td>0.0001871</td></tr></tbody>
+        <tbody><tr><th scope="row">10 × 2 × 2</th><td>1</td><td>297</td><td>0.4717635</td><td>-0.9297</td><td>100.00109</td><td>0.003512</td></tr><tr><th scope="row">20 × 4 × 4<br /><small>baseline</small></th><td>1</td><td>1575</td><td>0.4735772</td><td>-0.5488</td><td>99.999992</td><td>0.00005298</td></tr><tr><th scope="row">40 × 8 × 8</th><td>1</td><td>9963</td><td>0.4743261</td><td>-0.3915</td><td>100</td><td>0.00001409</td></tr><tr><th scope="row">10 × 2 × 2</th><td>2<br /><small>same clamp</small></td><td>1575</td><td>0.4740147</td><td>-0.4569</td><td>99.999741</td><td>0.0004974</td></tr></tbody>
       </table>
     </div>
     <p>Displacement error is <span class="math-nowrap"><math><mn>100</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>δ</mi><mi>h</mi></msub><mo>−</mo><mi>δ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mi>δ</mi></math>;</span> stress error is the largest
@@ -920,13 +921,11 @@
       contraction and differs from the analytical bar, so refinement alone
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
-    <p><strong>The order-2 hex row is diagnostic.</strong> Currently,
-      <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/static_solve.rs#L86">Dirichlet extension</a>
-      constrains vertices and edge nodes but leaves Q2 face-centre nodes free.
-      That support differs from a fully clamped face. Its extension therefore
-      cannot establish order convergence for the same boundary-value problem,
-      even though both readouts fall inside the stated bands. The app’s
-      tetrahedral meshes do not have Q2 face-centre DOFs.</p>
+    <p><strong>The order-2 hex row solves the same clamp.</strong> The
+      support holds every node of the fully fixed end face: its vertices,
+      edge nodes and Q2 face-centre nodes. Its extension on the coarsest grid lands next
+      to the finest order-1 mesh. One order-2 mesh still does not establish an
+      order of convergence.</p>
     <p>The middle-region agreement checks a uniform stress invariant. It does
       not verify stress sign, individual tensor components, clamp peaks,
       material interfaces, curved geometry, bending, shells or coupling.
@@ -950,7 +949,7 @@
     <h2 id="sources">Run record and sources</h2>
     <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
       of the four solves.</p>
-    <p><a href="https://github.com/mkofler96/KoFEM/blob/b1f7b101f2713787e4afba17be57aead1ac2011c/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
+    <p><a href="https://github.com/mkofler96/KoFEM/blob/9d5e4f33d61bb9b93935dce5273e060b35ece086/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
       reuses the public case’s inputs and the solver wrapper. See also
       <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/resultField.ts#L84">app averaging and extrema</a>
       and the <a href="/theory/foundations/reading-a-study/">complete reading path</a>.</p>

@@ -140,7 +140,7 @@ for (const [grid, order] of [
     grid,
     role:
       order === 2
-        ? "diagnostic: Q2 clamp face-centre DOFs remain free"
+        ? "order-2 check with the same fully fixed end"
         : "order-1 refinement with fully fixed end",
     ...meshStats(model.mesh, order),
     displacementMm,
