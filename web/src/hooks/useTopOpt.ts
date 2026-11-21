@@ -29,6 +29,8 @@ import {
   isCadBody,
   suppressionMismatch,
   suppressionMismatchMessage,
+  unconfirmedMaterialBodies,
+  unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { passiveElements, roleOf } from "../lib/regions";
 import { topOptTieRefusal } from "../lib/solve/refusals";
@@ -206,9 +208,14 @@ export function useTopOpt() {
   );
   const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — same rule as the solve.
-  const matOk =
+  const materialsExist =
     materials.length > 0 &&
     properties.every((p) => materials.some((m) => m.id === p.materialId));
+  // A body the mesh added was offered a material nobody chose (KOF-413).
+  const unconfirmedMaterial = unconfirmedMaterialMessage(
+    unconfirmedMaterialBodies(properties),
+  );
+  const matOk = materialsExist && unconfirmedMaterial === null;
   const bcOk = constraints.length > 0;
   // Minimum-compliance TO needs external work to minimize, so an applied load
   // is required (a prescribed-displacement-only model is degenerate here) —
@@ -431,9 +438,11 @@ export function useTopOpt() {
       matOk,
       materials.length === 0
         ? "No material assigned"
-        : !matOk
+        : !materialsExist
           ? "A body references a deleted material — reassign body materials"
-          : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+          : unconfirmedMaterial !== null
+            ? unconfirmedMaterial
+            : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
     ],
     [
       bcOk,
