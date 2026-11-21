@@ -7,8 +7,8 @@
 // whether the result still depends on the mesh. Each level meshes exactly as
 // the Mesh button would (lib/volumeMesh) and solves exactly as the Solve button
 // would (lib/solve/payload); the supports, loads and couplings follow their CAD
-// faces onto each mesh. The model ends on the finest mesh with its result; the Mesh settings
-// stay as the user typed them.
+// faces onto each mesh. The model ends on the finest mesh with its result; the
+// Mesh settings stay as the user typed them.
 
 import { useMemo } from "react";
 import { useModelStore, type ModelState } from "../store/modelStore";
@@ -55,7 +55,6 @@ type StudySource = Pick<
   | "maxElementSize"
   | "minElementSize"
   | "properties"
-  | "refinementInput"
 >;
 
 // The sizes of the first level, and whether the current mesh is that level.
@@ -217,7 +216,6 @@ export function useRefinementStudy() {
       maxElementSize,
       minElementSize,
       properties,
-      refinementInput,
     }),
     [
       stepBytes,
@@ -234,7 +232,6 @@ export function useRefinementStudy() {
       maxElementSize,
       minElementSize,
       properties,
-      refinementInput,
     ],
   );
   const refusal = useMemo(() => refinementRefusal(source), [source]);
@@ -271,7 +268,7 @@ export function useRefinementStudy() {
     const assertUnchanged = () => {
       if (studyFingerprint(get()) !== fingerprint)
         throw new Error(
-          "The model changed while the study ran (a material, body, support, load or solver setting). Run the study again to compare levels of one model.",
+          "The model changed while the study ran (a material, body, support, load, coupling or solver setting). Run the study again to compare levels of one model.",
         );
     };
 
