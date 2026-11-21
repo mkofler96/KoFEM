@@ -11,14 +11,15 @@
 //
 //   modelRigidBodyInput   — the store model: elements, supports, ties and
 //                           couplings as the user defined them. For the solid
-//                           and shell paths, and a pure auto-shell solve (one
-//                           body, all of it Shell).
+//                           and shell paths.
 //   coupledRigidBodyInput — the coupled solve's own inputs, where shells and
 //                           solids are separate node sets joined by couplings
 //                           the builder derives from proximity. Only these
 //                           show whether a shell reaches the solid it stands on.
 //                           autoCoupledRigidBodyInput reads the same from the
-//                           auto-shell route's coupled solve.
+//                           auto-shell route's coupled solve, and
+//                           pureShellRigidBodyInput its pure shell solve, where
+//                           a support held in X, Y and Z also clamps rotation.
 //
 // routedRigidBodyInput picks the input the route a model takes calls for.
 
@@ -35,7 +36,11 @@ import {
   type EngineCoupling,
   type SolveLog,
 } from "./coupled.js";
-import { prepareAutoShellSolve, type AutoCoupledSolve } from "./autoShell.js";
+import {
+  prepareAutoShellSolve,
+  type AutoCoupledSolve,
+  type PureShellSolve,
+} from "./autoShell.js";
 import type { SolveRoute } from "./route.js";
 import { bodyMembership, tieSides, type TieDefinition } from "../tie.js";
 import {
@@ -333,6 +338,34 @@ export function autoCoupledRigidBodyInput(
   });
 }
 
+// The rigid-body input of the auto-shell route's pure shell solve: the
+// mid-surface facets of the one Shell body, every node with rotations, and the
+// supports as mapped onto it.
+export function pureShellRigidBodyInput(solve: PureShellSolve): RigidBodyInput {
+  const { mesh, dirichlet, shellBody } = solve;
+  const input = new InputBuilder();
+  for (let k = 0; k < mesh.triangles.length / 3; k++)
+    input.element(
+      Array.from(mesh.triangles.subarray(3 * k, 3 * k + 3)),
+      shellBody,
+    );
+  const fixed = [
+    ...dirichlet.fixed_vertices.flatMap((vertex) =>
+      [0, 1, 2, 3, 4, 5].map((dof) => 6 * vertex + dof),
+    ),
+    ...dirichlet.fixed_dofs.flatMap(({ vertex, dofs }) =>
+      dofs.map((dof) => 6 * vertex + dof),
+    ),
+    ...dirichlet.prescribed_dofs.map(({ vertex, dof }) => 6 * vertex + dof),
+  ];
+  const vertexCount = mesh.vertices.length / 3;
+  return input.build(
+    mesh.vertices,
+    Array.from({ length: vertexCount }, (_, vertex) => vertex),
+    fixed,
+  );
+}
+
 // The rigid-body input of the model a route solves: the coupled solve's own
 // inputs where the route builds them (only there are shells joined to
 // solids), the model as the user defined it otherwise.
@@ -348,7 +381,7 @@ export function routedRigidBodyInput(
       const prepared = prepareAutoShellSolve(model, route.shellBodyIds, log);
       return prepared.kind === "coupled"
         ? autoCoupledRigidBodyInput(prepared.solve)
-        : modelRigidBodyInput(model);
+        : pureShellRigidBodyInput(prepared.solve);
     }
     case "shell":
     case "solid":

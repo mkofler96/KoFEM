@@ -76,6 +76,7 @@ import {
   autoCoupledRigidBodyInput,
   coupledRigidBodyInput,
   modelRigidBodyInput,
+  pureShellRigidBodyInput,
   routedRigidBodyInput,
   unheldBodiesMessage,
   type RigidBodyInput,
@@ -719,7 +720,7 @@ async function handleAutoShellSolve(
   refuseUnheldBodies(
     prepared.kind === "coupled"
       ? autoCoupledRigidBodyInput(prepared.solve)
-      : modelRigidBodyInput(payload),
+      : pureShellRigidBodyInput(prepared.solve),
     payload,
   );
   const fields =

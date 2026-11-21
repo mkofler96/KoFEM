@@ -351,7 +351,7 @@ describe("a body marked Shell, idealised at solve time", () => {
   // block (body 2), as in auto-shell.spec.ts. The plate touches the block only
   // through duplicated nodes: as solid meshes they are apart, and only the
   // idealisation joins the shell to the block.
-  const plateOnBlock = (constraintsOf) => {
+  const plateOnBlock = (constraintsOf, { withBlock = true } = {}) => {
     const nodes = [];
     const elements = [];
     const grid = (origin, cells, step, body) => {
@@ -383,7 +383,7 @@ describe("a body marked Shell, idealised at solve time", () => {
           }
     };
     grid([0, 0, 0], [4, 4, 1], [5, 5, 0.5], 1);
-    grid([-6, 0, -16], [4, 4, 4], [4, 5, 4], 2);
+    if (withBlock) grid([-6, 0, -16], [4, 4, 4], [4, 5, 4], 2);
     // Boundary triangles, wound outward, with a face id per box plane.
     const faces = new Map();
     for (const element of elements)
@@ -448,7 +448,9 @@ describe("a body marked Shell, idealised at solve time", () => {
       materials: [STEEL],
       properties: [
         { id: 1, materialId: 1, discretization: "shell" },
-        { id: 2, materialId: 1, discretization: "solid" },
+        ...(withBlock
+          ? [{ id: 2, materialId: 1, discretization: "solid" }]
+          : []),
       ],
       constraints: constraintsOf(nodes),
       loads: [],
@@ -489,6 +491,28 @@ describe("a body marked Shell, idealised at solve time", () => {
     expect(message(plateOnBlock(fixWhere((n) => near(n.x, 20), [2])))).toBe(
       "Bodies 1 and 2 can still move along X and Y, and rotate about Y and Z. " +
         "Add supports or connect them to other bodies.",
+    );
+  });
+
+  // Alone, the plate is a pure shell solve. Its supports map onto the
+  // mid-surface, where a node held in X, Y and Z is clamped in rotation too,
+  // so a plate pinned along one edge is held, not hinged.
+  test("a plate alone, pinned along one edge, is held as the shell it is solved as", () => {
+    const model = plateOnBlock(
+      fixWhere((n) => near(n.x, 0) && near(n.z, 0), [0, 1, 2]),
+      { withBlock: false },
+    );
+    expect(message(model)).toBeNull();
+  });
+
+  test("a plate alone, held only in Z along one edge, is named", () => {
+    const model = plateOnBlock(
+      fixWhere((n) => near(n.x, 0) && near(n.z, 0), [2]),
+      { withBlock: false },
+    );
+    expect(message(model)).toBe(
+      "Body 1 can still move along X and Y, and rotate about Y and Z. " +
+        "Add a support or connect it to another body.",
     );
   });
 });

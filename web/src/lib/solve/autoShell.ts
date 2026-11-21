@@ -38,6 +38,7 @@ import {
   coupledToShellDirichlet,
   coupledToShellPointLoads,
   solidFacesOutward,
+  type ShellDirichlet,
 } from "./bcs.js";
 import {
   coupledTies,
@@ -636,6 +637,10 @@ export interface PureShellSolve {
   mesh: ShellMesh & { thicknesses: Float64Array };
   matJson: string;
   bcsJson: string;
+  // The idealised body and the essential BCs of bcsJson, for the rigid-body
+  // check (lib/solve/rigidBody.ts), which must see the shell that is solved.
+  shellBody: number;
+  dirichlet: ShellDirichlet;
   mapResult: (result: {
     displacements: Float64Array;
     von_mises: Float64Array;
@@ -748,6 +753,8 @@ export function preparePureShellSolve(
       poisson_ratio: mat.poisson,
     }),
     bcsJson: JSON.stringify({ ...dirichlet, point_loads }),
+    shellBody: shells.shellBody,
+    dirichlet,
     mapResult: (result) => {
       // Displacements: every store node takes its nearest mid-surface node's
       // three translations (the mid-surface is offset ~t/2 from the original
