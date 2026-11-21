@@ -7,6 +7,7 @@ import { refinementChartVisible } from "../../store/studySlice";
 import { SMALL_SCREEN_QUERY } from "../../store/viewSlice";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import {
+  bandLabel,
   chartLayout,
   type ChartBox,
   type ChartField,
@@ -20,8 +21,8 @@ import css from "./StudyChart.module.css";
 
 // The mesh refinement study's convergence chart (KOF-401), in the centre in
 // place of the 3D view while Results → Mesh refinement is open: each level as
-// it lands, element count on a log axis, and for displacement the ±2 % band
-// the verdict is judged by. A point opens its level in 3D once the study is
+// it lands, element count on a log axis, and for displacement the band of the
+// study's target error the verdict is judged by. A point opens its level in 3D once the study is
 // done. Inline SVG, like the optimization's TopOptChart.
 
 // Two drawings: a phone draws a narrower one, so its text keeps its size
@@ -77,13 +78,13 @@ export function RefinementChart() {
 
   const spec = FIELDS.find((f) => f.value === field);
   if (spec === undefined) throw new Error(`Unknown chart field "${field}"`);
-  const layout = chartLayout(run.levels, field, pointBox);
+  const layout = chartLayout(run.levels, field, pointBox, run.settings);
   const openable = run.status === "done" && matches;
   const status =
     run.status === "running"
       ? run.step
       : run.status === "done" && run.levels.length >= 2
-        ? verdictLine(run.levels).text
+        ? verdictLine(run.levels, run.settings).text
         : run.status === "failed"
           ? "The study stopped — see the panel"
           : null;
@@ -180,9 +181,7 @@ export function RefinementChart() {
                     y={layout.bandY.top - 6}
                     textAnchor="end"
                   >
-                    {layout.extrapolated
-                      ? `Extrapolated ${layout.reference.toPrecision(4)} mm · ±2 %`
-                      : "±2 % of the finest level"}
+                    {bandLabel(layout, run.settings.tolerance)}
                   </text>
                 </g>
               )}
