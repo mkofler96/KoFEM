@@ -557,11 +557,12 @@ export function prepareAutoCoupledSolve(
     buildReferenceCouplings(couplings, (nodeId) => poolOf(nodeId)),
   );
   // Faces wound outward from their tets, so a pressure pushes into the body.
+  // Shell nodes and reference points carry rotations, and take a nodal moment.
   const nodalLoads = coupledLoads(
     loads,
     solidFacesOutward(surfaceLoads, elements, nodes, vid),
     poolOf,
-    isRefPoint,
+    (pi) => isShellPoolIndex(model, pi) || isRefPoint(pi),
     nodes,
     vid,
   );
@@ -728,11 +729,12 @@ export function preparePureShellSolve(
     coupledFixedDofs(constraints, shellOf, () => true, noReferencePoints),
   );
   // Faces wound outward from their tets, so a pressure pushes into the body.
+  // Every node is a shell node, so every node takes a nodal moment.
   const { load_dofs, load_vals } = coupledLoads(
     loads,
     solidFacesOutward(payload.surfaceLoads, elements, nodes, vid),
     shellOf,
-    noReferencePoints,
+    () => true,
     nodes,
     vid,
   );

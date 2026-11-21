@@ -310,7 +310,6 @@ export function optimizeSolidInRust(
       elastic,
       payload,
       vid,
-      log,
     );
     if (levelSetArgs !== null) {
       const run = fem.TopologyRun.levelSetMethod(

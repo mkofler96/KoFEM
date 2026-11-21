@@ -310,7 +310,8 @@ describe("quadratic tetrahedra", () => {
       for (let component = 0; component < 3; component++)
         loads[3 * vertex + component] += force[component];
     (bcs.surface_loads ?? []).forEach((load, index) => {
-      const unmatched = quadratic.addSurfaceLoad(
+      // Throws on a face off the boundary (KOF-411).
+      quadratic.addSurfaceLoad(
         loads,
         index,
         new Uint32Array(load.faces.flat()),
@@ -318,7 +319,6 @@ describe("quadratic tetrahedra", () => {
         load.type,
         new Float64Array([load.pressure]),
       );
-      expect(unmatched, `${name}: surface load ${index} fully matched`).toBe(0);
     });
 
     // MFEM stops at 1e-6 in its Gauss–Seidel-preconditioned norm, which on the
@@ -531,7 +531,8 @@ describe("hexahedra and mixed meshes", () => {
     bcs.surface_loads.forEach((load, index) => {
       const triangles = load.faces.filter((face) => face.length === 3);
       const quads = load.faces.filter((face) => face.length === 4);
-      const unmatched = solid.addSurfaceLoad(
+      // Throws on a face off the boundary (KOF-411).
+      solid.addSurfaceLoad(
         loads,
         index,
         new Uint32Array(triangles.flat()),
@@ -541,7 +542,6 @@ describe("hexahedra and mixed meshes", () => {
           load.type === "pressure" ? [load.pressure] : load.force,
         ),
       );
-      expect(unmatched, `${name}: surface load ${index} fully matched`).toBe(0);
     });
     const solution = solid.solve(
       new Uint32Array(dofs),

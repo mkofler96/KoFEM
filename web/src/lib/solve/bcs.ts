@@ -195,19 +195,26 @@ export function coupledFixedDofs(
 }
 
 // Point + surface loads as 6·pool+dof nodal forces, with surface-load faces
-// positioned from the store nodes.
+// positioned from the store nodes. `hasRotations` marks the pool nodes that
+// take a nodal moment: shell nodes and coupling reference points.
 export function coupledLoads(
   loads: Load[],
   surfaceLoads: SurfaceLoad[] | undefined,
   poolOf: (nodeId: number) => number,
-  isRefPoint: (poolIndex: number) => boolean,
+  hasRotations: (poolIndex: number) => boolean,
   nodes: Node[],
   vid: VertexIndexer,
 ): { load_dofs: number[]; load_vals: number[] } {
-  return packCoupledLoads(loads, surfaceLoads, poolOf, isRefPoint, (nodeId) => {
-    const node = nodes[vid(nodeId, "surface load face")];
-    return [node.x, node.y, node.z];
-  });
+  return packCoupledLoads(
+    loads,
+    surfaceLoads,
+    poolOf,
+    hasRotations,
+    (nodeId) => {
+      const node = nodes[vid(nodeId, "surface load face")];
+      return [node.x, node.y, node.z];
+    },
+  );
 }
 
 // Surface loads with every face of a solid (CTETRA) element wound outward, for
@@ -286,26 +293,36 @@ export function coupledToShellDirichlet(
 }
 
 // Fold coupled-form (6·vertex+dof) loads into solve_shell's point_loads: the
-// three force components per vertex, summed. Moments (DOF 3..5) never reach
-// here — a pure shell has no reference point to receive them.
+// three force components per vertex, summed, and the three moment components
+// where there are any — every shell vertex carries rotations, so a nodal
+// moment is applied, not dropped (KOF-411).
 export function coupledToShellPointLoads(
   load_dofs: number[],
   load_vals: number[],
-): { vertex: number; force: [number, number, number] }[] {
-  const forceByVertex = new Map<number, [number, number, number]>();
+): {
+  vertex: number;
+  force: [number, number, number];
+  moment?: [number, number, number];
+}[] {
+  const byVertex = new Map<
+    number,
+    { force: [number, number, number]; moment: [number, number, number] }
+  >();
   for (let k = 0; k < load_dofs.length; k++) {
     const vertex = Math.floor(load_dofs[k] / 6);
     const comp = load_dofs[k] % 6;
-    let acc = forceByVertex.get(vertex);
+    let acc = byVertex.get(vertex);
     if (!acc) {
-      acc = [0, 0, 0];
-      forceByVertex.set(vertex, acc);
+      acc = { force: [0, 0, 0], moment: [0, 0, 0] };
+      byVertex.set(vertex, acc);
     }
-    if (comp <= 2) acc[comp] += load_vals[k];
+    if (comp <= 2) acc.force[comp] += load_vals[k];
+    else acc.moment[comp - 3] += load_vals[k];
   }
-  return [...forceByVertex.entries()].map(([vertex, force]) => ({
+  return [...byVertex.entries()].map(([vertex, { force, moment }]) => ({
     vertex,
     force,
+    ...(moment.some((value) => value !== 0) ? { moment } : {}),
   }));
 }
 

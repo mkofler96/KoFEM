@@ -236,7 +236,6 @@ export async function solveSolidInRust(
       elastic,
       model,
       refVid,
-      log,
     );
 
     const constraintTies = model.constraintTies ?? [];
@@ -355,7 +354,6 @@ export function rustSolidBoundaryConditions(
   elastic: ElasticModel,
   model: Pick<AmgSolidModel, "constraints" | "loads" | "surfaceLoads">,
   refVid: VertexIndexer,
-  log: (line: string) => void,
 ): { fixedDofs: Uint32Array; fixedValues: Float64Array; forces: Float64Array } {
   const { fixed_vertices, fixed_dofs, prescribed_dofs } = groupDirichlet(
     model.constraints,
@@ -386,7 +384,6 @@ export function rustSolidBoundaryConditions(
     elastic,
     forces,
     surfaceLoadsToVertices(model.surfaceLoads, refVid),
-    log,
   );
   return {
     fixedDofs: Uint32Array.from(fixedDofList),
@@ -510,7 +507,7 @@ export async function solveCoupledSolidInRust(
       else {
         addLoads(input.pointLoads);
         const translations = new Float64Array(elastic.dofCount);
-        addSurfaceLoads(elastic, translations, input.poolSurfaceLoads, log);
+        addSurfaceLoads(elastic, translations, input.poolSurfaceLoads);
         for (let node = 0; node < nodeCount; node++)
           for (let component = 0; component < 3; component++)
             forces[perVertex * node + component] +=
@@ -616,12 +613,13 @@ async function runRustSolve<T>(
 }
 
 // Add the work-equivalent nodal forces of `surfaceLoads` (faces as vertex
-// indices) to `forces` (3 per node), warning about faces off the boundary.
+// indices) to `forces` (3 per node). Rust refuses a load with a face off the
+// boundary, which would put the total on a smaller area (KOF-411);
+// surfaceLoadRefusal names it before the solve gets here.
 function addSurfaceLoads(
   elastic: ElasticModel,
   forces: Float64Array,
   surfaceLoads: SurfaceLoad[],
-  log: (line: string) => void,
 ): void {
   surfaceLoads.forEach((surfaceLoad, index) => {
     // Tet faces are triangles, hex faces quadrilaterals.
@@ -637,7 +635,7 @@ function addSurfaceLoads(
             "(hexahedron) faces only",
         );
     });
-    const unmatched = elastic.addSurfaceLoad(
+    elastic.addSurfaceLoad(
       forces,
       index,
       Uint32Array.from(triangles),
@@ -645,12 +643,6 @@ function addSurfaceLoads(
       surfaceLoad.type,
       surfaceLoadValues(surfaceLoad, index),
     );
-    if (unmatched > 0)
-      log(
-        `WARNING: surface load ${index}: ${unmatched} of ${surfaceLoad.faces.length} ` +
-          "selected face(s) are not on the mesh boundary and carry no load — " +
-          "check for stale or interior face selections",
-      );
   });
 }
 

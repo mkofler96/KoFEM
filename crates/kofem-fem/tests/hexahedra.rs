@@ -478,12 +478,31 @@ fn surface_force_on_linear_quadrilaterals_goes_a_quarter_to_each_corner() {
     let faces = quad_side(&mesh, 0, size[0]);
     assert_eq!(faces.len(), 4);
     let mut forces = vec![0.0; mesh.dof_count()];
-    // A duplicate and an interior face: counted once, and reported.
+    // A duplicate counts once; an interior face is refused (KOF-411).
     let mut selection = faces.clone();
     selection.push(faces[0]);
+    let boundary = BoundaryFaces::new(&mesh);
     let interior = quad_side(&mesh, 0, 1.0)[0];
-    selection.push(interior);
-    let report = BoundaryFaces::new(&mesh)
+    let mut with_interior = selection.clone();
+    with_interior.push(interior);
+    assert_eq!(
+        boundary
+            .apply(
+                &mesh,
+                0,
+                &[],
+                &with_interior,
+                SurfaceLoadKind::Force([0.0, 0.0, -400.0]),
+                &mut forces,
+            )
+            .err(),
+        Some(FemError::SurfaceLoadUnmatched {
+            load: 0,
+            unmatched: 1,
+            selected: with_interior.len(),
+        })
+    );
+    let report = boundary
         .apply(
             &mesh,
             0,
@@ -494,7 +513,6 @@ fn surface_force_on_linear_quadrilaterals_goes_a_quarter_to_each_corner() {
         )
         .expect("applies");
     assert_eq!(report.matched, 4);
-    assert_eq!(report.unmatched, 1);
     // Four equal faces: −100 each, −25 per face corner.
     for (vertex, point) in mesh.vertices().iter().enumerate() {
         let faces_here = faces

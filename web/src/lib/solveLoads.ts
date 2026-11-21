@@ -154,24 +154,34 @@ export function shellPointLoads(
 
 // Point + surface loads → equivalent nodal forces on the pool.
 //
-// A moment (DOF 3..5) is applied directly where the node has a rotational DOF to
-// receive it — a coupling REFERENCE POINT. That is the couple a surface-to-point
-// coupling exists to carry: the point takes M, the coupling spreads it over the
-// gripped surface as the statically equivalent traction, and no lever arm has to
-// be invented. Elsewhere a moment still arrives pre-converted to a ring of nodal
-// forces (momentToNodalForces), so it is skipped here as it always was.
+// A moment (DOF 3..5) is applied directly where the node has rotational DOFs to
+// receive it: a shell node, or a coupling REFERENCE POINT. At a reference point
+// that is the couple a surface-to-point coupling exists to carry: the point
+// takes M, and the coupling spreads it over the gripped surface as the
+// statically equivalent traction. A moment on a face reaches here already as a
+// ring of nodal forces (momentToNodalForces); one left on a node without
+// rotations (a solid node) has nowhere to act, so it is refused rather than
+// dropped (KOF-411), as the solid path refuses it (groupPointLoads).
 export function coupledLoads(
   loads: Load[],
   surfaceLoads: SurfaceLoad[] | undefined,
   poolOf: (nodeId: number) => number,
-  isRefPoint: (poolIndex: number) => boolean,
+  hasRotations: (poolIndex: number) => boolean,
   posOf: (nodeId: number) => [number, number, number],
 ): { load_dofs: number[]; load_vals: number[] } {
   const load_dofs: number[] = [];
   const load_vals: number[] = [];
   for (const l of loads) {
     const pi = poolOf(l.nodeId);
-    if (l.dof > 2 && !isRefPoint(pi)) continue;
+    if (l.dof > 2 && !hasRotations(pi)) {
+      if (l.value !== 0)
+        throw new Error(
+          `Node ${l.nodeId} carries a moment (DOF ${l.dof} = ${l.value}), but it is a solid ` +
+            "node with no rotational DOF, so the moment would be dropped. Apply the moment " +
+            "to a face, or couple the surface to a reference point and apply it there.",
+        );
+      continue;
+    }
     load_dofs.push(6 * pi + l.dof);
     load_vals.push(l.value);
   }

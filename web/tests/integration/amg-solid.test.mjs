@@ -372,6 +372,8 @@ describe("wall bracket: Rust AMG against MFEM", () => {
           elements: [
             { id: 1, type: "CTRIA3", nodeIds: [1, 2, 3], propertyId: 1 },
           ],
+          // The solid model's loaded faces are not on this facet (KOF-411).
+          surfaceLoads: [],
         }),
       ).toBe("incomplete-cholesky");
     });
@@ -524,24 +526,16 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     });
   });
 
-  test("a surface load selecting only interior or stale faces is refused, as in MFEM", async () => {
-    const loaded = model.surfaceLoads[0].faces;
-    let refusal = "";
+  // MFEM refused a load none of whose faces is on the boundary, and skipped
+  // the faces off it otherwise, spreading a total force over the rest. Rust
+  // refuses both (KOF-411).
+  const refusalOf = async (faces) => {
     try {
       await solveSolidInRust(
         fem,
         {
           ...model,
-          surfaceLoads: [
-            {
-              type: "pressure",
-              faces: [model.elements[0].nodeIds.slice(0, 3)].filter(
-                (face) =>
-                  !loaded.some((candidate) => candidate.join() === face.join()),
-              ),
-              pressure: 1,
-            },
-          ],
+          surfaceLoads: [{ type: "force", faces, force: [0, 0, -100] }],
         },
         1,
         "amg",
@@ -552,11 +546,45 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         ignoreProgress,
       );
     } catch (error) {
-      refusal = String(error);
+      return String(error);
     }
-    // The first tet's first face is interior on almost every mesh; if it happens
-    // to be on the boundary the load is simply applied, which is also correct.
-    if (refusal !== "") expect(refusal).toMatch(/no force at all/);
+    return "";
+  };
+  // An interior face: one of the first tet's faces shared with another tet.
+  // A function, not a value: the model is loaded in beforeAll.
+  const interiorFace = () => {
+    const faceKey = (face) => [...face].sort((a, b) => a - b).join();
+    const owners = new Map();
+    for (const element of model.elements)
+      for (const face of [
+        [0, 1, 2],
+        [0, 1, 3],
+        [0, 2, 3],
+        [1, 2, 3],
+      ]) {
+        const key = faceKey(face.map((corner) => element.nodeIds[corner]));
+        owners.set(key, (owners.get(key) ?? 0) + 1);
+      }
+    const interior = [0, 1, 2, 3]
+      .map((skip) => model.elements[0].nodeIds.filter((_, at) => at !== skip))
+      .find((face) => owners.get(faceKey(face)) === 2);
+    expect(interior).toBeDefined();
+    return interior;
+  };
+
+  test("a surface load selecting only interior faces is refused", async () => {
+    expect(await refusalOf([interiorFace()])).toMatch(
+      /surface load 0: 1 of the 1 selected face\(s\) are not on the mesh boundary/,
+    );
+  });
+
+  test("a surface load with one interior face among boundary faces is refused, not concentrated", async () => {
+    const loaded = model.surfaceLoads[0].faces;
+    expect(await refusalOf([...loaded, interiorFace()])).toMatch(
+      new RegExp(
+        `surface load 0: 1 of the ${loaded.length + 1} selected face\\(s\\) are not on the mesh boundary`,
+      ),
+    );
   });
 
   // A budget of 5 iterations runs out long before convergence while the residual

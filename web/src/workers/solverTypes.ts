@@ -67,11 +67,16 @@ export interface Load {
 //   force    — total force vector spread as a uniform traction over the face
 //   pressure — scalar magnitude applied as -p·n̂ (outward normal; + pushes in)
 //   traction — traction vector applied directly
+// `name` (the load group's) and `unmatchedSelections` (selections that span no
+// face of the mesh) let the solve refuse a load it cannot apply in full, by
+// name (surfaceLoadRefusal, KOF-411).
 export interface SurfaceLoad {
   type: "force" | "pressure" | "traction";
   faces: number[][];
   force?: [number, number, number];
   pressure?: number;
+  name?: string;
+  unmatchedSelections?: number;
 }
 export interface ParseStepPayload {
   bytes: Uint8Array;

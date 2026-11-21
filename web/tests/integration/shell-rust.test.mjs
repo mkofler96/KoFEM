@@ -787,6 +787,22 @@ describe("pressure on the auto-shell paths", () => {
       expectResultant(resultant, [0, -pressure * area, 0]);
     });
 
+    // KOF-411: a nodal moment on the idealised body lands on its nearest
+    // mid-surface node, which has rotations; it was dropped before.
+    test("a nodal moment is applied, not dropped", () => {
+      const nodeId = finModel.elements[0].nodeIds[0];
+      const pure = preparePureShellSolve(
+        { ...finModel, loads: [{ nodeId, dof: 4, value: 250 }] },
+        new Set([1]),
+        quiet,
+      );
+      const moments = JSON.parse(pure.bcsJson).point_loads.filter(
+        (entry) => entry.moment,
+      );
+      expect(moments).toHaveLength(1);
+      expect(moments[0].moment).toEqual([0, 250, 0]);
+    });
+
     // KOF-353: the shell solver applies no tie, so a tie on the pure auto-shell
     // path is refused by name rather than dropped.
     test("a tie is refused by name", () => {
@@ -855,6 +871,55 @@ describe("pressure on the auto-shell paths", () => {
         ...model.nodes.filter(inBody(1)).map((point) => point.z),
       );
       coupledResultant((p) => inBody(1)(p) && p.z > zMax - 1e-6, [0, 0, 1]);
+    });
+
+    // KOF-411: a nodal moment on the shelled fin reaches a rotational DOF of
+    // the shell node it maps to; on the solid base it has nowhere to act and
+    // is refused. Both were dropped before.
+    test("a nodal moment on the shelled fin is applied, on the solid base refused", () => {
+      // The fin node farthest from the base: on a thin wall, not a retained
+      // solid section.
+      const base = model.nodes.filter(inBody(1));
+      const centre = [0, 1, 2].map(
+        (axis) =>
+          base.reduce(
+            (sum, point) => sum + [point.x, point.y, point.z][axis],
+            0,
+          ) / base.length,
+      );
+      const distance = (point) =>
+        Math.hypot(
+          point.x - centre[0],
+          point.y - centre[1],
+          point.z - centre[2],
+        );
+      const finNode = model.nodes
+        .filter(inBody(2))
+        .reduce((far, point) =>
+          distance(point) > distance(far) ? point : far,
+        ).id;
+      const coupled = prepareAutoCoupledSolve(
+        { ...model, loads: [{ nodeId: finNode, dof: 5, value: 300 }] },
+        new Set([2]),
+        quiet,
+      );
+      const rotational = Array.from(coupled.bcs.load_dofs)
+        .map((dof, index) => ({ dof, value: coupled.bcs.load_vals[index] }))
+        .filter(({ dof }) => dof % 6 > 2);
+      expect(rotational).toHaveLength(1);
+      expect(rotational[0].dof % 6).toBe(5);
+      expect(rotational[0].value).toBe(300);
+
+      const baseNode = model.nodes.find(
+        (point) => inBody(1)(point) && !inBody(2)(point),
+      ).id;
+      expect(() =>
+        prepareAutoCoupledSolve(
+          { ...model, loads: [{ nodeId: baseNode, dof: 3, value: 300 }] },
+          new Set([2]),
+          quiet,
+        ),
+      ).toThrow(new RegExp(`Node ${baseNode} carries a moment`));
     });
 
     test("pressure on the shelled fin's wall", () => {
