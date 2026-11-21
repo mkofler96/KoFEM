@@ -257,3 +257,38 @@
   bottom: 0;
   border-left-width: 1px;
 }
+
+/* Delete cross at a boundary object's row end (KOF-423): hidden until the row
+   is hovered or the cross has keyboard focus; always shown where there is no
+   hover (touch screens). */
+.rowDelete {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted-2);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.entryRow:hover .rowDelete,
+.rowDelete:focus-visible {
+  opacity: 1;
+}
+
+.rowDelete:hover {
+  background: var(--hover);
+  color: var(--warn);
+}
+
+@media (hover: none) {
+  .rowDelete {
+    opacity: 1;
+  }
+}
