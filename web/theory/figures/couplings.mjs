@@ -430,10 +430,26 @@ function torsionDecay() {
   parts.push(
     curve("distributing", "accent2"),
     curve("kinematic", "accent", 'stroke-dasharray="6 4"'),
-    line([330, 48], [360, 48], "accent2"),
-    text([366, 52], "distributing (RBE3)", "small accent2-text", "start"),
-    line([330, 66], [360, 66], "accent", 'stroke-dasharray="6 4"'),
-    text([366, 70], "kinematic (RBE2)", "small accent-text", "start"),
+    // The legend in the empty band below the curves.
+    line([330, Y(0.45 * top)], [360, Y(0.45 * top)], "accent2"),
+    text(
+      [366, Y(0.45 * top) + 4],
+      "distributing (RBE3)",
+      "small accent2-text",
+      "start",
+    ),
+    line(
+      [330, Y(0.45 * top) + 18],
+      [360, Y(0.45 * top) + 18],
+      "accent",
+      'stroke-dasharray="6 4"',
+    ),
+    text(
+      [366, Y(0.45 * top) + 22],
+      "kinematic (RBE2)",
+      "small accent-text",
+      "start",
+    ),
     text([604, 262], "coupled tip", "small lbl", "end"),
   );
   return parts.join("");
