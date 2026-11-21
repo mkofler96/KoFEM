@@ -5,8 +5,9 @@ import { tex, texBlock } from "../../examples/validation/lib/tex.mjs";
 
 export default {
   slug: "foundations/consistent-units",
+  searchTitle: "Consistent units in FEA: SI, N–mm–s and more",
   description:
-    "Compare consistent SI, N–mm–s, N–mm–ms, kN–mm–ms, CGS and US customary unit systems for finite element analysis, with material-value conversions.",
+    "Consistent unit systems for finite element analysis in one table: SI, N–mm–s, N–mm–ms, kN–mm–ms, CGS and US customary, with steel's values in each.",
   sections: [
     ["consistency", "What consistency means"],
     ["systems", "Common unit systems"],

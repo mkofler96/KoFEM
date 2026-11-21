@@ -66,7 +66,7 @@ test.describe("static theory content", () => {
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);
       expect(await response?.text()).toContain("<h1>");
-      await expect(page).toHaveTitle(/KoFEM Theory Guide/);
+      await expect(page).toHaveTitle(/ \| KoFEM( Theory Guide)?$/);
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
         "href",
         `https://kofem.org${path}`,

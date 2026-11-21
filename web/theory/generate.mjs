@@ -146,10 +146,12 @@ function frame(slug, sectionList, body) {
 const viewerHead = `<script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
     <script type="module" src="/theory/viewer.js"></script>`;
 
-function page({ title, description, path, body, article = false }) {
+// A search result shows the <title>; `searchTitle` leads it with the phrase
+// people search for (KOF-333) while the page keeps its short heading.
+function page({ title, searchTitle, description, path, body, article = false }) {
   const head = `<link href="/theory.css" rel="stylesheet" />${body.includes('class="result-viewer"') ? `\n    ${viewerHead}` : ""}`;
   return renderDocsPage({
-    title: `${title} | KoFEM Theory Guide`,
+    title: searchTitle ? `${searchTitle} | KoFEM` : `${title} | KoFEM Theory Guide`,
     description,
     path,
     generatedBy: "web/theory/generate.mjs (cd web && bun run theory:generate)",
@@ -208,8 +210,9 @@ export function renderTheoryPages() {
       "theory/index.html",
       page({
         title: "Theory Guide",
+        searchTitle: "FEM theory guide with worked examples",
         description:
-          "Connected articles explaining KoFEM’s physical assumptions, mathematics and numerical methods, from coherent units to verification of a static solid study.",
+          "How finite element analysis works, from units and linear elasticity to elements, assembly, solvers, shells and topology optimization, with worked examples.",
         path: "/theory/",
         body: frame(
           null,
@@ -239,6 +242,7 @@ export function renderTheoryPages() {
       `theory/${topic.slug}/index.html`,
       page({
         title: topic.title,
+        searchTitle: article.searchTitle,
         description: article.description,
         path: articleUrl(topic),
         article: true,

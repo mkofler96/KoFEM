@@ -47,8 +47,9 @@ function historyChart(history) {
 const last = (row) => row.history[row.history.length - 1];
 
 export default {
+  searchTitle: "MBB beam topology optimization with SIMP",
   description:
-    "The MBB beam, the standard minimum-compliance topology optimization benchmark, solved in KoFEM with SIMP and MMA on a Netgen mesh: settings, convergence and the resulting truss.",
+    "The MBB beam, the standard topology optimization benchmark: SIMP and MMA minimize compliance with half the volume and find a truss. Runs in your browser.",
   opens: "Opens the model in the app, ready to optimize.",
   figure: () => mbbFigure(),
   intro: () => `
