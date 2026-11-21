@@ -226,6 +226,11 @@ export function renderTheoryPages() {
       throw new Error(
         `${article.slug}: a TeX \\; spacing command lost its backslash; write "\\\\;" in the source`,
       );
+    // The page heading comes from the topic title in content.mjs.
+    if (/<h1[\s>]/.test(article.body))
+      throw new Error(
+        `${article.slug}: the article body has its own <h1>; the generator writes the heading from content.mjs`,
+      );
     const topic = topics[index];
     // Keep the reading path continuous while planned topics remain in the contents.
     const previous = topics.slice(0, index).findLast(published);

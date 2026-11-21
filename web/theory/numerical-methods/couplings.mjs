@@ -56,7 +56,6 @@ export default {
     ["references", "References"],
   ],
   body: `
-    <h1>Kinematic and distributing couplings</h1>
     <p class="lede">What does a coupling do to the surface it grips, and which
       one should stand in for a screw, a shaft or a remote load?</p>
 

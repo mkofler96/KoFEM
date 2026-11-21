@@ -102,6 +102,11 @@ describe("every page", () => {
   test.each(pages)("%s: title does not repeat a phrase", (path) => {
     expect(repeatedPairs(snippet(path).title)).toEqual([]);
   });
+
+  test.each(pages)("%s: has one page heading", (path) => {
+    const html = readFileSync(resolve(web, path), "utf8");
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1);
+  });
 });
 
 describe("pages that rank without clicks", () => {
