@@ -21,8 +21,8 @@
 mod support;
 
 use kofem_fem::{
-    shell_stress_tensors, stress_tensors, von_mises, ElementOrder, Isotropic, ShellMesh,
-    ShellSurface, TetMesh,
+    corner_stress_tensors, shell_corner_stress_tensors, shell_stress_tensors, stress_tensors,
+    von_mises, ElementOrder, Isotropic, ShellMesh, ShellSurface, TetMesh,
 };
 use support::box_mesh;
 
@@ -67,6 +67,15 @@ fn linear_field(mesh: &TetMesh) -> Vec<f64> {
 fn assert_tensors(mesh: &TetMesh, label: &str) {
     let tensors = stress_tensors(mesh, &linear_field(mesh)).expect("fits");
     assert_eq!(tensors.len(), mesh.element_count(), "{label}");
+    let corners = corner_stress_tensors(mesh, &linear_field(mesh)).expect("fits");
+    let corner_count: usize = (0..mesh.element_count())
+        .map(|element| match mesh.shape(element) {
+            kofem_fem::ElementShape::Tetrahedron => 4,
+            kofem_fem::ElementShape::Hexahedron => 8,
+        })
+        .sum();
+    assert_eq!(corners.len(), corner_count, "{label} corners");
+    let tensors: Vec<[f64; 6]> = tensors.into_iter().chain(corners).collect();
     let expected = expected_tensor();
     let scale = expected.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
     for (element, tensor) in tensors.iter().enumerate() {
@@ -115,6 +124,44 @@ fn hex_cube(order: ElementOrder) -> TetMesh {
 fn hexahedra_reproduce_a_linear_field() {
     assert_tensors(&hex_cube(ElementOrder::Linear), "hex8");
     assert_tensors(&hex_cube(ElementOrder::Quadratic), "hex27");
+}
+
+/// The exact pure-bending field of elasticity, u = (κxz, −νκyz,
+/// −κ/2·(x² + ν(z² − y²))), is quadratic: a quadratic tet holds it exactly, so
+/// its stress at every corner is σxx = E·κ·z of that corner and nothing else.
+#[test]
+fn quadratic_tets_give_the_exact_stress_at_their_corners() {
+    let mesh = box_mesh([3, 2, 2], [3.0, 2.0, 2.0], steel())
+        .mesh
+        .with_order(ElementOrder::Quadratic)
+        .expect("fits");
+    let kappa = 1e-4;
+    let field: Vec<f64> = mesh
+        .node_coordinates()
+        .iter()
+        .flat_map(|&[x, y, z]| {
+            [
+                kappa * x * z,
+                -POISSON * kappa * y * z,
+                -0.5 * kappa * (x * x + POISSON * (z * z - y * y)),
+            ]
+        })
+        .collect();
+    let corners = corner_stress_tensors(&mesh, &field).expect("fits");
+    let scale = YOUNG * kappa;
+    for (element, tet) in mesh.tets().iter().enumerate() {
+        for (corner, &vertex) in tet.iter().enumerate() {
+            let z = mesh.vertices()[vertex as usize][2];
+            let tensor = corners[4 * element + corner];
+            assert!(
+                (tensor[0] - YOUNG * kappa * z).abs() < 1e-9 * scale,
+                "tet {element} corner {corner}: {tensor:?} at z = {z}"
+            );
+            for other in &tensor[1..] {
+                assert!(other.abs() < 1e-9 * scale, "{tensor:?}");
+            }
+        }
+    }
 }
 
 #[test]
@@ -217,6 +264,30 @@ fn shell_bending_stress_has_the_physical_sign_on_each_surface() {
     // A facet in the plane z = 0 has no out-of-plane components.
     for tensor in [top, bottom] {
         assert!(tensor[2].abs() < 1e-12 && tensor[4].abs() < 1e-12 && tensor[5].abs() < 1e-12);
+    }
+}
+
+#[test]
+fn shell_corner_stress_of_a_uniform_state_matches_the_centre() {
+    let mesh = facet();
+    let strain = 1e-4;
+    let mut dofs = vec![0.0; 18];
+    for (node, x) in [0.0, 2.0, 0.0].into_iter().enumerate() {
+        dofs[6 * node] = strain * x;
+    }
+    for surface in [
+        ShellSurface::Top,
+        ShellSurface::Middle,
+        ShellSurface::Bottom,
+    ] {
+        let centre = shell_stress_tensors(&mesh, &dofs, surface).expect("fits")[0];
+        let corners = shell_corner_stress_tensors(&mesh, &dofs, surface).expect("fits");
+        assert_eq!(corners.len(), 3);
+        for corner in corners {
+            for (got, want) in corner.iter().zip(centre) {
+                assert!((got - want).abs() < 1e-9 * centre[0].abs());
+            }
+        }
     }
 }
 

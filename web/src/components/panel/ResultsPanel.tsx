@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
 import type {
   ResultPlot,
@@ -307,6 +307,7 @@ function ProbeSection({ field }: { field: ResultType }) {
           Click the model to read {symbol} there.
         </div>
       )}
+      <ProbeAtPoint symbol={symbol} />
       <div style={{ marginTop: 8, marginBottom: 12 }}>
         {placed.map(({ probe, reading }) => (
           <ProbeRow
@@ -321,6 +322,61 @@ function ProbeSection({ field }: { field: ResultType }) {
         ))}
       </div>
     </>
+  );
+}
+
+// A probe at typed coordinates (KOF-447): it reads the surface point nearest
+// them, so a published value at a named point can be read exactly.
+function ProbeAtPoint({ symbol }: { symbol: string }) {
+  const addProbeAt = useModelStore((s) => s.addProbeAt);
+  const [coords, setCoords] = useState(["", "", ""]);
+  const [error, setError] = useState<string | null>(null);
+  const add = () => {
+    const point = coords.map((c) => (c.trim() === "" ? Number.NaN : Number(c)));
+    if (!point.every(Number.isFinite)) {
+      setError("Enter x, y and z as numbers.");
+      return;
+    }
+    try {
+      addProbeAt([point[0], point[1], point[2]]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className={styles.formNote}>Or read {symbol} at a point (mm):</div>
+      <div className={styles.formRow} style={{ gap: 4 }}>
+        {(["x", "y", "z"] as const).map((axis, i) => (
+          <input
+            key={axis}
+            className={styles.formInput}
+            data-testid={`probe-at-${axis}`}
+            aria-label={`Probe ${axis} (mm)`}
+            placeholder={axis}
+            inputMode="decimal"
+            value={coords[i]}
+            onChange={(e) =>
+              setCoords(coords.map((c, k) => (k === i ? e.target.value : c)))
+            }
+            onKeyDown={(e) => e.key === "Enter" && add()}
+          />
+        ))}
+        <button
+          className={styles.outlineBtn}
+          data-testid="probe-at-add"
+          onClick={add}
+        >
+          Add
+        </button>
+      </div>
+      {error && (
+        <div className={styles.formNote} data-testid="probe-at-error">
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 

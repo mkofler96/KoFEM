@@ -69,6 +69,10 @@ import {
 import { constraintTieCount } from "../../../web/src/lib/tie.ts";
 import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
+import {
+  anchorAtPoint,
+  readProbes,
+} from "../../../web/src/lib/resultProbe.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
@@ -701,6 +705,7 @@ async function solveSolid(payload, where) {
   return {
     displacements: expandTiedDisplacements(nodes, tied, solved.displacements),
     vonMises: solved.vonMises,
+    stress: solved.stress,
   };
 }
 
@@ -719,7 +724,11 @@ async function solveShell(payload, where) {
     neverAsk,
     () => {},
   );
-  return { displacements: solved.displacements, vonMises: solved.von_mises };
+  return {
+    displacements: solved.displacements,
+    vonMises: solved.von_mises,
+    stress: solved.stress,
+  };
 }
 
 function unsupportedRoute(path, where) {
@@ -836,6 +845,17 @@ function resolvedProbe(p, cadFaceIds) {
     };
   if (p.kind === "twist")
     return { ...base, spec: { kind: "twist", axis: p.axis, cadFaceIds } };
+  if (p.kind === "stress" && p.at !== undefined)
+    return {
+      ...base,
+      spec: {
+        kind: "stress",
+        field: p.field,
+        // A solid element has the same stress on every "surface".
+        surface: p.surface === undefined ? "middle" : p.surface,
+        point: [...p.at],
+      },
+    };
   return {
     ...base,
     spec: {
@@ -861,6 +881,9 @@ function resolvedProbe(p, cadFaceIds) {
  *   stress                  largest volume-weighted nodal von Mises
  *                           (the app's nodeVonMisesField) over the faces'
  *                           nodes, or all nodes
+ *   stress at point         the app's probe at those coordinates
+ *                           (anchorAtPoint, readProbes): the nodal field
+ *                           interpolated at the nearest surface point
  *
  * then divided by `divideBy` when the probe has one.
  *
@@ -939,6 +962,16 @@ export function evaluateProbe(probe, model) {
           s + (r1 * u[3 * v + a2] - r2 * u[3 * v + a1]) / r2sum,
         0,
       ) / off.length;
+  } else if (spec.kind === "stress" && spec.point) {
+    const [reading] = readProbes(
+      [{ id: 0, ...anchorAtPoint(spec.point, model) }],
+      model,
+      spec.field,
+      spec.surface,
+    );
+    if (reading.kind === "unreadable")
+      throw new Error(`probe: ${reading.reason}`);
+    value = reading.value;
   } else if (spec.kind === "stress") {
     const nodal = nodeVonMisesField(
       { displacements: result.displacements, vonMises: result.vonMises },

@@ -16,10 +16,27 @@ export const SHELL_SURFACES: readonly ShellSurface[] = [
   "bottom",
 ];
 
-// The stress tensor of every element on each surface (KOF-447): six global
-// components per element, σxx σyy σzz τxy τyz τzx, in element order. A model
+// The stress tensor of every element on each surface (KOF-447), recovered at
+// the element's corner vertices: six global components, σxx σyy σzz τxy τyz
+// τzx, per corner, the corners in the element's node order (four per tet,
+// eight per hex, three per shell facet), the elements in mesh order. A model
 // without shells holds the same array on every surface.
 export type ElementStress = Record<ShellSurface, Float64Array>;
+
+// Corner tensors of consecutive elements, joined into one array.
+export function concatTensors(parts: readonly Float64Array[]): Float64Array {
+  const out = new Float64Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
+// The number of tensors an element carries: one per corner vertex.
+export const cornerCount = (element: { nodeIds: readonly number[] }): number =>
+  element.nodeIds.length;
 
 // An ElementStress built surface by surface.
 export const mapSurfaces = (

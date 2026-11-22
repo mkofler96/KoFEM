@@ -99,6 +99,12 @@
 //   { kind: "stress", field: "vonMises", stat: "max", faces?: FaceRef[] }
 //       the largest nodal von Mises stress (averaged to the nodes as the app
 //       averages it), over the faces' nodes or the whole model (MPa)
+//   { kind: "stress", field: StressField, surface?: ShellSurface, at: Point }
+//       a stress component or principal stress (the Results field of that
+//       name, e.g. "Normal stress σyy") at the surface point nearest `at`, as
+//       a probe placed there by its coordinates reads it (MPa). `surface`
+//       ("top", "middle" or "bottom") is required on a shell model and
+//       absent on a solid one.
 //   Any probe may carry `divideBy` (a positive number, e.g. the nominal
 //   stress, to read Kt) and must carry `unit` ("mm", "rad", "MPa", "").
 //
@@ -141,6 +147,12 @@
 // @property {Optimize} [optimize]       a topology optimisation instead of the
 //                                       static solve; read out by "compliance"
 // @property {Readout} readout
+
+import {
+  isStressField,
+  SHELL_SURFACES,
+  STRESS_FIELDS,
+} from "../../../web/src/lib/stressFields.ts";
 
 /** Steel as the app seeds it (web/src/store/materialSlice.ts DEFAULT_MATERIAL). */
 export const APP_STEEL = Object.freeze({
@@ -396,6 +408,23 @@ export function validateRecipe(id, r) {
     if (![0, 1, 2].includes(p.axis))
       throw new Error(`${at}: twist probe needs axis 0, 1 or 2`);
     faceRefs(p.faces, `${at}.readout.probe`);
+  } else if (p.kind === "stress" && p.at !== undefined) {
+    if (!isStressField(p.field))
+      throw new Error(
+        `${at}: a stress probe at a point needs field one of ${STRESS_FIELDS.join(", ")}`,
+      );
+    if (!isPoint(p.at)) throw new Error(`${at}: probe.at must be a point`);
+    const shell = r.discretization.kind === "shell";
+    if (shell && !SHELL_SURFACES.includes(p.surface))
+      throw new Error(
+        `${at}: a stress probe on a shell needs surface "top", "middle" or "bottom"`,
+      );
+    if (!shell && p.surface !== undefined)
+      throw new Error(
+        `${at}: a solid has one stress per element; its stress probe takes no surface`,
+      );
+    if (p.faces !== undefined || p.stat !== undefined)
+      throw new Error(`${at}: a stress probe at a point takes no faces or stat`);
   } else if (p.kind === "stress") {
     if (p.field !== "vonMises" || p.stat !== "max")
       throw new Error(

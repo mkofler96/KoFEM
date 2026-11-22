@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {
+  cornerCount,
   SHELL_SURFACES,
   uniformStress,
   type ElementStress,
@@ -42,6 +43,8 @@ import { restoreInterfaces, type BodyInterface } from "./interfaces";
 //     <UnstructuredGrid>
 //       <FieldData>
 //         <DataArray type="UInt8" Name="KoFEM" format="binary">  ← setup JSON
+//         Stress, or StressTop / StressMiddle / StressBottom (Float64 ×6 per
+//                       element corner; corners in each cell's node order)
 //       </FieldData>
 //       <Piece NumberOfPoints=... NumberOfCells=...>
 //         <Points>      Float64 ×3 node coordinates (in store order)
@@ -256,11 +259,12 @@ export function serializeAnalysis(state: AnalysisState): string {
     throw new Error(
       `Cannot save analysis: von Mises field has ${result.vonMises.length} values but the mesh has ${elements.length} elements (von Mises is stored per element)`,
     );
+  const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
   if (result?.stress)
     for (const surface of SHELL_SURFACES)
-      if (result.stress[surface].length !== 6 * elements.length)
+      if (result.stress[surface].length !== 6 * corners)
         throw new Error(
-          `Cannot save analysis: the ${surface} stress tensors have ${result.stress[surface].length} values but the mesh has ${elements.length} elements (expected six per element)`,
+          `Cannot save analysis: the ${surface} stress tensors have ${result.stress[surface].length} values but the mesh's elements have ${corners} corners (expected six per corner)`,
         );
 
   const idToIndex = new Map(nodes.map((n, i) => [n.id, i]));
@@ -341,19 +345,21 @@ export function serializeAnalysis(state: AnalysisState): string {
     cellData.push(
       dataArray("Float64", "VonMises", joinTuples(result.vonMises, 1)),
     );
-  // One tensor per element (σxx σyy σzz τxy τyz τzx); a model with shells
-  // keeps each surface, one without holds the same tensor on all three.
+  // One tensor per element corner (σxx σyy σzz τxy τyz τzx): field data, as a
+  // value per corner is no cell array. A model with shells keeps each surface;
+  // one without holds the same tensors on all three.
+  const fieldData: string[] = [];
   if (result?.stress) {
     const { top, middle, bottom } = result.stress;
     if (top === middle && middle === bottom)
-      cellData.push(dataArray("Float64", "Stress", joinTuples(top, 6), 6));
+      fieldData.push(dataArray("Float64", "Stress", joinTuples(top, 6), 6));
     else
       for (const [name, values] of [
         ["StressTop", top],
         ["StressMiddle", middle],
         ["StressBottom", bottom],
       ] as const)
-        cellData.push(dataArray("Float64", name, joinTuples(values, 6), 6));
+        fieldData.push(dataArray("Float64", name, joinTuples(values, 6), 6));
   }
 
   const points = nodes.map((n) => `${n.x} ${n.y} ${n.z}`).join("\n");
@@ -367,6 +373,7 @@ export function serializeAnalysis(state: AnalysisState): string {
     `<DataArray type="UInt8" Name="KoFEM" NumberOfTuples="${encodedMeta.byteLength}" format="binary">`,
     encodedMeta.b64,
     `</DataArray>`,
+    ...fieldData,
     `</FieldData>`,
     `<Piece NumberOfPoints="${nodes.length}" NumberOfCells="${elements.length}">`,
     `<Points>`,
@@ -703,9 +710,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
       expectLength(vm.length, nCells, "VonMises");
       result.vonMises = new Float64Array(vm);
     }
+    const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
     const tensors = (name: string): Float64Array => {
       const values = parseNumbers(dataArrayContent(text, name), name);
-      expectLength(values.length, 6 * nCells, name);
+      expectLength(values.length, 6 * corners, name);
       return new Float64Array(values);
     };
     const has = (name: string) =>

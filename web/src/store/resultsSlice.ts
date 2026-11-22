@@ -6,7 +6,7 @@
 
 import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
-import type { ResultProbe } from "../lib/resultProbe";
+import { anchorAtPoint, type ResultProbe } from "../lib/resultProbe";
 import type { ReactionSummary } from "../lib/solve/reactions";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
@@ -136,6 +136,9 @@ export interface ResultsSlice {
     point: [number, number, number],
     anchor: { cadFaceId: number } | { triangle: [number, number, number] },
   ): void;
+  // A probe at a point given by its coordinates, on the surface triangle
+  // nearest it (KOF-447). Throws when the mesh has no surface to place it on.
+  addProbeAt(point: [number, number, number]): void;
   removeProbe(id: number): void;
 
   // Mode navigation
@@ -267,6 +270,16 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
           ? { id, point, cadFaceId: anchor.cadFaceId }
           : { id, point, triangle: anchor.triangle },
       );
+    }),
+  addProbeAt: (point) =>
+    set((s) => {
+      const anchor = anchorAtPoint(point, {
+        nodes: s.nodes,
+        surfaceTriangles: s.surfaceTriangles,
+        surfaceFaceIds: s.surfaceFaceIds,
+      });
+      const id = s.nextProbeId++;
+      s.probes.push({ id, ...anchor });
     }),
   removeProbe: (id) =>
     set((s) => {

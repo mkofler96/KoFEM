@@ -34,11 +34,14 @@ const elements: Element[] = [
   { id: 2, type: "CTRIA3", nodeIds: [2, 4, 3], propertyId: 1 },
 ];
 
-// σxx σyy σzz τxy τyz τzx per facet, in principal axes or with a shear.
+// σxx σyy σzz τxy τyz τzx per facet corner; `uniform` gives every corner of a
+// facet its facet's tensor (in principal axes or with a shear).
+const uniform = (...facets: number[][]) =>
+  Float64Array.from(facets.flatMap((t) => [...t, ...t, ...t]));
 const stress: ElementStress = {
-  top: Float64Array.from([11, 0, -1, 0, 0, 0, 31, 0, -2, 0, 0, 0]),
-  middle: Float64Array.from([5, 0, 0, 0, 0, 0, 15, 0, 0, 0, 0, 0]),
-  bottom: Float64Array.from([0, -1, 0, -2, 0, 0, 0, -3, 0, -4, 0, 0]),
+  top: uniform([11, 0, -1, 0, 0, 0], [31, 0, -2, 0, 0, 0]),
+  middle: uniform([5, 0, 0, 0, 0, 0], [15, 0, 0, 0, 0, 0]),
+  bottom: uniform([0, -1, 0, -2, 0, 0], [0, -3, 0, -4, 0, 0]),
 };
 const result: SolverResult = {
   displacements: new Float64Array(12),
@@ -114,6 +117,28 @@ describe("stress fields", () => {
     expect(range.max).toBeCloseTo((-1 - Math.sqrt(17)) / 2, 12);
   });
 
+  test("averages each node over the element corners at it", () => {
+    // Facet 1's corners at nodes 1, 2, 3 read 1, 2, 3; facet 2's at 2, 4, 3
+    // read 4, 5, 6 (σxx only).
+    const corner = (v: number) => [v, 0, 0, 0, 0, 0];
+    const tensors = Float64Array.from(
+      [1, 2, 3, 4, 5, 6].flatMap((v) => corner(v)),
+    );
+    const cornered: SolverResult = {
+      displacements: new Float64Array(12),
+      stress: { top: tensors, middle: tensors, bottom: tensors },
+    };
+    expect([
+      ...nodalResultValues(
+        cornered,
+        "Normal stress σxx",
+        nodes,
+        elements,
+        "middle",
+      )!,
+    ]).toEqual([1, (2 + 4) / 2, (3 + 6) / 2, 5]);
+  });
+
   test("leaves von Mises and the displacements independent of the surface", () => {
     for (const s of ["top", "middle", "bottom"] as const)
       expect([
@@ -137,14 +162,14 @@ describe("stress fields", () => {
     const stale: SolverResult = {
       displacements: new Float64Array(12),
       stress: {
-        top: Float64Array.from([1, 2, 3, 4, 5, 6]),
-        middle: Float64Array.from([1, 2, 3, 4, 5, 6]),
-        bottom: Float64Array.from([1, 2, 3, 4, 5, 6]),
+        top: uniform([1, 2, 3, 4, 5, 6]),
+        middle: uniform([1, 2, 3, 4, 5, 6]),
+        bottom: uniform([1, 2, 3, 4, 5, 6]),
       },
     };
     expect(() =>
       nodalResultValues(stale, "Normal stress σxx", nodes, elements, "top"),
-    ).toThrow(/1 elements.*2 elements|stale/);
+    ).toThrow(/3 element corners for a mesh of 6/);
   });
 
   test("a probe reads the component at its point", () => {

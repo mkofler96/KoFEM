@@ -7,8 +7,8 @@
 
 use kofem_fem::shell::SHELL_NODE_DOFS;
 use kofem_fem::{
-    assemble_shell_stiffness, assemble_stiffness, prepare_mixed_static, shell_stress_tensors,
-    shell_von_mises, stress_tensors, summarize_reactions, von_mises, AmgSettings,
+    assemble_shell_stiffness, assemble_stiffness, corner_stress_tensors, prepare_mixed_static,
+    shell_corner_stress_tensors, shell_von_mises, summarize_reactions, von_mises, AmgSettings,
     AppliedPreconditioner, CsrMatrix, MixedPreconditioner, PcgRun, PreconditionerChoice,
     PreparedMixed, ShellMesh, ShellPart, StoppingRule, TetMesh,
 };
@@ -285,21 +285,22 @@ impl MixedModel {
         }
     }
 
-    /// The stress tensor of every tet at its centre for a solution (6 DOFs
-    /// per vertex), six values each: σxx, σyy, σzz, τxy, τyz, τzx.
+    /// The stress tensor of every tet at its four corners for a solution (6
+    /// DOFs per vertex), six values each: σxx, σyy, σzz, τxy, τyz, τzx.
     ///
     /// # Errors
     /// A solution array that does not fit the model.
     #[wasm_bindgen(js_name = stressTensorsTets)]
     pub fn stress_tensors_tets(&self, dofs: &[f64]) -> Result<Vec<f64>, JsError> {
         let translations = self.translations(dofs)?;
-        stress_tensors(&self.solid, &translations)
+        corner_stress_tensors(&self.solid, &translations)
             .map(|tensors| tensors.into_iter().flatten().collect())
             .map_err(|error| to_js(&error))
     }
 
     /// The stress tensor of every shell facet on `surface` ("top", "middle"
-    /// or "bottom"), six values each. Empty without shell facets.
+    /// or "bottom") at its three corners, six values each. Empty without
+    /// shell facets.
     ///
     /// # Errors
     /// A solution array that does not fit the model, or an unknown surface.
@@ -309,7 +310,7 @@ impl MixedModel {
         let surface = shell_surface(surface)?;
         match &self.shell {
             None => Ok(Vec::new()),
-            Some(mesh) => shell_stress_tensors(mesh, dofs, surface)
+            Some(mesh) => shell_corner_stress_tensors(mesh, dofs, surface)
                 .map(|tensors| tensors.into_iter().flatten().collect())
                 .map_err(|error| to_js(&error)),
         }

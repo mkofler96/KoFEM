@@ -9,6 +9,7 @@ import type {
   SolverResult,
 } from "../store/modelStore";
 import {
+  cornerCount,
   isStressField,
   principalStresses,
   STRESS_FIELDS,
@@ -122,6 +123,36 @@ function nodeAveraged(
   return avg;
 }
 
+// As nodeAveraged, for a value per element corner: `atCorner` gets the offset
+// of the corner's tensor (six per corner, corners in each element's node
+// order), and each node takes the weighted mean of the corners at it.
+function nodeAveragedCorners(
+  atCorner: (offset: number) => number,
+  nodes: Node[],
+  elements: Element[],
+): Float64Array {
+  const nodeIndex = new Map<number, number>();
+  for (let i = 0; i < nodes.length; i++) nodeIndex.set(nodes[i].id, i);
+  const sums = new Float64Array(nodes.length);
+  const weights = new Float64Array(nodes.length);
+  let offset = 0;
+  for (const element of elements) {
+    const weight = elementWeight(element, nodeIndex, nodes);
+    for (const nodeId of element.nodeIds) {
+      const ni = nodeIndex.get(nodeId);
+      if (ni !== undefined) {
+        sums[ni] += weight * atCorner(offset);
+        weights[ni] += weight;
+      }
+      offset += 6;
+    }
+  }
+  const avg = new Float64Array(nodes.length);
+  for (let i = 0; i < nodes.length; i++)
+    avg[i] = weights[i] > 0 ? sums[i] / weights[i] : 0;
+  return avg;
+}
+
 // The node-averaged von Mises stress, or null when the result carries none.
 export function nodeVonMisesField(
   result: SolverResult,
@@ -150,20 +181,20 @@ export function nodeStressField(
   if (!result.stress || elements.length === 0 || nodes.length === 0)
     return null;
   const tensors = result.stress[surface];
-  if (tensors.length !== 6 * elements.length)
+  const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
+  if (tensors.length !== 6 * corners)
     throw new Error(
-      `the stress result carries ${tensors.length / 6} elements for a mesh of ${elements.length} elements — the result is stale or belongs to a different mesh`,
+      `the stress result carries ${tensors.length / 6} element corners for a mesh of ${corners} — the result is stale or belongs to a different mesh`,
     );
   const index = STRESS_FIELDS.indexOf(field);
-  if (index < 6)
-    return nodeAveraged((e) => tensors[6 * e + index], nodes, elements);
-  // Each element's principal stress, then averaged, as von Mises is.
+  // A corner's value: the component, or the principal stress of the corner's
+  // tensor, averaged to the node as von Mises is.
   const which = field === "Max principal stress σ1" ? 0 : 2;
-  return nodeAveraged(
-    (e) => principalStresses(tensors, 6 * e)[which],
-    nodes,
-    elements,
-  );
+  const atCorner = (offset: number) =>
+    index < 6
+      ? tensors[offset + index]
+      : principalStresses(tensors, offset)[which];
+  return nodeAveragedCorners(atCorner, nodes, elements);
 }
 
 export interface ResultRange {

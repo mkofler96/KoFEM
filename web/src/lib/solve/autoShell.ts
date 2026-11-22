@@ -8,7 +8,12 @@
 // result back onto the original mesh. The mid-surface extraction itself lives
 // in shellize.ts.
 
-import { mapSurfaces, type ElementStress } from "../stressFields.js";
+import {
+  concatTensors,
+  cornerCount,
+  mapSurfaces,
+  type ElementStress,
+} from "../stressFields.js";
 import type {
   Element,
   Node,
@@ -57,7 +62,7 @@ import {
   maxFacetStressPerNode,
   meanFacetTensorPerNode,
   shellStressAtCentroid,
-  shellTensorAtCentroid,
+  shellTensorsAtCorners,
   type NearestLocator,
 } from "./shellMapping.js";
 
@@ -462,9 +467,10 @@ export function mapCoupledVonMises(
   return vonMises;
 }
 
-// The stress tensors of the coupled solve per original element, on each
-// surface: a solid tet takes its own tensor, a wall tet of the shelled body the
-// mean tensor at its nearest shell node, as mapCoupledVonMises walks them.
+// The corner stress tensors of the coupled solve per original element, on
+// each surface: a solid tet takes its own, a wall tet of the shelled body at
+// each corner the mean tensor of the shell node nearest it, walked in the order
+// mapCoupledVonMises walks them.
 export function mapCoupledStress(
   stressTets: Float64Array,
   stressTris: ElementStress,
@@ -481,25 +487,29 @@ export function mapCoupledStress(
       model.triangles,
       stressTris[surface],
     );
-    const out = new Float64Array(6 * elements.length);
-    let solidIdx = 0;
+    const parts: Float64Array[] = [];
+    let solidAt = 0;
     for (let e = 0; e < elements.length; e++) {
+      const size = 6 * cornerCount(elements[e]);
       if (!(elements[e].propertyId === shellBody && wallTets.has(e))) {
-        out.set(stressTets.subarray(6 * solidIdx, 6 * solidIdx + 6), 6 * e);
-        solidIdx++;
+        if (solidAt + size > stressTets.length)
+          throw new Error(
+            "stress mapping: the solve returned too few solid corner tensors",
+          );
+        parts.push(stressTets.subarray(solidAt, solidAt + size));
+        solidAt += size;
       } else
-        out.set(
-          shellTensorAtCentroid(
+        parts.push(
+          shellTensorsAtCorners(
             elements[e],
             nodeById,
             nearestShell,
             byShellNode,
             "stress mapping",
           ),
-          6 * e,
         );
     }
-    return out;
+    return concatTensors(parts);
   });
 }
 
@@ -883,19 +893,17 @@ export function preparePureShellSolve(
           shells.shellTris,
           result.stress[surface],
         );
-        const out = new Float64Array(6 * elements.length);
-        for (let e = 0; e < elements.length; e++)
-          out.set(
-            shellTensorAtCentroid(
-              elements[e],
+        return concatTensors(
+          elements.map((element) =>
+            shellTensorsAtCorners(
+              element,
               nodeById,
               nearestShell,
               byShellNode,
               "pure shell stress mapping",
             ),
-            6 * e,
-          );
-        return out;
+          ),
+        );
       });
     },
   };

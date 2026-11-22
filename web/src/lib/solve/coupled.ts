@@ -7,7 +7,11 @@
 // auto-shell path (autoShell.ts) feeds the same assembler and reuses the
 // coupling/BC packing here.
 
-import { mapSurfaces, type ElementStress } from "../stressFields.js";
+import {
+  cornerCount,
+  mapSurfaces,
+  type ElementStress,
+} from "../stressFields.js";
 import type {
   Element,
   Property,
@@ -455,31 +459,49 @@ export function mapMixedStress(
   payload: Pick<SolveModel, "elements">,
   result: { stress_tets: Float64Array; stress_tris: ElementStress },
 ): ElementStress {
-  const isShell = payload.elements.map((el) => el.type === "CTRIA3");
   return mapSurfaces((surface) =>
-    interleaveTensors(isShell, result.stress_tets, result.stress_tris[surface]),
+    interleaveTensors(
+      payload.elements,
+      result.stress_tets,
+      result.stress_tris[surface],
+    ),
   );
 }
 
-// One tensor per element in element order, taken from the solid tensors for
-// a solid element and from the shell tensors for a shell facet, each in the
-// order its kind crossed the WASM boundary.
+// The corner tensors of every element in element order, taken from the solid
+// tensors for a solid element and from the shell tensors for a shell facet,
+// each in the order its kind crossed the WASM boundary.
 export function interleaveTensors(
-  isShell: readonly boolean[],
+  elements: readonly Pick<Element, "type" | "nodeIds">[],
   solid: Float64Array,
   shell: Float64Array,
 ): Float64Array {
-  const out = new Float64Array(6 * isShell.length);
-  let solidIdx = 0,
-    shellIdx = 0;
-  isShell.forEach((onShell, e) => {
+  const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
+  const out = new Float64Array(6 * corners);
+  let solidAt = 0,
+    shellAt = 0,
+    outAt = 0;
+  for (const element of elements) {
+    const size = 6 * cornerCount(element);
+    const onShell = element.type === "CTRIA3";
     const from = onShell ? shell : solid;
-    const at = onShell ? shellIdx++ : solidIdx++;
-    if (6 * at + 6 > from.length)
+    const at = onShell ? shellAt : solidAt;
+    if (at + size > from.length)
       throw new Error(
-        `the solve returned ${from.length / 6} ${onShell ? "shell" : "solid"} stress tensors, too few for the mesh's elements`,
+        `the solve returned ${from.length / 6} ${onShell ? "shell" : "solid"} corner stress tensors, too few for the mesh's elements`,
       );
-    out.set(from.subarray(6 * at, 6 * at + 6), 6 * e);
-  });
+    out.set(from.subarray(at, at + size), outAt);
+    outAt += size;
+    if (onShell) shellAt += size;
+    else solidAt += size;
+  }
+  for (const [name, from, used] of [
+    ["solid", solid, solidAt],
+    ["shell", shell, shellAt],
+  ] as const)
+    if (used !== from.length)
+      throw new Error(
+        `the solve returned ${from.length / 6} ${name} corner stress tensors, but the mesh's elements have ${used / 6}`,
+      );
   return out;
 }

@@ -62,15 +62,15 @@ pub use reactions::{
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
-    assemble_shell_stiffness, prepare_shell_static, shell_stress_tensors, shell_translations,
-    shell_von_mises, solve_shell_static, PreparedShell, ShellMesh, ShellPreconditioner,
-    ShellSolution, ShellSurface,
+    assemble_shell_stiffness, prepare_shell_static, shell_corner_stress_tensors,
+    shell_stress_tensors, shell_translations, shell_von_mises, solve_shell_static, PreparedShell,
+    ShellMesh, ShellPreconditioner, ShellSolution, ShellSurface,
 };
 pub use sparse::CsrMatrix;
 pub use static_solve::{
     prepare_static, solve_static, PreconditionerChoice, PreparedStatic, StaticSolution,
 };
-pub use stress::{stress_tensors, von_mises};
+pub use stress::{corner_stress_tensors, stress_tensors, von_mises};
 pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};
 pub use thermal::{thermal_load, thermal_strain_at_centre, thermal_strains_at_centres};
 pub use tie::{

@@ -334,8 +334,9 @@ describe("Hand check: probes", () => {
 
   // Facet 0 (nodes 0 1 2) and facet 1 (nodes 0 2 3) of equal area: σyy is
   // 10 / 30 on the top surface, −10 / −30 on the bottom.
+  // One tensor per facet corner, each facet's corners alike.
   const tensors = (a, b) =>
-    new Float64Array([0, a, 0, 0, 0, 0, 0, b, 0, 0, 0, 0]);
+    new Float64Array([a, a, a, b, b, b].flatMap((v) => [0, v, 0, 0, 0, 0]));
   const stressedShell = model({
     ...shellModel,
     result: {

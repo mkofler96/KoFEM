@@ -9,6 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  anchorAtPoint,
   fieldExtremes,
   readProbes,
   undeformedPoint,
@@ -316,5 +317,42 @@ describe("undeformedPoint", () => {
       0.2 * 2 + 0.5 * 2 + 0.3 * 3,
     ];
     expectVec(undeformedPoint(deformed, undeformed, clicked), [5, 3, 0]);
+  });
+});
+
+describe("anchorAtPoint", () => {
+  test("anchors a point to the CAD face of the nearest surface triangle", () => {
+    expect(anchorAtPoint([4, 6, 0.5], coarse)).toEqual({
+      point: [4, 6, 0.5],
+      cadFaceId: 1,
+    });
+    expect(anchorAtPoint([11, 5, 5], coarse)).toEqual({
+      point: [11, 5, 5],
+      cadFaceId: 2,
+    });
+  });
+
+  test("a probe placed by coordinates reads what a click there reads", () => {
+    const point: Vec3 = [7, 2, 0];
+    const [typed] = readProbes(
+      [{ id: 1, ...anchorAtPoint(point, coarse) }],
+      coarse,
+      "Ux",
+      "top",
+    );
+    expect(expectValue(typed).value).toBeCloseTo(field(point)[0], 12);
+  });
+
+  test("anchors to the triangle itself on a mesh without CAD faces", () => {
+    expect(
+      anchorAtPoint([1, 8, 0], { ...coarse, surfaceFaceIds: null }),
+    ).toEqual({ point: [1, 8, 0], triangle: [1, 3, 4] });
+  });
+
+  test("refuses a point that is not finite, and a mesh without a surface", () => {
+    expect(() => anchorAtPoint([Number.NaN, 0, 0], coarse)).toThrow(/finite/);
+    expect(() =>
+      anchorAtPoint([0, 0, 0], { ...coarse, surfaceTriangles: [] }),
+    ).toThrow(/no surface triangles/);
   });
 });

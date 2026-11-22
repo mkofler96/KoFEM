@@ -59,13 +59,17 @@ function solved() {
   return copy;
 }
 
+// One tensor per element corner: four per tetrahedron.
+const corners = (state) =>
+  state.elements.reduce((n, el) => n + el.nodeIds.length, 0);
+
 const tensors = (n, offset) =>
   Float64Array.from({ length: 6 * n }, (_, i) => offset + i / 8);
 
 describe("stress tensors in an analysis file", () => {
   test("a solid model's tensors come back on every surface", () => {
     const copy = solved();
-    const solid = tensors(copy.elements.length, 1);
+    const solid = tensors(corners(copy), 1);
     copy.result.stress = { top: solid, middle: solid, bottom: solid };
     const opened = parseAnalysisFile(serializeAnalysis(copy));
     for (const surface of ["top", "middle", "bottom"])
@@ -74,7 +78,7 @@ describe("stress tensors in an analysis file", () => {
 
   test("each surface of a model with shells comes back on its own", () => {
     const copy = solved();
-    const n = copy.elements.length;
+    const n = corners(copy);
     copy.result.stress = {
       top: tensors(n, 1),
       middle: tensors(n, 2),

@@ -31,8 +31,8 @@ pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
-    assemble_stiffness, fold_onto_vertices, load_on_held_nodes, nodal_residual,
-    prepare_coupled_static, prepare_static, prepare_tied_static, solve_static, stress_tensors,
+    assemble_stiffness, corner_stress_tensors, fold_onto_vertices, load_on_held_nodes,
+    nodal_residual, prepare_coupled_static, prepare_static, prepare_tied_static, solve_static,
     summarize_reactions, von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings,
     CoupledReduction, Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun,
     PcgStatus, PreconditionerChoice, PreparedCoupled, PreparedStatic, PreparedTied,
@@ -307,14 +307,15 @@ impl ElasticModel {
         von_mises(&self.mesh, displacements).map_err(|error| to_js(&error))
     }
 
-    /// The stress tensor of every element (tets, then hexes) at its centre,
-    /// six values each: σxx, σyy, σzz, τxy, τyz, τzx in global axes.
+    /// The stress tensor of every element (tets, then hexes) at each of its
+    /// corner vertices in its node order (four per tet, eight per hex), six
+    /// values each: σxx, σyy, σzz, τxy, τyz, τzx in global axes.
     ///
     /// # Errors
     /// A displacement array that does not fit the mesh.
     #[wasm_bindgen(js_name = stressTensors)]
     pub fn stress_tensors(&self, displacements: &[f64]) -> Result<Vec<f64>, JsError> {
-        stress_tensors(&self.mesh, displacements)
+        corner_stress_tensors(&self.mesh, displacements)
             .map(|tensors| tensors.into_iter().flatten().collect())
             .map_err(|error| to_js(&error))
     }

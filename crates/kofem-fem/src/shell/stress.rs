@@ -58,27 +58,27 @@ pub fn shell_stress_tensors(
 ) -> Result<Vec<[f64; 6]>, FemError> {
     check_length(mesh, dofs)?;
     Ok((0..mesh.triangles().len())
-        .map(|triangle| {
-            let facet = FacetStrain::new(mesh, dofs, triangle);
-            let depth = match surface {
-                ShellSurface::Top => facet.half,
-                ShellSurface::Middle => 0.0,
-                ShellSurface::Bottom => -facet.half,
-            };
-            let [sx, sy, txy] = facet.stress_at(depth);
-            let [e1, e2, _] = facet.axes;
-            // σ = sx·e1⊗e1 + sy·e2⊗e2 + txy·(e1⊗e2 + e2⊗e1).
-            let entry = |i: usize, j: usize| {
-                sx * e1[i] * e1[j] + sy * e2[i] * e2[j] + txy * (e1[i] * e2[j] + e2[i] * e1[j])
-            };
-            [
-                entry(0, 0),
-                entry(1, 1),
-                entry(2, 2),
-                entry(0, 1),
-                entry(1, 2),
-                entry(2, 0),
-            ]
+        .map(|triangle| FacetStrain::new(mesh, dofs, triangle).global_tensor(surface))
+        .collect())
+}
+
+/// Three values per facet, at its corners in its node order: the plane-stress
+/// tensor on `surface` from the facet's own field (its constant membrane
+/// strain and its DKT curvature at the corner), in global axes as for
+/// [`shell_stress_tensors`].
+///
+/// # Errors
+/// [`FemError::DisplacementLength`] when `dofs` is not 6 per vertex.
+pub fn shell_corner_stress_tensors(
+    mesh: &ShellMesh,
+    dofs: &[f64],
+    surface: ShellSurface,
+) -> Result<Vec<[f64; 6]>, FemError> {
+    check_length(mesh, dofs)?;
+    Ok((0..mesh.triangles().len())
+        .flat_map(|triangle| {
+            [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+                .map(|point| FacetStrain::at(mesh, dofs, triangle, point).global_tensor(surface))
         })
         .collect())
 }
@@ -107,6 +107,12 @@ struct FacetStrain {
 
 impl FacetStrain {
     fn new(mesh: &ShellMesh, dofs: &[f64], triangle: usize) -> Self {
+        Self::at(mesh, dofs, triangle, [1.0 / 3.0, 1.0 / 3.0])
+    }
+
+    /// The strains at the facet's parametric point (ξ, η): the membrane strain
+    /// is constant, the DKT curvature varies over the facet.
+    fn at(mesh: &ShellMesh, dofs: &[f64], triangle: usize, [xi, eta]: [f64; 2]) -> Self {
         let nodes = mesh.triangles()[triangle];
         let frame = FacetFrame::new(&mesh.corners(triangle));
         let [e1, e2, e3] = frame.axes;
@@ -129,13 +135,33 @@ impl FacetStrain {
         Self {
             axes: frame.axes,
             membrane: apply(&membrane_b(&frame), &membrane_dofs),
-            curvature: apply(
-                &dkt_curvature_b(&frame, 1.0 / 3.0, 1.0 / 3.0),
-                &bending_dofs,
-            ),
+            curvature: apply(&dkt_curvature_b(&frame, xi, eta), &bending_dofs),
             law: constitutive(material.young() / (1.0 - poisson * poisson), poisson),
             half: 0.5 * mesh.thickness(triangle),
         }
+    }
+
+    /// The stress on `surface`, rotated into global axes:
+    /// σ = sx·e1⊗e1 + sy·e2⊗e2 + txy·(e1⊗e2 + e2⊗e1).
+    fn global_tensor(&self, surface: ShellSurface) -> [f64; 6] {
+        let depth = match surface {
+            ShellSurface::Top => self.half,
+            ShellSurface::Middle => 0.0,
+            ShellSurface::Bottom => -self.half,
+        };
+        let [sx, sy, txy] = self.stress_at(depth);
+        let [e1, e2, _] = self.axes;
+        let entry = |i: usize, j: usize| {
+            sx * e1[i] * e1[j] + sy * e2[i] * e2[j] + txy * (e1[i] * e2[j] + e2[i] * e1[j])
+        };
+        [
+            entry(0, 0),
+            entry(1, 1),
+            entry(2, 2),
+            entry(0, 1),
+            entry(1, 2),
+            entry(2, 0),
+        ]
     }
 
     /// The plane stress [σx, σy, τxy] at height `depth` along the facet

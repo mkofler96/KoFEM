@@ -109,31 +109,29 @@ export function shellStressAtCentroid(
 }
 
 // Per shell node, the mean stress tensor (six components) of the facets
-// around it. A component cannot take the "worst" facet as von Mises does, so
-// the facets are averaged, as the result plot averages them at a node.
+// around it, each facet's tensor at its corner on that node (the solve gives
+// three corner tensors per facet). A component cannot take the "worst" facet as
+// von Mises does, so the facets are averaged, as the result plot averages them
+// at a node.
 export function meanFacetTensorPerNode(
   triangles: ArrayLike<number>,
-  facetTensors: Float64Array,
+  cornerTensors: Float64Array,
 ): Map<number, Float64Array> {
-  if (facetTensors.length !== 2 * triangles.length)
+  if (cornerTensors.length !== 6 * triangles.length)
     throw new Error(
-      `stress mapping: ${facetTensors.length / 6} facet tensors for ${triangles.length / 3} facets`,
+      `stress mapping: ${cornerTensors.length / 6} facet corner tensors for ${triangles.length / 3} facets`,
     );
   const sums = new Map<number, { sum: Float64Array; count: number }>();
-  for (let t = 0; t < triangles.length / 3; t++)
-    for (const node of [
-      triangles[3 * t],
-      triangles[3 * t + 1],
-      triangles[3 * t + 2],
-    ]) {
-      let entry = sums.get(node);
-      if (!entry) {
-        entry = { sum: new Float64Array(6), count: 0 };
-        sums.set(node, entry);
-      }
-      for (let k = 0; k < 6; k++) entry.sum[k] += facetTensors[6 * t + k];
-      entry.count++;
+  for (let c = 0; c < triangles.length; c++) {
+    const node = triangles[c];
+    let entry = sums.get(node);
+    if (!entry) {
+      entry = { sum: new Float64Array(6), count: 0 };
+      sums.set(node, entry);
     }
+    for (let k = 0; k < 6; k++) entry.sum[k] += cornerTensors[6 * c + k];
+    entry.count++;
+  }
   const means = new Map<number, Float64Array>();
   for (const [node, { sum, count }] of sums)
     means.set(
@@ -143,35 +141,31 @@ export function meanFacetTensorPerNode(
   return means;
 }
 
-// The recovered stress tensor of an original element: the mean tensor at the
-// shell node nearest its centroid. Throws for an element that references a node
-// the model does not have, or whose nearest shell node touches no facet.
-export function shellTensorAtCentroid(
+// The recovered corner tensors of an original element: at each of its nodes,
+// the mean tensor of the shell node nearest that node. Throws for an element
+// that references a node the model does not have, or whose nearest shell node
+// touches no facet.
+export function shellTensorsAtCorners(
   element: Element,
   nodeById: Map<number, Node>,
   nearestShell: NearestLocator,
   tensorByShellNode: Map<number, Float64Array>,
   context: string,
 ): Float64Array {
-  let cx = 0,
-    cy = 0,
-    cz = 0;
-  for (const nid of element.nodeIds) {
+  const out = new Float64Array(6 * element.nodeIds.length);
+  element.nodeIds.forEach((nid, corner) => {
     const nd = nodeById.get(nid);
     if (!nd)
       throw new Error(
         `${context}: element ${element.id} references unknown node id ${nid}`,
       );
-    cx += nd.x;
-    cy += nd.y;
-    cz += nd.z;
-  }
-  const k = element.nodeIds.length;
-  const pi = nearestShell([cx / k, cy / k, cz / k]);
-  const tensor = tensorByShellNode.get(pi);
-  if (!tensor)
-    throw new Error(
-      `${context}: element ${element.id} lies nearest mid-surface node ${pi}, which no shell facet uses`,
-    );
-  return tensor;
+    const pi = nearestShell([nd.x, nd.y, nd.z]);
+    const tensor = tensorByShellNode.get(pi);
+    if (!tensor)
+      throw new Error(
+        `${context}: node ${nid} lies nearest mid-surface node ${pi}, which no shell facet uses`,
+      );
+    out.set(tensor, 6 * corner);
+  });
+  return out;
 }
