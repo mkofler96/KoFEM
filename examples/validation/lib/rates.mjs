@@ -103,12 +103,16 @@ export function expectedRate(expect, order, fem) {
   return { rate, smooth, lambda, why };
 }
 
-// The refinement dimension the two finest levels imply: N grows as h^(−d).
+// The refinement dimension the fitted levels imply, from the coarsest to the
+// finest of them: N grows as h^(−d). Over one small step Netgen's element
+// counts are too noisy to say.
 function impliedDimension(points, levels) {
   const n = points.length;
-  const [coarse, fine] = [points[n - 2], points[n - 1]];
-  const ratio = levels[n - 2] / levels[n - 1];
-  return Math.log(fine.elements / coarse.elements) / Math.log(ratio);
+  const first = n - RATE_LEVELS;
+  const ratio = levels[first] / levels[n - 1];
+  return (
+    Math.log(points[n - 1].elements / points[first].elements) / Math.log(ratio)
+  );
 }
 
 /**

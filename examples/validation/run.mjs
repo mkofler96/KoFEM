@@ -285,6 +285,13 @@ if (report) {
   // Observed against expected rates (lib/rates.mjs, KOF-399), stored with the
   // points they come from; the pages show them and CI re-derives them
   // (web/tests/integration/convergence-rates.test.mjs).
+  // KOFEM_CONVERGENCE_DUMP=<file> keeps the studies' raw points, so the rate
+  // analysis can be reworked without solving them again.
+  if (process.env.KOFEM_CONVERGENCE_DUMP)
+    writeFileSync(
+      process.env.KOFEM_CONVERGENCE_DUMP,
+      JSON.stringify(convergence),
+    );
   const fem = await rustFem();
   for (const s of convergence) {
     const def = studies.find((d) => d.id === s.id);
