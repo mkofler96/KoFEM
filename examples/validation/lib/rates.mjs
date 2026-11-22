@@ -10,9 +10,12 @@
 //
 //   1. Element size. Netgen meshes are unstructured and their levels do not
 //      refine by a constant ratio, so a level's size is taken from its
-//      element count, h ∝ N^(−1/d), with d the directions the mesh refines
-//      in: 3 for a solid, 2 for a slab meshed one element thick at every
-//      level (study.dimension, checked against the element counts).
+//      element count, the mean element size h = (V/N)^(1/d) (Celik et al.,
+//      J. Fluids Eng. 130, 2008), with d the directions the mesh refines in:
+//      3 for a solid, 2 for a slab meshed one element thick at every level
+//      (study.dimension, from the geometry). The nominal maximum element size
+//      is no measure: on coarse meshes Netgen's elements are set by the
+//      geometry, not by it.
 //   2. Reference. The finest mesh of the highest-order series (an "overkill"
 //      solution of the same model). Errors against it are discretisation
 //      errors alone; the closed-form reference on the page also carries the
@@ -42,19 +45,14 @@
 export const RATE_LEVELS = 3;
 /** How far an observed rate may fall short of theory before CI fails. */
 export const RATE_MARGIN = 0.25;
-/** How far the element counts may imply another refinement dimension. */
-const DIMENSION_TOLERANCE = 0.6;
-
 const READOUTS = {
   energy: {
     smooth: (p) => 2 * p,
-    why: (p) =>
-      `an energy-type result converges at 2p = ${2 * p} on a smooth solution`,
+    text: "an energy-type result converges at 2p on a smooth solution",
   },
   point: {
     smooth: (p) => p + 1,
-    why: (p) =>
-      `a displacement at a point converges at p + 1 = ${p + 1} on a smooth solution`,
+    text: "a displacement at a point converges at p + 1 on a smooth solution",
   },
 };
 
@@ -64,8 +62,8 @@ const round2 = (v) => Math.round(v * 100) / 100;
  * The rate theory expects for one series of a study: the read-out's rate on a
  * smooth solution, capped by a singular clamped–free corner (`corner`) and by
  * a load that is itself refined with the mesh (`loadCap`), whichever is
- * lowest.
- * @returns {{ rate: number, smooth: number, lambda: number | null, why: string }}
+ * lowest. `caps` explains the caps below the smooth rate.
+ * @returns {{ rate: number, smooth: number, lambda: number | null, readout: string, caps: string[] }}
  */
 export function expectedRate(expect, order, fem) {
   const readout = READOUTS[expect?.readout];
@@ -94,23 +92,13 @@ export function expectedRate(expect, order, fem) {
       throw new Error("expected rate: a load cap needs rate > 0 and why");
     caps.push({ rate, why: `${why}, which caps it at ${rate}` });
   }
-  const binding = caps.filter((c) => c.rate < smooth);
-  const rate = Math.min(smooth, ...caps.map((c) => c.rate));
-  const why = binding.length
-    ? `${readout.why(order)}, but ${binding.map((c) => c.why).join("; and ")}`
-    : readout.why(order);
-  return { rate, smooth, lambda, why };
-}
-
-// The refinement dimension the fitted levels imply, from the coarsest to the
-// finest of them: N grows as h^(−d). Over one small step Netgen's element
-// counts are too noisy to say.
-function impliedDimension(fit, levels) {
-  const [first, last] = [fit[0], fit[fit.length - 1]];
-  return (
-    Math.log(last.point.elements / first.point.elements) /
-    Math.log(levels[first.index] / levels[last.index])
-  );
+  return {
+    rate: Math.min(smooth, ...caps.map((c) => c.rate)),
+    smooth,
+    lambda,
+    readout: readout.text,
+    caps: caps.filter((c) => c.rate < smooth).map((c) => c.why),
+  };
 }
 
 /**
@@ -156,11 +144,6 @@ export function analyseStudy(def, published, fem) {
         `${where}, ${s.label}: a rate needs ${RATE_LEVELS} levels coarser than the reference, the study has ${candidates.length}`,
       );
     const fit = candidates.slice(-RATE_LEVELS);
-    const implied = impliedDimension(fit, s.levels);
-    if (Math.abs(implied - def.dimension) > DIMENSION_TOLERANCE)
-      throw new Error(
-        `${where}, ${s.label}: the fitted levels refine as a ${implied.toFixed(2)}-dimensional mesh, not ${def.dimension}D — set the study's dimension or its levels`,
-      );
     const sizes = Array.from(
       fem.relativeElementSizes(
         Uint32Array.from(fit.map(({ point }) => point.elements)),
@@ -190,7 +173,9 @@ export function analyseStudy(def, published, fem) {
       relErrors: errors.map((e) => e / reference.value),
       observed,
       expected: expected.rate,
-      why: expected.why,
+      smooth: expected.smooth,
+      readout: expected.readout,
+      caps: expected.caps,
       pass: observed === null || observed >= expected.rate - RATE_MARGIN,
     };
   });

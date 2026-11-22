@@ -429,7 +429,10 @@ function rateChart(study, rates) {
       const k = rel.indexOf(Math.min(...rel));
       const coarse = Math.max(...rel);
       // The expected slope through the finest level.
-      const guide = `<line class="slope s${i + 1}" x1="${f(X(rel[k]))}" y1="${f(Y(errs[k]))}" x2="${f(X(coarse))}" y2="${f(Y(errs[k] * (coarse / rel[k]) ** s.expected))}"/>`;
+      const guide =
+        s.observed === null
+          ? ""
+          : `<line class="slope s${i + 1}" x1="${f(X(rel[k]))}" y1="${f(Y(errs[k]))}" x2="${f(X(coarse))}" y2="${f(Y(errs[k] * (coarse / rel[k]) ** s.expected))}"/>`;
       const path = rel
         .map((h, j) => `${j ? "L" : "M"}${f(X(h))} ${f(Y(errs[j]))}`)
         .join(" ");
@@ -448,7 +451,7 @@ function rateChart(study, rates) {
             <line class="axis" x1="${PAD.l}" x2="${PAD.l + pw}" y1="${PAD.t + ph}" y2="${PAD.t + ph}"/>
             <line class="axis" x1="${PAD.l}" x2="${PAD.l}" y1="${PAD.t}" y2="${PAD.t + ph}"/>
             ${drawn}
-            <text class="axis-title" x="${PAD.l + pw}" y="${H - 5}" text-anchor="end">element size h / h₀</text>
+            <text class="axis-title" x="${PAD.l + pw}" y="${H - 5}" text-anchor="end">relative element size</text>
           </svg>`;
 }
 
@@ -464,14 +467,28 @@ function rateSection(study, def, row) {
       (s) => `
                 <tr>
                   <td>${esc(s.label)}</td>
-                  <td class="num">${fixed2(s.observed)}</td>
+                  <td class="num">${s.observed === null ? "—" : fixed2(s.observed)}</td>
                   <td class="num">${fixed2(s.expected)}</td>
                 </tr>`,
     )
     .join("");
-  const reasons = rates.series
-    .map((s) => `${esc(s.label)}: ${esc(s.why)}.`)
-    .join(" ");
+  // Theory once for the study: the read-out's smooth rate per order, then
+  // the caps (the same for every order of a study).
+  const short = (label) => label.split(" ")[0];
+  const caps = [...new Set(rates.series.flatMap((s) => s.caps))];
+  const sup = (text) => esc(text).replace("r^λ", "r<sup>λ</sup>");
+  const theory = `Expected: ${esc(rates.series[0].readout)} (${rates.series
+    .map((s) => `${esc(short(s.label))}: ${s.smooth}`)
+    .join(
+      ", ",
+    )})${caps.length ? `, but ${caps.map(sup).join("; and ")}` : ""}.`;
+  const noRate = rates.series
+    .filter((s) => s.observed === null)
+    .map(
+      (s) =>
+        ` ${esc(s.label)}: its error does not fall monotonically on these meshes, so it has no rate yet.`,
+    )
+    .join("");
   const legend = rates.series
     .map(
       (s, i) =>
@@ -483,7 +500,7 @@ function rateSection(study, def, row) {
         <figure class="chart">
           <div class="legend">${legend}<span class="key"><span class="dash"></span>expected slope</span></div>
           ${rateChart(study, rates)}
-          <figcaption>Error against the result extrapolated to zero element size (${withUnit(num(rates.reference.value), row.unit)}), on the ${rates.series[0].levels.length} finest meshes. Element size from the element count, h ∝ N<sup>−1/${def.dimension}</sup>.</figcaption>
+          <figcaption>Error against the finest ${esc(short(rates.reference.series))} mesh (${esc(rates.reference.mesh)}, ${withUnit(num(rates.reference.value), row.unit)}), fitted over the ${rates.series[0].levels.length} finest meshes of each order coarser than that. Element size from the element count, h ∝ N<sup>−1/${def.dimension}</sup>.</figcaption>
         </figure>
         <div class="table-wrap">
           <table>
@@ -498,7 +515,7 @@ function rateSection(study, def, row) {
             </tbody>
           </table>
         </div>
-        <p>${reasons} The error shrinks as h<sup>rate</sup>. <a href="${REPO}/blob/main/examples/validation/lib/rates.mjs">Method</a>.</p>`;
+        <p>${theory}${noRate} The error shrinks as h<sup>rate</sup>. <a href="${REPO}/blob/main/examples/validation/lib/rates.mjs">Method</a>.</p>`;
 }
 
 function convergenceSection(study, def, row) {

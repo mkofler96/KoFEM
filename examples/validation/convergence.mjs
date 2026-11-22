@@ -120,7 +120,7 @@ export default [
     note: "Quadratic elements stay within 2 % below Howland's 3.14 on every mesh; the nodal average of element-centre stresses keeps them slightly low. Linear elements overshoot by several percent and come down only slowly.",
     expect: null,
     noRate:
-      "Neither order converges monotonically here, so there is no rate to fit: the peak of element-centre stresses averaged to the nodes moves between nodes from one mesh to the next. Recovering the stress at the integration points instead would give it one.",
+      "There is no rate to fit here. The quadratic series does not converge monotonically: the peak of element-centre stresses averaged to the nodes moves between nodes from one mesh to the next. The linear one falls steadily but has not yet reached the range where its slope settles. Recovering the stress at the integration points would give both a rate.",
     series: [
       {
         label: "P1 (linear)",
@@ -189,6 +189,7 @@ export default [
     caseId: "cooks-membrane",
     title: "Cook's membrane, P1 vs. P2",
     note: "Linear elements lock in the panel's bending and approach from below; quadratic ones are within half a percent even at 16 mm and level off at 23.94, 0.1 % under the plane-stress reference, since the slab clamped over its whole end face is slightly stiffer than the plane-stress panel.",
+    // The 1 mm slab is meshed one element thick at every level here.
     dimension: 2,
     // The clamped edge meets the sloping top edge, from (0, 44) to (48, 60),
     // at 90° + atan(16/48) = 108.4°: the most singular corner of the panel.

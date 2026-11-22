@@ -246,8 +246,14 @@ if (report) {
     return r;
   };
   console.log("\nConvergence studies");
-  const convergence = [];
-  for (const study of studies) {
+  // KOFEM_CONVERGENCE_FROM=<file> reuses the raw points a run kept with
+  // KOFEM_CONVERGENCE_DUMP instead of solving the studies again (the rate
+  // analysis and the pages change, the solves do not).
+  const reused = process.env.KOFEM_CONVERGENCE_FROM
+    ? JSON.parse(readFileSync(process.env.KOFEM_CONVERGENCE_FROM, "utf8"))
+    : null;
+  const convergence = reused ?? [];
+  for (const study of reused ? [] : studies) {
     const series = [];
     for (const s of study.series) {
       const ref = rowOf(s.caseId);
@@ -298,7 +304,7 @@ if (report) {
     s.rates = analyseStudy(def, s, fem);
     for (const r of s.rates.series)
       console.log(
-        `  ${s.id.padEnd(16)} ${r.label.padEnd(15)} rate ${r.observed.toFixed(2)} (expected ${r.expected.toFixed(2)})${r.pass ? "" : "  BELOW"}`,
+        `  ${s.id.padEnd(16)} ${r.label.padEnd(15)} ${r.observed === null ? "no rate (error not monotone)" : `rate ${r.observed.toFixed(2)}`} (expected ${r.expected.toFixed(2)})${r.pass ? "" : "  BELOW"}`,
       );
   }
 

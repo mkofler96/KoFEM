@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-21",
-  "engine": "engine-3606d8ab1090",
-  "fem": "fem-22391462c75d",
+  "generated": "2026-11-22",
+  "engine": "engine-44314641a642",
+  "fem": "fem-b2b063103186",
   "cases": [
     {
       "id": "axial-bar",
@@ -819,10 +819,102 @@
               "fe": 0.4746107548942458,
               "errPct": -0.33174147220837397,
               "ci": false
+            },
+            {
+              "mesh": "12.5 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 28470,
+              "vertices": 6423,
+              "nodes": 44377,
+              "dofs": 133131,
+              "maxElementSize": 12.5,
+              "minElementSize": 1.25,
+              "fe": 0.4747222716499818,
+              "errPct": -0.30832295350381234,
+              "ci": false
+            },
+            {
+              "mesh": "10 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 47948,
+              "vertices": 10564,
+              "nodes": 73921,
+              "dofs": 221763,
+              "maxElementSize": 10,
+              "minElementSize": 1,
+              "fe": 0.4747374060196799,
+              "errPct": -0.305144735867216,
+              "ci": false
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": {
+          "series": "P2 (quadratic)",
+          "mesh": "10 mm",
+          "dofs": 221763,
+          "value": 0.4747374060196799
+        },
+        "series": [
+          {
+            "label": "P1 (linear)",
+            "order": 1,
+            "levels": [
+              "50 mm",
+              "25 mm",
+              "12.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.733631259774536,
+              0.3461684446902582
+            ],
+            "relErrors": [
+              -0.004221687582729307,
+              -0.0019770655020218304,
+              -0.0006959363141529999
+            ],
+            "observed": 1.641952282970287,
+            "expected": 1.4223458659429322,
+            "smooth": 2,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42"
+            ],
+            "pass": true
+          },
+          {
+            "label": "P2 (quadratic)",
+            "order": 2,
+            "levels": [
+              "50 mm",
+              "25 mm",
+              "12.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.733631259774536,
+              0.3461684446902582
+            ],
+            "relErrors": [
+              -0.000827677408791987,
+              -0.00026678143291037606,
+              -0.00003187945484424352
+            ],
+            "observed": 3.025106829221992,
+            "expected": 1.4223458659429322,
+            "smooth": 4,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42"
+            ],
+            "pass": true
+          }
+        ]
+      }
     },
     {
       "id": "beam-torsion",
@@ -941,7 +1033,73 @@
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": {
+          "series": "P2 (quadratic)",
+          "mesh": "10 mm",
+          "dofs": 221763,
+          "value": 0.0008833273516755361
+        },
+        "series": [
+          {
+            "label": "P1 (linear)",
+            "order": 1,
+            "levels": [
+              "50 mm",
+              "25 mm",
+              "12.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.733631259774536,
+              0.3461684446902582
+            ],
+            "relErrors": [
+              -0.451662425460989,
+              -0.27039746478897575,
+              -0.08207140799010224
+            ],
+            "observed": 1.603824693344745,
+            "expected": 1,
+            "smooth": 2,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42",
+              "the moment is applied as point forces at the vertices of the loaded face, where the twist is read, and their local give shrinks only as h, which caps it at 1"
+            ],
+            "pass": true
+          },
+          {
+            "label": "P2 (quadratic)",
+            "order": 2,
+            "levels": [
+              "50 mm",
+              "25 mm",
+              "12.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.733631259774536,
+              0.3461684446902582
+            ],
+            "relErrors": [
+              -0.003918645622829043,
+              0.009523752227246728,
+              0.0025871288864112367
+            ],
+            "observed": null,
+            "expected": 1,
+            "smooth": 4,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42",
+              "the moment is applied as point forces at the vertices of the loaded face, where the twist is read, and their local give shrinks only as h, which caps it at 1"
+            ],
+            "pass": true
+          }
+        ]
+      }
     },
     {
       "id": "plate-with-hole",
@@ -1046,7 +1204,12 @@
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "There is no rate to fit here. The quadratic series does not converge monotonically: the peak of element-centre stresses averaged to the nodes moves between nodes from one mesh to the next. The linear one falls steadily but has not yet reached the range where its slope settles. Recovering the stress at the integration points would give both a rate."
+      }
     },
     {
       "id": "cantilever-beam",
@@ -1162,10 +1325,88 @@
               "fe": -1.9057895365331905,
               "errPct": 0.0539506679925067,
               "ci": false
+            },
+            {
+              "mesh": "10 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 47948,
+              "vertices": 10564,
+              "nodes": 73921,
+              "dofs": 221763,
+              "maxElementSize": 10,
+              "minElementSize": 1,
+              "fe": -1.9060027961569623,
+              "errPct": 0.06514679824052794,
+              "ci": false
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": {
+          "series": "P2 (quadratic)",
+          "mesh": "10 mm",
+          "dofs": 221763,
+          "value": -1.9060027961569623
+        },
+        "series": [
+          {
+            "label": "P1 (linear)",
+            "order": 1,
+            "levels": [
+              "25 mm",
+              "12.5 mm",
+              "8 mm"
+            ],
+            "sizes": [
+              1,
+              0.4718561812601126,
+              0.2869103514799938
+            ],
+            "relErrors": [
+              -0.14906148607619957,
+              -0.03917948312747301,
+              -0.014004159451701841
+            ],
+            "observed": 1.8848994776005104,
+            "expected": 1.4223458659429322,
+            "smooth": 2,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42"
+            ],
+            "pass": true
+          },
+          {
+            "label": "P2 (quadratic)",
+            "order": 2,
+            "levels": [
+              "50 mm",
+              "25 mm",
+              "12.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.733631259774536,
+              0.3461684446902582
+            ],
+            "relErrors": [
+              -0.003958631893790166,
+              -0.0010366083071603484,
+              -0.00011188841076299812
+            ],
+            "observed": 3.2878346110048122,
+            "expected": 1.4223458659429322,
+            "smooth": 4,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42"
+            ],
+            "pass": true
+          }
+        ]
+      }
     },
     {
       "id": "shaft-torsion",
@@ -1298,7 +1539,73 @@
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": {
+          "series": "P2 (quadratic)",
+          "mesh": "5 mm",
+          "dofs": 345183,
+          "value": 0.0014593313122196988
+        },
+        "series": [
+          {
+            "label": "P1 (linear)",
+            "order": 1,
+            "levels": [
+              "20 mm",
+              "10 mm",
+              "7.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.6679529329139129,
+              0.45554316557219315
+            ],
+            "relErrors": [
+              -0.07023553431216933,
+              -0.06587228661464843,
+              -0.0251771537399128
+            ],
+            "observed": 1.2944243607630306,
+            "expected": 1,
+            "smooth": 2,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42",
+              "the moment is applied as point forces at the vertices of the loaded face, where the twist is read, and their local give shrinks only as h, which caps it at 1"
+            ],
+            "pass": true
+          },
+          {
+            "label": "P2 (quadratic)",
+            "order": 2,
+            "levels": [
+              "15 mm",
+              "10 mm",
+              "7.5 mm"
+            ],
+            "sizes": [
+              1,
+              0.7387260746892083,
+              0.5038103704202372
+            ],
+            "relErrors": [
+              0.022327829759153626,
+              0.012380044234590144,
+              0.006401409198737855
+            ],
+            "observed": 1.8180660499607746,
+            "expected": 1,
+            "smooth": 4,
+            "readout": "an energy-type result converges at 2p on a smooth solution",
+            "caps": [
+              "the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r^λ with λ = 0.71, which caps it at 2λ = 1.42",
+              "the moment is applied as point forces at the vertices of the loaded face, where the twist is read, and their local give shrinks only as h, which caps it at 1"
+            ],
+            "pass": true
+          }
+        ]
+      }
     },
     {
       "id": "cooks-membrane",
@@ -1445,7 +1752,71 @@
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": {
+          "series": "P2 (quadratic)",
+          "mesh": "1 mm",
+          "dofs": 62859,
+          "value": 23.94163833106575
+        },
+        "series": [
+          {
+            "label": "P1 (linear)",
+            "order": 1,
+            "levels": [
+              "4 mm",
+              "2 mm",
+              "1 mm"
+            ],
+            "sizes": [
+              1,
+              0.6272161303382353,
+              0.32223650816620053
+            ],
+            "relErrors": [
+              -0.03555597201614852,
+              -0.010133016931139046,
+              -0.004542073959332267
+            ],
+            "observed": 1.7751647591771298,
+            "expected": 1.2488377921809803,
+            "smooth": 2,
+            "readout": "a displacement at a point converges at p + 1 on a smooth solution",
+            "caps": [
+              "the clamped edge's upper corners (clamped meeting free at 108.43°, ν = 0.33) are singular, u ~ r^λ with λ = 0.62, which caps it at 2λ = 1.25"
+            ],
+            "pass": true
+          },
+          {
+            "label": "P2 (quadratic)",
+            "order": 2,
+            "levels": [
+              "8 mm",
+              "4 mm",
+              "2 mm"
+            ],
+            "sizes": [
+              1,
+              0.6627279185776056,
+              0.4156736405573589
+            ],
+            "relErrors": [
+              -0.0015563224560225849,
+              -0.0004885516948284421,
+              -0.00024233197183277618
+            ],
+            "observed": 2.1048820425795367,
+            "expected": 1.2488377921809803,
+            "smooth": 3,
+            "readout": "a displacement at a point converges at p + 1 on a smooth solution",
+            "caps": [
+              "the clamped edge's upper corners (clamped meeting free at 108.43°, ν = 0.33) are singular, u ~ r^λ with λ = 0.62, which caps it at 2λ = 1.25"
+            ],
+            "pass": true
+          }
+        ]
+      }
     },
     {
       "id": "plate-with-hole-shell",
@@ -1557,7 +1928,12 @@
             }
           ]
         }
-      ]
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The peak stress is read from the one or two triangles at the cut edge, whose size does not shrink with the maximum element size, so it has no rate to observe."
+      }
     }
   ]
 }

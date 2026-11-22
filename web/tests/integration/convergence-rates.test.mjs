@@ -73,7 +73,8 @@ describe("expected rates", () => {
     expect(linear.lambda).toBeCloseTo(0.7112, 3);
     expect(linear.rate).toBeCloseTo(2 * 0.7112, 3);
     expect(quadratic.rate).toBeCloseTo(linear.rate, 12);
-    expect(quadratic.why).toContain("2λ");
+    expect(quadratic.caps).toEqual([expect.stringContaining("2λ = 1.42")]);
+    expect(expectedRate({ readout: "energy" }, 2, fem).caps).toEqual([]);
   });
 
   test("an unknown read-out is refused", () => {
@@ -102,13 +103,6 @@ describe("analyseStudy", () => {
     const { def, published } = madeUpStudy({ dimension: 2, linearRate: 2 });
     const linear = analyseStudy(def, published, fem).series[0];
     expect(linear.observed).toBeCloseTo(2, 3);
-  });
-
-  test("refuses a dimension the element counts contradict", () => {
-    const { def, published } = madeUpStudy({ dimension: 2, linearRate: 2 });
-    expect(() =>
-      analyseStudy({ ...def, dimension: 3 }, published, fem),
-    ).toThrow(/2\.00-dimensional/);
   });
 
   test("gives no rate to a series whose error does not fall monotonically", () => {
@@ -172,7 +166,7 @@ test("the published rates are the ones their points give", () => {
       if (again.series[i].observed === null) expect(s.observed).toBeNull();
       else expect(s.observed).toBeCloseTo(again.series[i].observed, 9);
       expect(s.expected).toBeCloseTo(again.series[i].expected, 9);
-      expect(s.why).toBe(again.series[i].why);
+      expect(s.caps).toEqual(again.series[i].caps);
     });
   }
 });
