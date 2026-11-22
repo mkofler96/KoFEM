@@ -1,6 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { TemperatureLoad } from "../workers/solverTypes";
+import {
+  cornerCount,
+  SHELL_SURFACES,
+  uniformStress,
+  type ElementStress,
+} from "./stressFields";
 import type {
   AppMode,
   CouplingGroup,
@@ -37,6 +44,8 @@ import { restoreInterfaces, type BodyInterface } from "./interfaces";
 //     <UnstructuredGrid>
 //       <FieldData>
 //         <DataArray type="UInt8" Name="KoFEM" format="binary">  ← setup JSON
+//         Stress, or StressTop / StressMiddle / StressBottom (Float64 ×6 per
+//                       element corner; corners in each cell's node order)
 //       </FieldData>
 //       <Piece NumberOfPoints=... NumberOfCells=...>
 //         <Points>      Float64 ×3 node coordinates (in store order)
@@ -81,6 +90,8 @@ export interface AnalysisState {
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
   couplingGroups: CouplingGroup[];
+  // A temperature change over the model (KOF-449), or null for none.
+  temperature: TemperatureLoad | null;
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId: number;
@@ -94,7 +105,11 @@ export interface AnalysisState {
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
-  result: { displacements: Float64Array; vonMises?: Float64Array } | null;
+  result: {
+    displacements: Float64Array;
+    vonMises?: Float64Array;
+    stress?: ElementStress;
+  } | null;
   resultType: ResultType;
   // Topology-optimization setup (KOF-232). Absent in files written before TO
   // existed — such a file restores the default settings. The density field a
@@ -130,6 +145,9 @@ interface KofemFieldDataV1 {
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
   couplingGroups?: CouplingGroup[];
+  // A temperature change (KOF-449). Absent in files written before it
+  // existed — such a file has none.
+  temperature?: TemperatureLoad | null;
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId?: number;
@@ -247,6 +265,13 @@ export function serializeAnalysis(state: AnalysisState): string {
     throw new Error(
       `Cannot save analysis: von Mises field has ${result.vonMises.length} values but the mesh has ${elements.length} elements (von Mises is stored per element)`,
     );
+  const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
+  if (result?.stress)
+    for (const surface of SHELL_SURFACES)
+      if (result.stress[surface].length !== 6 * corners)
+        throw new Error(
+          `Cannot save analysis: the ${surface} stress tensors have ${result.stress[surface].length} values but the mesh's elements have ${corners} corners (expected six per corner)`,
+        );
 
   const idToIndex = new Map(nodes.map((n, i) => [n.id, i]));
   const connectivity: string[] = [];
@@ -282,6 +307,7 @@ export function serializeAnalysis(state: AnalysisState): string {
     loadGroups: state.loadGroups,
     tieGroups: state.tieGroups,
     couplingGroups: state.couplingGroups,
+    temperature: state.temperature,
     nextBcGroupId: state.nextBcGroupId,
     nextLoadGroupId: state.nextLoadGroupId,
     nextTieGroupId: state.nextTieGroupId,
@@ -326,6 +352,22 @@ export function serializeAnalysis(state: AnalysisState): string {
     cellData.push(
       dataArray("Float64", "VonMises", joinTuples(result.vonMises, 1)),
     );
+  // One tensor per element corner (σxx σyy σzz τxy τyz τzx): field data, as a
+  // value per corner is no cell array. A model with shells keeps each surface;
+  // one without holds the same tensors on all three.
+  const fieldData: string[] = [];
+  if (result?.stress) {
+    const { top, middle, bottom } = result.stress;
+    if (top === middle && middle === bottom)
+      fieldData.push(dataArray("Float64", "Stress", joinTuples(top, 6), 6));
+    else
+      for (const [name, values] of [
+        ["StressTop", top],
+        ["StressMiddle", middle],
+        ["StressBottom", bottom],
+      ] as const)
+        fieldData.push(dataArray("Float64", name, joinTuples(values, 6), 6));
+  }
 
   const points = nodes.map((n) => `${n.x} ${n.y} ${n.z}`).join("\n");
   const encodedMeta = encodeVtkBinary(JSON.stringify(meta));
@@ -338,6 +380,7 @@ export function serializeAnalysis(state: AnalysisState): string {
     `<DataArray type="UInt8" Name="KoFEM" NumberOfTuples="${encodedMeta.byteLength}" format="binary">`,
     encodedMeta.b64,
     `</DataArray>`,
+    ...fieldData,
     `</FieldData>`,
     `<Piece NumberOfPoints="${nodes.length}" NumberOfCells="${elements.length}">`,
     `<Points>`,
@@ -497,6 +540,19 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
   if (meta.couplingGroups !== undefined && !Array.isArray(meta.couplingGroups))
     throw new Error(
       `Invalid analysis file: "couplingGroups" must be an array, got ${typeof meta.couplingGroups}`,
+    );
+  const temperature: unknown = meta.temperature;
+  if (
+    temperature !== undefined &&
+    temperature !== null &&
+    !(
+      typeof temperature === "object" &&
+      typeof (temperature as { formula?: unknown }).formula === "string" &&
+      (temperature as { formula: string }).formula.trim() !== ""
+    )
+  )
+    throw new Error(
+      `Invalid analysis file: "temperature" must be null or { formula: "…" }, got ${JSON.stringify(temperature)}`,
     );
 
   // TO settings postdate the first analysis files, so absence is legitimate —
@@ -674,6 +730,21 @@ export function parseAnalysisFile(text: string): AnalysisState {
       expectLength(vm.length, nCells, "VonMises");
       result.vonMises = new Float64Array(vm);
     }
+    const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
+    const tensors = (name: string): Float64Array => {
+      const values = parseNumbers(dataArrayContent(text, name), name);
+      expectLength(values.length, 6 * corners, name);
+      return new Float64Array(values);
+    };
+    const has = (name: string) =>
+      new RegExp(`<DataArray[^>]*Name="${name}"`).test(text);
+    if (has("Stress")) result.stress = uniformStress(tensors("Stress"));
+    else if (has("StressTop") || has("StressMiddle") || has("StressBottom"))
+      result.stress = {
+        top: tensors("StressTop"),
+        middle: tensors("StressMiddle"),
+        bottom: tensors("StressBottom"),
+      };
   }
 
   // A file written before ties existed carries none. The counter is then not
@@ -704,6 +775,8 @@ export function parseAnalysisFile(text: string): AnalysisState {
     loadGroups: meta.loadGroups,
     tieGroups,
     couplingGroups,
+    // A file written before temperature changes existed (KOF-449) has none.
+    temperature: meta.temperature ?? null,
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
     nextTieGroupId,

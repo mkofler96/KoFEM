@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
 import type {
   ResultPlot,
@@ -19,6 +19,7 @@ import {
   formatHandCheckValue,
   type HandCheck,
 } from "../../lib/handCheck";
+import { isStressField, type ShellSurface } from "../../lib/stressFields";
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { DeformScaleControl } from "./DeformScaleControl";
@@ -29,10 +30,13 @@ import { TopOptResult } from "./TopOptResult";
 import { SupportReactions } from "./SupportReactions";
 import styles from "./Panel.module.css";
 
-// "Von Mises stress" → "von-mises-stress", for test ids.
+// "Von Mises stress" → "von-mises-stress", "Normal stress σxx" →
+// "normal-stress-sigmaxx", for test ids.
 function fieldSlug(field: ResultType): string {
   return field
     .toLowerCase()
+    .replace(/σ/g, "sigma")
+    .replace(/τ/g, "tau")
     .replace(/[^a-z]+/g, "-")
     .replace(/^-|-$/g, "");
 }
@@ -303,6 +307,7 @@ function ProbeSection({ field }: { field: ResultType }) {
           Click the model to read {symbol} there.
         </div>
       )}
+      <ProbeAtPoint symbol={symbol} />
       <div style={{ marginTop: 8, marginBottom: 12 }}>
         {placed.map(({ probe, reading }) => (
           <ProbeRow
@@ -317,6 +322,66 @@ function ProbeSection({ field }: { field: ResultType }) {
         ))}
       </div>
     </>
+  );
+}
+
+// A probe at typed coordinates (KOF-447): it reads the surface point nearest
+// them, so a published value at a named point can be read exactly.
+function ProbeAtPoint({ symbol }: { symbol: string }) {
+  const addProbeAt = useModelStore((s) => s.addProbeAt);
+  const [coords, setCoords] = useState(["", "", ""]);
+  const [error, setError] = useState<string | null>(null);
+  const add = () => {
+    const point = coords.map((c) => (c.trim() === "" ? Number.NaN : Number(c)));
+    if (!point.every(Number.isFinite)) {
+      setError("Enter x, y and z as numbers.");
+      return;
+    }
+    try {
+      addProbeAt([point[0], point[1], point[2]]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className={`${styles.formNote} ${styles.formNoteFull}`}>
+        Or read {symbol} at a point (mm):
+      </div>
+      <div className={styles.coordRow}>
+        {(["x", "y", "z"] as const).map((axis, i) => (
+          <input
+            key={axis}
+            className={styles.formInput}
+            data-testid={`probe-at-${axis}`}
+            aria-label={`Probe ${axis} (mm)`}
+            placeholder={axis}
+            inputMode="decimal"
+            value={coords[i]}
+            onChange={(e) =>
+              setCoords(coords.map((c, k) => (k === i ? e.target.value : c)))
+            }
+            onKeyDown={(e) => e.key === "Enter" && add()}
+          />
+        ))}
+        <button
+          className={styles.outlineBtn}
+          data-testid="probe-at-add"
+          onClick={add}
+        >
+          Add
+        </button>
+      </div>
+      {error && (
+        <div
+          className={`${styles.formNote} ${styles.formNoteFull}`}
+          data-testid="probe-at-error"
+        >
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -343,6 +408,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const deleteResultPlot = useModelStore((s) => s.deleteResultPlot);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
+  const shellSurface = useModelStore((s) => s.shellSurface);
+  const setShellSurface = useModelStore((s) => s.setShellSurface);
   const handCheck = useModelStore((s) => s.handCheck);
   const refinementStudy = useModelStore((s) => s.refinementStudy);
 
@@ -393,7 +460,16 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const resultType = plot.field;
   // Min/max of the selected scalar field over all nodes — the same field and
   // node averaging used for the viewport coloring and colorbar legend.
-  const stats = computeResultRange(result, resultType, nodes, elements);
+  const stats = computeResultRange(
+    result,
+    resultType,
+    nodes,
+    elements,
+    shellSurface,
+  );
+  // The surface choice matters only for a stress component on a shell.
+  const surfaceChoice =
+    isStressField(resultType) && elements.some((e) => e.type === "CTRIA3");
 
   const fieldSymbol = resultFieldSymbol(resultType);
   const unit = resultUnit(resultType);
@@ -415,6 +491,23 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
             </option>
           ))}
         </select>
+
+        {surfaceChoice && (
+          <>
+            <div className={styles.sectionLabel}>Shell surface</div>
+            <select
+              className={styles.formSelect}
+              style={{ marginBottom: 12 }}
+              data-testid="shell-surface"
+              value={shellSurface}
+              onChange={(e) => setShellSurface(e.target.value as ShellSurface)}
+            >
+              <option value="top">Top (+normal)</option>
+              <option value="middle">Middle</option>
+              <option value="bottom">Bottom (−normal)</option>
+            </select>
+          </>
+        )}
 
         <DeformScaleControl />
 
@@ -445,8 +538,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           </>
         ) : (
           <div className={styles.empty}>
-            {resultType === "Von Mises stress"
-              ? "Von Mises data not available — re-run the solver"
+            {resultType === "Von Mises stress" || isStressField(resultType)
+              ? "Stress data not available — re-run the solver"
               : "No nodal data"}
           </div>
         )}

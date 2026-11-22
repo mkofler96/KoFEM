@@ -6,16 +6,32 @@
 
 import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
-import type { ResultProbe } from "../lib/resultProbe";
+import { anchorAtPoint, type ResultProbe } from "../lib/resultProbe";
 import type { ReactionSummary } from "../lib/solve/reactions";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
 import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
+import {
+  SHELL_SURFACES,
+  STRESS_FIELDS,
+  type ElementStress,
+  type ShellSurface,
+} from "../lib/stressFields";
+export {
+  SHELL_SURFACES,
+  STRESS_FIELDS,
+  isStressField,
+  type ElementStress,
+  type ShellSurface,
+  type StressField,
+} from "../lib/stressFields";
 
 export interface SolverResult {
   displacements: Float64Array;
   vonMises?: Float64Array;
+  // Absent on a result solved or saved before stress components existed.
+  stress?: ElementStress;
   // Each support's reaction and the applied load (KOF-387); absent on a
   // result that did not come from a static solve here (a saved file).
   reactions?: ReactionSummary | null;
@@ -27,6 +43,7 @@ export const RESULT_TYPES = [
   "Uy",
   "Uz",
   "Von Mises stress",
+  ...STRESS_FIELDS,
 ] as const;
 export type ResultType = (typeof RESULT_TYPES)[number];
 
@@ -74,6 +91,9 @@ export interface ResultsSlice {
   // map and flattens everything else to blue, hiding the second-highest
   // stressed region (#390); clamping to a manual range brings it back.
   legendRange: LegendRange | null;
+  // The shell surface the stress components are read on. Von Mises is always
+  // the worse of the two surfaces; a solid element ignores the choice.
+  shellSurface: ShellSurface;
   mode: AppMode;
   hasStarted: boolean;
   // The closed-form check the loaded example carries (KOF-261), shown beside
@@ -105,6 +125,7 @@ export interface ResultsSlice {
   setElementOrder(order: number): void;
   setSolverMethod(method: SolverMethod): void;
   setLegendRange(range: LegendRange | null): void;
+  setShellSurface(surface: ShellSurface): void;
   setProbing(on: boolean): void;
   setShowExtremeProbes(on: boolean): void;
   setSection(section: ResultSection | null): void;
@@ -115,6 +136,9 @@ export interface ResultsSlice {
     point: [number, number, number],
     anchor: { cadFaceId: number } | { triangle: [number, number, number] },
   ): void;
+  // A probe at a point given by its coordinates, on the surface triangle
+  // nearest it (KOF-447). Throws when the mesh has no surface to place it on.
+  addProbeAt(point: [number, number, number]): void;
   removeProbe(id: number): void;
 
   // Mode navigation
@@ -131,6 +155,7 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   elementOrder: 1,
   solverMethod: DEFAULT_SOLVER_METHOD,
   legendRange: null,
+  shellSurface: "top",
   mode: "geometry",
   hasStarted: false,
   handCheck: null,
@@ -171,6 +196,13 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setSolverMethod: (method) =>
     set((s) => {
       s.solverMethod = method;
+    }),
+  setShellSurface: (surface) =>
+    set((s) => {
+      if (!SHELL_SURFACES.includes(surface))
+        throw new Error(`unknown shell surface ${JSON.stringify(surface)}`);
+      s.shellSurface = surface;
+      s.legendRange = null;
     }),
   setLegendRange: (range) =>
     set((s) => {
@@ -238,6 +270,16 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
           ? { id, point, cadFaceId: anchor.cadFaceId }
           : { id, point, triangle: anchor.triangle },
       );
+    }),
+  addProbeAt: (point) =>
+    set((s) => {
+      const anchor = anchorAtPoint(point, {
+        nodes: s.nodes,
+        surfaceTriangles: s.surfaceTriangles,
+        surfaceFaceIds: s.surfaceFaceIds,
+      });
+      const id = s.nextProbeId++;
+      s.probes.push({ id, ...anchor });
     }),
   removeProbe: (id) =>
     set((s) => {

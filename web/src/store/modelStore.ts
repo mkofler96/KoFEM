@@ -170,6 +170,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.loadGroups = a.loadGroups;
       s.tieGroups = a.tieGroups;
       s.couplingGroups = a.couplingGroups;
+      s.temperature = a.temperature;
       s.constraints = rebuildConstraints(a.bcGroups);
       s.loads = rebuildLoads(a.loadGroups, s.nodes, a.couplingGroups);
       s.surfaceLoads = rebuildSurfaceLoads(
@@ -278,6 +279,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.loadGroups = [];
       s.tieGroups = [];
       s.couplingGroups = [];
+      s.temperature = null;
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];

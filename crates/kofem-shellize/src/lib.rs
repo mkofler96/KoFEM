@@ -10,8 +10,8 @@
 //! (KOF-297); the app reaches it through `web/src/lib/shellize.ts`.
 //! Stages, bottom-up:
 //!   [`walls`]          thin-wall detection (opposite planar CAD-face pairs)
-//!   [`curved_walls`]   curved thin walls, measured for the linear thin-wall check
-//!   [`mid_surface`]    collapse the walls to welded mid-surface facets
+//!   [`curved_walls`]   curved thin walls (cylinders, spheres, cones, bends)
+//!   [`mid_surface`]    collapse both kinds to welded mid-surface facets
 //!   `junction`         imprint T-junctions into the wall they stand on
 //!   [`wall_tets`]      which solid tets the shell facets replace
 //!   [`transition`]     cut retained solid at a wall root ([`clip`])

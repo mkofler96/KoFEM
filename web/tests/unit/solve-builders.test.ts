@@ -37,6 +37,7 @@ import {
 import {
   buildCoupledEngineInputs,
   mapMixedResult,
+  mapMixedStress,
 } from "../../src/lib/solve/coupled";
 import {
   routeSolve,
@@ -438,6 +439,24 @@ test("mixed result mapping follows element type order", () => {
     },
   );
   expect([...mixed.vonMises]).toEqual([10, 100, 20]);
+  const stress = mapMixedStress(
+    { elements: [shellElements[0], tetElements[0], shellElements[1]] },
+    {
+      // Six values per corner: four corners per tet, three per facet.
+      stress_tets: new Float64Array(24).fill(1),
+      stress_tris: {
+        top: Float64Array.from([...Array(18).fill(2), ...Array(18).fill(3)]),
+        middle: new Float64Array(36),
+        bottom: Float64Array.from([...Array(18).fill(4), ...Array(18).fill(5)]),
+      },
+    },
+  );
+  // The stress tensors follow the same order, surface by surface.
+  // The first corner of each element: facet, tet, facet.
+  const tensorsOf = (a: Float64Array) => [0, 18, 42].map((at) => a[at]);
+  expect(tensorsOf(stress.top)).toEqual([2, 1, 3]);
+  expect(tensorsOf(stress.middle)).toEqual([0, 1, 0]);
+  expect(tensorsOf(stress.bottom)).toEqual([4, 1, 5]);
   expect([...mixed.displacements]).toEqual([
     4, 5, 6, 0, 0, 0, 1, 2, 3, 0, 0, 0,
   ]);

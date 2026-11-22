@@ -198,6 +198,18 @@ pub enum FemError {
         material: u32,
         count: usize,
     },
+    #[error(
+        "{count} thermal expansion coefficients given for {elements} elements (tetrahedra, \
+         then hexahedra)"
+    )]
+    ExpansionCoefficientCount { count: usize, elements: usize },
+    #[error(
+        "{count} temperature changes given for {nodes} nodes (vertices, then the nodes a \
+         quadratic mesh adds)"
+    )]
+    TemperatureCount { count: usize, nodes: usize },
+    #[error("element {element} is out of range (the mesh has {count})")]
+    ElementOutOfRange { element: usize, count: usize },
     #[error("topology optimization: {reason}")]
     TopologyInput { reason: String },
     #[error("mesh convergence: {reason}")]

@@ -30,6 +30,11 @@ function MaterialForm({
   const [density, setDensity] = useState(String(mat?.density ?? 7.85e-9));
   const [color, setColor] = useState(mat?.color ?? defaultColor ?? "#4e79a7");
   /* eslint-enable kofem/no-silent-fallback */
+  // α: blank for a material without one; a temperature change on it is then
+  // refused at the solve.
+  const [expansion, setExpansion] = useState(
+    mat?.expansion === undefined ? "" : String(mat.expansion),
+  );
   const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
@@ -51,12 +56,20 @@ function MaterialForm({
       setError("Density must be a non-negative number");
       return;
     }
+    const expansionValue =
+      expansion.trim() === "" ? undefined : Number(expansion);
+    if (expansionValue !== undefined && !Number.isFinite(expansionValue)) {
+      setError("The expansion coefficient must be a number, or blank for none");
+      return;
+    }
     onSave({
       // eslint-disable-next-line kofem/no-silent-fallback -- label for a material the user left unnamed; cosmetic, the physical constants above are all validated
       name: name || "Material",
       young: youngModulus,
       poisson: poissonRatio,
       density: densityValue,
+      // Always present, so clearing the field removes a saved α.
+      expansion: expansionValue,
       color,
     });
   }
@@ -123,6 +136,20 @@ function MaterialForm({
         Not used by the current static solver — reserved for future gravity /
         inertial loads.
       </p>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>α (1/°C)</span>
+        <input
+          className={styles.formInput}
+          type="number"
+          value={expansion}
+          step="1e-6"
+          placeholder="none"
+          data-testid="material-expansion"
+          aria-label="Thermal expansion coefficient (1/°C)"
+          onChange={(e) => setExpansion(e.target.value)}
+          title="Coefficient of thermal expansion, used by a temperature change. Leave blank if the model has none."
+        />
+      </div>
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
           Cancel

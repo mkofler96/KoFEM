@@ -69,6 +69,7 @@ import {
 import { constraintTieCount } from "../../../web/src/lib/tie.ts";
 import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
+import { anchorAtPoint, readProbes } from "../../../web/src/lib/resultProbe.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
@@ -382,6 +383,7 @@ export async function buildFromRecipe(
       young: m.young,
       poisson: m.poisson,
       density: m.density,
+      ...(m.expansion === undefined ? {} : { expansion: m.expansion }),
       color: MATERIAL_PALETTE[0],
     },
   ];
@@ -482,6 +484,11 @@ export async function buildFromRecipe(
     constraints: rebuildConstraints(bcGroups),
     loads: rebuildLoads(loadGroups, nodes, []),
     surfaceLoads: rebuildSurfaceLoads(loadGroups, elements, []),
+    // The temperature change the recipe sets, as Boundary conditions → +Add →
+    // Temperature change stores it.
+    temperature: recipe.temperature
+      ? { formula: recipe.temperature.formula }
+      : null,
     tieGroups,
     couplings: [],
     elementOrder,
@@ -509,6 +516,7 @@ export async function buildFromRecipe(
     bcGroups,
     loadGroups,
     tieGroups,
+    temperature: payload.temperature,
     nextFaceEntryId,
   });
 
@@ -701,6 +709,7 @@ async function solveSolid(payload, where) {
   return {
     displacements: expandTiedDisplacements(nodes, tied, solved.displacements),
     vonMises: solved.vonMises,
+    stress: solved.stress,
   };
 }
 
@@ -719,7 +728,11 @@ async function solveShell(payload, where) {
     neverAsk,
     () => {},
   );
-  return { displacements: solved.displacements, vonMises: solved.von_mises };
+  return {
+    displacements: solved.displacements,
+    vonMises: solved.von_mises,
+    stress: solved.stress,
+  };
 }
 
 function unsupportedRoute(path, where) {
@@ -730,6 +743,11 @@ function unsupportedRoute(path, where) {
 
 // The app measures a shell's thickness from the wall it idealises and offers no
 // thickness input: every shell section the mesh made must have the recipe's.
+// A flat wall measures exactly; a curved one is measured on its faceted
+// surface, where the chords of its two faces sag by slightly different amounts,
+// so it may differ by up to 5e-4 of the thickness (a 1e-3 change in a bending
+// stress): a tight torus, tube radius 6 t (NAFEMS LE8's knuckle), measures
+// 3e-4 of t thick at 10 mm elements.
 function checkShellThickness(properties, thickness, where) {
   const sections = properties.filter((p) => p.sourceBodyId !== undefined);
   if (sections.length === 0)
@@ -739,7 +757,7 @@ function checkShellThickness(properties, thickness, where) {
   for (const s of sections)
     if (
       !(typeof s.thickness === "number") ||
-      Math.abs(s.thickness - thickness) > 1e-6 * thickness
+      Math.abs(s.thickness - thickness) > 5e-4 * thickness
     )
       throw new Error(
         `${where}: the app measured a ${s.thickness} mm wall, the recipe says ${thickness} mm — the GUI has no thickness input to change it`,
@@ -836,6 +854,17 @@ function resolvedProbe(p, cadFaceIds) {
     };
   if (p.kind === "twist")
     return { ...base, spec: { kind: "twist", axis: p.axis, cadFaceIds } };
+  if (p.kind === "stress" && p.at !== undefined)
+    return {
+      ...base,
+      spec: {
+        kind: "stress",
+        field: p.field,
+        // A solid element has the same stress on every "surface".
+        surface: p.surface === undefined ? "middle" : p.surface,
+        point: [...p.at],
+      },
+    };
   return {
     ...base,
     spec: {
@@ -861,6 +890,9 @@ function resolvedProbe(p, cadFaceIds) {
  *   stress                  largest volume-weighted nodal von Mises
  *                           (the app's nodeVonMisesField) over the faces'
  *                           nodes, or all nodes
+ *   stress at point         the app's probe at those coordinates
+ *                           (anchorAtPoint, readProbes): the nodal field
+ *                           interpolated at the nearest surface point
  *
  * then divided by `divideBy` when the probe has one.
  *
@@ -939,6 +971,16 @@ export function evaluateProbe(probe, model) {
           s + (r1 * u[3 * v + a2] - r2 * u[3 * v + a1]) / r2sum,
         0,
       ) / off.length;
+  } else if (spec.kind === "stress" && spec.point) {
+    const [reading] = readProbes(
+      [{ id: 0, ...anchorAtPoint(spec.point, model) }],
+      model,
+      spec.field,
+      spec.surface,
+    );
+    if (reading.kind === "unreadable")
+      throw new Error(`probe: ${reading.reason}`);
+    value = reading.value;
   } else if (spec.kind === "stress") {
     const nodal = nodeVonMisesField(
       { displacements: result.displacements, vonMises: result.vonMises },

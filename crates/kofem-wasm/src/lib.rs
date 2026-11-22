@@ -11,6 +11,7 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 mod convergence;
+mod field;
 mod mixed;
 mod outline;
 mod rigid_body;
@@ -25,6 +26,7 @@ pub use convergence::{
     clamped_free_wedge_exponent, extrapolate_to_zero_size, fit_convergence_rate,
     relative_element_sizes, ConvergenceRate, ZeroSizeExtrapolation,
 };
+pub use field::{check_field_expression, evaluate_field_expression};
 pub use mixed::MixedModel;
 pub use outline::{outer_faces, unique_edges, MeshOuterFaces};
 pub use rigid_body::{free_rigid_motions_js, FreeMotions};
@@ -37,13 +39,14 @@ pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
-    assemble_stiffness, fold_onto_vertices, load_on_held_nodes, nodal_residual,
-    prepare_coupled_static, prepare_static, prepare_tied_static, solve_pcg_with,
+    assemble_stiffness, corner_stress_tensors, fold_onto_vertices, load_on_held_nodes,
+    nodal_residual, prepare_coupled_static, prepare_static, prepare_tied_static, solve_pcg_with,
     summarize_reactions, von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings,
     CoupledReduction, Coupling, CouplingKind, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
-    PreconditionerChoice, PreparedCoupled, PreparedTied, ReactionSummary, StoppingRule,
-    SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
+    PreconditionerChoice, PreparedCoupled, PreparedTied, ReactionSummary, ShellSurface,
+    StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
 };
+use kofem_fem::{corner_stress_tensors_thermal, thermal_load, thermal_strains_at_centres};
 use wasm_bindgen::prelude::*;
 
 use stiffness::{Loan, Stiffness};
@@ -173,6 +176,73 @@ impl ElasticModel {
         self.mesh.vertex_count()
     }
 
+    /// Node coordinates, x,y,z per node: the vertices, then (quadratic) the
+    /// edge midpoints, hex face centres and hex centres — the points to
+    /// evaluate a nodal field such as a temperature change at.
+    #[wasm_bindgen(getter, js_name = nodeCoordinates)]
+    #[must_use]
+    pub fn node_coordinates(&self) -> Vec<f64> {
+        self.mesh.node_coordinates().as_flattened().to_vec()
+    }
+
+    /// Equivalent nodal forces of a thermal strain, 3 per node like a force
+    /// vector, to add to the mechanical forces before the solve.
+    /// `alpha_per_element`: expansion coefficient (1/°C) of every element,
+    /// tets first, then hexes. `delta_t_per_node`: temperature change from
+    /// the stress-free state at every node (see `nodeCoordinates`).
+    ///
+    /// # Errors
+    /// An array of the wrong length or a value that is not finite.
+    #[wasm_bindgen(js_name = thermalLoad)]
+    pub fn thermal_load(
+        &self,
+        alpha_per_element: &[f64],
+        delta_t_per_node: &[f64],
+    ) -> Result<Vec<f64>, JsError> {
+        thermal_load(&self.mesh, alpha_per_element, delta_t_per_node).map_err(|error| to_js(&error))
+    }
+
+    /// The corner stress tensors as `stressTensors` gives them, with the
+    /// thermal strain of `alphaPerElement` (1/°C) and `deltaTPerNode` (°C)
+    /// removed: σ = D·(ε − α·ΔT·I).
+    ///
+    /// # Errors
+    /// A displacement, expansion or temperature array that does not fit the
+    /// mesh, or a value that is not finite.
+    #[wasm_bindgen(js_name = stressTensorsThermal)]
+    pub fn stress_tensors_thermal(
+        &self,
+        displacements: &[f64],
+        alpha_per_element: &[f64],
+        delta_t_per_node: &[f64],
+    ) -> Result<Vec<f64>, JsError> {
+        corner_stress_tensors_thermal(
+            &self.mesh,
+            displacements,
+            alpha_per_element,
+            delta_t_per_node,
+        )
+        .map(|tensors| tensors.into_iter().flatten().collect())
+        .map_err(|error| to_js(&error))
+    }
+
+    /// The free thermal strain α·ΔT of every element (tets, then hexes) at its
+    /// centre, where stresses are recovered: each normal strain component, to
+    /// subtract before applying the elasticity matrix (`σ = D·(ε − ε_th)`).
+    /// Inputs as for `thermalLoad`.
+    ///
+    /// # Errors
+    /// An array of the wrong length or a value that is not finite.
+    #[wasm_bindgen(js_name = thermalStrains)]
+    pub fn thermal_strains(
+        &self,
+        alpha_per_element: &[f64],
+        delta_t_per_node: &[f64],
+    ) -> Result<Vec<f64>, JsError> {
+        thermal_strains_at_centres(&self.mesh, alpha_per_element, delta_t_per_node)
+            .map_err(|error| to_js(&error))
+    }
+
     /// Add the work-equivalent nodal forces of one surface load to `forces`
     /// (3 per node), with the MFEM engine's semantics. `triangles` holds the
     /// selected tet faces as vertex-index triples, `quadrilaterals` the
@@ -268,6 +338,19 @@ impl ElasticModel {
     #[wasm_bindgen(js_name = vonMises)]
     pub fn von_mises(&self, displacements: &[f64]) -> Result<Vec<f64>, JsError> {
         von_mises(&self.mesh, displacements).map_err(|error| to_js(&error))
+    }
+
+    /// The stress tensor of every element (tets, then hexes) at each of its
+    /// corner vertices in its node order (four per tet, eight per hex), six
+    /// values each: σxx, σyy, σzz, τxy, τyz, τzx in global axes.
+    ///
+    /// # Errors
+    /// A displacement array that does not fit the mesh.
+    #[wasm_bindgen(js_name = stressTensors)]
+    pub fn stress_tensors(&self, displacements: &[f64]) -> Result<Vec<f64>, JsError> {
+        corner_stress_tensors(&self.mesh, displacements)
+            .map(|tensors| tensors.into_iter().flatten().collect())
+            .map_err(|error| to_js(&error))
     }
 
     /// The reaction of each support for a solution of this model and the
@@ -897,5 +980,21 @@ impl ElasticSolution {
     #[must_use]
     pub fn relative_residual(&self) -> f64 {
         self.relative_residual
+    }
+}
+
+/// The shell surface a stress is read on: "top" (z = +t/2 along the facet
+/// normal), "middle" or "bottom".
+///
+/// # Errors
+/// Any other name.
+pub(crate) fn shell_surface(name: &str) -> Result<ShellSurface, JsError> {
+    match name {
+        "top" => Ok(ShellSurface::Top),
+        "middle" => Ok(ShellSurface::Middle),
+        "bottom" => Ok(ShellSurface::Bottom),
+        other => Err(JsError::new(&format!(
+            "shell surface must be \"top\", \"middle\" or \"bottom\", got {other:?}"
+        ))),
     }
 }

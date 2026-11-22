@@ -52,7 +52,7 @@ pub const CENTROID: [f64; 4] = [0.25; 4];
 
 /// Barycentric points of the symmetric 4-point rule, exact for quadratics;
 /// each carries a quarter of the volume.
-fn degree_two_points() -> [[f64; 4]; 4] {
+pub(crate) fn degree_two_points() -> [[f64; 4]; 4] {
     let near = (5.0 - 5.0_f64.sqrt()) / 20.0;
     let far = 1.0 - 3.0 * near;
     let mut points = [[near; 4]; 4];
@@ -60,6 +60,19 @@ fn degree_two_points() -> [[f64; 4]; 4] {
         point[corner] = far;
     }
     points
+}
+
+/// Barycentric points and volume fractions of Stroud's 5-point rule T3:3-1,
+/// exact for cubics: the centroid with −4/5 of the volume and the four points
+/// (1/2, 1/6, 1/6, 1/6) with 9/20 each.
+pub(crate) fn degree_three_points() -> [([f64; 4], f64); 5] {
+    let mut rule = [([0.25; 4], -0.8); 5];
+    for (corner, entry) in rule.iter_mut().skip(1).enumerate() {
+        let mut point = [1.0 / 6.0; 4];
+        point[corner] = 0.5;
+        *entry = (point, 0.45);
+    }
+    rule
 }
 
 /// Physical gradients of the four shape functions, and the element volume.
@@ -102,6 +115,21 @@ pub fn tet10_gradients(corner_gradients: &[[f64; 3]; 4], point: [f64; 4]) -> [[f
             [0, 1, 2].map(|axis| 4.0 * (point[first] * rhs[axis] + point[second] * lhs[axis]));
     }
     gradients
+}
+
+/// Values of the ten quadratic shape functions at the barycentric point
+/// `point`, in the node order of [`tet10_gradients`]: `L_a·(2·L_a − 1)` at the
+/// corners, `4·L_a·L_b` on the edges.
+#[must_use]
+pub fn tet10_shape(point: [f64; 4]) -> [f64; 10] {
+    let mut values = [0.0; 10];
+    for (corner, value) in values.iter_mut().take(4).enumerate() {
+        *value = point[corner] * (2.0 * point[corner] - 1.0);
+    }
+    for (edge, [first, second]) in EDGES_OF_TET.into_iter().enumerate() {
+        values[4 + edge] = 4.0 * point[first] * point[second];
+    }
+    values
 }
 
 /// Add `weight` × the isotropic-elasticity integrand at one point to a
@@ -260,6 +288,19 @@ pub fn hex8_reference_gradients(point: [f64; 3]) -> [[f64; 3]; 8] {
 #[must_use]
 pub fn hex27_reference_gradients(point: [f64; 3]) -> [[f64; 3]; 27] {
     tensor_shape(&hex27_half_positions(), quadratic_basis, point).1
+}
+
+/// Values of the eight trilinear shape functions at reference point `point`.
+#[must_use]
+pub fn hex8_shape(point: [f64; 3]) -> [f64; 8] {
+    tensor_shape(&HEX_CORNERS, linear_basis, point).0
+}
+
+/// Values of the 27 triquadratic shape functions at reference point `point`,
+/// in 27-node order.
+#[must_use]
+pub fn hex27_shape(point: [f64; 3]) -> [f64; 27] {
+    tensor_shape(&hex27_half_positions(), quadratic_basis, point).0
 }
 
 /// Jacobian `∂x_i/∂ξ_j` of the trilinear map of a hex with corners `corners`,

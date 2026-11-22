@@ -21,4 +21,6 @@ pub use solve::{
     prepare_shell_static, shell_translations, solve_shell_static, PreparedShell,
     ShellPreconditioner, ShellSolution,
 };
-pub use stress::shell_von_mises;
+pub use stress::{
+    shell_corner_stress_tensors, shell_stress_tensors, shell_von_mises, ShellSurface,
+};

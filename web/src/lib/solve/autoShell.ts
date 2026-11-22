@@ -8,6 +8,12 @@
 // result back onto the original mesh. The mid-surface extraction itself lives
 // in shellize.ts.
 
+import {
+  concatTensors,
+  cornerCount,
+  mapSurfaces,
+  type ElementStress,
+} from "../stressFields.js";
 import type {
   Element,
   Node,
@@ -29,10 +35,12 @@ import {
   type CoupledModel,
   type ShellizeMesh,
   type ShellExtraction,
+  type Vec3,
 } from "../shellize.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
 import { shellTieRefusal } from "./refusals.js";
 import { supportOwners, type SupportOwners } from "./reactions.js";
+import { curvedWallPressures } from "./wallPressure.js";
 import {
   coupledFixedDofs,
   coupledLoads,
@@ -54,7 +62,9 @@ import {
 import {
   buildNearestVertexLocator,
   maxFacetStressPerNode,
+  meanFacetTensorPerNode,
   shellStressAtCentroid,
+  shellTensorsAtCorners,
   type NearestLocator,
 } from "./shellMapping.js";
 
@@ -126,6 +136,27 @@ export function buildShellizeMesh(
     surfFace.push(surfaceFaceIds[t]);
   }
   return { V: verts, tet, body, surfTri, surfFace };
+}
+
+// Position of vertex `index` of the flat shellize mesh.
+function vertexOf(mesh: ShellizeMesh, index: number): Vec3 {
+  return [mesh.V[3 * index], mesh.V[3 * index + 1], mesh.V[3 * index + 2]];
+}
+
+// Append forces on local shell nodes to coupled-form (6·pool+dof) loads.
+function addShellForces(
+  loads: { load_dofs: number[]; load_vals: number[] },
+  forces: Map<number, Vec3>,
+  poolOfShellNode: (local: number) => number,
+): void {
+  for (const [local, force] of forces) {
+    const pool = poolOfShellNode(local);
+    for (let axis = 0; axis < 3; axis++) {
+      if (force[axis] === 0) continue;
+      loads.load_dofs.push(6 * pool + axis);
+      loads.load_vals.push(force[axis]);
+    }
+  }
 }
 
 // Extract the Shell body's thin walls, refusing loudly when the body carries
@@ -459,6 +490,52 @@ export function mapCoupledVonMises(
   return vonMises;
 }
 
+// The corner stress tensors of the coupled solve per original element, on
+// each surface: a solid tet takes its own, a wall tet of the shelled body at
+// each corner the mean tensor of the shell node nearest it, walked in the order
+// mapCoupledVonMises walks them.
+export function mapCoupledStress(
+  stressTets: Float64Array,
+  stressTris: ElementStress,
+  nodes: Node[],
+  elements: Element[],
+  model: CoupledModel,
+  nearestShell: NearestLocator,
+  shellBody: number,
+  wallTets: Set<number>,
+): ElementStress {
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  return mapSurfaces((surface) => {
+    const byShellNode = meanFacetTensorPerNode(
+      model.triangles,
+      stressTris[surface],
+    );
+    const parts: Float64Array[] = [];
+    let solidAt = 0;
+    for (let e = 0; e < elements.length; e++) {
+      const size = 6 * cornerCount(elements[e]);
+      if (!(elements[e].propertyId === shellBody && wallTets.has(e))) {
+        if (solidAt + size > stressTets.length)
+          throw new Error(
+            "stress mapping: the solve returned too few solid corner tensors",
+          );
+        parts.push(stressTets.subarray(solidAt, solidAt + size));
+        solidAt += size;
+      } else
+        parts.push(
+          shellTensorsAtCorners(
+            elements[e],
+            nodeById,
+            nearestShell,
+            byShellNode,
+            "stress mapping",
+          ),
+        );
+    }
+    return concatTensors(parts);
+  });
+}
+
 // The coupled-assembler inputs of an auto-shell model, plus the mapping of the
 // engine's pool result back onto the original store mesh.
 export interface AutoCoupledSolve {
@@ -484,6 +561,12 @@ export interface AutoCoupledSolve {
     von_mises_tets: Float64Array;
     von_mises_tris: Float64Array;
   }) => SolveFields;
+  // The stress tensors per original element; apart from mapResult because the
+  // stored C++ results carry no tensors.
+  mapStress: (result: {
+    stress_tets: Float64Array;
+    stress_tris: ElementStress;
+  }) => ElementStress;
 }
 
 // Build the coupled solve of an all-tet multibody model whose Shell body is
@@ -579,14 +662,27 @@ export function prepareAutoCoupledSolve(
   );
   // Faces wound outward from their tets, so a pressure pushes into the body.
   // Shell nodes and reference points carry rotations, and take a nodal moment.
+  // A pressure on a whole face of a curved wall loads the wall's facets.
+  const pressures = curvedWallPressures(
+    solidFacesOutward(surfaceLoads, elements, nodes, vid),
+    shells,
+    { triangles: input.surfaceTriangles, faceIds: input.surfaceFaceIds },
+    (nodeId) => vertexOf(mesh, vid(nodeId, "surface load face")),
+  );
   const nodalLoads = coupledLoads(
     loads,
-    solidFacesOutward(surfaceLoads, elements, nodes, vid),
+    pressures.remaining,
     poolOf,
     (pi) => isShellPoolIndex(model, pi) || isRefPoint(pi),
     nodes,
     vid,
   );
+  addShellForces(nodalLoads, pressures.shellForces, (local) => {
+    const pool = model.shellPool[local];
+    if (pool === undefined)
+      throw new Error(`auto-shell: shell node ${local} has no pool node`);
+    return pool;
+  });
 
   // Solid bodies that actually contribute solid tets to the pool: the other
   // bodies plus the shelled body when its thick base survived (only its thin walls
@@ -651,6 +747,17 @@ export function prepareAutoCoupledSolve(
         wallTets,
       ),
     }),
+    mapStress: (result) =>
+      mapCoupledStress(
+        result.stress_tets,
+        result.stress_tris,
+        nodes,
+        elements,
+        model,
+        nearestShell,
+        shells.shellBody,
+        wallTets,
+      ),
   };
 }
 
@@ -671,6 +778,8 @@ export interface PureShellSolve {
     displacements: Float64Array;
     von_mises: Float64Array;
   }) => SolveFields;
+  // The stress tensors per original element, as for AutoCoupledSolve.
+  mapStress: (result: { stress: ElementStress }) => ElementStress;
 }
 
 // A thin single body (or an assembly where EVERY body is marked Shell) has no
@@ -755,15 +864,26 @@ export function preparePureShellSolve(
   );
   // Faces wound outward from their tets, so a pressure pushes into the body.
   // Every node is a shell node, so every node takes a nodal moment.
-  const { load_dofs, load_vals } = coupledLoads(
-    loads,
+  // A pressure on a whole face of a curved wall loads the wall's facets.
+  const pressures = curvedWallPressures(
     solidFacesOutward(payload.surfaceLoads, elements, nodes, vid),
+    shells,
+    { triangles: input.surfaceTriangles, faceIds: input.surfaceFaceIds },
+    (nodeId) => vertexOf(mesh, vid(nodeId, "surface load face")),
+  );
+  const nodalLoads = coupledLoads(
+    loads,
+    pressures.remaining,
     shellOf,
     () => true,
     nodes,
     vid,
   );
-  const point_loads = coupledToShellPointLoads(load_dofs, load_vals);
+  addShellForces(nodalLoads, pressures.shellForces, (local) => local);
+  const point_loads = coupledToShellPointLoads(
+    nodalLoads.load_dofs,
+    nodalLoads.load_vals,
+  );
 
   log(
     `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${shells.shellVerts.length / 3} shell nodes, ${shells.shellTris.length / 3} facets (pure shell, no solid to couple)`,
@@ -812,6 +932,26 @@ export function preparePureShellSolve(
           "pure shell stress mapping",
         );
       return { displacements, vonMises };
+    },
+    mapStress: (result) => {
+      const nodeById = new Map(nodes.map((nd) => [nd.id, nd]));
+      return mapSurfaces((surface) => {
+        const byShellNode = meanFacetTensorPerNode(
+          shells.shellTris,
+          result.stress[surface],
+        );
+        return concatTensors(
+          elements.map((element) =>
+            shellTensorsAtCorners(
+              element,
+              nodeById,
+              nearestShell,
+              byShellNode,
+              "pure shell stress mapping",
+            ),
+          ),
+        );
+      });
     },
   };
 }

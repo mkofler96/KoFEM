@@ -99,7 +99,7 @@ stiffest design (the returned compliance is the minimum of the whole history).
 
 - **`crates/kofem-fem/tests/topology_optimize.rs`** (KOF-230) is the native Rust
   check of the loop's trajectory on a tiny MBB (`just test-rust -p kofem-fem
-  topology`). These `examples/` cases are the web-side counterpart: they run the
+topology`). These `examples/` cases are the web-side counterpart: they run the
   Rust module the app loads, and lock the visual "textbook truss" layout the
   native test defers here.
 - **`crates/kofem-fem/tests/topology_stress.rs`** (KOF-236) is the native check

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { ElementStress } from "../lib/stressFields";
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
@@ -40,6 +41,7 @@ export function useSolver() {
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
+  const temperature = useModelStore((s) => s.temperature);
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const setResult = useModelStore((s) => s.setResult);
@@ -87,7 +89,9 @@ export function useSolver() {
   // the trivial zero field, so at least one driving action is still required.
   // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const prescribedOk = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
-  const drivingOk = loadOk || prescribedOk;
+  // A temperature change drives the model on its own too (KOF-449).
+  const temperatureOk = temperature !== null;
+  const drivingOk = loadOk || prescribedOk || temperatureOk;
   // The route the solve will take, or why no path takes this model (a tie or
   // element order the path cannot apply, KOF-353) — the worker refuses it with
   // the same words, so say so before the solve. Only with a mesh: before one
@@ -212,6 +216,7 @@ export function useSolver() {
       constraints,
       loads,
       surfaceLoads,
+      temperature,
       elementOrder,
       solverMethod,
       tieGroups,
@@ -224,10 +229,11 @@ export function useSolver() {
     sendToWorker<{
       displacements: Float64Array;
       vonMises: Float64Array;
+      stress: ElementStress;
       reactions: ReactionSummary | null;
     }>("solve", payload)
-      .then(({ displacements, vonMises, reactions }) => {
-        setResult({ displacements, vonMises, reactions });
+      .then(({ displacements, vonMises, stress, reactions }) => {
+        setResult({ displacements, vonMises, stress, reactions });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",
@@ -289,7 +295,9 @@ export function useSolver() {
         ? loadsSummary(loads.length, surfaceLoads.length)
         : prescribedOk
           ? "Prescribed displacement drives the model"
-          : "No loads or prescribed displacement",
+          : temperatureOk
+            ? "Temperature change drives the model"
+            : "No loads, prescribed displacement or temperature change",
     ],
     ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
     ...(routeRefusal === null

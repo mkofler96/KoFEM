@@ -34,9 +34,9 @@ pub enum ShellizeError {
     UnknownWallFace { face: i32 },
     #[error(
         "Body {body} is marked \"Shell\", but {lost} of its {total} elements ({percent:.1} % of \
-         its volume) lie outside every flat thin wall the shell idealisation found — a curved or \
-         small face, or a thick block, that the shells would drop. Split that part into a body of \
-         its own and keep it Solid, or set the body to Solid."
+         its volume) lie outside every thin wall the shell idealisation found — a small face, a \
+         thick block, or a curved face whose thickness is not steady, that the shells would drop. \
+         Split that part into a body of its own and keep it Solid, or set the body to Solid."
     )]
     UncoveredShellBody {
         body: i32,
@@ -49,6 +49,12 @@ pub enum ShellizeError {
          conforming shell mesh. Remesh with a different element size, or set the body to Solid."
     )]
     UnweldableJunction,
+    #[error(
+        "Body {body} is marked \"Shell\", but one of its thin walls stands on the inside of a \
+         curved wall (CAD face {face}), and the shell idealisation cannot weld a junction into a \
+         curved wall yet. Set the body to Solid."
+    )]
+    CurvedWallJunction { body: i32, face: i32 },
     #[error("Degenerate shell triangle at transition")]
     DegenerateShellTriangle,
     #[error(

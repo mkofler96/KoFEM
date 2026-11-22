@@ -14,6 +14,7 @@
 // written. Where the app has no control for a step the recipe asks for, the
 // driver throws a MissingUiCapability naming it instead of reaching around the UI.
 
+import type { ShellSurface, StressField } from "../../src/lib/stressFields";
 import { expect, type Page } from "@playwright/test";
 import { geometryCounts, importStepText } from "./split";
 import { clickViewportAt, lookFrom } from "./viewport";
@@ -52,6 +53,8 @@ export interface Material {
   young: number;
   poisson: number;
   density: number;
+  // Thermal expansion α (1/°C); absent: none (recipe.mjs Material).
+  expansion?: number;
 }
 export interface Support {
   name: string;
@@ -84,7 +87,20 @@ export type Probe =
       field: "vonMises";
       stat: "max";
       faces?: FaceRef[];
+    })
+  | (ProbeCommon & {
+      kind: "stress";
+      field: StressField;
+      surface?: ShellSurface;
+      at: Point;
     });
+
+// A stress field read at a point: read in the Results panel, not from a
+// snapshot (readStressAtPoint).
+export const isPointStressProbe = (
+  probe: Probe,
+): probe is Extract<Probe, { at: Point; kind: "stress" }> =>
+  probe.kind === "stress" && "at" in probe && probe.at !== undefined;
 export interface Readout {
   quantity: string;
   probe: Probe;
@@ -124,6 +140,8 @@ interface RecipeSteps {
   loads: Load[];
   // Absent: the model has no tie (recipe.mjs Recipe).
   ties?: Tie[];
+  // Absent: no temperature change (recipe.mjs Recipe).
+  temperature?: { formula: string };
 }
 export interface StaticRecipe extends RecipeSteps {
   optimize?: undefined;
@@ -315,6 +333,8 @@ export interface ResolvedFace {
 // the tessellation's chordal deflection (DEFLECTION_RELATIVE · model size), as
 // the contract's resolveFaceAt (and the node-side build) resolve it, so a point
 // on the true surface of a curved face resolves where the facets cut inside it.
+// Faces more than half the deflection farther than the nearest do not count:
+// the facets of a curved face beside a narrow one (a 40 mm rim on a 10 m shell).
 export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
   const { points, triangles, faceIds } = snap.tess;
   const tol = DEFLECTION_RELATIVE * modelSize(points);
@@ -328,6 +348,8 @@ export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
     if (dist <= tol && (prev === undefined || dist < prev.dist))
       hits.set(faceIds[t], { dist, normal: unit(cross(sub(b, a), sub(c, a))) });
   });
+  for (const [face, { dist }] of hits)
+    if (dist > nearest + tol / 2) hits.delete(face);
   if (hits.size !== 1) {
     const found =
       hits.size === 0
@@ -775,8 +797,10 @@ async function checkShellThickness(
   for (const s of sections)
     if (
       s.thickness === undefined ||
+      // A curved wall is measured on its faceted surface, to 5e-4 of t (as
+      // examples/validation/lib/pipeline.mjs checks it).
       Math.abs(s.thickness - discretization.thickness) >
-        1e-6 * discretization.thickness
+        5e-4 * discretization.thickness
     )
       throw new MissingUiCapability(
         `give the shell a thickness of ${discretization.thickness} mm`,
@@ -793,6 +817,10 @@ async function setMaterial(page: Page, material: Material): Promise<void> {
   await field("E (MPa)").fill(String(material.young));
   await field("ν").fill(String(material.poisson));
   await field("ρ (t/mm³)").fill(String(material.density));
+  if (material.expansion !== undefined)
+    await page
+      .getByTestId("material-expansion")
+      .fill(String(material.expansion));
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const materials = (await snapshot(page)).materials;
   const created = materials.filter((m) => !before.includes(m.id));
@@ -800,6 +828,9 @@ async function setMaterial(page: Page, material: Material): Promise<void> {
   expect(created[0]).toMatchObject({
     young: material.young,
     poisson: material.poisson,
+    ...(material.expansion === undefined
+      ? {}
+      : { expansion: material.expansion }),
   });
   for (const id of await cadBodyIds(page)) {
     await openBody(page, id);
@@ -807,6 +838,27 @@ async function setMaterial(page: Page, material: Material): Promise<void> {
       .getByTestId(`body-material-${id}`)
       .selectOption(String(created[0].id));
   }
+}
+
+// Boundary conditions → + Add → Temperature change: the formula typed and
+// applied; the store must then hold it as typed.
+async function addTemperature(
+  page: Page,
+  temperature: { formula: string },
+): Promise<void> {
+  await addBoundary(page, "temperature");
+  await page.getByTestId("temperature-formula").fill(temperature.formula);
+  await expect(page.getByTestId("temperature-apply")).toBeEnabled();
+  await page.getByTestId("temperature-apply").click();
+  const stored = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { temperature: unknown } };
+        }
+      ).__kofemStore.getState().temperature,
+  );
+  expect(stored).toEqual({ formula: temperature.formula });
 }
 
 const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
@@ -1091,6 +1143,7 @@ export async function buildByHand(
   for (const support of recipe.supports) await addSupport(page, support);
   for (const load of recipe.loads) await addLoad(page, load);
   for (const tie of recipe.ties ?? []) await addTie(page, tie);
+  if (recipe.temperature) await addTemperature(page, recipe.temperature);
   lap("boundary");
   if (recipe.optimize === undefined) {
     await solve(page);
@@ -1235,6 +1288,10 @@ export function probeValue(snap: Snapshot, probe: Probe): number {
     }
     if (count === 0) throw new Error("twist probe: every node is on the axis");
     value = sum / count;
+  } else if (isPointStressProbe(probe)) {
+    throw new Error(
+      "a stress field at a point is read in the Results panel (readStressAtPoint), not from a snapshot",
+    );
   } else {
     const vm = nodalVonMises(snap);
     const nodes = probe.faces
@@ -1242,6 +1299,38 @@ export function probeValue(snap: Snapshot, probe: Probe): number {
       : snap.nodes.map((_, i) => i);
     value = Math.max(...nodes.map((i) => vm[i]));
   }
+  return probe.divideBy === undefined ? value : value / probe.divideBy;
+}
+
+// The Results panel's reading of a stress field at a point, as a user takes
+// it: pick the field, the shell surface where the model has shells, type the
+// point into the probe's coordinates, and read the probe's row.
+export async function readStressAtPoint(
+  page: Page,
+  probe: Extract<Probe, { at: Point; kind: "stress" }>,
+): Promise<number> {
+  await page.getByTestId("plot-field").selectOption(probe.field);
+  if (probe.surface !== undefined)
+    await page.getByTestId("shell-surface").selectOption(probe.surface);
+  const before = await page.locator('[data-testid^="probe-row-"]').count();
+  for (const [axis, value] of [
+    ["x", probe.at[0]],
+    ["y", probe.at[1]],
+    ["z", probe.at[2]],
+  ] as const)
+    await page.getByTestId(`probe-at-${axis}`).fill(String(value));
+  await page.getByTestId("probe-at-add").click();
+  await expect(page.locator('[data-testid^="probe-row-"]')).toHaveCount(
+    before + 1,
+  );
+  const ids = await page
+    .locator('[data-testid^="probe-value-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+  const last = ids.filter((id) => id && /probe-value-\d+$/.test(id)).at(-1);
+  if (!last) throw new Error("the probe placed at the point shows no value");
+  const value = Number(await page.getByTestId(last).getAttribute("data-value"));
+  if (!Number.isFinite(value))
+    throw new Error(`the probe at the point reads ${value}`);
   return probe.divideBy === undefined ? value : value / probe.divideBy;
 }
 

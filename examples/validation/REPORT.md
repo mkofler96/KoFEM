@@ -24,3 +24,13 @@ cd web && bun run validate:report
 | Tie patch test | largest von Mises stress | 100.00 MPa | σ (uniform) | +0.00% | 0.01% | ✅ |
 | Tied thick-walled cylinder | bore radial displacement u(a) | 0.045620 mm | u(a), Lamé rings tied at r = c | -0.65% | 1% | ✅ |
 | Tied cantilever beam | tip deflection δ | -1.9045 mm | −P/(3·E·I)·((L+g)³ − (L/2+g)³ + (L/2)³) | -0.46% | 1% | ✅ |
+| NAFEMS LE1: elliptic membrane | tangential stress σyy at D | 94.226 MPa | NAFEMS LE1 target | +1.65% | 3% | ✅ |
+| NAFEMS LE2: cylindrical shell patch | tangential stress at E, outer surface | 61.042 MPa | NAFEMS LE2 target, 6·m / t² | +1.74% | 3% | ✅ |
+| NAFEMS LE3: hemisphere with point loads | radial displacement at A | 183.18 mm | NAFEMS LE3 target | -0.99% | 5% | ✅ |
+| NAFEMS LE4: hyperbolic shell | meridional stress at K, mid-surface | -49.857 MPa | NAFEMS LE4 target | -0.29% | 3% | ✅ |
+| NAFEMS LE5: Z-section cantilever | axial stress at A, mid-surface | -109.32 MPa | NAFEMS LE5 target | +1.22% | 3% | ✅ |
+| NAFEMS LE6: skew plate | max principal stress at E, lower surface | 0.80543 MPa | NAFEMS LE6 target | +0.43% | 2% | ✅ |
+| NAFEMS LE7: cylinder with hemispherical cap | axial stress at D, outer surface | 25.920 MPa | NAFEMS LE7 target | +0.08% | 3% | ✅ |
+| NAFEMS LE8: axisymmetric shell under pressure | hoop stress at D, outer surface | 87.222 MPa | NAFEMS LE8 target | -7.70% | 10% | ✅ |
+| NAFEMS LE10: thick plate under pressure | direct stress σyy at D | -5.3684 MPa | NAFEMS LE10 target | -0.22% | 2% | ✅ |
+| NAFEMS LE11: solid cylinder/taper/sphere, temperature loading | direct stress σzz at A | -103.77 MPa | NAFEMS LE11 target | -1.17% | 3% | ✅ |

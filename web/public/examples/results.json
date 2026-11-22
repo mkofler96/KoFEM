@@ -1,7 +1,7 @@
 {
   "generated": "2026-11-22",
   "engine": "engine-44314641a642",
-  "fem": "fem-515dda6e54a6",
+  "fem": "fem-9e0ba78fc956",
   "cases": [
     {
       "id": "axial-bar",
@@ -729,6 +729,606 @@
         "deform": 50,
         "width": 1200,
         "height": 523
+      }
+    },
+    {
+      "id": "nafems-le1",
+      "name": "NAFEMS LE1: elliptic membrane",
+      "quantity": "tangential stress σyy at D",
+      "unit": "MPa",
+      "reference": 92.7,
+      "referenceLabel": "NAFEMS LE1 target",
+      "tolPct": 3,
+      "fe": 94.22591126087285,
+      "errPct": 1.6460747150731887,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 14455,
+        "vertices": 5024,
+        "nodes": 29511,
+        "dofs": 88533,
+        "maxElementSize": 50,
+        "minElementSize": 5
+      },
+      "inputs": [
+        {
+          "symbol": "t",
+          "value": 100,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 10,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 0.5073654639332302,
+        "max": 90.10954799403815,
+        "deform": 0,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "nafems-le2",
+      "name": "NAFEMS LE2: cylindrical shell patch",
+      "quantity": "tangential stress at E, outer surface",
+      "unit": "MPa",
+      "reference": 60,
+      "referenceLabel": "NAFEMS LE2 target, 6·m / t²",
+      "tolPct": 3,
+      "fe": 61.04166295242878,
+      "errPct": 1.736104920714633,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 1010,
+        "vertices": 554,
+        "nodes": 554,
+        "dofs": 3324,
+        "maxElementSize": 25,
+        "minElementSize": 2.5
+      },
+      "inputs": [
+        {
+          "symbol": "R",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "L",
+          "value": 500,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "m",
+          "value": 1000,
+          "unit": "N·mm/mm"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 25.9375250889887,
+        "max": 71.04820813100201,
+        "deform": 5,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "nafems-le3",
+      "name": "NAFEMS LE3: hemisphere with point loads",
+      "quantity": "radial displacement at A",
+      "unit": "mm",
+      "reference": 185,
+      "referenceLabel": "NAFEMS LE3 target",
+      "tolPct": 5,
+      "fe": 183.17708233534842,
+      "errPct": -0.9853608998116669,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 5500,
+        "vertices": 2860,
+        "nodes": 2860,
+        "dofs": 17160,
+        "maxElementSize": 250,
+        "minElementSize": 25
+      },
+      "inputs": [
+        {
+          "symbol": "R",
+          "value": 10000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 40,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 68250,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "F",
+          "value": 2000,
+          "unit": "N"
+        }
+      ],
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 1.8370725145779359,
+        "max": 207.02770376859348,
+        "deform": 5,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "nafems-le4",
+      "name": "NAFEMS LE4: hyperbolic shell",
+      "quantity": "meridional stress at K, mid-surface",
+      "unit": "MPa",
+      "reference": -50,
+      "referenceLabel": "NAFEMS LE4 target",
+      "tolPct": 3,
+      "fe": -49.856776019156456,
+      "errPct": -0.2864479616870881,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 2021,
+        "vertices": 1086,
+        "nodes": 1086,
+        "dofs": 6516,
+        "maxElementSize": 50,
+        "minElementSize": 5
+      },
+      "inputs": [
+        {
+          "symbol": "a",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "H",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 1,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 87.85893772470047,
+        "max": 173.12538969671732,
+        "deform": 100,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "nafems-le5",
+      "name": "NAFEMS LE5: Z-section cantilever",
+      "quantity": "axial stress at A, mid-surface",
+      "unit": "MPa",
+      "reference": -108,
+      "referenceLabel": "NAFEMS LE5 target",
+      "tolPct": 3,
+      "fe": -109.31648825554653,
+      "errPct": 1.2189706069875288,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 26977,
+        "vertices": 9276,
+        "nodes": 54792,
+        "dofs": 164376,
+        "maxElementSize": 100,
+        "minElementSize": 10
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 10000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "d",
+          "value": 2000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "b",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 100,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "T",
+          "value": 1200000000,
+          "unit": "N·mm"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 5.417091654058963,
+        "max": 189.143407919238,
+        "deform": 20,
+        "width": 1200,
+        "height": 493
+      }
+    },
+    {
+      "id": "nafems-le6",
+      "name": "NAFEMS LE6: skew plate",
+      "quantity": "max principal stress at E, lower surface",
+      "unit": "MPa",
+      "reference": 0.802,
+      "referenceLabel": "NAFEMS LE6 target",
+      "tolPct": 2,
+      "fe": 0.8054311354817854,
+      "errPct": 0.427822379274976,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 7517,
+        "vertices": 3922,
+        "nodes": 3922,
+        "dofs": 23532,
+        "maxElementSize": 12.5,
+        "minElementSize": 1.25
+      },
+      "inputs": [
+        {
+          "symbol": "a",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "skew",
+          "value": 30,
+          "unit": "°"
+        },
+        {
+          "symbol": "t",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 0.0007,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 0.000010311933733248007,
+        "max": 4.217141492721961,
+        "deform": 10000,
+        "width": 1200,
+        "height": 470
+      }
+    },
+    {
+      "id": "nafems-le7",
+      "name": "NAFEMS LE7: cylinder with hemispherical cap",
+      "quantity": "axial stress at D, outer surface",
+      "unit": "MPa",
+      "reference": 25.9,
+      "referenceLabel": "NAFEMS LE7 target",
+      "tolPct": 3,
+      "fe": 25.920182742248237,
+      "errPct": 0.07792564574609316,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 14812,
+        "vertices": 7564,
+        "nodes": 7564,
+        "dofs": 45384,
+        "maxElementSize": 25,
+        "minElementSize": 2.5
+      },
+      "inputs": [
+        {
+          "symbol": "R",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 25,
+          "unit": "mm"
+        },
+        {
+          "symbol": "L",
+          "value": 1500,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 1,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 19.802337118704504,
+        "max": 35.990383808283504,
+        "deform": 1000,
+        "width": 1200,
+        "height": 761
+      }
+    },
+    {
+      "id": "nafems-le8",
+      "name": "NAFEMS LE8: axisymmetric shell under pressure",
+      "quantity": "hoop stress at D, outer surface",
+      "unit": "MPa",
+      "reference": 94.5,
+      "referenceLabel": "NAFEMS LE8 target",
+      "tolPct": 10,
+      "fe": 87.22199462571074,
+      "errPct": -7.7015929886658885,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 10950,
+        "vertices": 5611,
+        "nodes": 5611,
+        "dofs": 33666,
+        "maxElementSize": 7.5,
+        "minElementSize": 0.75
+      },
+      "inputs": [
+        {
+          "symbol": "R cylinder",
+          "value": 250,
+          "unit": "mm"
+        },
+        {
+          "symbol": "R knuckle",
+          "value": 62.5,
+          "unit": "mm"
+        },
+        {
+          "symbol": "R end",
+          "value": 250,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 1,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 17.480513259197792,
+        "max": 144.11626706862856,
+        "deform": 100,
+        "width": 1200,
+        "height": 785
+      }
+    },
+    {
+      "id": "nafems-le10",
+      "name": "NAFEMS LE10: thick plate under pressure",
+      "quantity": "direct stress σyy at D",
+      "unit": "MPa",
+      "reference": -5.38,
+      "referenceLabel": "NAFEMS LE10 target",
+      "tolPct": 2,
+      "fe": -5.368351852026694,
+      "errPct": -0.2165083266413701,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 5098,
+        "vertices": 1381,
+        "nodes": 8810,
+        "dofs": 26430,
+        "maxElementSize": 150,
+        "minElementSize": 15
+      },
+      "inputs": [
+        {
+          "symbol": "t",
+          "value": 600,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 1,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 0.7746474373574312,
+        "max": 32.577413224555414,
+        "deform": 1000,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "nafems-le11",
+      "name": "NAFEMS LE11: solid cylinder/taper/sphere, temperature loading",
+      "quantity": "direct stress σzz at A",
+      "unit": "MPa",
+      "reference": -105,
+      "referenceLabel": "NAFEMS LE11 target",
+      "tolPct": 3,
+      "fe": -103.76694856106808,
+      "errPct": -1.174334703744689,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 39446,
+        "vertices": 8632,
+        "nodes": 60315,
+        "dofs": 180945,
+        "maxElementSize": 50,
+        "minElementSize": 5
+      },
+      "inputs": [
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "α",
+          "value": 0.00023,
+          "unit": "1/°C"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 30.40168826121691,
+        "max": 146.19822151436802,
+        "deform": 200,
+        "width": 1200,
+        "height": 900
       }
     }
   ],
@@ -1933,6 +2533,672 @@
         "reference": null,
         "series": [],
         "noRate": "The peak stress is read from the one or two triangles at the cut edge, whose size does not shrink with the maximum element size, so it has no rate to observe."
+      }
+    },
+    {
+      "id": "nafems-le1",
+      "caseId": "nafems-le1",
+      "title": "NAFEMS LE1, quadratic tetrahedra",
+      "series": [
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "nafems-le1",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "100 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 3831,
+              "vertices": 1401,
+              "nodes": 8030,
+              "dofs": 24090,
+              "maxElementSize": 100,
+              "minElementSize": 10,
+              "fe": 94.1255103111944,
+              "errPct": 1.5377673259918023,
+              "ci": false
+            },
+            {
+              "mesh": "50 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 14455,
+              "vertices": 5024,
+              "nodes": 29511,
+              "dofs": 88533,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": 94.22591126087285,
+              "errPct": 1.6460747150731887,
+              "ci": true
+            },
+            {
+              "mesh": "35 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 32740,
+              "vertices": 10670,
+              "nodes": 64188,
+              "dofs": 192564,
+              "maxElementSize": 35,
+              "minElementSize": 3.5,
+              "fe": 93.30114337226439,
+              "errPct": 0.6484826022269564,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only."
+      }
+    },
+    {
+      "id": "nafems-le2",
+      "caseId": "nafems-le2",
+      "title": "NAFEMS LE2, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "nafems-le2",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "50 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 321,
+              "vertices": 195,
+              "nodes": 195,
+              "dofs": 1170,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": 61.08500762888902,
+              "errPct": 1.8083460481483609,
+              "ci": false
+            },
+            {
+              "mesh": "25 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 1010,
+              "vertices": 554,
+              "nodes": 554,
+              "dofs": 3324,
+              "maxElementSize": 25,
+              "minElementSize": 2.5,
+              "fe": 61.04166295242878,
+              "errPct": 1.736104920714633,
+              "ci": true
+            },
+            {
+              "mesh": "12.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 3992,
+              "vertices": 2082,
+              "nodes": 2082,
+              "dofs": 12492,
+              "maxElementSize": 12.5,
+              "minElementSize": 1.25,
+              "fe": 60.93033630746163,
+              "errPct": 1.55056051243605,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
+      }
+    },
+    {
+      "id": "nafems-le5",
+      "caseId": "nafems-le5",
+      "title": "NAFEMS LE5, quadratic tetrahedra",
+      "series": [
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "nafems-le5",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "200 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 6886,
+              "vertices": 2460,
+              "nodes": 14262,
+              "dofs": 42786,
+              "maxElementSize": 200,
+              "minElementSize": 20,
+              "fe": -108.93008027355938,
+              "errPct": 0.8611854384809106,
+              "ci": false
+            },
+            {
+              "mesh": "100 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 26977,
+              "vertices": 9276,
+              "nodes": 54792,
+              "dofs": 164376,
+              "maxElementSize": 100,
+              "minElementSize": 10,
+              "fe": -109.31648825554653,
+              "errPct": 1.2189706069875288,
+              "ci": true
+            },
+            {
+              "mesh": "70 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 56652,
+              "vertices": 19286,
+              "nodes": 114496,
+              "dofs": 343488,
+              "maxElementSize": 70,
+              "minElementSize": 7,
+              "fe": -109.50376400193883,
+              "errPct": 1.3923740758692902,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only."
+      }
+    },
+    {
+      "id": "nafems-le6",
+      "caseId": "nafems-le6",
+      "title": "NAFEMS LE6, flat shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "nafems-le6",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "25 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 1935,
+              "vertices": 1056,
+              "nodes": 1056,
+              "dofs": 6336,
+              "maxElementSize": 25,
+              "minElementSize": 2.5,
+              "fe": 0.8040516848737728,
+              "errPct": 0.2558210565801395,
+              "ci": false
+            },
+            {
+              "mesh": "12.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 7517,
+              "vertices": 3922,
+              "nodes": 3922,
+              "dofs": 23532,
+              "maxElementSize": 12.5,
+              "minElementSize": 1.25,
+              "fe": 0.8054311354817854,
+              "errPct": 0.427822379274976,
+              "ci": true
+            },
+            {
+              "mesh": "8 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 18131,
+              "vertices": 9317,
+              "nodes": 9317,
+              "dofs": 55902,
+              "maxElementSize": 8,
+              "minElementSize": 0.8,
+              "fe": 0.8061076110258028,
+              "errPct": 0.5121709508482175,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
+      }
+    },
+    {
+      "id": "nafems-le10",
+      "caseId": "nafems-le10",
+      "title": "NAFEMS LE10, quadratic tetrahedra",
+      "series": [
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "nafems-le10",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "200 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 2873,
+              "vertices": 787,
+              "nodes": 4980,
+              "dofs": 14940,
+              "maxElementSize": 200,
+              "minElementSize": 20,
+              "fe": -5.361363068823168,
+              "errPct": -0.3464113601641546,
+              "ci": false
+            },
+            {
+              "mesh": "150 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 5098,
+              "vertices": 1381,
+              "nodes": 8810,
+              "dofs": 26430,
+              "maxElementSize": 150,
+              "minElementSize": 15,
+              "fe": -5.368351852026694,
+              "errPct": -0.2165083266413701,
+              "ci": true
+            },
+            {
+              "mesh": "100 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 19919,
+              "vertices": 4425,
+              "nodes": 30766,
+              "dofs": 92298,
+              "maxElementSize": 100,
+              "minElementSize": 10,
+              "fe": -5.4016252697616185,
+              "errPct": 0.40195668701893317,
+              "ci": false
+            },
+            {
+              "mesh": "75 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 37214,
+              "vertices": 8053,
+              "nodes": 56869,
+              "dofs": 170607,
+              "maxElementSize": 75,
+              "minElementSize": 7.5,
+              "fe": -5.4026648839068265,
+              "errPct": 0.42128037001536506,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only."
+      }
+    },
+    {
+      "id": "nafems-le11",
+      "caseId": "nafems-le11",
+      "title": "NAFEMS LE11, quadratic tetrahedra",
+      "series": [
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "nafems-le11",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "100 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 4055,
+              "vertices": 1169,
+              "nodes": 7282,
+              "dofs": 21846,
+              "maxElementSize": 100,
+              "minElementSize": 10,
+              "fe": -101.81399725532589,
+              "errPct": -3.0342883282610598,
+              "ci": false
+            },
+            {
+              "mesh": "50 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 39446,
+              "vertices": 8632,
+              "nodes": 60315,
+              "dofs": 180945,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": -103.76694856106808,
+              "errPct": -1.174334703744689,
+              "ci": true
+            },
+            {
+              "mesh": "35 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 83060,
+              "vertices": 17847,
+              "nodes": 126363,
+              "dofs": 379089,
+              "maxElementSize": 35,
+              "minElementSize": 3.5,
+              "fe": -104.41578317161908,
+              "errPct": -0.5563969794103973,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only."
+      }
+    },
+    {
+      "id": "nafems-le3",
+      "caseId": "nafems-le3",
+      "title": "NAFEMS LE3, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "nafems-le3",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "500 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 1398,
+              "vertices": 759,
+              "nodes": 759,
+              "dofs": 4554,
+              "maxElementSize": 500,
+              "minElementSize": 50,
+              "fe": 185.40487048057742,
+              "errPct": 0.21884890842022434,
+              "ci": false
+            },
+            {
+              "mesh": "250 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 5500,
+              "vertices": 2860,
+              "nodes": 2860,
+              "dofs": 17160,
+              "maxElementSize": 250,
+              "minElementSize": 25,
+              "fe": 183.17708233534842,
+              "errPct": -0.9853608998116669,
+              "ci": true
+            },
+            {
+              "mesh": "125 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 21509,
+              "vertices": 10951,
+              "nodes": 10951,
+              "dofs": 65706,
+              "maxElementSize": 125,
+              "minElementSize": 12.5,
+              "fe": 180.1721210032075,
+              "errPct": -2.6096643225905365,
+              "ci": false
+            },
+            {
+              "mesh": "62.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 82897,
+              "vertices": 41822,
+              "nodes": 41822,
+              "dofs": 250932,
+              "maxElementSize": 62.5,
+              "minElementSize": 6.25,
+              "fe": 178.4205370866495,
+              "errPct": -3.5564664396489247,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a displacement on a shell of flat facets, which levels off below the target instead of converging to it (KOF-453); the rate check covers solid meshes only."
+      }
+    },
+    {
+      "id": "nafems-le4",
+      "caseId": "nafems-le4",
+      "title": "NAFEMS LE4, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "nafems-le4",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "50 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 2021,
+              "vertices": 1086,
+              "nodes": 1086,
+              "dofs": 6516,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": -49.856776019156456,
+              "errPct": -0.2864479616870881,
+              "ci": true
+            },
+            {
+              "mesh": "25 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 7708,
+              "vertices": 3984,
+              "nodes": 3984,
+              "dofs": 23904,
+              "maxElementSize": 25,
+              "minElementSize": 2.5,
+              "fe": -50.0990427904005,
+              "errPct": 0.19808558080100627,
+              "ci": false
+            },
+            {
+              "mesh": "12.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 28680,
+              "vertices": 14585,
+              "nodes": 14585,
+              "dofs": 87510,
+              "maxElementSize": 12.5,
+              "minElementSize": 1.25,
+              "fe": -49.99682043373112,
+              "errPct": -0.006359132537752998,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
+      }
+    },
+    {
+      "id": "nafems-le7",
+      "caseId": "nafems-le7",
+      "title": "NAFEMS LE7, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "nafems-le7",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "50 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 3611,
+              "vertices": 1889,
+              "nodes": 1889,
+              "dofs": 11334,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": 25.44664170428897,
+              "errPct": -1.7504181301584054,
+              "ci": false
+            },
+            {
+              "mesh": "35 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 7483,
+              "vertices": 3856,
+              "nodes": 3856,
+              "dofs": 23136,
+              "maxElementSize": 35,
+              "minElementSize": 3.5,
+              "fe": 25.798451199782832,
+              "errPct": -0.3920803097187896,
+              "ci": false
+            },
+            {
+              "mesh": "25 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 14812,
+              "vertices": 7564,
+              "nodes": 7564,
+              "dofs": 45384,
+              "maxElementSize": 25,
+              "minElementSize": 2.5,
+              "fe": 25.920182742248237,
+              "errPct": 0.07792564574609316,
+              "ci": true
+            },
+            {
+              "mesh": "17.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 30109,
+              "vertices": 15278,
+              "nodes": 15278,
+              "dofs": 91668,
+              "maxElementSize": 17.5,
+              "minElementSize": 1.75,
+              "fe": 25.900795879583914,
+              "errPct": 0.003072894146390494,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
+      }
+    },
+    {
+      "id": "nafems-le8",
+      "caseId": "nafems-le8",
+      "title": "NAFEMS LE8, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "nafems-le8",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "10 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 6219,
+              "vertices": 3213,
+              "nodes": 3213,
+              "dofs": 19278,
+              "maxElementSize": 10,
+              "minElementSize": 1,
+              "fe": 86.10833710066227,
+              "errPct": -8.880066560145748,
+              "ci": false
+            },
+            {
+              "mesh": "7.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 10950,
+              "vertices": 5611,
+              "nodes": 5611,
+              "dofs": 33666,
+              "maxElementSize": 7.5,
+              "minElementSize": 0.75,
+              "fe": 87.22199462571074,
+              "errPct": -7.7015929886658885,
+              "ci": true
+            },
+            {
+              "mesh": "6 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 16991,
+              "vertices": 8664,
+              "nodes": 8664,
+              "dofs": 51984,
+              "maxElementSize": 6,
+              "minElementSize": 0.6,
+              "fe": 86.78427347173327,
+              "errPct": -8.164789977001828,
+              "ci": false
+            },
+            {
+              "mesh": "5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 24802,
+              "vertices": 12604,
+              "nodes": 12604,
+              "dofs": 75624,
+              "maxElementSize": 5,
+              "minElementSize": 0.5,
+              "fe": 86.85149994450335,
+              "errPct": -8.093650852377413,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
       }
     }
   ]

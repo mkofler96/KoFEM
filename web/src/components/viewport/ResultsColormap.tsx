@@ -30,6 +30,7 @@ export function ResultsColormap({
   const elements = useModelStore((s) => s.elements);
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
+  const shellSurface = useModelStore((s) => s.shellSurface);
   const legendRange = useModelStore((s) => s.legendRange);
 
   const { nodeMap, boundaryQuadFaceIds, boundaryTriFaceIds } = topology;
@@ -51,8 +52,14 @@ export function ResultsColormap({
     // `SolverResult.vonMises` is optional, so an analysis file written before
     // the field existed legitimately lacks it: null then, and nothing is drawn
     // rather than a uniform colour that reads as a valid result. ResultsPanel
-    // already reports "Von Mises data not available — re-run the solver".
-    const values = nodalResultValues(result, resultType, nodes, elements);
+    // already reports "Stress data not available — re-run the solver".
+    const values = nodalResultValues(
+      result,
+      resultType,
+      nodes,
+      elements,
+      shellSurface,
+    );
     if (!values) return null;
 
     let minVal = Infinity,
@@ -115,6 +122,7 @@ export function ResultsColormap({
   }, [
     result,
     resultType,
+    shellSurface,
     legendRange,
     elements,
     boundaryQuadFaceIds,

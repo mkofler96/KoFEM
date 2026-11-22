@@ -31,8 +31,10 @@ import {
   buildByHand,
   compareWithNodeMesh,
   groupFaces,
+  isPointStressProbe,
   probeValue,
   readFinalCompliance,
+  readStressAtPoint,
   recipeFaceIds,
   snapshot,
   type BuildReport,
@@ -182,10 +184,13 @@ async function rebuild(
   const start = Date.now();
   const report = await buildByHand(page, recipe);
   await checkBuild(page, recipe, report);
+  const { probe } = recipe.readout;
   const value =
-    recipe.optimize === undefined
-      ? probeValue(await snapshot(page), recipe.readout.probe)
-      : await readFinalCompliance(page);
+    recipe.optimize !== undefined
+      ? await readFinalCompliance(page)
+      : isPointStressProbe(probe)
+        ? await readStressAtPoint(page, probe)
+        : probeValue(await snapshot(page), probe);
 
   // Should the Results panel show a hand check, it reads the same number.
   const handCheck = page.getByTestId("hand-check-fe");

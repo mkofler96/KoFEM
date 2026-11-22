@@ -18,6 +18,7 @@ import {
   buildShellTransitionModel as rustShellTransition,
   CouplingInput,
   detectCurvedWalls as rustCurvedWalls,
+  detectPlanarWalls as rustPlanarWalls,
   extractThinWallShells as rustExtractShells,
   shellBodyTets as rustShellBodyTets,
   ShellSet,
@@ -39,12 +40,16 @@ export interface ShellizeMesh {
 }
 
 // A detected thin wall: the CAD face kept as its mid-surface source (the outer
-// face of the pair), that face's unit normal, the thickness and the body.
+// face of the pair), that face's unit normal, the thickness and the body. A
+// curved wall (a cylinder, sphere, cone or bend) collapses along each node's
+// own normal; its `n` is the kept face's mean outward normal.
 export interface Wall {
   keep: number;
   n: Vec3;
   thk: number;
   body: number;
+  curved: boolean;
+  partner: number; // the face opposite `keep` (the first, for a split planar wall)
 }
 
 export interface ShellExtraction {
@@ -183,6 +188,8 @@ function shellInput(shells: ShellExtraction): ShellSet {
     Float64Array.from(shells.walls.flatMap((wall) => wall.n)),
     Float64Array.from(shells.walls.map((wall) => wall.thk)),
     Int32Array.from(shells.walls.map((wall) => wall.body)),
+    Uint8Array.from(shells.walls.map((wall) => (wall.curved ? 1 : 0))),
+    Int32Array.from(shells.walls.map((wall) => wall.partner)),
     Float64Array.from(shells.shellVerts),
     Uint32Array.from(shells.shellTris),
     Float64Array.from(shells.shellThk),
@@ -195,12 +202,16 @@ function shellsFrom(set: ShellSet): ShellExtraction {
   const keep = set.wallKeep,
     normal = set.wallNormal,
     thickness = set.wallThickness,
-    body = set.wallBody;
+    body = set.wallBody,
+    curved = set.wallCurved,
+    partner = set.wallPartner;
   const walls: Wall[] = Array.from(keep, (face, index) => ({
     keep: face,
     n: [normal[3 * index], normal[3 * index + 1], normal[3 * index + 2]],
     thk: thickness[index],
     body: body[index],
+    curved: curved[index] === 1,
+    partner: partner[index],
   }));
   return {
     walls,
@@ -324,9 +335,10 @@ function pairMap(keys: Uint32Array, values: Uint32Array): Map<number, number> {
 
 // ── Stages ────────────────────────────────────────────────────────────────────
 
-// Detect thin walls (opposite planar CAD-face pairs) and collapse each to a
-// mid-surface facet with its wall thickness, welded at junctions. Returns an
-// empty extraction (shellBody = -1) when no thin wall is found.
+// Detect thin walls (opposite planar CAD-face pairs, and curved walls of steady
+// thickness) and collapse each to mid-surface facets with its wall thickness,
+// welded at junctions. Returns an empty extraction (shellBody = -1) when no
+// thin wall is found.
 // `shellBodyIds` names the bodies to idealise as shells (the app passes the
 // per-body Shell/Solid choice; omitted, the largest thin-walled body is used).
 // Only ONE body is shelled per solve — this extraction carries one shell body
@@ -352,6 +364,33 @@ export function extractThinWallShells(
   );
 }
 
+export interface PlanarWall {
+  keep: number; // CAD face kept as the mid-surface source
+  thk: number; // mm
+  body: number;
+}
+
+// Planar thin walls (opposite planar CAD-face pairs) of every body, as the
+// linear thin-wall check measures them. Detection only: unlike
+// extractThinWallShells it collapses nothing and refuses nothing.
+export function detectPlanarWalls(
+  m: ShellizeMesh,
+  // eslint-disable-next-line kofem/no-silent-fallback -- the thin-wall limit in mm, a documented option of the measurement, as for extractThinWallShells
+  { maxWall = 15 }: { maxWall?: number } = {},
+): PlanarWall[] {
+  return using(meshInput(m), (mesh) =>
+    using(rustPlanarWalls(mesh, maxWall), (set) => {
+      const thickness = set.thickness;
+      const body = set.body;
+      return Array.from(set.keep, (keep, i) => ({
+        keep,
+        thk: thickness[i],
+        body: body[i],
+      }));
+    }),
+  );
+}
+
 export interface CurvedWall {
   face: number; // CAD face the wall was measured from
   partner: number; // CAD face opposite it
@@ -359,9 +398,9 @@ export interface CurvedWall {
   body: number;
 }
 
-// Curved thin walls (a tube, a sheet-metal bend) that the planar pairing of
-// extractThinWallShells cannot find. Measurement only: the shell idealisation
-// does not use them.
+// Curved thin walls (a tube, a sheet-metal bend) of every body, as the linear
+// thin-wall check measures them. extractThinWallShells collapses the Shell
+// body's curved walls itself.
 export function detectCurvedWalls(
   m: ShellizeMesh,
   // eslint-disable-next-line kofem/no-silent-fallback -- the thin-wall limit in mm, a documented option of the measurement, as for extractThinWallShells
@@ -400,8 +439,8 @@ export function shellWallTets(
 }
 
 // Every tet of the shelled body. A body some of whose tets lie in no detected
-// wall (a curved or small face, a thick block) is refused with the share of it
-// the shells would drop.
+// wall (a small face, a thick block, a curved face of unsteady thickness) is
+// refused with the share of it the shells would drop.
 export function shellBodyTets(
   m: ShellizeMesh,
   shells: ShellExtraction,
