@@ -138,36 +138,57 @@ describe("zero moment vector produces no loads", () => {
   });
 });
 
-describe("face whose nodes all lie on the moment axis is skipped", () => {
-  // All nodes on the x-axis -> S = 0 for Mx; the face cannot carry the moment.
+describe("a face along the moment axis takes the moment at its nodes", () => {
+  // All nodes on the x-axis: the face is a line along Mx, a shell edge, with
+  // no lever arm for a ring of forces. It takes the moment on the rotational
+  // DOF about x, spread by each node's share of the line's length (KOF-446,
+  // NAFEMS LE2's edge moment). On a solid node the solve refuses it.
   const line = nodeMap([
     { id: 1, x: 0, y: 0, z: 0 },
-    { id: 2, x: 5, y: 0, z: 0 },
     { id: 3, x: 10, y: 0, z: 0 },
+    { id: 2, x: 4, y: 0, z: 0 },
   ]);
-  const warnings = [];
-  const originalWarn = console.warn;
-  let loads = null;
-  try {
-    console.warn = (message) => warnings.push(message);
-    loads = momentToNodalForces(
-      [100, 0, 0],
-      [{ nodeIds: [1, 2, 3] }],
-      line,
-      "Load7",
-    );
-  } finally {
-    console.warn = originalWarn;
-  }
+  const loads = momentToNodalForces(
+    [100, 0, 0],
+    [{ nodeIds: [1, 3, 2] }],
+    line,
+    "Load7",
+  );
 
-  test("no loads generated", () => {
-    expect(loads).toHaveLength(0);
+  test("each node takes M · its tributary length / the line's length", () => {
+    const byNode = Object.fromEntries(loads.map((l) => [l.nodeId, l]));
+    expect(loads).toHaveLength(3);
+    for (const l of loads) expect(l.dof).toBe(3);
+    // Node 1 owns 0–2, node 2 owns 2–7, node 3 owns 7–10.
+    expect(byNode[1].value).toBeCloseTo(20, 12);
+    expect(byNode[2].value).toBeCloseTo(50, 12);
+    expect(byNode[3].value).toBeCloseTo(30, 12);
   });
 
-  test("a warning names the group and axis", () => {
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('"Load7"');
-    expect(warnings[0]).toContain("Mx");
+  test("a line off the axis by a hair is still a line", () => {
+    // A shell edge along z, its mid-surface nodes off the straight line by
+    // hundredths of a millimetre: a ring of forces would need lever arms that
+    // small and blow up the forces.
+    const edge = nodeMap([
+      { id: 1, x: 866.0161, y: 500.0165, z: 0 },
+      { id: 2, x: 866.0127, y: 500.0226, z: 250 },
+      { id: 3, x: 866.0087, y: 500.0295, z: 500 },
+    ]);
+    const loads = momentToNodalForces(
+      [0, 0, 5e5],
+      [{ nodeIds: [1, 2, 3] }],
+      edge,
+      "Edge moment",
+    );
+    expect(loads.map((l) => l.dof)).toEqual([5, 5, 5]);
+    expect(loads.reduce((sum, l) => sum + l.value, 0)).toBeCloseTo(5e5, 6);
+  });
+
+  test("a face of one node takes the whole moment", () => {
+    const point = nodeMap([{ id: 9, x: 1, y: 2, z: 3 }]);
+    expect(
+      momentToNodalForces([0, 0, 7], [{ nodeIds: [9] }], point, "Load8"),
+    ).toEqual([{ nodeId: 9, dof: 5, value: 7 }]);
   });
 });
 
