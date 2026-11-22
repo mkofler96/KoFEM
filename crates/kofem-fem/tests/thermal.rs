@@ -537,3 +537,30 @@ fn zero_temperature_change_gives_no_load() {
     let forces = thermal_load(&mesh, &[ALPHA], &vec![0.0; mesh.node_count()]).expect("valid input");
     assert!(forces.iter().all(|value| *value == 0.0));
 }
+
+/// A quadratic temperature field on a quadratic tetrahedron: the thermal force
+/// integrand ∇N·ΔT is cubic, so the rule must be exact for cubics. On the unit
+/// tetrahedron with ΔT = x², the corner (1, 0, 0) has N = x(2x − 1), and its
+/// x-force is (3λ + 2μ)·α·∫(4x − 1)·x² dV = (3λ + 2μ)·α/60.
+#[test]
+fn quadratic_temperature_on_a_quadratic_tet_is_integrated_exactly() {
+    let corners = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    let mesh = TetMesh::new(&corners, &[0, 1, 2, 3], &[0], vec![steel()])
+        .and_then(|mesh| mesh.with_order(ElementOrder::Quadratic))
+        .expect("valid tet10");
+    let (lambda, mu) = steel().lame();
+    let alpha = 1.0 / (3.0 * lambda + 2.0 * mu);
+    let temperatures: Vec<f64> = mesh
+        .node_coordinates()
+        .iter()
+        .map(|point| point[0] * point[0])
+        .collect();
+    let forces = thermal_load(&mesh, &[alpha], &temperatures).expect("valid thermal input");
+    let corner = vertex_at(&mesh, [1.0, 0.0, 0.0]);
+    let force = forces[3 * corner];
+    assert!(
+        (force - 1.0 / 60.0).abs() < 1e-12,
+        "x-force at (1, 0, 0): {force} vs {}",
+        1.0 / 60.0
+    );
+}

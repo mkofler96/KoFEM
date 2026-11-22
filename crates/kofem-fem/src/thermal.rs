@@ -23,9 +23,9 @@
 //! [`thermal_strain_at_centre`] from the diagonal of the strain.
 
 use crate::element::{
-    cube_rule, degree_two_points, hex27_reference_gradients, hex27_shape, hex8_reference_gradients,
-    hex8_shape, hex_gradients, tet10_gradients, tet10_shape, tet4_gradients, CENTROID,
-    HEX27_RULE_POINTS, HEX8_RULE_POINTS, HEX_CENTRE,
+    cube_rule, degree_three_points, hex27_reference_gradients, hex27_shape,
+    hex8_reference_gradients, hex8_shape, hex_gradients, tet10_gradients, tet10_shape,
+    tet4_gradients, CENTROID, HEX27_RULE_POINTS, HEX8_RULE_POINTS, HEX_CENTRE,
 };
 use crate::error::FemError;
 use crate::mesh::{ElementOrder, ElementShape, TetMesh};
@@ -71,10 +71,10 @@ fn check_finite<'a>(
     Ok(())
 }
 
-/// Call `visit(values, gradients, weight)` at every point of `element`'s
-/// stiffness rule, with the shape-function values and physical gradients
-/// there (in the element's node order) and the quadrature weight times the
-/// volume scale.
+/// Call `visit(values, gradients, weight)` at every point of a rule exact for
+/// `element`'s thermal-force integrand (∇N times the interpolated ΔT), with
+/// the shape-function values and physical gradients there (in the element's
+/// node order) and the quadrature weight times the volume scale.
 fn for_each_stiffness_point(
     mesh: &TetMesh,
     element: usize,
@@ -87,10 +87,12 @@ fn for_each_stiffness_point(
             visit(&CENTROID, &gradients, volume);
         }
         (ElementShape::Tetrahedron, ElementOrder::Quadratic) => {
+            // A quadratic ΔT times the linear gradient is cubic: the stiffness
+            // rule (exact for quadratics) is not enough.
             let (corner_gradients, volume) = tet4_gradients(&mesh.corners(element));
-            for point in degree_two_points() {
+            for (point, fraction) in degree_three_points() {
                 let gradients = tet10_gradients(&corner_gradients, point);
-                visit(&tet10_shape(point), &gradients, 0.25 * volume);
+                visit(&tet10_shape(point), &gradients, fraction * volume);
             }
         }
         (ElementShape::Hexahedron, ElementOrder::Linear) => {

@@ -62,6 +62,19 @@ pub(crate) fn degree_two_points() -> [[f64; 4]; 4] {
     points
 }
 
+/// Barycentric points and volume fractions of Stroud's 5-point rule T3:3-1,
+/// exact for cubics: the centroid with −4/5 of the volume and the four points
+/// (1/2, 1/6, 1/6, 1/6) with 9/20 each.
+pub(crate) fn degree_three_points() -> [([f64; 4], f64); 5] {
+    let mut rule = [([0.25; 4], -0.8); 5];
+    for (corner, entry) in rule.iter_mut().skip(1).enumerate() {
+        let mut point = [1.0 / 6.0; 4];
+        point[corner] = 0.5;
+        *entry = (point, 0.45);
+    }
+    rule
+}
+
 /// Physical gradients of the four shape functions, and the element volume.
 /// Independent of winding: a negative-volume element gives the same result.
 #[must_use]
