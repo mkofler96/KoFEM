@@ -333,6 +333,8 @@ export interface ResolvedFace {
 // the tessellation's chordal deflection (DEFLECTION_RELATIVE · model size), as
 // the contract's resolveFaceAt (and the node-side build) resolve it, so a point
 // on the true surface of a curved face resolves where the facets cut inside it.
+// Faces more than half the deflection farther than the nearest do not count:
+// the facets of a curved face beside a narrow one (a 40 mm rim on a 10 m shell).
 export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
   const { points, triangles, faceIds } = snap.tess;
   const tol = DEFLECTION_RELATIVE * modelSize(points);
@@ -346,6 +348,8 @@ export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
     if (dist <= tol && (prev === undefined || dist < prev.dist))
       hits.set(faceIds[t], { dist, normal: unit(cross(sub(b, a), sub(c, a))) });
   });
+  for (const [face, { dist }] of hits)
+    if (dist > nearest + tol / 2) hits.delete(face);
   if (hits.size !== 1) {
     const found =
       hits.size === 0

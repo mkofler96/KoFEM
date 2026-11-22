@@ -253,8 +253,12 @@ export function faceDistances(surface, at) {
 /**
  * The CAD face (its 1-based id in `tess.faceIds`) a recipe's `at` names: the
  * one face of the display tessellation within its chordal deflection
- * (DEFLECTION_RELATIVE × model size) of the point. Throws when no face, or more
- * than one (a point on or near an edge), lies within it.
+ * (DEFLECTION_RELATIVE × model size) of the point. The facets of a curved face
+ * cut inside it by up to that deflection, so on a large model they can pass
+ * within it of a narrow face beside them (the 40 mm rim of a 10 m shell);
+ * faces more than half the deflection farther than the nearest one do not
+ * count. Throws when no face, or more than one (a point on or near an edge),
+ * is left.
  * @param {{ points: Point[], triangles: [number, number, number][], faceIds: number[] }} tess
  * @param {Point} at
  * @returns {number}
@@ -266,7 +270,10 @@ export function resolveFaceAt(tess, at) {
     );
   const tol = DEFLECTION_RELATIVE * modelSize(tess.points);
   const dist = faceDistances(tess, at);
-  const near = dist.filter(([, d]) => d <= tol).map(([id]) => id);
+  const closest = dist.length > 0 ? dist[0][1] : Infinity;
+  const near = dist
+    .filter(([, d]) => d <= tol && d <= closest + tol / 2)
+    .map(([id]) => id);
   if (near.length !== 1) {
     const nearest = dist
       .slice(0, 3)
