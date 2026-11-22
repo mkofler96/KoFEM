@@ -1044,18 +1044,18 @@
       "reference": 0.802,
       "referenceLabel": "NAFEMS LE6 target",
       "tolPct": 2,
-      "fe": 0.8040516848737728,
-      "errPct": 0.2558210565801395,
+      "fe": 0.8054311354817854,
+      "errPct": 0.427822379274976,
       "pass": true,
       "mesh": {
         "order": 1,
         "elementType": "CTRIA3",
-        "elements": 1935,
-        "vertices": 1056,
-        "nodes": 1056,
-        "dofs": 6336,
-        "maxElementSize": 25,
-        "minElementSize": 2.5
+        "elements": 7517,
+        "vertices": 3922,
+        "nodes": 3922,
+        "dofs": 23532,
+        "maxElementSize": 12.5,
+        "minElementSize": 1.25
       },
       "inputs": [
         {
@@ -1092,8 +1092,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 0.00003238710200077627,
-        "max": 4.272836592986547,
+        "min": 0.000010311933733248007,
+        "max": 4.217141492721961,
         "deform": 10000,
         "width": 1200,
         "height": 470
@@ -2349,7 +2349,7 @@
               "minElementSize": 2.5,
               "fe": 0.8040516848737728,
               "errPct": 0.2558210565801395,
-              "ci": true
+              "ci": false
             },
             {
               "mesh": "12.5 mm",
@@ -2363,7 +2363,7 @@
               "minElementSize": 1.25,
               "fe": 0.8054311354817854,
               "errPct": 0.427822379274976,
-              "ci": false
+              "ci": true
             },
             {
               "mesh": "8 mm",
