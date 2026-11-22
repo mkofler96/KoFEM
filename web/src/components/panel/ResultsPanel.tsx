@@ -346,8 +346,10 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
   };
   return (
     <div style={{ marginTop: 8 }}>
-      <div className={styles.formNote}>Or read {symbol} at a point (mm):</div>
-      <div className={styles.formRow} style={{ gap: 4 }}>
+      <div className={`${styles.formNote} ${styles.formNoteFull}`}>
+        Or read {symbol} at a point (mm):
+      </div>
+      <div className={styles.coordRow}>
         {(["x", "y", "z"] as const).map((axis, i) => (
           <input
             key={axis}
@@ -372,7 +374,10 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
         </button>
       </div>
       {error && (
-        <div className={styles.formNote} data-testid="probe-at-error">
+        <div
+          className={`${styles.formNote} ${styles.formNoteFull}`}
+          data-testid="probe-at-error"
+        >
           {error}
         </div>
       )}

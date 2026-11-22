@@ -50,7 +50,7 @@ export function TemperatureSection() {
   return (
     <div data-testid="temperature-section">
       <div className={styles.sectionLabel}>Temperature change</div>
-      <div className={styles.formNote}>
+      <div className={`${styles.formNote} ${styles.formNoteFull}`}>
         ΔT in °C from the stress-free state, as a formula in x, y and z (mm):
         numbers, + − * / ^, sqrt, abs, exp, ln, sin, cos, min, max. Solid models
         only; each material needs its expansion coefficient α.
