@@ -982,3 +982,82 @@ export function meridianFigure({
     name,
   });
 }
+
+/**
+ * The NAFEMS LE5 Z cross-section seen along the beam: web, two flanges, the
+ * end shears S on the flanges and the read-out point A on the lower flange's
+ * free edge.
+ */
+export function zSectionFigure() {
+  const s = 70,
+    ox = 165,
+    oy = 120;
+  const P = (x, y) => [ox + s * x, oy - s * y];
+  const t = 0.1;
+  const pts = [
+    [-1 - t / 2, -1],
+    [-1 + t / 2, -1],
+    [-1 + t / 2, -t / 2],
+    [1 + t / 2, -t / 2],
+    [1 + t / 2, 1],
+    [1 - t / 2, 1],
+    [1 - t / 2, t / 2],
+    [-1 - t / 2, t / 2],
+  ].map(([x, y]) => P(x, y));
+  const [ax, ay] = P(-1, -1);
+  const [u0x, u0y] = P(1, 0.25),
+    [l0x, l0y] = P(-1, -0.25);
+  const parts = [
+    poly(pts, "body"),
+    arrow(u0x + 14, u0y + 20, u0x + 14, u0y - 22),
+    sym(u0x + 22, u0y, "S", "start"),
+    arrow(l0x - 14, l0y - 20, l0x - 14, l0y + 22),
+    sym(l0x - 22, l0y + 8, "S", "end"),
+    `<circle class="pt" cx="${f(ax)}" cy="${f(ay)}" r="3.5"/>`,
+    label(ax + 10, ay + 4, "A", { anchor: "start" }),
+  ];
+  return svg(
+    330,
+    240,
+    "The Z cross-section: a horizontal web and two flanges running to opposite sides, each end flange loaded by a shear S; A sits on the free edge of the lower flange",
+    parts.join("\n    "),
+    { cls: "fig half", name: "z-section-diagram" },
+  );
+}
+
+/**
+ * The NAFEMS LE6 skew plate from above, to scale: the 30° rhombus ABCD with
+ * 1 m sides, simply supported on every edge, and its centre E.
+ */
+export function skewPlateFigure() {
+  const s = 130,
+    ox = 30,
+    oy = 120;
+  const c = Math.cos(Math.PI / 6),
+    sn = Math.sin(Math.PI / 6);
+  const P = (x, y) => [ox + s * x, oy - s * y];
+  const A = P(0, 0),
+    B = P(1, 0),
+    C = P(1 + c, sn),
+    D = P(c, sn),
+    E = P((1 + c) / 2, sn / 2);
+  const parts = [
+    poly([A, B, C, D], "body"),
+    `<circle class="pt" cx="${f(E[0])}" cy="${f(E[1])}" r="3.5"/>`,
+    label(A[0] - 4, A[1] + 16, "A"),
+    label(B[0], B[1] + 16, "B"),
+    label(C[0] + 6, C[1] - 4, "C", { anchor: "start" }),
+    label(D[0] - 6, D[1] - 6, "D", { anchor: "end" }),
+    label(E[0] + 8, E[1] - 6, "E", { anchor: "start" }),
+    label(ox, oy + 36, "simply supported on all edges; uniform pressure", {
+      anchor: "start",
+    }),
+  ];
+  return svg(
+    330,
+    170,
+    "The 30° skew plate ABCD with 1 m sides, simply supported on every edge under a uniform pressure; E is its centre",
+    parts.join("\n    "),
+    { cls: "fig half", name: "skew-plate-diagram" },
+  );
+}

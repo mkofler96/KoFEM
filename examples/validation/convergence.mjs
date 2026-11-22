@@ -167,4 +167,88 @@ export default [
       },
     ],
   }),
+  recipeStudy({
+    id: "nafems-le1",
+    caseId: "nafems-le1",
+    title: "NAFEMS LE1, quadratic tetrahedra",
+    note: "The corner stresses of the few elements at D scatter around the peak: 1–2 % high on coarse meshes, a few tenths of a percent on the finest.",
+    series: [
+      {
+        label: "P2 (quadratic)",
+        caseId: "nafems-le1",
+        order: 2,
+        levels: [100, 50, 35],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le2",
+    caseId: "nafems-le2",
+    title: "NAFEMS LE2, curved shell triangles",
+    note: "The difference stays near 1.6 % as the mesh is refined: it comes from flat facets standing in for the curved panel, not from the mesh size.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "nafems-le2",
+        order: 1,
+        levels: [50, 25, 12.5],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le5",
+    caseId: "nafems-le5",
+    title: "NAFEMS LE5, quadratic tetrahedra",
+    note: "The solid settles about 1.5 % beyond NAFEMS' thin-shell value: the walls are a tenth of a flange wide.",
+    series: [
+      {
+        label: "P2 (quadratic)",
+        caseId: "nafems-le5",
+        order: 2,
+        levels: [200, 100, 70],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le6",
+    caseId: "nafems-le6",
+    title: "NAFEMS LE6, flat shell triangles",
+    note: "The principal stress settles about half a percent above the target.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "nafems-le6",
+        order: 1,
+        levels: [25, 12.5, 8],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le10",
+    caseId: "nafems-le10",
+    title: "NAFEMS LE10, quadratic tetrahedra",
+    note: "Read at the element corners, the surface stress at D is within half a percent on every mesh.",
+    series: [
+      {
+        label: "P2 (quadratic)",
+        caseId: "nafems-le10",
+        order: 2,
+        levels: [200, 150, 100, 75],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le11",
+    caseId: "nafems-le11",
+    title: "NAFEMS LE11, quadratic tetrahedra",
+    note: "The thermal stress at A approaches the target from below as the mesh is refined.",
+    series: [
+      {
+        label: "P2 (quadratic)",
+        caseId: "nafems-le11",
+        order: 2,
+        levels: [100, 50, 35],
+      },
+    ],
+  }),
 ];

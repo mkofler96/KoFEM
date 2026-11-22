@@ -26,6 +26,8 @@ import tieLameCylinder from "./tie-lame-cylinder.mjs";
 import tieCantilever from "./tie-cantilever.mjs";
 import nafemsLe1 from "./nafems-le1.mjs";
 import nafemsLe2 from "./nafems-le2.mjs";
+import nafemsLe5 from "./nafems-le5.mjs";
+import nafemsLe6 from "./nafems-le6.mjs";
 import nafemsLe10 from "./nafems-le10.mjs";
 import nafemsLe11 from "./nafems-le11.mjs";
 
@@ -44,6 +46,8 @@ export default new Map([
   ["tie-cantilever", tieCantilever],
   ["nafems-le1", nafemsLe1],
   ["nafems-le2", nafemsLe2],
+  ["nafems-le5", nafemsLe5],
+  ["nafems-le6", nafemsLe6],
   ["nafems-le10", nafemsLe10],
   ["nafems-le11", nafemsLe11],
 ]);
