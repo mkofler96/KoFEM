@@ -14,6 +14,7 @@
 // written. Where the app has no control for a step the recipe asks for, the
 // driver throws a MissingUiCapability naming it instead of reaching around the UI.
 
+import type { ShellSurface, StressField } from "../../src/lib/stressFields";
 import { expect, type Page } from "@playwright/test";
 import { geometryCounts, importStepText } from "./split";
 import { clickViewportAt, lookFrom } from "./viewport";
@@ -84,7 +85,20 @@ export type Probe =
       field: "vonMises";
       stat: "max";
       faces?: FaceRef[];
+    })
+  | (ProbeCommon & {
+      kind: "stress";
+      field: StressField;
+      surface?: ShellSurface;
+      at: Point;
     });
+
+// A stress field read at a point: read in the Results panel, not from a
+// snapshot (readStressAtPoint).
+export const isPointStressProbe = (
+  probe: Probe,
+): probe is Extract<Probe, { at: Point; kind: "stress" }> =>
+  probe.kind === "stress" && "at" in probe && probe.at !== undefined;
 export interface Readout {
   quantity: string;
   probe: Probe;
@@ -1235,6 +1249,10 @@ export function probeValue(snap: Snapshot, probe: Probe): number {
     }
     if (count === 0) throw new Error("twist probe: every node is on the axis");
     value = sum / count;
+  } else if (isPointStressProbe(probe)) {
+    throw new Error(
+      "a stress field at a point is read in the Results panel (readStressAtPoint), not from a snapshot",
+    );
   } else {
     const vm = nodalVonMises(snap);
     const nodes = probe.faces
@@ -1242,6 +1260,38 @@ export function probeValue(snap: Snapshot, probe: Probe): number {
       : snap.nodes.map((_, i) => i);
     value = Math.max(...nodes.map((i) => vm[i]));
   }
+  return probe.divideBy === undefined ? value : value / probe.divideBy;
+}
+
+// The Results panel's reading of a stress field at a point, as a user takes
+// it: pick the field, the shell surface where the model has shells, type the
+// point into the probe's coordinates, and read the probe's row.
+export async function readStressAtPoint(
+  page: Page,
+  probe: Extract<Probe, { at: Point; kind: "stress" }>,
+): Promise<number> {
+  await page.getByTestId("plot-field").selectOption(probe.field);
+  if (probe.surface !== undefined)
+    await page.getByTestId("shell-surface").selectOption(probe.surface);
+  const before = await page.locator('[data-testid^="probe-row-"]').count();
+  for (const [axis, value] of [
+    ["x", probe.at[0]],
+    ["y", probe.at[1]],
+    ["z", probe.at[2]],
+  ] as const)
+    await page.getByTestId(`probe-at-${axis}`).fill(String(value));
+  await page.getByTestId("probe-at-add").click();
+  await expect(page.locator('[data-testid^="probe-row-"]')).toHaveCount(
+    before + 1,
+  );
+  const ids = await page
+    .locator('[data-testid^="probe-value-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+  const last = ids.filter((id) => id && /probe-value-\d+$/.test(id)).at(-1);
+  if (!last) throw new Error("the probe placed at the point shows no value");
+  const value = Number(await page.getByTestId(last).getAttribute("data-value"));
+  if (!Number.isFinite(value))
+    throw new Error(`the probe at the point reads ${value}`);
   return probe.divideBy === undefined ? value : value / probe.divideBy;
 }
 
