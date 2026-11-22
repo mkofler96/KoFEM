@@ -45,7 +45,7 @@
               "https://kofem.org/examples/tie-patch-test.png",
               "https://kofem.org/examples/tie-patch-test/tie-patch-test-diagram.png"
             ],
-            "dateModified": "2026-11-21",
+            "dateModified": "2026-11-22",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -821,6 +821,16 @@
             <li><a href="/examples/tie-patch-test/" aria-current="page">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
+            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -851,6 +861,16 @@
             <li><a href="/examples/tie-patch-test/" aria-current="page">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
+            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -862,7 +882,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 9 of 11</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 9 of 21</p>
       <h1>Tie patch test</h1>
       <div class="lede">
         <p>Parts of an assembly are often meshed on their own, so where they
@@ -948,7 +968,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 10 mm maximum element size: 742 linear 4-node tetrahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>276 nodes, 828 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-22391462c75d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3606d8ab1090</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-f06aca279e85); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The two blocks are separate solids in one STEP file. Netgen meshes
