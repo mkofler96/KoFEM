@@ -52,6 +52,12 @@ import { rustTieTables } from "./solid.js";
 import { shellMarkedBodies } from "./autoShell.js";
 import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
+import {
+  readReactions,
+  supportOwners,
+  type ReactionSummary,
+  type SupportOwners,
+} from "./reactions.js";
 
 export type { ContinuationPrompt } from "./cgRun.js";
 
@@ -205,7 +211,11 @@ export async function solveSolidInRust(
   iterationLimit: number | undefined,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
-): Promise<{ displacements: Float64Array; vonMises: Float64Array }> {
+): Promise<{
+  displacements: Float64Array;
+  vonMises: Float64Array;
+  reactions: ReactionSummary | null;
+}> {
   const reason = amgUnavailableReason({
     elements: model.elements,
     properties: model.properties,
@@ -236,6 +246,11 @@ export async function solveSolidInRust(
       elastic,
       model,
       refVid,
+    );
+    const supports = supportOwners(
+      model.constraints,
+      elastic.vertexCount,
+      (nodeId) => refVid(nodeId, "support reaction"),
     );
 
     const constraintTies = model.constraintTies ?? [];
@@ -286,6 +301,7 @@ export async function solveSolidInRust(
         return {
           displacements: nodal.slice(0, 3 * elastic.vertexCount),
           vonMises: elastic.vonMises(nodal),
+          reactions: readReactions(elastic, solution, forces, supports),
         };
       },
     );
@@ -433,10 +449,14 @@ export async function solveCoupledSolidInRust(
   iterationLimit: number | undefined,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
+  // Which support holds each pool DOF; callers that report no reactions (the
+  // stored-reference tests) leave it out.
+  supports?: SupportOwners,
 ): Promise<{
   displacements: Float64Array;
   von_mises_tets: Float64Array;
   von_mises_tris: Float64Array;
+  reactions: ReactionSummary | null;
 }> {
   const { mesh, coupling, bcs, solidMaterials } = input;
   if (mesh.triangles.length > 0)
@@ -535,6 +555,10 @@ export async function solveCoupledSolidInRust(
             displacements: nodal.slice(0, 3 * pointCount),
             von_mises_tets: elastic.vonMises(nodal),
             von_mises_tris: new Float64Array(0),
+            reactions:
+              supports === undefined
+                ? null
+                : readReactions(elastic, solution, forces, supports),
           };
         },
       );

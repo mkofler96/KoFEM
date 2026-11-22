@@ -55,6 +55,9 @@ export interface Constraint {
   nodeId: number;
   dof: number;
   prescribedValue?: number;
+  // Index of the support (BC group) this DOF belongs to, for its reaction
+  // (lib/solve/reactions.ts). Absent: the DOF is held but reported nowhere.
+  group?: number;
 }
 export interface Load {
   nodeId: number;

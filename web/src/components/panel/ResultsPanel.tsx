@@ -26,6 +26,7 @@ import { LegendRangeControls } from "./LegendRangeControls";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
 import { TopOptResult } from "./TopOptResult";
+import { SupportReactions } from "./SupportReactions";
 import styles from "./Panel.module.css";
 
 // "Von Mises stress" → "von-mises-stress", for test ids.
@@ -447,6 +448,11 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
             {resultType === "Von Mises stress"
               ? "Von Mises data not available — re-run the solver"
               : "No nodal data"}
+          </div>
+        )}
+        {result.reactions && (
+          <div style={{ marginTop: 12 }}>
+            <SupportReactions summary={result.reactions} />
           </div>
         )}
         <div style={{ marginTop: 12 }}>

@@ -54,6 +54,8 @@ pub enum FemError {
     TooManyNodes { count: usize, max: usize },
     #[error("the mesh has no elements")]
     EmptyMesh,
+    #[error("support reactions: {reason}")]
+    ReactionInput { reason: String },
     #[error("constrained degree of freedom {dof} is out of range (the model has {count})")]
     DofOutOfRange { dof: u32, count: usize },
     #[error("degree of freedom {dof} is constrained twice, to {first} and {second}")]

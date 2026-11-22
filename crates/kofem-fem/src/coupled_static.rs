@@ -118,13 +118,30 @@ impl CoupledReduction {
     /// (or moment) a support must apply there. Zero at free DOFs, up to the
     /// solver tolerance; zero at dependent DOFs, whose reaction is carried
     /// by the independent DOFs they follow. `stiffness` is the solid one (3
-    /// per node), so this holds for a model without shell facets only.
+    /// per node), so this holds for a model without shell facets only; see
+    /// [`CoupledReduction::mixed_reactions`] for one with them.
     ///
     /// # Errors
     /// Vectors of the wrong length.
     pub fn reactions(
         &self,
         stiffness: &CsrMatrix,
+        dofs: &[f64],
+        forces: &[f64],
+    ) -> Result<Vec<f64>, FemError> {
+        self.mixed_reactions(stiffness, None, dofs, forces)
+    }
+
+    /// As [`CoupledReduction::reactions`], for a mixed model: `solid` is the
+    /// solid stiffness (3 per node) and `shell`, if the model has shell
+    /// facets, the shell stiffness (6 per node) over the same nodes.
+    ///
+    /// # Errors
+    /// Vectors or matrices of the wrong size.
+    pub fn mixed_reactions(
+        &self,
+        solid: &CsrMatrix,
+        shell: Option<&CsrMatrix>,
         dofs: &[f64],
         forces: &[f64],
     ) -> Result<Vec<f64>, FemError> {
@@ -142,27 +159,37 @@ impl CoupledReduction {
             });
         }
         let nodes = count / DOFS_PER_NODE;
-        if stiffness.rows() != 3 * nodes {
+        if solid.rows() != 3 * nodes {
             return Err(FemError::CouplingInput {
-                reason: format!(
-                    "the stiffness has {} rows for {nodes} nodes",
-                    stiffness.rows()
-                ),
+                reason: format!("the stiffness has {} rows for {nodes} nodes", solid.rows()),
             });
         }
         let translations: Vec<f64> = (0..3 * nodes)
             .map(|index| dofs[DOFS_PER_NODE * (index / 3) + index % 3])
             .collect();
-        let mut internal = vec![0.0; 3 * nodes];
-        stiffness.mul_vec(&translations, &mut internal);
+        let mut solid_internal = vec![0.0; 3 * nodes];
+        solid.mul_vec(&translations, &mut solid_internal);
+        let mut internal = vec![0.0; count];
+        for (index, value) in solid_internal.iter().enumerate() {
+            internal[DOFS_PER_NODE * (index / 3) + index % 3] = *value;
+        }
+        if let Some(shell) = shell {
+            if shell.rows() != count {
+                return Err(FemError::CouplingInput {
+                    reason: format!(
+                        "the shell stiffness has {} rows for {nodes} nodes",
+                        shell.rows()
+                    ),
+                });
+            }
+            let mut shell_internal = vec![0.0; count];
+            shell.mul_vec(dofs, &mut shell_internal);
+            for (total, value) in internal.iter_mut().zip(&shell_internal) {
+                *total += value;
+            }
+        }
         let mut reduced = vec![0.0; self.reduced_count()];
-        for (dof, &force) in forces.iter().enumerate() {
-            let (node, component) = (dof / DOFS_PER_NODE, dof % DOFS_PER_NODE);
-            let own = if component < 3 {
-                internal[3 * node + component]
-            } else {
-                0.0
-            };
+        for (dof, (&own, &force)) in internal.iter().zip(forces).enumerate() {
             let residual = own - force;
             if residual != 0.0 {
                 self.for_each_term(dof, |slot, coefficient| {

@@ -29,16 +29,42 @@ pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
-    assemble_stiffness, prepare_coupled_static, prepare_static, prepare_tied_static, solve_static,
-    von_mises, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling, CouplingKind,
-    CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice,
-    PreparedCoupled, PreparedStatic, PreparedTied, StoppingRule, SurfaceLoadKind, TetMesh,
+    assemble_stiffness, fold_onto_vertices, nodal_residual, prepare_coupled_static, prepare_static,
+    prepare_tied_static, solve_static, summarize_reactions, von_mises, widen_translations,
+    AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling, CouplingKind, CsrMatrix,
+    ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice, PreparedCoupled,
+    PreparedStatic, PreparedTied, ReactionSummary, StoppingRule, SurfaceLoadKind, TetMesh,
     TieReport, VertexTies, DOFS_PER_NODE,
 };
 use wasm_bindgen::prelude::*;
 
 fn to_js(error: &FemError) -> JsError {
     JsError::new(&error.to_string())
+}
+
+/// Values per support in a `supportReactions` result: force, moment about the
+/// centroid, centroid, held vertex count.
+pub const REACTION_STRIDE: usize = 10;
+
+/// A reaction summary as `supportReactions` returns it: `REACTION_STRIDE`
+/// values per support (Fx, Fy, Fz, Mx, My, Mz, the centroid x, y, z, the
+/// vertices it holds), then the applied force (3) and the applied force on
+/// supported DOFs (3).
+fn flatten_reactions(summary: &ReactionSummary) -> Vec<f64> {
+    let mut out = Vec::with_capacity(REACTION_STRIDE * summary.supports.len() + 6);
+    for support in &summary.supports {
+        out.extend_from_slice(&support.force);
+        out.extend_from_slice(&support.moment);
+        out.extend_from_slice(&support.centroid);
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a vertex count is far below 2^52"
+        )]
+        out.push(support.vertices as f64);
+    }
+    out.extend_from_slice(&summary.applied);
+    out.extend_from_slice(&summary.applied_on_supports);
+    out
 }
 
 /// A solid solve's preconditioner, in words for the solve log.
@@ -234,6 +260,51 @@ impl ElasticModel {
         von_mises(&self.mesh, displacements).map_err(|error| to_js(&error))
     }
 
+    /// The reaction of each support for a solution of this model and the
+    /// `forces` its solve took (3 per node, or 6 per node for a coupled
+    /// solve), with the applied loads to check them against. `owners` holds
+    /// 6 values per vertex, the support (0..`supports`) that holds each DOF
+    /// or −1. The layout of the result is `REACTION_STRIDE` values per
+    /// support, then the applied force and the applied force on supported
+    /// DOFs (`kofem_fem::reactions`). A coupled or tied solve's reactions go
+    /// through its reduction; a quadratic model's edge, face and centre nodes
+    /// fold onto the vertices.
+    ///
+    /// # Errors
+    /// Missing assembly, or a solution, forces or owners that do not fit.
+    #[wasm_bindgen(js_name = supportReactions)]
+    pub fn support_reactions(
+        &self,
+        solution: &ElasticSolution,
+        forces: &[f64],
+        owners: &[i32],
+        supports: usize,
+    ) -> Result<Vec<f64>, JsError> {
+        let stiffness = self
+            .stiffness
+            .as_ref()
+            .ok_or_else(|| JsError::new("assemble() must be called before supportReactions()"))?;
+        let wide_forces = if forces.len() == self.mesh.dof_count() {
+            widen_translations(forces)
+        } else {
+            forces.to_vec()
+        };
+        let residual = match &solution.reduction {
+            Some(reduction) => reduction
+                .reactions(stiffness, &solution.full_dofs, &wide_forces)
+                .map_err(|error| to_js(&error))?,
+            None => widen_translations(
+                &nodal_residual(stiffness, &solution.full_dofs, forces)
+                    .map_err(|error| to_js(&error))?,
+            ),
+        };
+        let reactions = fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
+        let loads = fold_onto_vertices(&self.mesh, &wide_forces).map_err(|error| to_js(&error))?;
+        summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
+            .map(|summary| flatten_reactions(&summary))
+            .map_err(|error| to_js(&error))
+    }
+
     /// Assemble the global stiffness matrix; returns its non-zero count.
     pub fn assemble(&mut self) -> usize {
         let matrix = assemble_stiffness(&self.mesh);
@@ -271,11 +342,13 @@ impl ElasticModel {
         )
         .map_err(|error| to_js(&error))?;
         Ok(ElasticSolution {
+            full_dofs: solution.displacements.clone(),
             displacements: solution.displacements,
             iterations: solution.iterations,
             relative_residual: solution.relative_residual,
             unused_vertices: solution.unused_vertices,
             level_sizes: solution.levels.iter().map(|level| level.unknowns).collect(),
+            reduction: None,
         })
     }
 
@@ -669,11 +742,13 @@ impl SolveRun {
         let level_sizes = self.level_sizes();
         let unused_vertices = self.prepared.unused_vertices;
         let (solution, outcome) = self.run.into_solution().map_err(|error| to_js(&error))?;
+        let full_dofs = match &self.reduction {
+            None => solution,
+            Some(reduction) => reduction.expand(&solution),
+        };
         let displacements = match (&self.reduction, self.output) {
-            (None, _) => solution,
-            (Some(reduction), RunOutput::AllDofs) => reduction.expand(&solution),
-            (Some(reduction), RunOutput::Translations) => reduction
-                .expand(&solution)
+            (None, _) | (Some(_), RunOutput::AllDofs) => full_dofs.clone(),
+            (Some(_), RunOutput::Translations) => full_dofs
                 .as_chunks::<DOFS_PER_NODE>()
                 .0
                 .iter()
@@ -686,6 +761,8 @@ impl SolveRun {
             relative_residual: outcome.relative_residual,
             unused_vertices,
             level_sizes,
+            full_dofs,
+            reduction: self.reduction,
         })
     }
 }
@@ -750,6 +827,11 @@ pub struct ElasticSolution {
     relative_residual: f64,
     unused_vertices: usize,
     level_sizes: Vec<usize>,
+    /// Every DOF of the solve's own numbering: the solution as it is, or, for
+    /// a coupled, tied or mixed solve, expanded to 6 per node.
+    pub(crate) full_dofs: Vec<f64>,
+    /// A coupled, tied or mixed solve's reduction, for its reactions.
+    pub(crate) reduction: Option<CoupledReduction>,
 }
 
 #[wasm_bindgen]
