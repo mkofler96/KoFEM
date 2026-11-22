@@ -83,7 +83,7 @@ const CASES = [
     step: "Wall Bracket.stp",
     size: 6,
     shellBody: 1,
-    refuses: 'Body 1 is marked "Shell", but 6529 of its 38206 elements (11.9 %',
+    refuses: 'Body 1 is marked "Shell", but 6536 of its 38206 elements (11.9 %',
   },
   // The web and both flanges, welded along the two web/flange T-junctions
   // (KOF-205). Before, the 15 mm web just missed maxWall = 15 and the split

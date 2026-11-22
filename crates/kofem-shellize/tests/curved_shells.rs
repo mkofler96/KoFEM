@@ -210,14 +210,16 @@ fn cylindrical_panel_collapses_to_its_mid_radius() {
     }
 }
 
-/// Every facet carries the wall thickness.
+/// Every facet carries the wall thickness. The measuring rays run between the
+/// curved surfaces, not their chords, which cut the surface by the sag: from
+/// chord to chord this mesh read 2.4e-4 of t short.
 #[test]
 fn cylindrical_panel_facets_carry_the_wall_thickness() {
     let shells = extract(&cylindrical_panel()).expect("extraction");
     assert_ne!(shells.thicknesses.len(), 0);
     for &thickness in &shells.thicknesses {
         assert!(
-            (thickness - PANEL_THICKNESS).abs() < 0.01 * PANEL_THICKNESS,
+            (thickness - PANEL_THICKNESS).abs() < 1e-4 * PANEL_THICKNESS,
             "{thickness}"
         );
     }

@@ -739,6 +739,10 @@ function unsupportedRoute(path, where) {
 
 // The app measures a shell's thickness from the wall it idealises and offers no
 // thickness input: every shell section the mesh made must have the recipe's.
+// A flat wall measures exactly; a curved one is measured on its faceted
+// surface, where the chords of its two faces sag by slightly different amounts,
+// so it may differ by 1e-4 of the thickness (a 2e-4 change in a bending
+// stress).
 function checkShellThickness(properties, thickness, where) {
   const sections = properties.filter((p) => p.sourceBodyId !== undefined);
   if (sections.length === 0)
@@ -748,7 +752,7 @@ function checkShellThickness(properties, thickness, where) {
   for (const s of sections)
     if (
       !(typeof s.thickness === "number") ||
-      Math.abs(s.thickness - thickness) > 1e-6 * thickness
+      Math.abs(s.thickness - thickness) > 1e-4 * thickness
     )
       throw new Error(
         `${where}: the app measured a ${s.thickness} mm wall, the recipe says ${thickness} mm — the GUI has no thickness input to change it`,
