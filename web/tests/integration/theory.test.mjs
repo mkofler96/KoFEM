@@ -22,6 +22,11 @@ const CHECKS = [
     [],
   ],
   [
+    "the multigrid example adds up and multigrid scales",
+    "theory/numerical-methods/multigrid-example.mjs",
+    [],
+  ],
+  [
     "the stress-recovery example adds up",
     "theory/results/stress-example.mjs",
     [],
