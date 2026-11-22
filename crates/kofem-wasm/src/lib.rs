@@ -30,11 +30,12 @@ pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
     assemble_stiffness, fold_onto_vertices, load_on_held_nodes, nodal_residual,
-    prepare_coupled_static, prepare_static, prepare_tied_static, solve_static, summarize_reactions,
-    von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction,
-    Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
-    PreconditionerChoice, PreparedCoupled, PreparedStatic, PreparedTied, ReactionSummary,
-    StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
+    prepare_coupled_static, prepare_static, prepare_tied_static, principal_stresses, solve_static,
+    stress_tensors, summarize_reactions, von_mises, widen_translations, AmgSettings, BoundaryFaces,
+    CgSettings, CoupledReduction, Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError,
+    Isotropic, PcgRun, PcgStatus, PreconditionerChoice, PreparedCoupled, PreparedStatic,
+    PreparedTied, ReactionSummary, ShellSurface, StoppingRule, SurfaceLoadKind, TetMesh, TieReport,
+    VertexTies, DOFS_PER_NODE,
 };
 use wasm_bindgen::prelude::*;
 
@@ -258,6 +259,18 @@ impl ElasticModel {
     #[wasm_bindgen(js_name = vonMises)]
     pub fn von_mises(&self, displacements: &[f64]) -> Result<Vec<f64>, JsError> {
         von_mises(&self.mesh, displacements).map_err(|error| to_js(&error))
+    }
+
+    /// The stress tensor of every element (tets, then hexes) at its centre,
+    /// six values each: σxx, σyy, σzz, τxy, τyz, τzx in global axes.
+    ///
+    /// # Errors
+    /// A displacement array that does not fit the mesh.
+    #[wasm_bindgen(js_name = stressTensors)]
+    pub fn stress_tensors(&self, displacements: &[f64]) -> Result<Vec<f64>, JsError> {
+        stress_tensors(&self.mesh, displacements)
+            .map(|tensors| tensors.into_iter().flatten().collect())
+            .map_err(|error| to_js(&error))
     }
 
     /// The reaction of each support for a solution of this model and the
@@ -874,5 +887,42 @@ impl ElasticSolution {
     #[must_use]
     pub fn relative_residual(&self) -> f64 {
         self.relative_residual
+    }
+}
+
+/// The principal stresses σ1 ≥ σ2 ≥ σ3 of each tensor in `tensors` (six
+/// values each: σxx, σyy, σzz, τxy, τyz, τzx), three values each.
+///
+/// # Errors
+/// A tensor array whose length is not a multiple of six.
+#[wasm_bindgen(js_name = principalStresses)]
+pub fn principal_stresses_of(tensors: &[f64]) -> Result<Vec<f64>, JsError> {
+    if !tensors.len().is_multiple_of(6) {
+        return Err(JsError::new(&format!(
+            "principalStresses: {} values is not six per tensor",
+            tensors.len()
+        )));
+    }
+    Ok(tensors
+        .as_chunks::<6>()
+        .0
+        .iter()
+        .flat_map(|tensor| principal_stresses(*tensor))
+        .collect())
+}
+
+/// The shell surface a stress is read on: "top" (z = +t/2 along the facet
+/// normal), "middle" or "bottom".
+///
+/// # Errors
+/// Any other name.
+pub(crate) fn shell_surface(name: &str) -> Result<ShellSurface, JsError> {
+    match name {
+        "top" => Ok(ShellSurface::Top),
+        "middle" => Ok(ShellSurface::Middle),
+        "bottom" => Ok(ShellSurface::Bottom),
+        other => Err(JsError::new(&format!(
+            "shell surface must be \"top\", \"middle\" or \"bottom\", got {other:?}"
+        ))),
     }
 }

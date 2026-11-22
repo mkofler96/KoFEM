@@ -18,56 +18,133 @@ use crate::shell::mesh::ShellMesh;
 /// # Errors
 /// [`FemError::DisplacementLength`] when `dofs` is not 6 per vertex.
 pub fn shell_von_mises(mesh: &ShellMesh, dofs: &[f64]) -> Result<Vec<f64>, FemError> {
-    let count = SHELL_NODE_DOFS * mesh.vertex_count();
-    if dofs.len() != count {
-        return Err(FemError::DisplacementLength {
-            len: dofs.len(),
-            count,
-        });
-    }
-    let stresses = mesh
-        .triangles()
-        .iter()
-        .enumerate()
-        .map(|(triangle, nodes)| {
-            let frame = FacetFrame::new(&mesh.corners(triangle));
-            let [e1, e2, e3] = frame.axes;
-            // Nodal DOFs in the facet frame: (u, v) for the membrane, (w, θx,
-            // θy) for bending.
-            let mut membrane_dofs = [0.0; 6];
-            let mut bending_dofs = [0.0; 9];
-            for (local, &node) in nodes.iter().enumerate() {
-                let base = SHELL_NODE_DOFS * node as usize;
-                let translation = [dofs[base], dofs[base + 1], dofs[base + 2]];
-                let rotation = [dofs[base + 3], dofs[base + 4], dofs[base + 5]];
-                membrane_dofs[2 * local] = dot(e1, translation);
-                membrane_dofs[2 * local + 1] = dot(e2, translation);
-                bending_dofs[3 * local] = dot(e3, translation);
-                bending_dofs[3 * local + 1] = dot(e1, rotation);
-                bending_dofs[3 * local + 2] = dot(e2, rotation);
-            }
-            let membrane_strain = apply(&membrane_b(&frame), &membrane_dofs);
-            let curvature = apply(
-                &dkt_curvature_b(&frame, 1.0 / 3.0, 1.0 / 3.0),
-                &bending_dofs,
-            );
-
-            let material = mesh.material(triangle);
-            let poisson = material.poisson();
-            let law = constitutive(material.young() / (1.0 - poisson * poisson), poisson);
-            let half = 0.5 * mesh.thickness(triangle);
-            [half, -half]
+    check_length(mesh, dofs)?;
+    let stresses = (0..mesh.triangles().len())
+        .map(|triangle| {
+            let facet = FacetStrain::new(mesh, dofs, triangle);
+            [facet.half, -facet.half]
                 .into_iter()
                 .map(|depth| {
-                    let strain: [f64; 3] =
-                        std::array::from_fn(|i| membrane_strain[i] + depth * curvature[i]);
-                    let [sx, sy, txy] = apply(&law, &strain);
+                    let [sx, sy, txy] = facet.stress_at(depth);
                     (sx * sx - sx * sy + sy * sy + 3.0 * txy * txy).sqrt()
                 })
                 .fold(0.0, f64::max)
         })
         .collect();
     Ok(stresses)
+}
+
+/// The surface of a shell a stress is read on: z = +t/2 along the facet
+/// normal (the right-hand normal of its corner order), the mid-surface, or
+/// z = −t/2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellSurface {
+    Top,
+    Middle,
+    Bottom,
+}
+
+/// One value per facet: the plane-stress tensor on `surface` at the facet
+/// centroid, rotated into global axes as `[σxx, σyy, σzz, τxy, τyz, τzx]`.
+/// The bending part follows the physical sign: a facet curving towards its
+/// normal is shortened on its top surface.
+///
+/// # Errors
+/// [`FemError::DisplacementLength`] when `dofs` is not 6 per vertex.
+pub fn shell_stress_tensors(
+    mesh: &ShellMesh,
+    dofs: &[f64],
+    surface: ShellSurface,
+) -> Result<Vec<[f64; 6]>, FemError> {
+    check_length(mesh, dofs)?;
+    Ok((0..mesh.triangles().len())
+        .map(|triangle| {
+            let facet = FacetStrain::new(mesh, dofs, triangle);
+            let depth = match surface {
+                ShellSurface::Top => facet.half,
+                ShellSurface::Middle => 0.0,
+                ShellSurface::Bottom => -facet.half,
+            };
+            let [sx, sy, txy] = facet.stress_at(depth);
+            let [e1, e2, _] = facet.axes;
+            // σ = sx·e1⊗e1 + sy·e2⊗e2 + txy·(e1⊗e2 + e2⊗e1).
+            let entry = |i: usize, j: usize| {
+                sx * e1[i] * e1[j] + sy * e2[i] * e2[j] + txy * (e1[i] * e2[j] + e2[i] * e1[j])
+            };
+            [
+                entry(0, 0),
+                entry(1, 1),
+                entry(2, 2),
+                entry(0, 1),
+                entry(1, 2),
+                entry(2, 0),
+            ]
+        })
+        .collect())
+}
+
+fn check_length(mesh: &ShellMesh, dofs: &[f64]) -> Result<(), FemError> {
+    let count = SHELL_NODE_DOFS * mesh.vertex_count();
+    if dofs.len() == count {
+        Ok(())
+    } else {
+        Err(FemError::DisplacementLength {
+            len: dofs.len(),
+            count,
+        })
+    }
+}
+
+/// A facet's CST membrane strain and DKT curvature at its centroid, in its
+/// own frame, with its plane-stress law and half thickness.
+struct FacetStrain {
+    axes: [[f64; 3]; 3],
+    membrane: [f64; 3],
+    curvature: [f64; 3],
+    law: [[f64; 3]; 3],
+    half: f64,
+}
+
+impl FacetStrain {
+    fn new(mesh: &ShellMesh, dofs: &[f64], triangle: usize) -> Self {
+        let nodes = mesh.triangles()[triangle];
+        let frame = FacetFrame::new(&mesh.corners(triangle));
+        let [e1, e2, e3] = frame.axes;
+        // Nodal DOFs in the facet frame: (u, v) for the membrane, (w, θx,
+        // θy) for bending.
+        let mut membrane_dofs = [0.0; 6];
+        let mut bending_dofs = [0.0; 9];
+        for (local, &node) in nodes.iter().enumerate() {
+            let base = SHELL_NODE_DOFS * node as usize;
+            let translation = [dofs[base], dofs[base + 1], dofs[base + 2]];
+            let rotation = [dofs[base + 3], dofs[base + 4], dofs[base + 5]];
+            membrane_dofs[2 * local] = dot(e1, translation);
+            membrane_dofs[2 * local + 1] = dot(e2, translation);
+            bending_dofs[3 * local] = dot(e3, translation);
+            bending_dofs[3 * local + 1] = dot(e1, rotation);
+            bending_dofs[3 * local + 2] = dot(e2, rotation);
+        }
+        let material = mesh.material(triangle);
+        let poisson = material.poisson();
+        Self {
+            axes: frame.axes,
+            membrane: apply(&membrane_b(&frame), &membrane_dofs),
+            curvature: apply(
+                &dkt_curvature_b(&frame, 1.0 / 3.0, 1.0 / 3.0),
+                &bending_dofs,
+            ),
+            law: constitutive(material.young() / (1.0 - poisson * poisson), poisson),
+            half: 0.5 * mesh.thickness(triangle),
+        }
+    }
+
+    /// The plane stress [σx, σy, τxy] at height `depth` along the facet
+    /// normal: `σ(z) = D·(ε_m + z·κ)`.
+    fn stress_at(&self, depth: f64) -> [f64; 3] {
+        let strain: [f64; 3] =
+            std::array::from_fn(|i| self.membrane[i] + depth * self.curvature[i]);
+        apply(&self.law, &strain)
+    }
 }
 
 /// matrix · vector for a 3-row matrix.

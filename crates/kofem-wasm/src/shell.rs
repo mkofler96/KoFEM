@@ -5,13 +5,15 @@
 
 use kofem_fem::shell::SHELL_NODE_DOFS;
 use kofem_fem::{
-    assemble_shell_stiffness, nodal_residual, prepare_shell_static, shell_translations,
-    shell_von_mises, summarize_reactions, CsrMatrix, PcgRun, ShellMesh, ShellPreconditioner,
-    StoppingRule,
+    assemble_shell_stiffness, nodal_residual, prepare_shell_static, shell_stress_tensors,
+    shell_translations, shell_von_mises, summarize_reactions, CsrMatrix, PcgRun, ShellMesh,
+    ShellPreconditioner, StoppingRule,
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{flatten_reactions, parse_materials, to_js, ElasticSolution, RunOutput, SolveRun};
+use crate::{
+    flatten_reactions, parse_materials, shell_surface, to_js, ElasticSolution, RunOutput, SolveRun,
+};
 
 /// A validated Kirchhoff shell model (CST membrane + DKT bending facets).
 #[wasm_bindgen]
@@ -151,6 +153,19 @@ impl ShellModel {
     #[wasm_bindgen(js_name = vonMises)]
     pub fn von_mises(&self, dofs: &[f64]) -> Result<Vec<f64>, JsError> {
         shell_von_mises(&self.mesh, dofs).map_err(|error| to_js(&error))
+    }
+
+    /// The stress tensor of every facet on `surface` ("top", "middle" or
+    /// "bottom"), six values each: σxx, σyy, σzz, τxy, τyz, τzx in global
+    /// axes.
+    ///
+    /// # Errors
+    /// A solution array that does not fit the mesh, or an unknown surface.
+    #[wasm_bindgen(js_name = stressTensors)]
+    pub fn stress_tensors(&self, dofs: &[f64], surface: &str) -> Result<Vec<f64>, JsError> {
+        shell_stress_tensors(&self.mesh, dofs, shell_surface(surface)?)
+            .map(|tensors| tensors.into_iter().flatten().collect())
+            .map_err(|error| to_js(&error))
     }
 
     /// The three translations per vertex of a solution (6 DOFs per vertex),
