@@ -177,3 +177,52 @@ test("probes work on a shell @pipeline", async ({ page }) => {
   await page.getByTestId("probe-row-1").hover();
   await expect(page.getByTestId("probe-vector-1")).toContainText("mm");
 });
+
+// Stress components (KOF-447): the axial bar carries σxx = P / A = 100 MPa and
+// no shear, which a probe placed by its coordinates reads; on a shell model the
+// Results panel offers the surface the components are read on.
+async function probeAt(page: Page, [x, y, z]: Point): Promise<void> {
+  await page.getByTestId("probe-at-x").fill(String(x));
+  await page.getByTestId("probe-at-y").fill(String(y));
+  await page.getByTestId("probe-at-z").fill(String(z));
+  await page.getByTestId("probe-at-add").click();
+}
+
+test("a stress component is read by a probe placed at typed coordinates @pipeline", async ({
+  page,
+}) => {
+  await solveExample(page, "axial-bar");
+  await page.getByTestId("plot-field").selectOption("Normal stress σxx");
+  await expect(page.getByTestId("colorbar")).toContainText("σxx [MPa]");
+  // A solid model has no shell surface to choose.
+  await expect(page.getByTestId("shell-surface")).toHaveCount(0);
+  await probeAt(page, [500, 50, 100]);
+  await expect(page.getByTestId("probe-row-1")).toContainText("P1 · σxx");
+  expect(await probeValue(page, 1)).toBeCloseTo(100, 0);
+  await page.getByTestId("plot-field").selectOption("Shear stress τxy");
+  expect(Math.abs(await probeValue(page, 1))).toBeLessThan(1);
+  await page.getByTestId("plot-field").selectOption("Max principal stress σ1");
+  expect(await probeValue(page, 1)).toBeCloseTo(100, 0);
+
+  // Coordinates that are not numbers are refused with a message.
+  await page.getByTestId("probe-at-x").fill("abc");
+  await page.getByTestId("probe-at-add").click();
+  await expect(page.getByTestId("probe-at-error")).toContainText("numbers");
+  await expect(page.getByTestId("probe-row-2")).toHaveCount(0);
+});
+
+test("a shell model reads its stress components on the chosen surface @pipeline", async ({
+  page,
+}) => {
+  await solveExample(page, "plate-with-hole-shell");
+  await page.getByTestId("plot-field").selectOption("Normal stress σxx");
+  await expect(page.getByTestId("shell-surface")).toHaveValue("top");
+  // Far from the hole, at the pulled end, the plate carries σ = 100 MPa in
+  // membrane tension: the same on both surfaces.
+  await probeAt(page, [145, 45, 0.5]);
+  const top = await probeValue(page, 1);
+  expect(top).toBeGreaterThan(90);
+  expect(top).toBeLessThan(110);
+  await page.getByTestId("shell-surface").selectOption("bottom");
+  expect(await probeValue(page, 1)).toBeCloseTo(top, 3);
+});
