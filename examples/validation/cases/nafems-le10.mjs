@@ -95,8 +95,18 @@ export default {
     mesh: { maxElementSize: h, order: 2 },
     material: APP_STEEL,
     supports: [
-      { name: "Symmetry y = 0", faces: [{ at: [2600, 0, 100] }], dofs: [1], value: 0 },
-      { name: "Symmetry x = 0", faces: [{ at: [0, 1800, 100] }], dofs: [0], value: 0 },
+      {
+        name: "Symmetry y = 0",
+        faces: [{ at: [2600, 0, 100] }],
+        dofs: [1],
+        value: 0,
+      },
+      {
+        name: "Symmetry x = 0",
+        faces: [{ at: [0, 1800, 100] }],
+        dofs: [0],
+        value: 0,
+      },
       {
         name: "Outer face",
         faces: [

@@ -56,6 +56,8 @@
 // @property {number} young              MPa
 // @property {number} poisson
 // @property {number} density            tonne/mm³
+// @property {number} [expansion]        thermal expansion coefficient α (1/°C),
+//                                       required with a temperature change
 //
 // @typedef {object} Support
 // @property {string} name
@@ -144,6 +146,12 @@
 // @property {Support[]} supports
 // @property {Load[]} loads
 // @property {Tie[]} [ties]              absent: the model has no tie
+// @property {{ formula: string }} [temperature]
+//                                       a temperature change ΔT (°C) over the
+//                                       model, a formula in x, y, z (mm), as
+//                                       Boundary conditions → + Add →
+//                                       Temperature change takes it; absent:
+//                                       none
 // @property {Optimize} [optimize]       a topology optimisation instead of the
 //                                       static solve; read out by "compliance"
 // @property {Readout} readout
@@ -337,8 +345,24 @@ export function validateRecipe(id, r) {
     if (!Number.isFinite(s.value))
       throw new Error(`${at}.supports[${i}]: value must be a number`);
   });
-  if (!Array.isArray(r.loads) || r.loads.length === 0)
-    throw new Error(`${at}: needs at least one load`);
+  if (r.temperature !== undefined) {
+    if (
+      typeof r.temperature?.formula !== "string" ||
+      r.temperature.formula.trim() === ""
+    )
+      throw new Error(`${at}: temperature needs a formula`);
+    if (!Number.isFinite(m.expansion))
+      throw new Error(
+        `${at}: a temperature change needs the material's expansion coefficient`,
+      );
+  }
+  if (m.expansion !== undefined && !Number.isFinite(m.expansion))
+    throw new Error(`${at}: material.expansion must be a number`);
+  if (
+    !Array.isArray(r.loads) ||
+    (r.loads.length === 0 && r.temperature === undefined)
+  )
+    throw new Error(`${at}: needs at least one load or a temperature change`);
   // A load the app's Load panel would refuse is refused here too, by the same
   // rule (web/src/components/panel/bcFormUtils.ts): a pressure must be non-zero
   // (parsePressure), a force or moment vector must not be all zero
@@ -424,7 +448,9 @@ export function validateRecipe(id, r) {
         `${at}: a solid has one stress per element; its stress probe takes no surface`,
       );
     if (p.faces !== undefined || p.stat !== undefined)
-      throw new Error(`${at}: a stress probe at a point takes no faces or stat`);
+      throw new Error(
+        `${at}: a stress probe at a point takes no faces or stat`,
+      );
   } else if (p.kind === "stress") {
     if (p.field !== "vonMises" || p.stat !== "max")
       throw new Error(

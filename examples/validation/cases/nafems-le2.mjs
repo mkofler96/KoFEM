@@ -55,7 +55,11 @@ const outer = (theta, z) => [
   z,
 ];
 // A point in the middle of an end face (z = 0 or z = L) at angle θ.
-const onEnd = (theta, z) => [R * Math.cos(theta * deg), R * Math.sin(theta * deg), z];
+const onEnd = (theta, z) => [
+  R * Math.cos(theta * deg),
+  R * Math.sin(theta * deg),
+  z,
+];
 // A point in the middle of an edge face θ = const.
 const onEdge = (theta) => onEnd(theta, L / 2);
 
@@ -78,14 +82,15 @@ export default {
       ["ν", nu, ""],
       ["m", m, "N·mm/mm"],
     ],
-    supports:
-      "Edge θ = 0 clamped; the end edges z = 0 and z = L held in z.",
+    supports: "Edge θ = 0 clamped; the end edges z = 0 and z = L held in z.",
     loads: "Edge moment m·L about z on the edge θ = 30°.",
-    measured: "Largest principal stress on the outer (top) surface at E, read with a probe: the hoop stress.",
+    measured:
+      "Largest principal stress on the outer (top) surface at E, read with a probe: the hoop stress.",
     source: "NAFEMS TNSB Rev. 3 (1990), test LE2",
   },
   recipe: {
-    step: () => cylindricalPanelStep(R, t, L, sweep, "NAFEMS LE2 cylindrical panel"),
+    step: () =>
+      cylindricalPanelStep(R, t, L, sweep, "NAFEMS LE2 cylindrical panel"),
     splits: [],
     discretization: { kind: "shell", thickness: t },
     mesh: { maxElementSize: h, order: 1 },

@@ -53,6 +53,8 @@ export interface Material {
   young: number;
   poisson: number;
   density: number;
+  // Thermal expansion α (1/°C); absent: none (recipe.mjs Material).
+  expansion?: number;
 }
 export interface Support {
   name: string;
@@ -138,6 +140,8 @@ interface RecipeSteps {
   loads: Load[];
   // Absent: the model has no tie (recipe.mjs Recipe).
   ties?: Tie[];
+  // Absent: no temperature change (recipe.mjs Recipe).
+  temperature?: { formula: string };
 }
 export interface StaticRecipe extends RecipeSteps {
   optimize?: undefined;
@@ -809,6 +813,10 @@ async function setMaterial(page: Page, material: Material): Promise<void> {
   await field("E (MPa)").fill(String(material.young));
   await field("ν").fill(String(material.poisson));
   await field("ρ (t/mm³)").fill(String(material.density));
+  if (material.expansion !== undefined)
+    await page
+      .getByTestId("material-expansion")
+      .fill(String(material.expansion));
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const materials = (await snapshot(page)).materials;
   const created = materials.filter((m) => !before.includes(m.id));
@@ -816,6 +824,9 @@ async function setMaterial(page: Page, material: Material): Promise<void> {
   expect(created[0]).toMatchObject({
     young: material.young,
     poisson: material.poisson,
+    ...(material.expansion === undefined
+      ? {}
+      : { expansion: material.expansion }),
   });
   for (const id of await cadBodyIds(page)) {
     await openBody(page, id);
@@ -823,6 +834,27 @@ async function setMaterial(page: Page, material: Material): Promise<void> {
       .getByTestId(`body-material-${id}`)
       .selectOption(String(created[0].id));
   }
+}
+
+// Boundary conditions → + Add → Temperature change: the formula typed and
+// applied; the store must then hold it as typed.
+async function addTemperature(
+  page: Page,
+  temperature: { formula: string },
+): Promise<void> {
+  await addBoundary(page, "temperature");
+  await page.getByTestId("temperature-formula").fill(temperature.formula);
+  await expect(page.getByTestId("temperature-apply")).toBeEnabled();
+  await page.getByTestId("temperature-apply").click();
+  const stored = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { temperature: unknown } };
+        }
+      ).__kofemStore.getState().temperature,
+  );
+  expect(stored).toEqual({ formula: temperature.formula });
 }
 
 const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
@@ -1107,6 +1139,7 @@ export async function buildByHand(
   for (const support of recipe.supports) await addSupport(page, support);
   for (const load of recipe.loads) await addLoad(page, load);
   for (const tie of recipe.ties ?? []) await addTie(page, tie);
+  if (recipe.temperature) await addTemperature(page, recipe.temperature);
   lap("boundary");
   if (recipe.optimize === undefined) {
     await solve(page);

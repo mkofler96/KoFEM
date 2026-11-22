@@ -84,9 +84,24 @@ export default {
     mesh: { maxElementSize: h, order: 2 },
     material: APP_STEEL,
     supports: [
-      { name: "Symmetry x = 0", faces: [{ at: [0, 1800, 10] }], dofs: [0], value: 0 },
-      { name: "Symmetry y = 0", faces: [{ at: [2600, 0, 10] }], dofs: [1], value: 0 },
-      { name: "Mid-plane z = 0", faces: [{ at: [1000, 1500, 0] }], dofs: [2], value: 0 },
+      {
+        name: "Symmetry x = 0",
+        faces: [{ at: [0, 1800, 10] }],
+        dofs: [0],
+        value: 0,
+      },
+      {
+        name: "Symmetry y = 0",
+        faces: [{ at: [2600, 0, 10] }],
+        dofs: [1],
+        value: 0,
+      },
+      {
+        name: "Mid-plane z = 0",
+        faces: [{ at: [1000, 1500, 0] }],
+        dofs: [2],
+        value: 0,
+      },
     ],
     loads: [
       {

@@ -37,6 +37,7 @@ import tieLameCylinder from "./tie-lame-cylinder.mjs";
 import tieCantilever from "./tie-cantilever.mjs";
 import nafemsLe1 from "./nafems-le1.mjs";
 import nafemsLe10 from "./nafems-le10.mjs";
+import nafemsLe11 from "./nafems-le11.mjs";
 import nafemsLe2 from "./nafems-le2.mjs";
 import { validateRecipe } from "../lib/recipe.mjs";
 
@@ -98,4 +99,5 @@ export default [
   nafemsLe1,
   nafemsLe2,
   nafemsLe10,
+  nafemsLe11,
 ].map(register);

@@ -69,10 +69,7 @@ import {
 import { constraintTieCount } from "../../../web/src/lib/tie.ts";
 import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
-import {
-  anchorAtPoint,
-  readProbes,
-} from "../../../web/src/lib/resultProbe.ts";
+import { anchorAtPoint, readProbes } from "../../../web/src/lib/resultProbe.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
@@ -386,6 +383,7 @@ export async function buildFromRecipe(
       young: m.young,
       poisson: m.poisson,
       density: m.density,
+      ...(m.expansion === undefined ? {} : { expansion: m.expansion }),
       color: MATERIAL_PALETTE[0],
     },
   ];
@@ -486,6 +484,11 @@ export async function buildFromRecipe(
     constraints: rebuildConstraints(bcGroups),
     loads: rebuildLoads(loadGroups, nodes, []),
     surfaceLoads: rebuildSurfaceLoads(loadGroups, elements, []),
+    // The temperature change the recipe sets, as Boundary conditions → +Add →
+    // Temperature change stores it.
+    temperature: recipe.temperature
+      ? { formula: recipe.temperature.formula }
+      : null,
     tieGroups,
     couplings: [],
     elementOrder,
@@ -513,6 +516,7 @@ export async function buildFromRecipe(
     bcGroups,
     loadGroups,
     tieGroups,
+    temperature: payload.temperature,
     nextFaceEntryId,
   });
 
