@@ -251,4 +251,46 @@ export default [
       },
     ],
   }),
+  recipeStudy({
+    id: "nafems-le3",
+    caseId: "nafems-le3",
+    title: "NAFEMS LE3, curved shell triangles",
+    note: "The displacement falls as the mesh is refined and levels off a few percent below the target: flat facets on a doubly curved shell carry some membrane stiffness into bending.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "nafems-le3",
+        order: 1,
+        levels: [500, 250, 125, 62.5],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le4",
+    caseId: "nafems-le4",
+    title: "NAFEMS LE4, curved shell triangles",
+    note: "The meridional stress at the waist is within half a percent on every mesh.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "nafems-le4",
+        order: 1,
+        levels: [50, 25, 12.5],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "nafems-le7",
+    caseId: "nafems-le7",
+    title: "NAFEMS LE7, curved shell triangles",
+    note: "The bending stress near the junction settles once the mesh resolves its decay length.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "nafems-le7",
+        order: 1,
+        levels: [50, 35, 25, 17.5],
+      },
+    ],
+  }),
 ];
