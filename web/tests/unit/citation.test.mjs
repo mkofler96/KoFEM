@@ -4,12 +4,13 @@
 // CITATION.cff is what Zenodo reads for the metadata of each archived
 // release, and what GitHub shows under "Cite this repository" (KOF-450).
 
+import { YAML } from "bun";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
-const citation = Bun.YAML.parse(readFileSync(`${REPO}CITATION.cff`, "utf8"));
+const citation = YAML.parse(readFileSync(`${REPO}CITATION.cff`, "utf8"));
 const pkg = JSON.parse(readFileSync(`${REPO}web/package.json`, "utf8"));
 
 describe("CITATION.cff", () => {
