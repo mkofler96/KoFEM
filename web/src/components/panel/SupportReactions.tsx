@@ -41,73 +41,39 @@ export function SupportReactions({ summary }: { summary: ReactionSummary }) {
     bcGroups.at(support)?.name ?? `Support ${support + 1}`;
   return (
     <div data-testid="support-reactions">
-      <table className={styles.reactionTable} aria-label="Reaction forces">
-        <caption className={styles.sectionLabel}>Forces (N)</caption>
-        <thead>
-          <tr>
-            <th />
-            <th>Fx</th>
-            <th>Fy</th>
-            <th>Fz</th>
-            <th>|F|</th>
-          </tr>
-        </thead>
-        <tbody>
-          {summary.supports.map((support) => (
-            <tr
-              key={support.support}
-              data-testid={`reaction-${support.support}`}
-              data-force={support.force.join(",")}
-            >
-              <td>{nameOf(support.support)}</td>
-              {support.vertices === 0 ? (
-                <td colSpan={4} className={styles.reactionMissing}>
-                  not in the mesh
-                </td>
-              ) : (
-                <VectorCells v={support.force} scale={scale} />
-              )}
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td>Σ reactions</td>
-            <VectorCells v={balance.reaction} scale={scale} />
-          </tr>
-          <tr>
-            <td>Applied</td>
-            <VectorCells v={balance.applied} scale={scale} />
-          </tr>
-        </tfoot>
-      </table>
+      <VectorTable
+        label="Reaction forces"
+        caption="Forces (N)"
+        symbol="F"
+        scale={scale}
+        rows={summary.supports.map((support) => ({
+          key: String(support.support),
+          name: nameOf(support.support),
+          vector: support.vertices === 0 ? null : support.force,
+          testId: `reaction-${support.support}`,
+          force: support.force,
+        }))}
+        footer={[
+          { key: "sum", name: "Σ reactions", vector: balance.reaction },
+          { key: "applied", name: "Applied", vector: balance.applied },
+        ]}
+      />
       {anyRotation && (
-        <table className={styles.reactionTable} aria-label="Reaction moments">
-          <caption className={styles.sectionLabel}>
-            Moments about each support's centre (N·mm)
-          </caption>
-          <thead>
-            <tr>
-              <th />
-              <th>Mx</th>
-              <th>My</th>
-              <th>Mz</th>
-              <th>|M|</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.supports
-              .filter((support) =>
-                bcGroups.at(support.support)?.dofs.some((dof) => dof >= 3),
-              )
-              .map((support) => (
-                <tr key={support.support}>
-                  <td>{nameOf(support.support)}</td>
-                  <VectorCells v={support.moment} scale={momentScale} />
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        <VectorTable
+          label="Reaction moments"
+          caption="Moments about each support’s centre (N·mm)"
+          symbol="M"
+          scale={momentScale}
+          rows={summary.supports
+            .filter((support) =>
+              bcGroups.at(support.support)?.dofs.some((dof) => dof >= 3),
+            )
+            .map((support) => ({
+              key: String(support.support),
+              name: nameOf(support.support),
+              vector: support.moment,
+            }))}
+        />
       )}
       <p
         className={
@@ -139,5 +105,64 @@ function VectorCells({ v, scale }: { v: Vec3; scale: number }) {
       <td>{component(v[2], scale)}</td>
       <td>{component(magnitude(v), scale)}</td>
     </>
+  );
+}
+
+interface VectorRowData {
+  key: string;
+  name: string;
+  // Null for a support none of whose nodes reached the solve.
+  vector: Vec3 | null;
+  testId?: string;
+  // The support's force, for tests to read exactly.
+  force?: Vec3;
+}
+
+// A table of vectors: a row per support (or sum), its x, y, z components and
+// length; `symbol` heads the columns (F or M).
+function VectorTable({
+  label,
+  caption,
+  symbol,
+  scale,
+  rows,
+  footer,
+}: {
+  label: string;
+  caption: string;
+  symbol: string;
+  scale: number;
+  rows: VectorRowData[];
+  footer?: VectorRowData[];
+}) {
+  const heads = ["", `${symbol}x`, `${symbol}y`, `${symbol}z`, `|${symbol}|`];
+  const headCells = heads.map((head) => <th key={head}>{head}</th>);
+  const row = (data: VectorRowData) => (
+    <VectorRow key={data.key} data={data} scale={scale} />
+  );
+  return (
+    <table className={styles.reactionTable} aria-label={label}>
+      <caption className={styles.sectionLabel}>{caption}</caption>
+      <thead>
+        <tr>{headCells}</tr>
+      </thead>
+      <tbody>{rows.map(row)}</tbody>
+      {footer && <tfoot>{footer.map(row)}</tfoot>}
+    </table>
+  );
+}
+
+function VectorRow({ data, scale }: { data: VectorRowData; scale: number }) {
+  return (
+    <tr data-testid={data.testId} data-force={data.force?.join(",")}>
+      <td>{data.name}</td>
+      {data.vector === null ? (
+        <td colSpan={4} className={styles.reactionMissing}>
+          not in the mesh
+        </td>
+      ) : (
+        <VectorCells v={data.vector} scale={scale} />
+      )}
+    </tr>
   );
 }

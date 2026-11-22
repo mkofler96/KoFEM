@@ -42,7 +42,7 @@ function DeletePrompt({ request }: { request: DeleteRequest }) {
           checked={dontAsk}
           onChange={(event) => setDontAsk(event.target.checked)}
         />
-        Don't ask again this session
+        {"Don't ask again this session"}
       </label>
       <div className={styles.actions}>
         <button

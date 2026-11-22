@@ -110,9 +110,13 @@ export function LegendRangeControls({
     }
   };
 
+  // The text follows at once, not a frame later through the effect above:
+  // typed in that frame, an edit would be checked against the old text.
   const auto = () => {
     applied.current = null;
     setLegendRange(null);
+    setMinText(format(fieldRange.min));
+    setMaxText(format(fieldRange.max));
     setError(null);
   };
 

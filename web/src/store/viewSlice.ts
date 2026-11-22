@@ -166,6 +166,9 @@ export function applyTreeSelection(
   s.treeSelection = selection;
   const { target } = selection;
   s.reactionsShown = target.type === "item" && target.kind === "reactions";
+  // The reactions come from the static solve: show it, even when an
+  // optimization's density was on view.
+  if (s.reactionsShown) s.activeResult = "static";
   if (
     target.type !== "item" ||
     (target.kind !== "plot" && target.kind !== "section")
