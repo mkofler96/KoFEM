@@ -6,8 +6,8 @@
 #
 # Print the engine build ID for the current working tree, e.g. `engine-4f1c2a9b3d70`.
 #
-# The compiled engine is no longer committed (KOF-186): it is published as a
-# GitHub Release named after this ID and pulled down by scripts/fetch-wasm-engine.sh.
+# The compiled engine is no longer committed (KOF-186): it is published to GHCR as
+# kofem-engine:<this ID> and pulled down by scripts/fetch-wasm-engine.sh.
 # The ID is a content hash rather than a version number, which is what makes that
 # safe — the same sources always resolve to the same published binary, and changed
 # sources can never resolve to a stale one.

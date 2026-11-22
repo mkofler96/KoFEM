@@ -27,6 +27,7 @@ const NUMERICAL_PAGES = [
   "/theory/numerical-methods/loads-and-constraints/",
   "/theory/numerical-methods/couplings/",
   "/theory/numerical-methods/linear-solve/",
+  "/theory/numerical-methods/multigrid/",
 ];
 const RESULT_PAGES = [
   "/theory/results/displacement-and-stress/",
@@ -592,7 +593,7 @@ test("loads and constraints give checkable worked examples and evidence", async 
 test("linear solve links the residual calculation, settings and failure evidence", async ({
   page,
 }) => {
-  const [, , , couplings, solve] = NUMERICAL_PAGES;
+  const [, , , couplings, solve, multigrid] = NUMERICAL_PAGES;
   await page.goto(solve);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Linear solve",
@@ -627,12 +628,65 @@ test("linear solve links the residual calculation, settings and failure evidence
   );
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
-    RESULT_PAGES[0],
+    multigrid,
   );
+  // The preconditioner list links the multigrid article.
+  await expect(page.locator(`main > ul a[href="${multigrid}"]`)).toHaveCount(1);
   await page.goto(couplings);
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
     solve,
+  );
+});
+
+test("multigrid explains the coarse levels with a checked bar and a refinement study", async ({
+  page,
+}) => {
+  const [, , , , solve, multigrid] = NUMERICAL_PAGES;
+  await page.goto(multigrid);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Algebraic multigrid",
+  );
+  const smoothed = page.getByRole("region", {
+    name: /^Transpose of the smoothed prolongator/,
+  });
+  await expect(smoothed.locator("mtr")).toHaveCount(2);
+  await expect(smoothed.locator("mtr").first().locator("mtd")).toHaveText([
+    "2/3",
+    "1",
+    "2/3",
+    "1/3",
+    "0",
+    "0",
+  ]);
+  const coarse = page.getByRole("region", {
+    name: /^Smoothed coarse matrix/,
+  });
+  await expect(coarse.locator("mtr").first().locator("mtd").first()).toHaveText(
+    "8/9",
+  );
+  // The refinement table: one row per mesh, multigrid far below Gauss–Seidel.
+  const study = page.getByRole("region", {
+    name: /^Iterations under mesh refinement/,
+  });
+  const rows = study.locator("tbody tr");
+  await expect(rows).toHaveCount(4);
+  for (const row of await rows.all()) {
+    const cells = row.locator("td");
+    const gaussSeidel = Number(await cells.nth(3).textContent());
+    const multigridIterations = Number(await cells.nth(4).textContent());
+    expect(multigridIterations).toBeLessThan(gaussSeidel / 2);
+  }
+  await expect(
+    page.locator('main a[href*="crates/kofem-fem/src/amg.rs"]').first(),
+  ).toHaveAttribute("href", /blob\/[a-f0-9]{40}\/crates\/kofem-fem\//);
+  await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+    "href",
+    solve,
+  );
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    RESULT_PAGES[0],
   );
 });
 

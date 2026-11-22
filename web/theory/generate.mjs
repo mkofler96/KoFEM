@@ -31,6 +31,7 @@ import assembly from "./numerical-methods/assembly.mjs";
 import loadsAndConstraints from "./numerical-methods/loads-and-constraints.mjs";
 import couplings from "./numerical-methods/couplings.mjs";
 import linearSolve from "./numerical-methods/linear-solve.mjs";
+import multigrid from "./numerical-methods/multigrid.mjs";
 import displacementAndStress from "./results/displacement-and-stress.mjs";
 import interpretationAndConvergence from "./results/interpretation-and-convergence.mjs";
 import shellFormulation from "./shells/formulation.mjs";
@@ -56,6 +57,7 @@ const articles = [
   loadsAndConstraints,
   couplings,
   linearSolve,
+  multigrid,
   displacementAndStress,
   interpretationAndConvergence,
   axialBar,

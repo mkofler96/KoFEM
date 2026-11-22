@@ -74,7 +74,8 @@ export default {
         rigid-body motions, and applies one V-cycle per CG step, with a
         forward Gauss–Seidel sweep before and a backward sweep after each
         coarse correction. The coarsest level is solved directly when it
-        is small enough.</li>
+        is small enough. <a href="/theory/numerical-methods/multigrid/">Algebraic multigrid</a>
+        explains how the levels are built.</li>
       <li><strong>Gauss–Seidel</strong>: one symmetric Gauss–Seidel sweep,
         a forward and a backward pass, per application. These local sweeps
         reduce error cheaply but remove long-range, slowly varying errors

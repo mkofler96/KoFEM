@@ -8,7 +8,7 @@
 # Wired up as the pre-hooks in package.json.
 #
 # The engine is no longer committed (KOF-186); scripts/fetch-wasm-engine.sh at the
-# repo root downloads the release matching the engine sources. That script does not
+# repo root downloads the published engine matching the engine sources. That script does not
 # exist in every context this runs in: web/Dockerfile's build context is web/ alone,
 # and there the engine is already COPYed in, so there is nothing to fetch.
 

@@ -86,8 +86,8 @@ cd web && bun run dev
 [AGENTS.md](AGENTS.md) says which one covers what.
 
 `bun run dev` and `build` prepare both WebAssembly modules first. The
-compiled C++ engine (~28 MB) is a build output, so it is published as a GitHub
-Release rather than committed; they download the one matching your checkout via
+compiled C++ engine (~28 MB) is a build output, so it is published to the GitHub
+Container Registry rather than committed; they download the one matching your checkout via
 `scripts/fetch-wasm-engine.sh`. The Rust finite-element module (`crates/`) is
 built locally by `scripts/build-fem-wasm.sh` in a few seconds.
 
