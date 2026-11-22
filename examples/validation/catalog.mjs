@@ -45,6 +45,7 @@ export const ORDER = [
   "nafems-le5",
   "nafems-le6",
   "nafems-le7",
+  "nafems-le8",
   "nafems-le10",
   "nafems-le11",
   "mbb-beam-topopt",

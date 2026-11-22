@@ -624,6 +624,105 @@ fn bend_keeps_the_side_its_flat_legs_keep() {
     assert_on_bracket_mid_surface(&shells);
 }
 
+// ── An S-bend: two curved walls of opposite curvature ─────────────────────────
+
+const S_RADIUS: f64 = 50.0;
+
+/// Centre of the second arc of the S-bend, in the xz plane.
+fn s_bend_second_centre() -> Vec3 {
+    let joint = PI / 3.0;
+    [
+        2.0 * S_RADIUS * joint.cos(),
+        0.0,
+        2.0 * S_RADIUS * joint.sin(),
+    ]
+}
+
+/// A 2 mm sheet, 40 mm wide (y), bent in an S in the xz plane: a 60° arc of
+/// mid radius 50 mm about the y axis, then tangentially a 30° arc of the same
+/// radius curving the other way, as a knuckle runs into a dished end. The
+/// side w = 1 is the first arc's convex (larger) face but the second arc's
+/// concave (smaller) one. Faces: 1 first arc w = 1, 2 second arc w = 1,
+/// 3 first arc w = 0, 4 second arc w = 0, 5, 6 the ends, 7 y = 0, 8 y = 40.
+fn s_bend() -> ShellizeMesh {
+    let (first, second) = (12, 6);
+    let cells = [2, 4, first + second];
+    let centre = s_bend_second_centre();
+    mapped_mesh(
+        cells,
+        |_| true,
+        |[layer, around, along]| {
+            let off = SHEET * (layer as f64 / 2.0 - 0.5);
+            let width = 10.0 * around as f64;
+            if along <= first {
+                // About the y axis; w runs out of the arc's centre.
+                let angle = PI / 3.0 * along as f64 / first as f64;
+                let rho = S_RADIUS + off;
+                [rho * angle.cos(), width, rho * angle.sin()]
+            } else {
+                // About the second centre; w runs into it.
+                let angle = PI / 3.0 * (1.0 - 0.5 * (along - first) as f64 / second as f64);
+                let rho = S_RADIUS - off;
+                [
+                    centre[0] - rho * angle.cos(),
+                    width,
+                    centre[2] - rho * angle.sin(),
+                ]
+            }
+        },
+        |corners| {
+            let second_arc = corners.iter().any(|corner| corner[2] > first);
+            if all(corners, 2, 0) {
+                5
+            } else if all(corners, 2, cells[2]) {
+                6
+            } else if all(corners, 1, 0) {
+                7
+            } else if all(corners, 1, cells[1]) {
+                8
+            } else if all(corners, 0, cells[0]) {
+                if second_arc {
+                    2
+                } else {
+                    1
+                }
+            } else if second_arc {
+                4
+            } else {
+                3
+            }
+        },
+    )
+}
+
+/// The second arc follows the first onto the side w = 1, though that is its
+/// smaller face: the two walls share their edge nodes along the tangent line
+/// and weld into one sheet on the mid surface.
+#[test]
+fn s_bend_keeps_one_side_across_the_inflection() {
+    let mesh = s_bend();
+    let shells = extract(&mesh).expect("extraction");
+    let kept: BTreeSet<i32> = shells.walls.iter().map(|wall| wall.keep).collect();
+    assert_eq!(kept, BTreeSet::from([1, 2]), "{:?}", shells.walls);
+    let side: BTreeSet<usize> = nodes_of_face(&mesh, 1)
+        .union(&nodes_of_face(&mesh, 2))
+        .copied()
+        .collect();
+    assert_eq!(shells.vertices.len(), side.len());
+    let centre = s_bend_second_centre();
+    for vertex in &shells.vertices {
+        let from_first = vertex[0].hypot(vertex[2]);
+        let from_second = (vertex[0] - centre[0]).hypot(vertex[2] - centre[2]);
+        // The first arc lies below the joint's line through both centres.
+        let on_second = vertex[2] * centre[0] - vertex[0] * centre[2] > 1e-6;
+        let mid = if on_second { from_second } else { from_first };
+        let off = (mid - S_RADIUS).abs();
+        assert!(off < 0.01 * SHEET, "{vertex:?} is {off} mm off");
+    }
+    let tets = shell_body_tets(&mesh, &shells).expect("fully covered");
+    assert_eq!(tets.len(), mesh.tets().len());
+}
+
 // ── The edges of a flat plate ─────────────────────────────────────────────────
 
 /// A quarter washer, 10 mm thick along z, r = 20…32 mm: a flat plate whose

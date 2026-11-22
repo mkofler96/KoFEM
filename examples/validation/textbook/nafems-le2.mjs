@@ -21,7 +21,7 @@ export default {
         <p>The edge moment ${tex("m")} per unit length is carried unchanged
         around the panel, so every section bends under the same moment. With
         the curved edges held axially, the outer surface carries</p>
-        ${texBlock("σ_{θθ} = \\frac{6 m}{t^{2}}, \\qquad σ_{zz} = ν σ_{θθ}, \\qquad τ = 0.")}
+        ${texBlock("σ_{θθ} = \\frac{6 m}{t^{2}}, \\quad σ_{zz} = ν σ_{θθ}, \\quad τ = 0.")}
         <p>The largest principal stress is therefore ${tex("σ_{θθ}")}, which is
         what the probe reads: the hoop direction at E is no global axis.</p>`,
   model: ({ inp, row }) => `

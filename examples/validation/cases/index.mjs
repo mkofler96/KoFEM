@@ -44,6 +44,7 @@ import nafemsLe4 from "./nafems-le4.mjs";
 import nafemsLe5 from "./nafems-le5.mjs";
 import nafemsLe6 from "./nafems-le6.mjs";
 import nafemsLe7 from "./nafems-le7.mjs";
+import nafemsLe8 from "./nafems-le8.mjs";
 import { validateRecipe } from "../lib/recipe.mjs";
 
 const CASE_KEYS = new Set([
@@ -108,6 +109,7 @@ export default [
   nafemsLe5,
   nafemsLe6,
   nafemsLe7,
+  nafemsLe8,
   nafemsLe10,
   nafemsLe11,
 ].map(register);

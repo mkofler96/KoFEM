@@ -36,7 +36,7 @@ export default {
         meridional force, and the axial equilibrium of the shell above any
         circle fixes the meridional force there. At the waist, where the
         meridian is vertical,</p>
-        ${texBlock("N_{φ} = -\\frac{p}{2 a}\\left(r_{A}^{2} - a^{2}\\right), \\qquad σ_{φφ} = \\frac{N_{φ}}{t}.")}`,
+        ${texBlock("N_{φ} = -\\frac{p}{2 a}\\left(r_{A}^{2} - a^{2}\\right), \\quad σ_{φφ} = \\frac{N_{φ}}{t}.")}`,
   model: ({ inp, row }) => `
         <p>A quarter of the shell's upper half: the cut meridians held by
         symmetry and the waist <i>z</i>&nbsp;=&nbsp;0 a symmetry plane; the top

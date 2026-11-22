@@ -6,7 +6,7 @@
 //! face t/2 along the face normal; a curved wall (KOF-448) moves each node of
 //! its kept face t/2 along that node's own normal.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::curved_walls::{curved_walls, CurvedWall};
 use crate::error::ShellizeError;
@@ -548,6 +548,7 @@ fn collapsible_curved_walls(
         })
     };
     let mut walls = Vec::new();
+    let mut anchors: Vec<usize> = Vec::new();
     for wall in curved {
         let (Some(&larger), Some(&smaller)) = (area.get(&wall.face), area.get(&wall.partner))
         else {
@@ -569,6 +570,14 @@ fn collapsible_curved_walls(
                     .iter()
                     .any(|&partner| touches(partner, wall.face))
         });
+        let anchored = planar.iter().any(|paired| {
+            std::iter::once(paired.wall.keep)
+                .chain(paired.partners.iter().copied())
+                .any(|face| touches(face, wall.face) || touches(face, wall.partner))
+        });
+        if anchored {
+            anchors.push(walls.len());
+        }
         let (keep, partner) = if flipped {
             (wall.partner, wall.face)
         } else {
@@ -586,7 +595,56 @@ fn collapsible_curved_walls(
             partners: vec![partner],
         });
     }
+    follow_curved_neighbours(&mut walls, &anchors, touches);
     walls
+}
+
+/// Tangent curved walls of opposite curvature (a knuckle running into a dished
+/// end, an S-bend) have their larger faces on opposite sides, so keeping each
+/// wall's larger face would leave them sharing no edge nodes. Walk the curved
+/// walls outwards from the ones a planar wall decided (then from the largest
+/// left), and flip each wall that continues a decided one on the other side —
+/// its partner meets the decided wall's kept face and its kept face meets the
+/// decided wall's partner — so neighbouring walls are kept on one side.
+fn follow_curved_neighbours(
+    walls: &mut [PairedWall],
+    anchors: &[usize],
+    touches: impl Fn(i32, i32) -> bool,
+) {
+    let mut decided = vec![false; walls.len()];
+    for &anchor in anchors {
+        decided[anchor] = true;
+    }
+    let roots: Vec<usize> = anchors.iter().copied().chain(0..walls.len()).collect();
+    for root in roots {
+        if decided[root] && !anchors.contains(&root) {
+            continue;
+        }
+        decided[root] = true;
+        let mut queue = VecDeque::from([root]);
+        while let Some(current) = queue.pop_front() {
+            let (keep, partner) = (walls[current].wall.keep, walls[current].wall.partner);
+            for next in 0..walls.len() {
+                if decided[next] {
+                    continue;
+                }
+                let (next_keep, next_partner) = (walls[next].wall.keep, walls[next].wall.partner);
+                let continues = touches(keep, next_keep) || touches(partner, next_partner);
+                let crossed = touches(keep, next_partner) && touches(partner, next_keep);
+                if !continues && !crossed {
+                    continue;
+                }
+                if crossed && !continues {
+                    let wall = &mut walls[next];
+                    wall.wall.keep = next_partner;
+                    wall.wall.partner = next_keep;
+                    wall.partners = vec![next_keep];
+                }
+                decided[next] = true;
+                queue.push_back(next);
+            }
+        }
+    }
 }
 
 /// The collapsed walls before welding: one node per (wall, original node).
