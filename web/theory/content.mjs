@@ -51,6 +51,7 @@ export const topics = [
     "Kinematic and distributing couplings",
   ],
   ["Numerical methods", "numerical-methods/linear-solve", "Linear solve"],
+  ["Numerical methods", "numerical-methods/multigrid", "Algebraic multigrid"],
   ["Results", "results/displacement-and-stress", "Displacement and stress"],
   [
     "Results",
