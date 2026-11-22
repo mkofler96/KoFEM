@@ -53,8 +53,8 @@ pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};
 pub use mortar::{mortar_weights, MortarFace, MortarRow};
 pub use reactions::{
-    fold_onto_vertices, nodal_residual, summarize_reactions, widen_translations, ReactionSummary,
-    SupportReaction,
+    fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,
+    widen_translations, ReactionSummary, SupportReaction,
 };
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};

@@ -29,12 +29,12 @@ pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
-    assemble_stiffness, fold_onto_vertices, nodal_residual, prepare_coupled_static, prepare_static,
-    prepare_tied_static, solve_static, summarize_reactions, von_mises, widen_translations,
-    AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling, CouplingKind, CsrMatrix,
-    ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice, PreparedCoupled,
-    PreparedStatic, PreparedTied, ReactionSummary, StoppingRule, SurfaceLoadKind, TetMesh,
-    TieReport, VertexTies, DOFS_PER_NODE,
+    assemble_stiffness, fold_onto_vertices, load_on_held_nodes, nodal_residual,
+    prepare_coupled_static, prepare_static, prepare_tied_static, solve_static, summarize_reactions,
+    von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction,
+    Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
+    PreconditionerChoice, PreparedCoupled, PreparedStatic, PreparedTied, ReactionSummary,
+    StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
 };
 use wasm_bindgen::prelude::*;
 
@@ -300,9 +300,14 @@ impl ElasticModel {
         };
         let reactions = fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
         let loads = fold_onto_vertices(&self.mesh, &wide_forces).map_err(|error| to_js(&error))?;
-        summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
-            .map(|summary| flatten_reactions(&summary))
-            .map_err(|error| to_js(&error))
+        let mut summary =
+            summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
+                .map_err(|error| to_js(&error))?;
+        // Counted before folding: a free edge node's load is not on a support
+        // because one of its ends is.
+        summary.applied_on_supports =
+            load_on_held_nodes(&self.mesh, &wide_forces, owners).map_err(|error| to_js(&error))?;
+        Ok(flatten_reactions(&summary))
     }
 
     /// Assemble the global stiffness matrix; returns its non-zero count.

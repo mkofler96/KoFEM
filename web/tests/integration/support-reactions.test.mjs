@@ -157,7 +157,7 @@ function expectClampCarriesTip(summary) {
   expect(balance.loadOnSupports).toBe(false);
 }
 
-let fem;
+let fem = null;
 beforeAll(async () => {
   fem = await loadFem();
 });

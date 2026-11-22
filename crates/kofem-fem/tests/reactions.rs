@@ -18,10 +18,10 @@
 mod support;
 
 use kofem_fem::{
-    assemble_shell_stiffness, assemble_stiffness, fold_onto_vertices, nodal_residual,
-    prepare_coupled_static, prepare_mixed_static, solve_coupled_static, solve_mixed_static,
-    solve_shell_static, solve_static, summarize_reactions, widen_translations, CgSettings,
-    Coupling, CouplingKind, ElementOrder, FemError, Isotropic, MixedPreconditioner,
+    assemble_shell_stiffness, assemble_stiffness, fold_onto_vertices, load_on_held_nodes,
+    nodal_residual, prepare_coupled_static, prepare_mixed_static, solve_coupled_static,
+    solve_mixed_static, solve_shell_static, solve_static, summarize_reactions, widen_translations,
+    CgSettings, Coupling, CouplingKind, ElementOrder, FemError, Isotropic, MixedPreconditioner,
     PreconditionerChoice, ReactionSummary, ShellMesh, ShellPart, StoppingRule, TetMesh,
     DOFS_PER_NODE,
 };
@@ -486,4 +486,32 @@ fn malformed_reaction_input_is_refused() {
         ),
         Err(FemError::ReactionInput { .. })
     ));
+}
+
+#[test]
+fn load_on_a_free_edge_node_is_not_load_on_a_support() {
+    // One quadratic tet; vertices 0 and 1 are held in z. Load on the edge
+    // node between them sits on the support; load on the edge node between
+    // 0 and the free vertex 2 does not, although folding would give half of
+    // it to vertex 0.
+    let flat = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    let mesh = TetMesh::new(&flat, &[0, 1, 2, 3], &[0], vec![steel()])
+        .and_then(|mesh| mesh.with_order(ElementOrder::Quadratic))
+        .expect("valid tet");
+    let edge = |first: u32, second: u32| {
+        4 + mesh
+            .edges()
+            .iter()
+            .position(|&ends| ends == [first, second])
+            .expect("edge exists")
+    };
+    let mut forces = vec![0.0; DOFS_PER_NODE * mesh.node_count()];
+    forces[DOFS_PER_NODE * edge(0, 1) + 2] = -10.0;
+    forces[DOFS_PER_NODE * edge(0, 2) + 2] = -6.0;
+    forces[DOFS_PER_NODE + 2] = -1.0; // vertex 1
+    let mut owners = vec![-1; DOFS_PER_NODE * 4];
+    owners[2] = 0;
+    owners[DOFS_PER_NODE + 2] = 0;
+    let held = load_on_held_nodes(&mesh, &forces, &owners).expect("fits the mesh");
+    assert_eq!(held, [0.0, 0.0, -11.0]);
 }

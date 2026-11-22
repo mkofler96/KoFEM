@@ -141,6 +141,66 @@ pub fn fold_onto_vertices(mesh: &TetMesh, values: &[f64]) -> Result<Vec<f64>, Fe
     Ok(folded)
 }
 
+/// Σ of the forces in `forces` (six per node of `mesh`, vertices first) that
+/// act on a held translation, in the solve's own numbering: on a vertex, a
+/// component its `owners` entry (six per vertex) gives to a support; on an
+/// added node of a quadratic mesh, a component every corner it lies between
+/// holds — the rule by which a support reaches the edge and face nodes of the
+/// faces it holds; a hex centre node is never held. Folding the loads first would count half of a free edge
+/// node's load as on a support whenever one of its ends is held.
+///
+/// # Errors
+/// [`FemError::ReactionInput`] when `forces` is not six per node or `owners`
+/// not six per vertex.
+pub fn load_on_held_nodes(
+    mesh: &TetMesh,
+    forces: &[f64],
+    owners: &[i32],
+) -> Result<[f64; 3], FemError> {
+    if forces.len() != DOFS_PER_NODE * mesh.node_count()
+        || owners.len() != DOFS_PER_NODE * mesh.vertex_count()
+    {
+        return Err(FemError::ReactionInput {
+            reason: format!(
+                "{} forces and {} owners for {} nodes and {} vertices; expected \
+                 {DOFS_PER_NODE} per node and per vertex",
+                forces.len(),
+                owners.len(),
+                mesh.node_count(),
+                mesh.vertex_count()
+            ),
+        });
+    }
+    let held =
+        |vertex: u32, component: usize| owners[DOFS_PER_NODE * vertex as usize + component] >= 0;
+    let mut total = [0.0; 3];
+    let mut add = |node: usize, corners: &[u32]| {
+        for (component, sum) in total.iter_mut().enumerate() {
+            if corners.iter().all(|&corner| held(corner, component)) {
+                *sum += forces[DOFS_PER_NODE * node + component];
+            }
+        }
+    };
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "TetMesh caps the node count at MAX_NODES, so every vertex fits in u32"
+    )]
+    for vertex in 0..mesh.vertex_count() {
+        add(vertex, &[vertex as u32]);
+    }
+    let mut node = mesh.vertex_count();
+    for edge in mesh.edges() {
+        add(node, edge);
+        node += 1;
+    }
+    for face in mesh.faces() {
+        add(node, face);
+        node += 1;
+    }
+    // A hex centre is never held: no support reaches inside an element.
+    Ok(total)
+}
+
 /// Sum the nodal reactions of each support. `reactions` and `forces` hold
 /// six values per vertex of `vertices` (forces, then moments); `owners` six
 /// per vertex too, the support (0..`supports`) that holds each DOF, or −1.
