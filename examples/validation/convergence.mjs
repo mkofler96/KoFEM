@@ -25,7 +25,7 @@
 //
 //   dimension  the directions the mesh refines in: 3 for a solid, 2 for a slab
 //              meshed one element thick at every level (h ∝ N^(−1/d))
-//   expect     { readout: "energy" | "point" | "centroid-stress",
+//   expect     { readout: "energy" | "point",
 //                corner?: { angleDeg, poisson, where },   a singular clamped–
 //                                                         free edge: caps 2λ
 //                loadCap?: { rate, why } }               a load refined with
@@ -83,7 +83,7 @@ export default [
         label: "P2 (quadratic)",
         caseId: "axial-bar",
         order: 2,
-        levels: [50, 25, 12.5],
+        levels: [50, 25, 12.5, 10],
       },
     ],
   }),
@@ -118,8 +118,9 @@ export default [
     caseId: "plate-with-hole",
     title: "Plate with a hole, P1 vs. P2",
     note: "Quadratic elements stay within 2 % below Howland's 3.14 on every mesh; the nodal average of element-centre stresses keeps them slightly low. Linear elements overshoot by several percent and come down only slowly.",
-    dimension: 2,
-    expect: { readout: "centroid-stress" },
+    expect: null,
+    noRate:
+      "Neither order converges monotonically here, so there is no rate to fit: the peak of element-centre stresses averaged to the nodes moves between nodes from one mesh to the next. Recovering the stress at the integration points instead would give it one.",
     series: [
       {
         label: "P1 (linear)",
@@ -153,7 +154,7 @@ export default [
         label: "P2 (quadratic)",
         caseId: "cantilever-beam",
         order: 2,
-        levels: [50, 25, 12.5],
+        levels: [50, 25, 12.5, 10],
       },
     ],
   }),

@@ -3,8 +3,8 @@
 
 // Observed against expected convergence rates for the mesh-convergence
 // studies on the example pages (KOF-399). The arithmetic is the Rust
-// module's (crates/kofem-fem/src/convergence.rs); this file only decides
-// which levels go into it and what theory expects.
+// module's (crates/kofem-fem/src/convergence.rs); this file decides which
+// levels go into it and what theory expects.
 //
 // Method, per study:
 //
@@ -13,28 +13,32 @@
 //      element count, h ∝ N^(−1/d), with d the directions the mesh refines
 //      in: 3 for a solid, 2 for a slab meshed one element thick at every
 //      level (study.dimension, checked against the element counts).
-//   2. Reference. The error of a level is its distance from the result at
-//      zero element size, extrapolated from the finest RATE_LEVELS levels of
-//      the highest-order series (generalised Richardson extrapolation). It is
-//      the discretisation error alone: the closed-form reference on the page
-//      also carries the model's own difference from 3D elasticity (beam
-//      theory, plane stress), which would flatten every rate.
-//   3. Observed rate. The slope of ln|error| against ln h over the finest
-//      RATE_LEVELS levels of each series, least squares.
+//   2. Reference. The finest mesh of the highest-order series (an "overkill"
+//      solution of the same model). Errors against it are discretisation
+//      errors alone; the closed-form reference on the page also carries the
+//      model's own difference from 3D elasticity (beam theory, plane stress),
+//      which would flatten every rate. A finest mesh rather than a Richardson
+//      extrapolation, because the quadratic series of several studies are
+//      converged to a few parts in 10⁴, where the read-out's mesh-to-mesh noise
+//      decides an extrapolated limit.
+//   3. Observed rate. The slope of ln|error| against ln h, least squares,
+//      over the RATE_LEVELS finest levels of each series that are coarser than
+//      the reference. A series whose error does not fall monotonically over
+//      them has not reached the range where a rate means anything; it gets no
+//      rate, and the page says so.
 //   4. Expected rate. What a priori theory gives for the read-out on a
 //      quasi-uniform mesh: 2p for an energy-type quantity (a mean
-//      displacement under the load it is conjugate to, an angle of twist), p+1
-//      for a displacement at a point, and 1 for a peak of element-centre
-//      stresses averaged to the nodes (what the app shows until KOF-428).
-//      Where a clamped face meets a free face, the stress is singular along
-//      the edge, u ~ r^λ, and the rate cannot exceed 2λ whatever p is; λ is
-//      the root of Williams' clamped–free equation for that corner angle and
-//      Poisson's ratio.
+//      displacement under the load it is conjugate to, an angle of twist) and
+//      p+1 for a displacement at a point. Where a clamped face meets a free
+//      face, the stress is singular along the edge, u ~ r^λ, and the rate
+//      cannot exceed 2λ whatever p is; λ is the root of Williams' clamped–free
+//      equation for that corner angle and Poisson's ratio. A load that is
+//      itself refined with the mesh can cap it too (`loadCap`).
 //
 // CI fails when an observed rate falls short of the expected one by more than
 // RATE_MARGIN.
 
-/** Levels a rate and the reference are fitted over: the finest ones. */
+/** Levels a rate is fitted over: the finest ones coarser than the reference. */
 export const RATE_LEVELS = 3;
 /** How far an observed rate may fall short of theory before CI fails. */
 export const RATE_MARGIN = 0.25;
@@ -51,11 +55,6 @@ const READOUTS = {
     smooth: (p) => p + 1,
     why: (p) =>
       `a displacement at a point converges at p + 1 = ${p + 1} on a smooth solution`,
-  },
-  "centroid-stress": {
-    smooth: () => 1,
-    why: () =>
-      "a peak of element-centre stresses averaged to the nodes converges at 1 for either order",
   },
 };
 
@@ -106,12 +105,11 @@ export function expectedRate(expect, order, fem) {
 // The refinement dimension the fitted levels imply, from the coarsest to the
 // finest of them: N grows as h^(−d). Over one small step Netgen's element
 // counts are too noisy to say.
-function impliedDimension(points, levels) {
-  const n = points.length;
-  const first = n - RATE_LEVELS;
-  const ratio = levels[first] / levels[n - 1];
+function impliedDimension(fit, levels) {
+  const [first, last] = [fit[0], fit[fit.length - 1]];
   return (
-    Math.log(points[n - 1].elements / points[first].elements) / Math.log(ratio)
+    Math.log(last.point.elements / first.point.elements) /
+    Math.log(levels[first.index] / levels[last.index])
   );
 }
 
@@ -129,67 +127,78 @@ export function analyseStudy(def, published, fem) {
   }
   if (![2, 3].includes(def.dimension))
     throw new Error(`${where}: dimension must be 2 or 3`);
-  const bySeries = new Map(published.series.map((s) => [s.label, s]));
-  const series = def.series.map((s) => {
-    const record = bySeries.get(s.label);
+  const records = def.series.map((s) => {
+    const record = published.series.find((r) => r.label === s.label);
     if (!record) throw new Error(`${where}: no published series "${s.label}"`);
-    if (record.points.length < RATE_LEVELS)
+    if (record.points.length !== s.levels.length)
       throw new Error(
-        `${where}, ${s.label}: a rate needs ${RATE_LEVELS} levels, the study has ${record.points.length}`,
+        `${where}, ${s.label}: ${record.points.length} published levels for ${s.levels.length} defined`,
       );
-    const implied = impliedDimension(record.points, s.levels);
+    return { def: s, record };
+  });
+
+  // The reference: the finest level of the highest-order series.
+  const top = records.reduce((a, b) => (b.def.order > a.def.order ? b : a));
+  const finest = top.record.points[top.record.points.length - 1];
+  const reference = {
+    series: top.def.label,
+    mesh: finest.mesh,
+    dofs: finest.dofs,
+    value: finest.fe,
+  };
+
+  const series = records.map(({ def: s, record }) => {
+    const candidates = record.points
+      .map((point, index) => ({ point, index }))
+      .filter(({ point }) => point !== finest);
+    if (candidates.length < RATE_LEVELS)
+      throw new Error(
+        `${where}, ${s.label}: a rate needs ${RATE_LEVELS} levels coarser than the reference, the study has ${candidates.length}`,
+      );
+    const fit = candidates.slice(-RATE_LEVELS);
+    const implied = impliedDimension(fit, s.levels);
     if (Math.abs(implied - def.dimension) > DIMENSION_TOLERANCE)
       throw new Error(
-        `${where}, ${s.label}: the finest levels refine as a ${implied.toFixed(2)}-dimensional mesh, not ${def.dimension}D — set the study's dimension or its levels`,
+        `${where}, ${s.label}: the fitted levels refine as a ${implied.toFixed(2)}-dimensional mesh, not ${def.dimension}D — set the study's dimension or its levels`,
       );
-    const fit = record.points.slice(-RATE_LEVELS);
     const sizes = Array.from(
       fem.relativeElementSizes(
-        Uint32Array.from(fit.map((p) => p.elements)),
+        Uint32Array.from(fit.map(({ point }) => point.elements)),
         def.dimension,
       ),
     );
-    return { def: s, record, fit, sizes };
-  });
-
-  // The reference: the highest-order series, extrapolated to zero size.
-  const top = series.reduce((a, b) => (b.def.order > a.def.order ? b : a));
-  const ex = fem.extrapolateToZeroSize(
-    Float64Array.from(top.sizes),
-    Float64Array.from(top.fit.map((p) => p.fe)),
-  );
-  const reference = {
-    series: top.def.label,
-    value: ex.limit,
-    order: ex.order,
-    rmsResidual: ex.rmsResidual,
-  };
-  ex.free();
-
-  return {
-    reference,
-    series: series.map(({ def: s, fit, sizes }) => {
-      const errors = fit.map((p) => p.fe - reference.value);
+    const errors = fit.map(({ point }) => point.fe - reference.value);
+    const magnitudes = errors.map(Math.abs);
+    const monotone = magnitudes.every(
+      (e, k) => k === 0 || e < magnitudes[k - 1],
+    );
+    let observed = null;
+    if (monotone) {
       const rate = fem.fitConvergenceRate(
         Float64Array.from(sizes),
         Float64Array.from(errors),
       );
-      const observed = rate.rate;
+      observed = rate.rate;
       rate.free();
-      const expected = expectedRate(def.expect, s.order, fem);
-      return {
-        label: s.label,
-        order: s.order,
-        levels: fit.map((p) => p.mesh),
-        sizes,
-        relErrors: errors.map((e) => e / reference.value),
-        observed,
-        expected: expected.rate,
-        why: expected.why,
-        pass: observed >= expected.rate - RATE_MARGIN,
-      };
-    }),
-  };
+    }
+    const expected = expectedRate(def.expect, s.order, fem);
+    return {
+      label: s.label,
+      order: s.order,
+      levels: fit.map(({ point }) => point.mesh),
+      sizes,
+      relErrors: errors.map((e) => e / reference.value),
+      observed,
+      expected: expected.rate,
+      why: expected.why,
+      pass: observed === null || observed >= expected.rate - RATE_MARGIN,
+    };
+  });
+  if (series.every((s) => s.observed === null))
+    throw new Error(
+      `${where}: no series converges monotonically on its fitted levels, so the study has no rate — refine its levels, or set expect: null with noRate`,
+    );
+  return { reference, series };
 }
 
 /** Every study whose observed rate falls short of theory, as messages. */
