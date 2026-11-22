@@ -862,3 +862,289 @@ Runtime: bun 1.4.4 (JavaScriptCore). Builds:
 | wall-bracket P1 h=3    | mfem:D-O3-noasync |   1.17 s |  86 ms |     3.59 s |       8.96 ms |  77 ms |
 | wall-bracket P1 h=3    | rust-amg          |   231 ms | 1.11 s |     530 ms |      24.11 ms |   0 ms |
 | wall-bracket P1 h=3    | rust-gs           |   116 ms |   0 ms |     2.85 s |       6.90 ms |   0 ms |
+
+## e6-simd-node
+
+Runtime: node v22.16.0 (V8 12.4.254.21-node.26). Builds:
+
+- `rust-amg@nosimd`: `2bc1a4b16794b65f31b5feeec15acb71afff8884`
+- `rust-gs@nosimd`: `2bc1a4b16794b65f31b5feeec15acb71afff8884`
+- `rust-gs`: `f08feacdc2ad4c7b556f3b65353bc9e18d0dd68d`
+- `rust-amg`: `f08feacdc2ad4c7b556f3b65353bc9e18d0dd68d`
+
+### Medians per model
+
+| Model                     |   DOF |            rust-amg total (it) |     rust-amg@nosimd total (it) |                 rust-gs total (it) |          rust-gs@nosimd total (it) |
+| ------------------------- | ----: | -----------------------------: | -----------------------------: | ---------------------------------: | ---------------------------------: |
+| cantilever-beam P1 h=12.5 | 19269 | 519 ms (17) n=5, 514 ms–616 ms | 538 ms (17) n=5, 510 ms–551 ms |    1.10 s (393) n=5, 1.07 s–1.13 s |    1.12 s (393) n=5, 1.08 s–1.13 s |
+| cantilever-beam P2 h=25   | 16596 | 585 ms (35) n=5, 562 ms–634 ms | 562 ms (35) n=5, 548 ms–634 ms |    1.95 s (476) n=5, 1.83 s–2.01 s |    1.97 s (476) n=5, 1.90 s–2.22 s |
+| cooks-membrane P2 h=2     | 17133 | 768 ms (91) n=5, 740 ms–809 ms | 794 ms (91) n=5, 758 ms–893 ms |   8.50 s (2200) n=5, 8.30 s–8.84 s |   8.34 s (2200) n=5, 8.22 s–8.69 s |
+| plate-with-hole P1 h=1    | 52803 | 1.03 s (18) n=5, 937 ms–1.20 s | 924 ms (18) n=5, 869 ms–1.03 s |    2.61 s (433) n=5, 2.56 s–2.96 s |    2.63 s (433) n=5, 2.60 s–2.89 s |
+| plate-with-hole P2 h=4    | 22179 | 985 ms (67) n=5, 966 ms–1.03 s | 1.01 s (67) n=5, 974 ms–1.05 s |    4.09 s (800) n=5, 4.03 s–4.23 s |    4.07 s (800) n=5, 3.83 s–4.37 s |
+| wall-bracket P1 h=2       | 97890 | 4.07 s (22) n=5, 3.90 s–4.12 s | 4.08 s (22) n=5, 3.91 s–4.23 s | 12.44 s (621) n=5, 11.20 s–13.87 s | 12.75 s (621) n=5, 12.13 s–13.17 s |
+| wall-bracket P1 h=3       | 39789 | 1.24 s (22) n=5, 1.18 s–1.32 s | 1.28 s (22) n=5, 1.20 s–1.45 s |    2.55 s (413) n=5, 2.39 s–2.64 s |    2.56 s (413) n=5, 2.54 s–2.83 s |
+| wall-bracket P2 h=40      | 45402 | 2.38 s (54) n=5, 2.24 s–2.82 s | 2.63 s (54) n=5, 2.25 s–3.05 s |    7.58 s (546) n=5, 7.13 s–8.09 s |    7.80 s (546) n=5, 7.16 s–8.37 s |
+
+### SIMD off against on, Rust Gauss–Seidel: rust-gs@nosimd / rust-gs (total)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.016 [0.975, 1.048] |
+| cantilever-beam P2 h=25          |     1.012 [0.973, 1.139] |
+| cooks-membrane P2 h=2            |     0.981 [0.943, 1.023] |
+| plate-with-hole P1 h=1           |     1.008 [0.887, 1.108] |
+| plate-with-hole P2 h=4           |     0.994 [0.934, 1.068] |
+| wall-bracket P1 h=2              |     1.026 [0.899, 1.138] |
+| wall-bracket P1 h=3              |     1.007 [0.972, 1.131] |
+| wall-bracket P2 h=40             |     1.030 [0.933, 1.134] |
+| **Geometric mean over 8 models** | **1.009 [0.982, 1.045]** |
+
+### SIMD off against on, Rust Gauss–Seidel, time per iteration: rust-gs@nosimd / rust-gs (perIteration)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.016 [0.976, 1.050] |
+| cantilever-beam P2 h=25          |     1.012 [0.973, 1.140] |
+| cooks-membrane P2 h=2            |     0.981 [0.942, 1.023] |
+| plate-with-hole P1 h=1           |     1.009 [0.884, 1.094] |
+| plate-with-hole P2 h=4           |     0.993 [0.934, 1.068] |
+| wall-bracket P1 h=2              |     1.030 [0.886, 1.145] |
+| wall-bracket P1 h=3              |     1.011 [0.976, 1.128] |
+| wall-bracket P2 h=40             |     1.030 [0.933, 1.135] |
+| **Geometric mean over 8 models** | **1.010 [0.981, 1.047]** |
+
+### SIMD off against on, Rust Gauss–Seidel, assembly: rust-gs@nosimd / rust-gs (assembly)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.016 [0.961, 1.180] |
+| cantilever-beam P2 h=25          |     1.008 [0.737, 1.039] |
+| cooks-membrane P2 h=2            |     0.977 [0.674, 1.065] |
+| plate-with-hole P1 h=1           |     0.963 [0.885, 1.387] |
+| plate-with-hole P2 h=4           |     1.015 [0.747, 1.178] |
+| wall-bracket P1 h=2              |     1.024 [0.906, 1.339] |
+| wall-bracket P1 h=3              |     0.954 [0.889, 1.407] |
+| wall-bracket P2 h=40             |     0.980 [0.721, 1.036] |
+| **Geometric mean over 8 models** | **0.992 [0.932, 1.062]** |
+
+### SIMD off against on, Rust AMG: rust-amg@nosimd / rust-amg (total)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.037 [0.874, 1.061] |
+| cantilever-beam P2 h=25          |     0.962 [0.887, 1.084] |
+| cooks-membrane P2 h=2            |     1.033 [0.963, 1.162] |
+| plate-with-hole P1 h=1           |     0.896 [0.768, 0.998] |
+| plate-with-hole P2 h=4           |     1.024 [0.981, 1.064] |
+| wall-bracket P1 h=2              |     1.002 [0.959, 1.047] |
+| wall-bracket P1 h=3              |     1.034 [0.951, 1.168] |
+| wall-bracket P2 h=40             |     1.107 [0.905, 1.283] |
+| **Geometric mean over 8 models** | **1.010 [0.961, 1.062]** |
+
+### SIMD off against on, Rust AMG, setup: rust-amg@nosimd / rust-amg (setup)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.027 [0.828, 1.053] |
+| cantilever-beam P2 h=25          |     0.999 [0.913, 1.061] |
+| cooks-membrane P2 h=2            |     1.015 [0.928, 1.056] |
+| plate-with-hole P1 h=1           |     0.943 [0.693, 1.108] |
+| plate-with-hole P2 h=4           |     0.978 [0.956, 1.053] |
+| wall-bracket P1 h=2              |     1.011 [0.975, 1.102] |
+| wall-bracket P1 h=3              |     1.018 [0.960, 1.208] |
+| wall-bracket P2 h=40             |     0.989 [0.757, 1.098] |
+| **Geometric mean over 8 models** | **0.997 [0.945, 1.043]** |
+
+### Gauss–Seidel against AMG, Rust: rust-gs / rust-amg (total)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     2.120 [1.786, 2.169] |
+| cantilever-beam P2 h=25          |     3.331 [3.073, 3.486] |
+| cooks-membrane P2 h=2            |  11.067 [10.515, 11.740] |
+| plate-with-hole P1 h=1           |     2.531 [2.169, 2.902] |
+| plate-with-hole P2 h=4           |     4.158 [3.982, 4.303] |
+| wall-bracket P1 h=2              |     3.052 [2.750, 3.430] |
+| wall-bracket P1 h=3              |     2.049 [1.896, 2.158] |
+| wall-bracket P2 h=40             |     3.191 [2.690, 3.421] |
+| **Geometric mean over 8 models** | **3.364 [2.495, 4.962]** |
+
+### Phases (medians)
+
+| Model                     | Configuration   | Assembly |  Setup | Iterations | Per iteration | Other |
+| ------------------------- | --------------- | -------: | -----: | ---------: | ------------: | ----: |
+| cantilever-beam P1 h=12.5 | rust-amg        |    49 ms | 363 ms |     111 ms |       6.52 ms |  0 ms |
+| cantilever-beam P1 h=12.5 | rust-amg@nosimd |    52 ms | 372 ms |     115 ms |       6.77 ms |  0 ms |
+| cantilever-beam P1 h=12.5 | rust-gs         |    49 ms |   0 ms |     1.05 s |       2.68 ms |  0 ms |
+| cantilever-beam P1 h=12.5 | rust-gs@nosimd  |    50 ms |   0 ms |     1.07 s |       2.72 ms |  0 ms |
+| cantilever-beam P2 h=25   | rust-amg        |    34 ms | 306 ms |     239 ms |       6.82 ms |  6 ms |
+| cantilever-beam P2 h=25   | rust-amg@nosimd |    35 ms | 306 ms |     221 ms |       6.31 ms |  1 ms |
+| cantilever-beam P2 h=25   | rust-gs         |    35 ms |   0 ms |     1.91 s |       4.02 ms |  0 ms |
+| cantilever-beam P2 h=25   | rust-gs@nosimd  |    35 ms |   0 ms |     1.94 s |       4.07 ms |  0 ms |
+| cooks-membrane P2 h=2     | rust-amg        |    30 ms | 212 ms |     527 ms |       5.80 ms |  0 ms |
+| cooks-membrane P2 h=2     | rust-amg@nosimd |    31 ms | 215 ms |     545 ms |       5.99 ms |  2 ms |
+| cooks-membrane P2 h=2     | rust-gs         |    31 ms |   0 ms |     8.47 s |       3.85 ms |  0 ms |
+| cooks-membrane P2 h=2     | rust-gs@nosimd  |    31 ms |   0 ms |     8.31 s |       3.78 ms |  0 ms |
+| plate-with-hole P1 h=1    | rust-amg        |    98 ms | 539 ms |     364 ms |      20.25 ms | 29 ms |
+| plate-with-hole P1 h=1    | rust-amg@nosimd |   102 ms | 508 ms |     315 ms |      17.50 ms |  0 ms |
+| plate-with-hole P1 h=1    | rust-gs         |   108 ms |   0 ms |     2.50 s |       5.78 ms |  0 ms |
+| plate-with-hole P1 h=1    | rust-gs@nosimd  |   104 ms |   0 ms |     2.53 s |       5.83 ms |  0 ms |
+| plate-with-hole P2 h=4    | rust-amg        |    42 ms | 376 ms |     563 ms |       8.40 ms |  3 ms |
+| plate-with-hole P2 h=4    | rust-amg@nosimd |    41 ms | 368 ms |     594 ms |       8.86 ms |  6 ms |
+| plate-with-hole P2 h=4    | rust-gs         |    43 ms |   0 ms |     4.05 s |       5.06 ms |  0 ms |
+| plate-with-hole P2 h=4    | rust-gs@nosimd  |    44 ms |   0 ms |     4.02 s |       5.03 ms |  2 ms |
+| wall-bracket P1 h=2       | rust-amg        |   383 ms | 2.23 s |     1.43 s |      65.10 ms | 32 ms |
+| wall-bracket P1 h=2       | rust-amg@nosimd |   409 ms | 2.25 s |     1.35 s |      61.49 ms | 71 ms |
+| wall-bracket P1 h=2       | rust-gs         |   397 ms |   0 ms |    11.99 s |      19.30 ms | 52 ms |
+| wall-bracket P1 h=2       | rust-gs@nosimd  |   407 ms |   0 ms |    12.35 s |      19.88 ms |  0 ms |
+| wall-bracket P1 h=3       | rust-amg        |   108 ms | 759 ms |     355 ms |      16.15 ms | 21 ms |
+| wall-bracket P1 h=3       | rust-amg@nosimd |   108 ms | 772 ms |     388 ms |      17.63 ms | 17 ms |
+| wall-bracket P1 h=3       | rust-gs         |   108 ms |   0 ms |     2.43 s |       5.90 ms |  4 ms |
+| wall-bracket P1 h=3       | rust-gs@nosimd  |   103 ms |   0 ms |     2.46 s |       5.96 ms |  0 ms |
+| wall-bracket P2 h=40      | rust-amg        |   113 ms | 895 ms |     1.37 s |      25.36 ms |  0 ms |
+| wall-bracket P2 h=40      | rust-amg@nosimd |   117 ms | 885 ms |     1.56 s |      28.89 ms | 67 ms |
+| wall-bracket P2 h=40      | rust-gs         |   115 ms |   0 ms |     7.46 s |      13.67 ms |  0 ms |
+| wall-bracket P2 h=40      | rust-gs@nosimd  |   113 ms |   0 ms |     7.69 s |      14.08 ms |  0 ms |
+
+## e7-simd-bun
+
+Runtime: bun 1.4.4 (JavaScriptCore). Builds:
+
+- `rust-gs@nosimd`: `2bc1a4b16794b65f31b5feeec15acb71afff8884`
+- `rust-amg@nosimd`: `2bc1a4b16794b65f31b5feeec15acb71afff8884`
+- `rust-amg`: `f08feacdc2ad4c7b556f3b65353bc9e18d0dd68d`
+- `rust-gs`: `f08feacdc2ad4c7b556f3b65353bc9e18d0dd68d`
+
+### Medians per model
+
+| Model                     |   DOF |            rust-amg total (it) |     rust-amg@nosimd total (it) |                  rust-gs total (it) |           rust-gs@nosimd total (it) |
+| ------------------------- | ----: | -----------------------------: | -----------------------------: | ----------------------------------: | ----------------------------------: |
+| cantilever-beam P1 h=12.5 | 19269 | 738 ms (17) n=5, 625 ms–795 ms | 794 ms (17) n=5, 756 ms–886 ms |     1.50 s (393) n=5, 1.38 s–1.72 s |     1.53 s (393) n=5, 1.38 s–1.61 s |
+| cantilever-beam P2 h=25   | 16596 | 750 ms (35) n=5, 711 ms–1.13 s | 934 ms (35) n=5, 680 ms–1.05 s |     2.78 s (476) n=5, 2.45 s–2.94 s |     2.55 s (476) n=5, 2.50 s–2.77 s |
+| cooks-membrane P2 h=2     | 17133 | 1.08 s (91) n=5, 977 ms–1.57 s | 1.21 s (91) n=5, 940 ms–1.23 s | 13.10 s (2200) n=5, 11.85 s–13.55 s | 12.15 s (2200) n=5, 11.14 s–12.33 s |
+| plate-with-hole P1 h=1    | 52803 | 1.11 s (18) n=5, 1.07 s–1.64 s | 1.39 s (18) n=5, 1.11 s–1.60 s |     3.51 s (433) n=5, 3.14 s–3.76 s |     3.70 s (433) n=5, 3.37 s–4.23 s |
+| plate-with-hole P2 h=4    | 22179 | 1.25 s (67) n=5, 1.21 s–1.55 s | 1.39 s (67) n=5, 1.22 s–1.48 s |     5.47 s (800) n=5, 5.06 s–5.56 s |     5.23 s (800) n=5, 4.98 s–5.74 s |
+| wall-bracket P1 h=2       | 97890 | 4.93 s (22) n=5, 4.70 s–5.55 s | 5.18 s (22) n=5, 4.52 s–5.39 s |  19.05 s (621) n=5, 17.11 s–19.21 s |  18.39 s (621) n=5, 17.10 s–19.04 s |
+| wall-bracket P1 h=3       | 39789 | 1.80 s (22) n=5, 1.52 s–2.26 s | 1.70 s (22) n=5, 1.44 s–2.00 s |     3.35 s (413) n=5, 2.95 s–3.83 s |     3.14 s (413) n=5, 3.05 s–3.55 s |
+| wall-bracket P2 h=40      | 45402 | 3.39 s (54) n=5, 2.94 s–3.63 s | 3.12 s (54) n=5, 2.97 s–3.26 s |  10.86 s (546) n=5, 10.24 s–11.75 s |   11.37 s (546) n=5, 9.91 s–13.32 s |
+
+### SIMD off against on, Rust Gauss–Seidel: rust-gs@nosimd / rust-gs (total)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.022 [0.846, 1.138] |
+| cantilever-beam P2 h=25          |     0.917 [0.868, 1.089] |
+| cooks-membrane P2 h=2            |     0.927 [0.850, 1.025] |
+| plate-with-hole P1 h=1           |     1.055 [0.942, 1.246] |
+| plate-with-hole P2 h=4           |     0.957 [0.910, 1.100] |
+| wall-bracket P1 h=2              |     0.965 [0.898, 1.074] |
+| wall-bracket P1 h=3              |     0.938 [0.820, 1.096] |
+| wall-bracket P2 h=40             |     1.047 [0.913, 1.226] |
+| **Geometric mean over 8 models** | **0.977 [0.940, 1.045]** |
+
+### SIMD off against on, Rust Gauss–Seidel, time per iteration: rust-gs@nosimd / rust-gs (perIteration)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.034 [0.857, 1.141] |
+| cantilever-beam P2 h=25          |     0.915 [0.867, 1.099] |
+| cooks-membrane P2 h=2            |     0.928 [0.850, 1.025] |
+| plate-with-hole P1 h=1           |     1.057 [0.928, 1.235] |
+| plate-with-hole P2 h=4           |     0.957 [0.906, 1.102] |
+| wall-bracket P1 h=2              |     0.951 [0.891, 1.067] |
+| wall-bracket P1 h=3              |     0.941 [0.824, 1.099] |
+| wall-bracket P2 h=40             |     1.041 [0.913, 1.225] |
+| **Geometric mean over 8 models** | **0.976 [0.940, 1.047]** |
+
+### SIMD off against on, Rust Gauss–Seidel, assembly: rust-gs@nosimd / rust-gs (assembly)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     0.745 [0.638, 1.248] |
+| cantilever-beam P2 h=25          |     0.785 [0.667, 1.385] |
+| cooks-membrane P2 h=2            |     0.980 [0.727, 1.320] |
+| plate-with-hole P1 h=1           |     1.080 [0.808, 1.554] |
+| plate-with-hole P2 h=4           |     0.915 [0.703, 1.408] |
+| wall-bracket P1 h=2              |     1.067 [0.931, 1.464] |
+| wall-bracket P1 h=3              |     0.884 [0.706, 1.188] |
+| wall-bracket P2 h=40             |     0.900 [0.664, 1.490] |
+| **Geometric mean over 8 models** | **0.912 [0.838, 1.123]** |
+
+### SIMD off against on, Rust AMG: rust-amg@nosimd / rust-amg (total)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.076 [0.998, 1.299] |
+| cantilever-beam P2 h=25          |     1.246 [0.823, 1.413] |
+| cooks-membrane P2 h=2            |     1.117 [0.772, 1.238] |
+| plate-with-hole P1 h=1           |     1.259 [0.851, 1.446] |
+| plate-with-hole P2 h=4           |     1.110 [0.886, 1.198] |
+| wall-bracket P1 h=2              |     1.051 [0.884, 1.108] |
+| wall-bracket P1 h=3              |     0.948 [0.730, 1.179] |
+| wall-bracket P2 h=40             |     0.919 [0.858, 1.062] |
+| **Geometric mean over 8 models** | **1.085 [0.963, 1.156]** |
+
+### SIMD off against on, Rust AMG, setup: rust-amg@nosimd / rust-amg (setup)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     1.145 [0.941, 1.329] |
+| cantilever-beam P2 h=25          |     1.228 [0.761, 1.586] |
+| cooks-membrane P2 h=2            |     0.921 [0.710, 1.425] |
+| plate-with-hole P1 h=1           |     1.318 [0.829, 1.518] |
+| plate-with-hole P2 h=4           |     1.123 [0.915, 1.317] |
+| wall-bracket P1 h=2              |     1.067 [0.909, 1.128] |
+| wall-bracket P1 h=3              |     0.981 [0.744, 1.233] |
+| wall-bracket P2 h=40             |     0.961 [0.908, 1.043] |
+| **Geometric mean over 8 models** | **1.086 [0.967, 1.186]** |
+
+### Gauss–Seidel against AMG, Rust: rust-gs / rust-amg (total)
+
+| Model                            |          Ratio [95 % CI] |
+| -------------------------------- | -----------------------: |
+| cantilever-beam P1 h=12.5        |     2.028 [1.861, 2.580] |
+| cantilever-beam P2 h=25          |     3.709 [2.453, 3.947] |
+| cooks-membrane P2 h=2            |   12.100 [8.365, 13.411] |
+| plate-with-hole P1 h=1           |     3.165 [2.138, 3.396] |
+| plate-with-hole P2 h=4           |     4.370 [3.523, 4.520] |
+| wall-bracket P1 h=2              |     3.864 [3.423, 4.051] |
+| wall-bracket P1 h=3              |     1.864 [1.479, 2.264] |
+| wall-bracket P2 h=40             |     3.201 [2.985, 3.700] |
+| **Geometric mean over 8 models** | **3.613 [2.494, 5.283]** |
+
+### Phases (medians)
+
+| Model                     | Configuration   | Assembly |  Setup | Iterations | Per iteration |  Other |
+| ------------------------- | --------------- | -------: | -----: | ---------: | ------------: | -----: |
+| cantilever-beam P1 h=12.5 | rust-amg        |    59 ms | 517 ms |     159 ms |       9.34 ms |   3 ms |
+| cantilever-beam P1 h=12.5 | rust-amg@nosimd |    60 ms | 592 ms |     148 ms |       8.68 ms |   0 ms |
+| cantilever-beam P1 h=12.5 | rust-gs         |    70 ms |   0 ms |     1.43 s |       3.63 ms |   0 ms |
+| cantilever-beam P1 h=12.5 | rust-gs@nosimd  |    52 ms |   0 ms |     1.47 s |       3.75 ms |   3 ms |
+| cantilever-beam P2 h=25   | rust-amg        |    52 ms | 421 ms |     291 ms |       8.31 ms |   0 ms |
+| cantilever-beam P2 h=25   | rust-amg@nosimd |    35 ms | 517 ms |     326 ms |       9.31 ms |  55 ms |
+| cantilever-beam P2 h=25   | rust-gs         |    46 ms |   0 ms |     2.73 s |       5.74 ms |   0 ms |
+| cantilever-beam P2 h=25   | rust-gs@nosimd  |    36 ms |   0 ms |     2.50 s |       5.25 ms |  13 ms |
+| cooks-membrane P2 h=2     | rust-amg        |    45 ms | 361 ms |     677 ms |       7.44 ms |   0 ms |
+| cooks-membrane P2 h=2     | rust-amg@nosimd |    32 ms | 332 ms |     800 ms |       8.79 ms |  45 ms |
+| cooks-membrane P2 h=2     | rust-gs         |    35 ms |   0 ms |    13.06 s |       5.93 ms |  11 ms |
+| cooks-membrane P2 h=2     | rust-gs@nosimd  |    35 ms |   0 ms |    12.11 s |       5.51 ms |   7 ms |
+| plate-with-hole P1 h=1    | rust-amg        |    97 ms | 637 ms |     375 ms |      20.84 ms |   0 ms |
+| plate-with-hole P1 h=1    | rust-amg@nosimd |   115 ms | 840 ms |     416 ms |      23.14 ms |  24 ms |
+| plate-with-hole P1 h=1    | rust-gs         |   100 ms |   0 ms |     3.40 s |       7.86 ms |   5 ms |
+| plate-with-hole P1 h=1    | rust-gs@nosimd  |   108 ms |   0 ms |     3.60 s |       8.31 ms |   0 ms |
+| plate-with-hole P2 h=4    | rust-amg        |    45 ms | 475 ms |     749 ms |      11.18 ms |   0 ms |
+| plate-with-hole P2 h=4    | rust-amg@nosimd |    42 ms | 534 ms |     804 ms |      12.00 ms |   9 ms |
+| plate-with-hole P2 h=4    | rust-gs         |    44 ms |   0 ms |     5.42 s |       6.78 ms |   0 ms |
+| plate-with-hole P2 h=4    | rust-gs@nosimd  |    41 ms |   0 ms |     5.19 s |       6.49 ms |   0 ms |
+| wall-bracket P1 h=2       | rust-amg        |   412 ms | 2.87 s |     1.62 s |      73.80 ms |  28 ms |
+| wall-bracket P1 h=2       | rust-amg@nosimd |   455 ms | 3.06 s |     1.61 s |      73.34 ms |  52 ms |
+| wall-bracket P1 h=2       | rust-gs         |   404 ms |   0 ms |    18.71 s |      30.14 ms |   0 ms |
+| wall-bracket P1 h=2       | rust-gs@nosimd  |   431 ms |   0 ms |    17.80 s |      28.66 ms | 160 ms |
+| wall-bracket P1 h=3       | rust-amg        |   136 ms | 1.13 s |     595 ms |      27.05 ms |   0 ms |
+| wall-bracket P1 h=3       | rust-amg@nosimd |   111 ms | 1.11 s |     500 ms |      22.73 ms |   0 ms |
+| wall-bracket P1 h=3       | rust-gs         |   124 ms |   0 ms |     3.22 s |       7.81 ms |   0 ms |
+| wall-bracket P1 h=3       | rust-gs@nosimd  |   110 ms |   0 ms |     3.03 s |       7.34 ms |   0 ms |
+| wall-bracket P2 h=40      | rust-amg        |   137 ms | 1.13 s |     2.11 s |      38.99 ms |  19 ms |
+| wall-bracket P2 h=40      | rust-amg@nosimd |   113 ms | 1.09 s |     1.98 s |      36.63 ms |   0 ms |
+| wall-bracket P2 h=40      | rust-gs         |   132 ms |   0 ms |    10.73 s |      19.65 ms |   1 ms |
+| wall-bracket P2 h=40      | rust-gs@nosimd  |   118 ms |   0 ms |    11.17 s |      20.46 ms |  78 ms |

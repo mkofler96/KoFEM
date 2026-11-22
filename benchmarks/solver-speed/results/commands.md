@@ -55,8 +55,19 @@ solver), `<dev>` this branch; the entries are written by `make-entry.mjs`
 ```
 
 ```bash
+# E6 and E7: the 8 models of E1, today's module with (f08feac…) and without (2bc1a4b…) +simd128,
+# loaded side by side (make-entry.mjs --alt nosimd=<dir>), 1 warm-up + 5 timed rounds
+M=cantilever-beam_p1_h12.5.json,cantilever-beam_p2_h25.json,cooks-membrane_p2_h2.json,plate-with-hole_p1_h1.json,plate-with-hole_p2_h4.json,wall-bracket_p1_h2.json,wall-bracket_p1_h3.json,wall-bracket_p2_h40.json
+C=rust-gs,rust-amg,rust-gs@nosimd,rust-amg@nosimd
+(cd <dev>/web && taskset -c 3 node entry-simd.node.mjs --models models --configs $C --only $M \
+  --reps 5 --warmup 1 --seed 23 --out e6-simd-node.jsonl)
+(cd <dev>/web && taskset -c 3 bun entry-simd.mjs --models models --configs $C --only $M \
+  --reps 5 --warmup 1 --seed 29 --out e7-simd-bun.jsonl)
+```
+
+```bash
 cd benchmarks/solver-speed/results
-bun ../analyse.mjs . e1-factors-node.jsonl e2-scaling-node.jsonl e3-develop-node.jsonl e4-factors-bun.jsonl
+bun ../analyse.mjs . e1-factors-node.jsonl e2-scaling-node.jsonl e3-develop-node.jsonl e4-factors-bun.jsonl e6-simd-node.jsonl e7-simd-bun.jsonl
 bun ../wall-bracket.mjs . e5-wall-bracket-node.jsonl e2-scaling-node.jsonl e3-develop-node.jsonl
 ```
 

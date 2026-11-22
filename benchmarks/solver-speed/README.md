@@ -23,7 +23,8 @@ lists the runs.
 
 A ratio is the time of the first configuration over the second, as a
 geometric mean over the models with its 95 % bootstrap interval. Above 1 means
-the first is slower; an interval that contains 1 is no detectable effect.
+the first is slower; an interval that contains 1 is no detectable effect. The
+Bun SIMD rows are over the same 8 models as Node; its other rows over 3.
 
 | Factor                                   | Node (V8), 8 models | Bun (JavaScriptCore), 3 models |
 | ---------------------------------------- | ------------------- | ------------------------------ |
@@ -31,8 +32,8 @@ the first is slower; an interval that contains 1 is no detectable effect.
 | Asyncify, at `-O3`                       | 0.99 [0.94, 1.06]   | 1.14 [0.97, 1.28]              |
 | `-O2` against `-O3`, with Asyncify       | 1.02 [0.96, 1.09]   | 0.99 [0.93, 1.05]              |
 | `-O2` against `-O3`, without Asyncify    | 0.98 [0.94, 1.05]   | 0.96 [0.89, 1.01]              |
-| SIMD off against on, Rust Gauss–Seidel   | pending             | pending                        |
-| SIMD off against on, Rust AMG            | pending             | pending                        |
+| SIMD off against on, Rust Gauss–Seidel   | 1.01 [0.98, 1.05]   | 0.98 [0.94, 1.05]              |
+| SIMD off against on, Rust AMG            | 1.01 [0.96, 1.06]   | 1.09 [0.96, 1.16]              |
 | C++/MFEM against Rust, same Gauss–Seidel | 1.25 [1.11, 1.46]   | 1.52 [0.98, 1.94]              |
 | … time per iteration                     | 1.05 [0.99, 1.14]   | 1.14 [0.99, 1.26]              |
 | … assembly                               | 8.5 [7.3, 9.9]      | 12.3 [5.5, 20.1]               |
@@ -43,7 +44,10 @@ the first is slower; an interval that contains 1 is no detectable effect.
   JavaScriptCore Asyncify costs about a quarter on the two linear models and
   nothing detectable on the quadratic one; three models are too few to say
   more, and we have not traced why.
-- **SIMD** is being measured (runs E6 and E7 in `results/commands.md`).
+- **SIMD** makes no detectable difference either, on both runtimes and over the 8 models of
+  the Node factor study (the SIMD runs repeat them on Bun too). Today's Rust
+  module built with `+simd128` holds 7 963 SIMD instructions, built without
+  it none; the hot loops gain nothing from two f64 lanes without a gather.
 - **Rust against C++, same algorithm**: Rust assembles the stiffness matrix
   about 8 times faster (specialised tetrahedron kernels against MFEM's general
   integrator), but iterates at about the same speed: the PCG iterations are
