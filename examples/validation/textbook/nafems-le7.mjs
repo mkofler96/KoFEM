@@ -32,6 +32,14 @@ export default {
         would expand by different amounts, so the junction bends. NAFEMS
         reads the axial stress on the outer surface just below the junction,
         ${tex(`σ_{zz} = ${n(row.reference)}\\text{ MPa}`)} at D.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>Away from the junction both parts carry the pressure as membranes:</p>
+        ${texBlock("\\text{cylinder: } σ_{θθ} = \\frac{p r}{t}, \\quad σ_{zz} = \\frac{p r}{2 t}; \\quad \\text{sphere: } σ = \\frac{p r}{2 t}.")}
+        <p>The cylinder's hoop strain is larger than the sphere's, so the two
+        would separate at the junction; bending closes the gap and decays
+        over a length of about ${tex("\\sqrt{r t}")}. At D, inside that
+        length, the outer surface carries the membrane stress plus that
+        bending.</p>`,
   model: ({ inp, row }) => `
         <p>A quarter of the vessel, its cut meridians held by symmetry,
         imported as a ${inp("t")}&nbsp;mm solid and marked Shell: the app

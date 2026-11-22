@@ -948,6 +948,15 @@
         </table>
       </div>
 
+      <h2 id="theory">Analytical solution</h2>
+        <p>A thin plate under a lateral pressure bends as a Kirchhoff plate,
+        its deflection <math><mi>w</mi></math> governed by</p>
+        <math display="block"><mi>D</mi><mspace width="0.17em"/><msup><mo>∇</mo><mrow><mn>4</mn></mrow></msup><mi>w</mi><mo>=</mo><mi>p</mi><mo>,</mo><mspace width="1em"/><mi>D</mi><mo>=</mo><mfrac><mrow><mi>E</mi><msup><mi>t</mi><mrow><mn>3</mn></mrow></msup></mrow><mrow><mn>12</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><msup><mi>ν</mi><mrow><mn>2</mn></mrow></msup><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></mfrac><mo>,</mo></math>
+        <p>and the bending moments give the surface stresses
+        <math><mi>σ</mi><mo>=</mo><mn>6</mn><mi>M</mi><mo lspace="0" rspace="0">/</mo><msup><mi>t</mi><mrow><mn>2</mn></mrow></msup></math>. On a skew plate the obtuse corners stiffen
+        the plate, the principal moments turn away from the edges, and no
+        closed form exists: NAFEMS' target is a converged numerical one.</p>
+
       <h2 id="model">Finite element model</h2>
       
       <div class="table-wrap">
@@ -1065,6 +1074,7 @@
         <p>On this page</p>
         <ul>
           <li><a href="#problem">The problem</a></li>
+          <li><a href="#theory">Analytical solution</a></li>
           <li><a href="#model">Finite element model</a></li>
           <li><a href="#results">Results</a></li>
           <li><a href="#discussion">Discussion</a></li>

@@ -38,6 +38,15 @@ export default {
         without stretching locks and moves far too little. NAFEMS gives the
         radial displacement ${tex(`u_{x} = ${n(row.reference)}\\text{ mm}`)} at
         A.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>A Kirchhoff shell strains through its thickness as its
+        mid-surface stretches and bends:</p>
+        ${texBlock("ε(z) = ε_{m} + z κ, \\quad -\\frac{t}{2} \\le z \\le \\frac{t}{2}.")}
+        <p>Pinched at four points, a thin hemisphere deforms almost without
+        stretching its mid-surface (${tex("ε_{m} \\approx 0")}): all its
+        work goes into bending. An element that cannot bend without
+        stretching stores membrane energy that is not there and moves far
+        too little.</p>`,
   model: ({ inp, row }) => `
         <p>A quarter of the hemisphere, its cut meridians held by symmetry,
         imported as a ${inp("t")}&nbsp;mm solid and marked Shell. The point

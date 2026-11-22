@@ -17,6 +17,14 @@ export default {
         classic trap for plate elements. NAFEMS reads the largest principal
         stress ${tex(`σ_{1} = ${n(row.reference)}\\text{ MPa}`)} on the lower
         surface at the centre E.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>A thin plate under a lateral pressure bends as a Kirchhoff plate,
+        its deflection ${tex("w")} governed by</p>
+        ${texBlock("D \\, \\nabla^{4} w = p, \\quad D = \\frac{E t^{3}}{12 (1 - ν^{2})},")}
+        <p>and the bending moments give the surface stresses
+        ${tex("σ = 6 M / t^{2}")}. On a skew plate the obtuse corners stiffen
+        the plate, the principal moments turn away from the edges, and no
+        closed form exists: NAFEMS' target is a converged numerical one.</p>`,
   model: ({ row }) => `
         <p>The plate is imported as a 10&nbsp;mm thick solid and marked Shell;
         the app collapses it to its mid-surface. Each edge is held in all

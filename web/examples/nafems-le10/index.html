@@ -946,6 +946,15 @@
         </table>
       </div>
 
+      <h2 id="theory">Analytical solution</h2>
+        <p>The plate is thick, a third of its span, so plate theory does not
+        describe it: the stress varies through the thickness in all six
+        components, and on the upper face the pressure itself is a stress,</p>
+        <math display="block"><msub><mi>σ</mi><mrow><mi>z</mi><mi>z</mi></mrow></msub><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><mspace width="1em"/><mtext>on </mtext><mi>z</mi><mo>=</mo><mi>t</mi><mo lspace="0" rspace="0">.</mo></math>
+        <p>NAFEMS' target is a converged three-dimensional solution. At D the
+        upper face meets the symmetry plane and the inner face, and
+        <math><msub><mi>σ</mi><mrow><mi>y</mi><mi>y</mi></mrow></msub></math> is the bending stress there.</p>
+
       <h2 id="model">Finite element model</h2>
       
       <div class="table-wrap">
@@ -1076,6 +1085,7 @@
         <p>On this page</p>
         <ul>
           <li><a href="#problem">The problem</a></li>
+          <li><a href="#theory">Analytical solution</a></li>
           <li><a href="#model">Finite element model</a></li>
           <li><a href="#results">Results</a></li>
           <li><a href="#discussion">Discussion</a></li>

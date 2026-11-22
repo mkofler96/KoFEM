@@ -17,6 +17,16 @@ export default {
         elliptic ring is pulled outward along its outer edge. Where the inner
         ellipse is sharpest, at D, the tangential stress peaks at
         ${tex(`σ_{yy} = ${n(row.reference)}\\text{ MPa}`)}.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>In plane stress the faces of the ring carry no load, so
+        ${tex("σ_{zz} = τ_{xz} = τ_{yz} = 0")} through the thickness. At D the
+        free inner edge meets the symmetry line ${tex("y = 0")}: the stress
+        normal to the edge vanishes and only the tangential stress
+        ${tex("σ_{yy}")} remains. It peaks there because the inner ellipse is
+        sharpest at D, with the radius of curvature</p>
+        ${texBlock("ρ_{D} = \\frac{b^{2}}{a} = \\frac{(1\\text{ m})^{2}}{2\\text{ m}} = 0.5\\text{ m}.")}
+        <p>The ring is too short for a closed-form solution: NAFEMS' target is
+        a converged numerical one.</p>`,
   model: ({ inp, row }) => `
         <p>The ring is ${inp("t")}&nbsp;mm thick and in plane stress, so it
         is modelled as a thin solid: the faces through the thickness are

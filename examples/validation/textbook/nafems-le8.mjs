@@ -31,6 +31,14 @@ export default {
         knuckle meets the end, at D, the shell bends hard. NAFEMS gives the
         hoop stress on the outer surface there,
         ${tex(`σ_{θθ} = ${n(row.reference)}\\text{ MPa}`)}.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>A shell of revolution under pressure carries it as a membrane where
+        its curvature changes slowly, with meridional and hoop forces set by
+        the two radii of curvature ${tex("r_{1}")} and ${tex("r_{2}")}:</p>
+        ${texBlock("\\frac{N_{φ}}{r_{1}} + \\frac{N_{θ}}{r_{2}} = p.")}
+        <p>At a knuckle the meridian's radius jumps from the torus to the
+        sphere, the membrane forces cannot follow, and the shell bends: the
+        stress at D is mostly that bending.</p>`,
   model: ({ row }) => `
         <p>NAFEMS gives the dimensions in a figure: the cylinder radius, the
         height of the pole, the knuckle and end radii and an angle of about

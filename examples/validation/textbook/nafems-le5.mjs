@@ -18,6 +18,15 @@ export default {
         stresses build up near it. NAFEMS reads
         ${tex(`σ_{xx} = ${n(row.reference)}\\text{ MPa}`)} at A, on the free
         edge of the lower flange, 2.5&nbsp;m from the root.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>An open thin-walled section twists by warping: each point moves
+        along the beam by ${tex("u = -ω θ'")}, with ${tex("ω")} the sectorial
+        coordinate of the section and ${tex("θ'")} the rate of twist. Where
+        the clamped root stops the warping, the twist rate varies along the
+        beam and the warping carries an axial stress (Vlasov),</p>
+        ${texBlock("σ_{xx} = -E \\, ω \\, θ''.")}
+        <p>It is largest at the flange tips, where ${tex("|ω|")} is largest,
+        and dies away from the root.</p>`,
   model: ({ inp, row }) => `
         <p>The beam is imported as one solid, its end face cut into web and
         flanges so that each flange's shear sits on a whole face. The torque

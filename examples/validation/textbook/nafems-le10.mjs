@@ -17,6 +17,14 @@ export default {
         direct stress ${tex(`σ_{yy} = ${n(row.reference)}\\text{ MPa}`)} on
         the upper face at D, where the inner ellipse meets the symmetry
         plane.</p>`,
+  theory: ({ tex, texBlock }) => `
+        <p>The plate is thick, a third of its span, so plate theory does not
+        describe it: the stress varies through the thickness in all six
+        components, and on the upper face the pressure itself is a stress,</p>
+        ${texBlock("σ_{zz} = -p \\quad \\text{on } z = t.")}
+        <p>NAFEMS' target is a converged three-dimensional solution. At D the
+        upper face meets the symmetry plane and the inner face, and
+        ${tex("σ_{yy}")} is the bending stress there.</p>`,
   model: ({ inp, row }) => `
         <p>The quarter plate is ${inp("t")}&nbsp;mm thick and modelled whole
         through its thickness. The faces <i>x</i>&nbsp;=&nbsp;0 and
