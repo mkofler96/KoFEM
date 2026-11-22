@@ -23,8 +23,17 @@ export interface SupportReaction {
   vertices: number;
 }
 
+// The reaction force at one vertex a support holds, for drawing.
+export interface NodalReaction {
+  support: number;
+  position: Vec3;
+  force: Vec3;
+}
+
 export interface ReactionSummary {
   supports: SupportReaction[];
+  // The reaction at each vertex a support holds in translation.
+  nodal: NodalReaction[];
   // Σ of the applied nodal forces, N.
   applied: Vec3;
   // Σ of the applied forces on held DOFs: load that goes straight into a
@@ -85,8 +94,9 @@ export function payloadSupportOwners(
   );
 }
 
-// Values per support in the Rust result.
+// Values per support, and per held vertex, in the Rust result.
 const STRIDE = 10;
+const NODAL_STRIDE = 7;
 
 const vec3 = (flat: Float64Array, at: number): Vec3 => [
   flat[at],
@@ -95,15 +105,38 @@ const vec3 = (flat: Float64Array, at: number): Vec3 => [
 ];
 
 // The Rust `supportReactions` result: per support force, moment, centroid and
-// vertex count, then the applied force and the applied force on supports.
+// vertex count, then the applied force and the applied force on supports,
+// then the number of held vertices and each one's support, position and force.
 export function parseReactions(
   flat: Float64Array,
   supports: number,
 ): ReactionSummary {
-  if (flat.length !== STRIDE * supports + 6)
+  const head = STRIDE * supports + 7;
+  if (flat.length < head)
     throw new Error(
-      `support reactions: ${flat.length} values for ${supports} supports; expected ${STRIDE * supports + 6}`,
+      `support reactions: ${flat.length} values for ${supports} supports; expected at least ${head}`,
     );
+  const count = flat[head - 1];
+  if (!Number.isSafeInteger(count) || count < 0)
+    throw new Error(`support reactions: ${count} held vertices`);
+  if (flat.length !== head + NODAL_STRIDE * count)
+    throw new Error(
+      `support reactions: ${flat.length} values for ${supports} supports and ${count} held vertices; expected ${head + NODAL_STRIDE * count}`,
+    );
+  const nodal: NodalReaction[] = [];
+  for (let node = 0; node < count; node++) {
+    const at = head + NODAL_STRIDE * node;
+    const support = flat[at];
+    if (!Number.isInteger(support) || support < 0 || support >= supports)
+      throw new Error(
+        `support reactions: a held vertex names support ${support} of ${supports}`,
+      );
+    nodal.push({
+      support,
+      position: vec3(flat, at + 1),
+      force: vec3(flat, at + 4),
+    });
+  }
   const list: SupportReaction[] = [];
   for (let support = 0; support < supports; support++) {
     const at = STRIDE * support;
@@ -118,6 +151,7 @@ export function parseReactions(
   const tail = STRIDE * supports;
   return {
     supports: list,
+    nodal,
     applied: vec3(flat, tail),
     appliedOnSupports: vec3(flat, tail + 3),
   };

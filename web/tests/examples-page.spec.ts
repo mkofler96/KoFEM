@@ -37,8 +37,8 @@ async function expectNoDevTooling(page: Page) {
   expect(text.match(DEV_TOOLING)?.[0] ?? null).toBeNull();
 }
 
-// The value the app's Result summary shows for `stat` (e.g. "Min Uy").
-function summaryValue(page: Page, stat: string) {
+// The value the app's Min and max rows show for `stat` (e.g. "Min Uy").
+function minMaxValue(page: Page, stat: string) {
   return page
     .getByText(stat, { exact: true })
     .locator("xpath=following-sibling::span[1]");
@@ -372,5 +372,5 @@ for (const id of IDS)
     }, null);
     await page.getByTestId("tree-plot-1").click();
     await page.getByTestId("plot-field").selectOption(field);
-    await expect(summaryValue(page, stat)).toHaveText(value);
+    await expect(minMaxValue(page, stat)).toHaveText(value);
   });

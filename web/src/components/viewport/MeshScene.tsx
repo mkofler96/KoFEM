@@ -11,6 +11,7 @@
 //   SampleGuideTargets     — the faces the sample guide asks to pick
 //   MeshOverlapLayer       — where the last mesh attempt found an overlap
 //   ProbeLayer             — result probes: markers and value labels
+//   ReactionArrows         — support reactions, per support or per node
 //   FitCamera              — Fit view, framing the scene as drawn
 
 import { useMemo } from "react";
@@ -32,6 +33,7 @@ import { SampleGuideTargets } from "./SampleGuideTargets";
 import { MeshOverlapLayer } from "./MeshOverlapLayer";
 import { useDisplayedDensity } from "./useDisplayedDensity";
 import { ProbeLayer } from "./ProbeLayer";
+import { ReactionArrows } from "./ReactionArrows";
 import { undeformedPoint } from "../../lib/resultProbe";
 import { useDeformFactor } from "../../hooks/useDeformFactor";
 
@@ -39,6 +41,7 @@ export function MeshScene() {
   const nodes = useModelStore((s) => s.nodes);
   const result = useModelStore((s) => s.result);
   const mode = useModelStore((s) => s.mode);
+  const reactionsShown = useModelStore((s) => s.reactionsShown);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const highlightBodyId = useModelStore((s) => s.highlightBodyId);
@@ -143,9 +146,13 @@ export function MeshScene() {
   // even though the solved `result` is still held in the store. A density run
   // takes precedence over a static result when it is the active one.
   const showResult = !!result && mode === "results" && !showDensity;
+  // The reactions output replaces the plotted field: the undeformed mesh and
+  // the reaction arrows, coloured by force.
+  const reactionsView = showResult && reactionsShown;
+  const showField = showResult && !reactionsView;
   // The section plane as drawn (KOF-390): it clips the result surface and its
   // edges, and SectionLayer fills the cut.
-  const section = useResultSection(showResult, deformScale);
+  const section = useResultSection(showField, deformScale);
   const clippingPlanes = useMemo(
     () => (section ? [section.clip] : []),
     [section],
@@ -188,7 +195,7 @@ export function MeshScene() {
   const fitCamera = (
     <FitCamera
       result={
-        showResult
+        showField
           ? { displacements: result.displacements, scale: deformScale }
           : null
       }
@@ -211,13 +218,13 @@ export function MeshScene() {
         topology={topology}
         repr={repr}
         deformScale={deformScale}
-        showResult={showResult}
+        showResult={showField}
         onFacePick={onFacePick}
         clippingPlanes={clippingPlanes}
       />
       {/* The deformed surface only places probes: face picks match clicks
           against undeformed nodes and live on Supports & Loads (KOF-407). */}
-      {showResult && (
+      {showField && (
         <ResultsColormap
           topology={topology}
           deformScale={deformScale}
@@ -226,9 +233,10 @@ export function MeshScene() {
         />
       )}
       {section && <SectionLayer topology={topology} section={section} />}
-      {showResult && (
+      {showField && (
         <ProbeLayer deformScale={deformScale} modelSize={modelSize} />
       )}
+      {reactionsView && <ReactionArrows modelSize={modelSize} />}
       <BoundaryConditionLayer topology={topology} showResult={showResult} />
       {!showResult && repr !== "geometry" && (
         <SampleGuideTargets topology={topology} />

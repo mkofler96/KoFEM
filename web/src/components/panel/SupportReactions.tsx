@@ -21,9 +21,6 @@ function component(value: number, scale: number): string {
   return String(Number(value.toPrecision(4)));
 }
 
-const vector = (v: Vec3, scale: number) =>
-  `(${v.map((c) => component(c, scale)).join(", ")})`;
-
 const magnitude = (v: Vec3) => Math.hypot(v[0], v[1], v[2]);
 
 export function SupportReactions({ summary }: { summary: ReactionSummary }) {
@@ -37,41 +34,81 @@ export function SupportReactions({ summary }: { summary: ReactionSummary }) {
     ...summary.supports.map((support) => magnitude(support.moment)),
   );
   const offBy = magnitude(balance.difference);
+  const anyRotation = summary.supports.some((support) =>
+    bcGroups.at(support.support)?.dofs.some((dof) => dof >= 3),
+  );
+  const nameOf = (support: number) =>
+    bcGroups.at(support)?.name ?? `Support ${support + 1}`;
   return (
     <div data-testid="support-reactions">
-      <div className={styles.sectionLabel}>Reactions</div>
-      {summary.supports.map((support) => {
-        const group = bcGroups.at(support.support);
-        const name = group?.name ?? `Support ${support.support + 1}`;
-        const holdsRotation =
-          group !== undefined && group.dofs.some((dof) => dof >= 3);
-        return (
-          <div
-            key={support.support}
-            data-testid={`reaction-${support.support}`}
-            data-force={support.force.join(",")}
-          >
-            <div className={styles.statRow}>
-              <span className={styles.statKey}>{name}</span>
-              <span className={styles.statVal}>
-                {support.vertices === 0
-                  ? "not in the mesh"
-                  : `${component(magnitude(support.force), scale)} N`}
-              </span>
-            </div>
-            {support.vertices > 0 && (
-              <div className={styles.reactionDetail}>
-                F = {vector(support.force, scale)} N
-                {holdsRotation && (
-                  <>
-                    <br />M = {vector(support.moment, momentScale)} N·mm
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      <table className={styles.reactionTable} aria-label="Reaction forces">
+        <caption className={styles.sectionLabel}>Forces (N)</caption>
+        <thead>
+          <tr>
+            <th />
+            <th>Fx</th>
+            <th>Fy</th>
+            <th>Fz</th>
+            <th>|F|</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summary.supports.map((support) => (
+            <tr
+              key={support.support}
+              data-testid={`reaction-${support.support}`}
+              data-force={support.force.join(",")}
+            >
+              <td>{nameOf(support.support)}</td>
+              {support.vertices === 0 ? (
+                <td colSpan={4} className={styles.reactionMissing}>
+                  not in the mesh
+                </td>
+              ) : (
+                <VectorCells v={support.force} scale={scale} />
+              )}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Σ reactions</td>
+            <VectorCells v={balance.reaction} scale={scale} />
+          </tr>
+          <tr>
+            <td>Applied</td>
+            <VectorCells v={balance.applied} scale={scale} />
+          </tr>
+        </tfoot>
+      </table>
+      {anyRotation && (
+        <table className={styles.reactionTable} aria-label="Reaction moments">
+          <caption className={styles.sectionLabel}>
+            Moments about each support's centre (N·mm)
+          </caption>
+          <thead>
+            <tr>
+              <th />
+              <th>Mx</th>
+              <th>My</th>
+              <th>Mz</th>
+              <th>|M|</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.supports
+              .filter((support) =>
+                bcGroups.at(support.support)?.dofs.some((dof) => dof >= 3),
+              )
+              .map((support) => (
+                <tr key={support.support}>
+                  <td>{nameOf(support.support)}</td>
+                  <VectorCells v={support.moment} scale={momentScale} />
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      )}
       <p
         className={
           balance.balanced ? styles.reactionBalance : styles.reactionImbalance
@@ -79,14 +116,28 @@ export function SupportReactions({ summary }: { summary: ReactionSummary }) {
         data-testid="reaction-balance"
         data-balanced={String(balance.balanced)}
       >
-        Applied: {vector(balance.applied, scale)} N · Reactions:{" "}
-        {vector(balance.reaction, scale)} N ·{" "}
         {balance.balanced
-          ? "balanced"
-          : `off by ${component(offBy, scale)} N. The solve may have stopped short of its tolerance, or a coupling or tie carries load to a node no support lists.`}
-        {balance.loadOnSupports &&
-          ` ${component(magnitude(summary.appliedOnSupports), scale)} N of the load acts on supported nodes and goes straight into the support.`}
+          ? "Balanced"
+          : `Off by ${component(offBy, scale)} N. The solve may have stopped short of its tolerance, or a coupling or tie carries load to a node no support lists.`}
       </p>
+      {balance.loadOnSupports && (
+        <p className={styles.formNote}>
+          {component(magnitude(summary.appliedOnSupports), scale)} N of the load
+          acts on supported nodes and goes straight into the support.
+        </p>
+      )}
     </div>
+  );
+}
+
+// A vector's components and its length, as table cells.
+function VectorCells({ v, scale }: { v: Vec3; scale: number }) {
+  return (
+    <>
+      <td>{component(v[0], scale)}</td>
+      <td>{component(v[1], scale)}</td>
+      <td>{component(v[2], scale)}</td>
+      <td>{component(magnitude(v), scale)}</td>
+    </>
   );
 }

@@ -3,7 +3,8 @@
 
 // Deformation scale (KOF-383): the Results panel shows the real factor the
 // displacements are drawn at, "×1 240 (auto)" by default, and the user can
-// type one, drag the log slider, or pick Auto or True scale. Every state is
+// type one (1 is true scale), drag the log slider, or clear the box to return
+// to the automatic factor. Every state is
 // checked against the drawn result surface: its vertices sit at
 // node + factor · displacement for the factor the panel shows.
 
@@ -33,9 +34,12 @@ async function readModel(page: Page) {
   });
 }
 
-// The factor the readout shows: "×1 240 (auto)" → 1240.
+// The factor the slider announces: "×1 240 (auto)" → 1240.
 async function shownFactor(page: Page): Promise<number> {
-  const text = await page.getByTestId("deform-scale-value").innerText();
+  const text =
+    (await page
+      .getByLabel("Deformation scale")
+      .getAttribute("aria-valuetext")) ?? "";
   const match = /^×([\d .]+)/u.exec(text);
   if (!match) throw new Error(`unexpected deformation readout "${text}"`);
   return Number(match[1].replace(/ /g, ""));
@@ -51,15 +55,14 @@ test("the deformation scale shows and sets the factor the result is drawn at @pi
   await run.click();
   await expect(page.getByTestId("colorbar")).toBeVisible();
 
-  const readout = page.getByTestId("deform-scale-value");
   const slider = page.getByLabel("Deformation scale");
+  // What the slider announces: the factor and which preset, if any, it is.
+  const readout = (text: string | RegExp) =>
+    expect(slider).toHaveAttribute("aria-valuetext", text);
   const input = page.getByLabel("Deformation factor");
-  const auto = page.getByTestId("deform-scale-auto");
-  const trueScale = page.getByTestId("deform-scale-true");
 
   // By default: the automatic factor, shown for what it is.
-  await expect(readout).toContainText("(auto)");
-  await expect(auto).toHaveAttribute("aria-pressed", "true");
+  await readout(/\(auto\)$/);
   const autoFactor = await shownFactor(page);
   // The bar stretches by 0.476 mm over 1000 mm: hundreds of times magnified.
   expect(autoFactor).toBeGreaterThan(100);
@@ -69,7 +72,7 @@ test("the deformation scale shows and sets the factor the result is drawn at @pi
   // 0 is the undeformed shape: the drawn vertices are node positions. Match
   // each vertex to its node once, by its undeformed coordinates.
   await slider.fill("0");
-  await expect(readout).toHaveText("×0 (undeformed)");
+  await readout("×0 (undeformed)");
   const undeformed = await drawnPositions(page, SURFACE);
   const { nodes, disp } = await readModel(page);
   const key = (x: number, y: number, z: number) =>
@@ -106,23 +109,20 @@ test("the deformation scale shows and sets the factor the result is drawn at @pi
 
   // A typed factor is drawn as typed.
   await input.fill("2500");
-  await expect(readout).toHaveText("×2 500");
-  await expect(auto).toHaveAttribute("aria-pressed", "false");
+  await readout("×2 500");
   expect(drawnFactor(await drawnPositions(page, SURFACE)) / 2500).toBeCloseTo(
     1,
     4,
   );
 
   // True scale: the real displacements.
-  await trueScale.click();
-  await expect(readout).toHaveText("×1 (true scale)");
-  await expect(trueScale).toHaveAttribute("aria-pressed", "true");
-  await expect(input).toHaveValue("1");
+  await input.fill("1");
+  await readout("×1 (true scale)");
   expect(drawnFactor(await drawnPositions(page, SURFACE))).toBeCloseTo(1, 2);
 
   // The slider is logarithmic: one decade per step of 1 above true scale.
   await slider.fill("4");
-  await expect(readout).toHaveText("×1 000");
+  await readout("×1 000");
   expect(drawnFactor(await drawnPositions(page, SURFACE)) / 1000).toBeCloseTo(
     1,
     4,
@@ -132,11 +132,12 @@ test("the deformation scale shows and sets the factor the result is drawn at @pi
   await input.fill("-3");
   await input.press("Enter");
   await expect(page.getByTestId("deform-scale-error")).toBeVisible();
-  await expect(readout).toHaveText("×1 000");
+  await readout("×1 000");
 
-  // Auto returns to the automatic factor.
-  await auto.click();
-  await expect(readout).toHaveText(
+  // A cleared box returns to the automatic factor.
+  await input.fill("");
+  await input.press("Enter");
+  await readout(
     `×${autoFactor.toLocaleString("en-US").replace(/,/g, " ")} (auto)`,
   );
   await expect(page.getByTestId("deform-scale-error")).toHaveCount(0);

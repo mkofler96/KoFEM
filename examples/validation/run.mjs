@@ -135,7 +135,7 @@ function caseRow(c, fe, mesh, result) {
       value,
       unit,
     })),
-    // What the app's Result summary shows after a fresh solve of the file.
+    // What the app's Min and max rows show after a fresh solve of the file.
     ...(c.readout
       ? {
           readout: {

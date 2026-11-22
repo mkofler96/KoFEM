@@ -19,6 +19,7 @@ import { useTiePairs } from "../../hooks/useTiePairs";
 import { parseTieDistance, toFaceEntries } from "./bcFormUtils";
 import { PickedFaceList, TieExtentInputs } from "./BcLoadFormControls";
 import { TieValueForm } from "./GroupValueForms";
+import { requestDelete } from "../../store/confirmDelete";
 import styles from "./Panel.module.css";
 import {
   focusedId,
@@ -257,7 +258,9 @@ export function TieSection({
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Delete tie"
-                  onClick={() => deleteTieGroup(group.id)}
+                  onClick={() =>
+                    requestDelete(group.name, () => deleteTieGroup(group.id))
+                  }
                 >
                   ✕
                 </button>

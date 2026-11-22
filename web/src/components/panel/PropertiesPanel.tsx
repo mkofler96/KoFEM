@@ -28,6 +28,8 @@ const KIND_LABEL: Record<TreeItemKind, string> = {
   coupling: "Coupling",
   study: "Study",
   plot: "Result plot",
+  section: "Section cut",
+  reactions: "Reactions",
 };
 
 function addTitle({ group, target }: TreeSelection): string {

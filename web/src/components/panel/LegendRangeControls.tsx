@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Manual colorbar limits for the displayed result field (#390). Editing either
-// limit pins both; "Auto" hands the range back to the field's own min/max.
+// Manual colorbar limits for the displayed result field (#390), in the popup
+// the legend's pencil opens. Editing either limit pins both; "Auto", shown
+// beside the heading while they are pinned, hands the range back to the
+// field's own min/max.
 // A valid pair applies as the user types (KOF-384); an invalid one is reported
 // on Enter or blur only, so partial input ("-", "") never flashes an error.
 
@@ -16,6 +18,8 @@ interface LegendRangeControlsProps {
   // point when the user pins the limits.
   fieldRange: ResultRange;
   unit: string;
+  // Closes the popup these controls sit in.
+  onClose: () => void;
 }
 
 type Parsed = { range: ResultRange } | { error: string };
@@ -46,6 +50,7 @@ function format(v: number): string {
 export function LegendRangeControls({
   fieldRange,
   unit,
+  onClose,
 }: LegendRangeControlsProps) {
   const legendRange = useModelStore((s) => s.legendRange);
   const setLegendRange = useModelStore((s) => s.setLegendRange);
@@ -105,8 +110,40 @@ export function LegendRangeControls({
     }
   };
 
+  const auto = () => {
+    applied.current = null;
+    setLegendRange(null);
+    setError(null);
+  };
+
   return (
     <>
+      <div className={styles.sectionHead}>
+        <span className={styles.sectionLabel} id="legend-range-title">
+          Legend range
+        </span>
+        <span style={{ display: "inline-flex", gap: 10 }}>
+          {legendRange && (
+            <button
+              className={styles.sectionHeadAction}
+              data-testid="legend-auto"
+              title="Use the field's own min and max"
+              onClick={auto}
+            >
+              Auto
+            </button>
+          )}
+          <button
+            className={styles.iconBtn}
+            data-testid="legend-close"
+            aria-label="Close"
+            title="Close"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </span>
+      </div>
       <div className={styles.formRow}>
         <span className={styles.formLabel}>Min</span>
         <input
@@ -140,24 +177,11 @@ export function LegendRangeControls({
           {error}
         </div>
       )}
-      <div className={styles.formNote}>
-        {legendRange
-          ? "Values outside the range take the end colours."
-          : "Auto: the field's own min/max."}
-      </div>
-      <button
-        className={styles.outlineBtn}
-        data-testid="legend-auto"
-        style={{ marginBottom: 12 }}
-        disabled={!legendRange}
-        onClick={() => {
-          applied.current = null;
-          setLegendRange(null);
-          setError(null);
-        }}
-      >
-        Auto
-      </button>
+      {legendRange && (
+        <div className={styles.formNote}>
+          Values outside the range take the end colours.
+        </div>
+      )}
     </>
   );
 }

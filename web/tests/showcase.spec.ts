@@ -256,7 +256,7 @@ test.describe("Full workflow showcase", () => {
     console.log(`[showcase] ${elapsed()} solver started…`);
 
     await Promise.race([
-      expect(page.getByText("Result summary")).toBeVisible(),
+      expect(page.getByText("Min and max", { exact: true })).toBeVisible(),
       fatalError,
     ]);
 

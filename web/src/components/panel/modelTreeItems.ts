@@ -21,6 +21,7 @@ import { bodyGroups } from "../../lib/regions";
 import {
   addSelection,
   MESH_ITEM_ID,
+  REACTIONS_ITEM_ID,
   type TreeGroup,
   type TreeItemKind,
 } from "../../store/viewSlice";
@@ -68,6 +69,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   const meshOutOfDate = useMeshOutOfDate();
   const studies = useModelStore((s) => s.studies);
   const resultPlots = useModelStore((s) => s.resultPlots);
+  const showReactions = useModelStore((s) => s.showReactions);
 
   return useMemo(() => {
     const colorOf = (materialId: number) =>
@@ -186,11 +188,32 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
         id: st.id,
         label: st.name,
       })),
-      results: resultPlots.map((p) => ({
-        kind: "plot" as const,
-        id: p.id,
-        label: plotLabel(p),
-      })),
+      // A plot's section cut follows it, indented (a result output of it).
+      // The reactions output follows the plots.
+      results: [
+        ...resultPlots.flatMap((p) => [
+          { kind: "plot" as const, id: p.id, label: plotLabel(p) },
+          ...(p.section
+            ? [
+                {
+                  kind: "section" as const,
+                  id: p.id,
+                  label: `Section ${"XYZ"[p.section.axis]}`,
+                  nested: true,
+                },
+              ]
+            : []),
+        ]),
+        ...(showReactions
+          ? [
+              {
+                kind: "reactions" as const,
+                id: REACTIONS_ITEM_ID,
+                label: "Reactions",
+              },
+            ]
+          : []),
+      ],
     };
   }, [
     hasGeometry,
@@ -206,6 +229,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     meshOutOfDate,
     studies,
     resultPlots,
+    showReactions,
   ]);
 }
 

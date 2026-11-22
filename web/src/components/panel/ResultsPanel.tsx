@@ -9,6 +9,7 @@ import type {
   SolverResult,
 } from "../../store/modelStore";
 import type { TreeTarget } from "../../store/viewSlice";
+import { plotLabel } from "../../store/studySlice";
 import {
   computeResultRange,
   resultFieldSymbol,
@@ -22,7 +23,6 @@ import {
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { DeformScaleControl } from "./DeformScaleControl";
-import { LegendRangeControls } from "./LegendRangeControls";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
 import { TopOptResult } from "./TopOptResult";
@@ -47,6 +47,13 @@ function AddResultPlot() {
     (s) => s.refinementStudy?.status === "done",
   );
   const addResultPlot = useModelStore((s) => s.addResultPlot);
+  const addPlotSection = useModelStore((s) => s.addPlotSection);
+  const showReactions = useModelStore((s) => s.showReactions);
+  const addReactions = useModelStore((s) => s.addReactions);
+  // A cut is added to the plot on screen, a field of the static solve.
+  const shownPlot = useModelStore((s) =>
+    s.resultPlots.find((p) => p.id === s.shownPlotId && p.source === "static"),
+  );
   return (
     <div className={styles.addChooser}>
       {RESULT_TYPES.map((field) => (
@@ -65,6 +72,36 @@ function AddResultPlot() {
           </span>
         </button>
       ))}
+      <button
+        className={styles.addChoice}
+        data-testid="add-plot-section"
+        disabled={!shownPlot || shownPlot.section !== null}
+        onClick={() => shownPlot && addPlotSection(shownPlot.id)}
+      >
+        <span className={styles.addChoiceLabel}>Section cut</span>
+        <span className={styles.addChoiceHint}>
+          {!shownPlot
+            ? "Show a field of the static solve first"
+            : shownPlot.section !== null
+              ? `${plotLabel(shownPlot)} already has a cut`
+              : `Cut through ${plotLabel(shownPlot)}`}
+        </span>
+      </button>
+      <button
+        className={styles.addChoice}
+        data-testid="add-reactions"
+        disabled={!hasStatic || showReactions}
+        onClick={addReactions}
+      >
+        <span className={styles.addChoiceLabel}>Reactions</span>
+        <span className={styles.addChoiceHint}>
+          {!hasStatic
+            ? "Run a static study first"
+            : showReactions
+              ? "Already listed"
+              : "Support forces · balance check"}
+        </span>
+      </button>
       <button
         className={styles.addChoice}
         data-testid="add-plot-density"
@@ -180,15 +217,16 @@ const formatVector = (v: readonly number[]) =>
 function ProbeRow({
   testId,
   label,
-  symbol,
-  unit,
+  name,
+  formatValue,
   reading,
   onRemove,
 }: {
   testId: string;
+  // The probe's name, for the remove button; `name` is the row's key text.
   label: string;
-  symbol: string;
-  unit: "mm" | "MPa";
+  name: string;
+  formatValue: (value: number) => string;
   reading:
     | { kind: "value"; at: number[]; displacement: number[]; value: number }
     | { kind: "unreadable"; reason: string }
@@ -202,9 +240,7 @@ function ProbeRow({
       tabIndex={0}
     >
       <div className={styles.statRow}>
-        <span className={styles.statKey}>
-          {label} · {symbol}
-        </span>
+        <span className={styles.statKey}>{name}</span>
         <span className={styles.statValWithAction}>
           {reading?.kind === "value" ? (
             <span
@@ -212,7 +248,7 @@ function ProbeRow({
               data-testid={`probe-value-${testId}`}
               data-value={String(reading.value)}
             >
-              {formatHandCheckValue(reading.value, unit)}
+              {formatValue(reading.value)}
             </span>
           ) : (
             <span className={styles.statVal}>—</span>
@@ -249,31 +285,29 @@ function ProbeRow({
   );
 }
 
-// Result probes (KOF-389): the min and max of the plotted field, the tool that
-// places probes by clicking the model, and a row per probe.
-function ProbeSection({ field }: { field: ResultType }) {
-  const probing = useModelStore((s) => s.probing);
-  const setProbing = useModelStore((s) => s.setProbing);
-  const removeProbe = useModelStore((s) => s.removeProbe);
+// The min and max of the plotted field, over every node like the legend: always
+// listed here, labelled in the view while the checkbox is on (KOF-389). The
+// values keep the format the example pages publish ("1.909e+0 mm").
+function MinMaxSection({ field }: { field: ResultType }) {
   const showExtremes = useModelStore((s) => s.showExtremeProbes);
   const setShowExtremes = useModelStore((s) => s.setShowExtremeProbes);
-  const { placed, extremes } = useProbeReadings();
+  const { extremes } = useProbeReadings();
   const unit = resultUnit(field);
   const symbol = resultFieldSymbol(field);
   return (
     <>
-      <div className={styles.sectionLabel}>Probes</div>
-      <label className={styles.statRow} style={{ justifyContent: "start" }}>
-        <input
-          type="checkbox"
-          data-testid="probe-extremes"
-          checked={showExtremes}
-          onChange={(e) => setShowExtremes(e.target.checked)}
-        />
-        <span className={styles.statKey} style={{ marginLeft: 6 }}>
-          Show min and max
-        </span>
-      </label>
+      <div className={styles.sectionHead}>
+        <span className={styles.sectionLabel}>Min and max</span>
+        <label className={styles.sectionHeadAction}>
+          <input
+            type="checkbox"
+            data-testid="probe-extremes"
+            checked={showExtremes}
+            onChange={(e) => setShowExtremes(e.target.checked)}
+          />
+          Label in view
+        </label>
+      </div>
       {extremes?.kind === "unreadable" && (
         <div className={styles.formNote}>
           Min and max cannot be read. {extremes.reason}
@@ -285,11 +319,38 @@ function ProbeSection({ field }: { field: ResultType }) {
             key={end}
             testId={end}
             label={end === "min" ? "Min" : "Max"}
-            symbol={symbol}
-            unit={unit}
+            name={`${end === "min" ? "Min" : "Max"} ${symbol}`}
+            formatValue={(v) => `${v.toExponential(3)} ${unit}`}
             reading={{ kind: "value", ...extremes[end] }}
           />
         ))}
+    </>
+  );
+}
+
+// Result probes (KOF-389): the tool that places probes by clicking the model,
+// and a row per probe.
+function ProbeSection({ field }: { field: ResultType }) {
+  const probing = useModelStore((s) => s.probing);
+  const setProbing = useModelStore((s) => s.setProbing);
+  const removeProbe = useModelStore((s) => s.removeProbe);
+  const { placed } = useProbeReadings();
+  const unit = resultUnit(field);
+  const symbol = resultFieldSymbol(field);
+  return (
+    <>
+      <div className={styles.sectionLabel}>Probes</div>
+      {placed.map(({ probe, reading }) => (
+        <ProbeRow
+          key={probe.id}
+          testId={String(probe.id)}
+          label={probeLabel(probe)}
+          name={`${probeLabel(probe)} · ${symbol}`}
+          formatValue={(v) => formatHandCheckValue(v, unit)}
+          reading={reading}
+          onRemove={() => removeProbe(probe.id)}
+        />
+      ))}
       <button
         className={styles.outlineBtn}
         data-testid="probe-toggle"
@@ -303,19 +364,6 @@ function ProbeSection({ field }: { field: ResultType }) {
           Click the model to read {symbol} there.
         </div>
       )}
-      <div style={{ marginTop: 8, marginBottom: 12 }}>
-        {placed.map(({ probe, reading }) => (
-          <ProbeRow
-            key={probe.id}
-            testId={String(probe.id)}
-            label={probeLabel(probe)}
-            symbol={symbol}
-            unit={unit}
-            reading={reading}
-            onRemove={() => removeProbe(probe.id)}
-          />
-        ))}
-      </div>
     </>
   );
 }
@@ -348,7 +396,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
 
   const footer = (
     <button
-      className={styles.dangerBtn}
+      className={styles.dangerLink}
       data-testid="delete-plot"
       onClick={() => deleteResultPlot(plot.id)}
     >
@@ -391,12 +439,10 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
     return <Empty text="No results — run the static study" footer={footer} />;
 
   const resultType = plot.field;
-  // Min/max of the selected scalar field over all nodes — the same field and
-  // node averaging used for the viewport coloring and colorbar legend.
+  // The range of the plotted field over all nodes — the same field and node
+  // averaging as the viewport colouring; null when the field has no data.
   const stats = computeResultRange(result, resultType, nodes, elements);
-
-  const fieldSymbol = resultFieldSymbol(resultType);
-  const unit = resultUnit(resultType);
+  // Shown, then how it is drawn, then what it reads.
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
@@ -404,7 +450,6 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         <div className={styles.sectionLabel}>Field</div>
         <select
           className={styles.formSelect}
-          style={{ marginBottom: 12 }}
           data-testid="plot-field"
           value={resultType}
           onChange={(e) => setPlotField(plot.id, e.target.value as ResultType)}
@@ -416,49 +461,66 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           ))}
         </select>
 
-        <DeformScaleControl />
-
-        <SectionControls field={resultType} />
-
-        {stats && (
-          <>
-            <div className={styles.sectionLabel}>Legend range</div>
-            <LegendRangeControls fieldRange={stats} unit={unit} />
-          </>
-        )}
-
-        <div className={styles.sectionLabel}>Result summary</div>
-        {stats ? (
-          <>
-            <div className={styles.statRow}>
-              <span className={styles.statKey}>Min {fieldSymbol}</span>
-              <span className={styles.statVal}>
-                {stats.min.toExponential(3)} {unit}
-              </span>
-            </div>
-            <div className={styles.statRow}>
-              <span className={styles.statKey}>Max {fieldSymbol}</span>
-              <span className={styles.statVal}>
-                {stats.max.toExponential(3)} {unit}
-              </span>
-            </div>
-          </>
-        ) : (
+        {!stats && (
           <div className={styles.empty}>
             {resultType === "Von Mises stress"
               ? "Von Mises data not available — re-run the solver"
               : "No nodal data"}
           </div>
         )}
-        {result.reactions && (
-          <div style={{ marginTop: 12 }}>
-            <SupportReactions summary={result.reactions} />
+
+        <DeformScaleControl />
+
+        {stats && <MinMaxSection field={resultType} />}
+
+        <ProbeSection field={resultType} />
+
+        {footer}
+      </div>
+    </div>
+  );
+}
+
+// Results → Reactions: the support reactions of the latest static solve, a
+// result output of its own rather than part of every plot (KOF-387).
+function ReactionsPanel() {
+  const reactions = useModelStore((s) => s.result?.reactions ?? null);
+  const deleteReactions = useModelStore((s) => s.deleteReactions);
+  const display = useModelStore((s) => s.reactionsDisplay);
+  const setDisplay = useModelStore((s) => s.setReactionsDisplay);
+  return (
+    <div className={styles.panel}>
+      <div className={styles.tabContent}>
+        <div className={styles.sectionHead}>
+          <span className={styles.sectionLabel}>Arrows in view</span>
+        </div>
+        <div className={styles.segToggle} role="group" aria-label="Arrows">
+          {(["resultant", "nodal"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={`${styles.segBtn} ${display === option ? styles.segBtnActive : ""}`}
+              aria-pressed={display === option}
+              onClick={() => setDisplay(option)}
+            >
+              {option === "resultant" ? "Resultant" : "Nodal"}
+            </button>
+          ))}
+        </div>
+        {reactions ? (
+          <SupportReactions summary={reactions} />
+        ) : (
+          <div className={styles.empty}>
+            Run the static solve to compute the reactions.
           </div>
         )}
-        <div style={{ marginTop: 12 }}>
-          <ProbeSection field={resultType} />
-        </div>
-        {footer}
+        <button
+          className={styles.dangerLink}
+          data-testid="delete-reactions"
+          onClick={deleteReactions}
+        >
+          Delete reactions
+        </button>
       </div>
     </div>
   );
@@ -470,6 +532,20 @@ export function ResultsPanel({ target }: { target: TreeTarget }) {
       ? s.resultPlots.find((p) => p.id === target.id)
       : undefined,
   );
+  if (target.type === "item" && target.kind === "section")
+    return plot?.section && plot.field !== null ? (
+      <div className={styles.panel}>
+        <div className={styles.tabContent}>
+          <SectionControls
+            plotId={plot.id}
+            section={plot.section}
+            field={plot.field}
+          />
+        </div>
+      </div>
+    ) : null;
+  if (target.type === "item" && target.kind === "reactions")
+    return <ReactionsPanel />;
   if (target.type === "item") return plot ? <PlotDetail plot={plot} /> : null;
   return (
     <div className={styles.panel}>

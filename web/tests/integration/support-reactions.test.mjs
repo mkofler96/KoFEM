@@ -155,6 +155,17 @@ function expectClampCarriesTip(summary) {
   const balance = reactionBalance(summary);
   expect(balance.balanced).toBe(true);
   expect(balance.loadOnSupports).toBe(false);
+  // The nodal reactions drawn in the view sum to the support's resultant,
+  // all of them on the clamp plane x = 0.
+  expect(summary.nodal.length).toBe(support.vertices);
+  const sum = [0, 0, 0];
+  for (const node of summary.nodal) {
+    expect(node.support).toBe(0);
+    expect(node.position[0]).toBe(0);
+    for (let axis = 0; axis < 3; axis++) sum[axis] += node.force[axis];
+  }
+  for (let axis = 0; axis < 3; axis++)
+    expect(sum[axis]).toBeCloseTo(support.force[axis], 6);
 }
 
 let fem = null;

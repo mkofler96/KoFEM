@@ -109,10 +109,10 @@ test("min and max probes mark where the plotted field peaks @pipeline", async ({
   await page.getByTestId("plot-field").selectOption("Von Mises stress");
   await expect(page.getByTestId("probe-value-max")).toContainText("MPa");
 
-  // And can be hidden.
+  // Their labels can be hidden; the panel keeps the values.
   await page.getByTestId("probe-extremes").uncheck();
   await expect(page.getByTestId("probe-label-max")).toHaveCount(0);
-  await expect(page.getByTestId("probe-row-max")).toHaveCount(0);
+  await expect(page.getByTestId("probe-row-max")).toBeVisible();
   await page.getByTestId("probe-extremes").check();
   await expect(page.getByTestId("probe-label-max")).toBeVisible();
 });

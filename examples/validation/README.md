@@ -140,7 +140,7 @@ files no figure produces any more.
 
 Every plain run compares itself with the committed `results.json` — each case's
 value to 1e-4 relative, its reference, band, mesh and inputs, and the read-out
-the app's Result summary shows — checks that each case's `.vtu` holds the case's
+the app's Min and max rows show — checks that each case's `.vtu` holds the case's
 model and its `.result.json` this run's solve, and re-renders every page from the committed data and records, which
 must match the committed HTML. It fails with the list of differences when any
 disagrees. So an engine change that moves a published number, or a text or
