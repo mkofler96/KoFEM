@@ -50,6 +50,7 @@ import {
 } from "../lib/solve/autoShell.js";
 import {
   buildCoupledEngineInputs,
+  coupledSupportOwners,
   mapMixedResult,
   type SolveLog,
 } from "../lib/solve/coupled.js";
@@ -82,6 +83,11 @@ import {
   type RigidBodyInput,
 } from "../lib/solve/rigidBody.js";
 import { expandTiedDisplacements, weldTies } from "../lib/solve/solid.js";
+import {
+  payloadSupportOwners,
+  type ReactionSummary,
+  type SupportOwners,
+} from "../lib/solve/reactions.js";
 import {
   optimizeCoupledInRust,
   optimizeShellInRust,
@@ -595,13 +601,20 @@ type SolveResultFields = {
   vonMises: Float64Array;
 };
 
-function postSolveResult(id: number, result: SolveResultFields) {
+// Each path's reactions are summed in the solve's own numbering, before its
+// result is mapped back to the store mesh (KOF-387).
+function postSolveResult(
+  id: number,
+  result: SolveResultFields,
+  reactions: ReactionSummary | null,
+) {
   self.postMessage(
     {
       id,
       ok: true,
       displacements: result.displacements,
       vonMises: result.vonMises,
+      reactions,
     },
     [result.displacements.buffer, result.vonMises.buffer],
   );
@@ -618,6 +631,7 @@ function solveShell(
   inputs: Parameters<typeof solveShellInRust>[1],
   payload: SolvePayload,
   log: SolveLog,
+  supports: SupportOwners,
 ) {
   return solveShellInRust(
     { ShellModel },
@@ -625,6 +639,7 @@ function solveShell(
     payload.cgIterationLimit,
     onCgLimit,
     log,
+    supports,
   );
 }
 
@@ -641,16 +656,25 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
     id,
     log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
   });
-  const result = await solveShell(inputs, payload, logTo(id));
+  const result = await solveShell(
+    inputs,
+    payload,
+    logTo(id),
+    payloadSupportOwners(payload),
+  );
 
   self.postMessage({
     id,
     log: `Shell solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} facet stresses`,
   });
-  postSolveResult(id, {
-    displacements: result.displacements,
-    vonMises: result.von_mises,
-  });
+  postSolveResult(
+    id,
+    {
+      displacements: result.displacements,
+      vonMises: result.von_mises,
+    },
+    result.reactions,
+  );
 }
 
 // The mixed (solid + shell) Rust solve of the coupled assembler's inputs,
@@ -661,6 +685,7 @@ function solveMixed(
   inputs: Parameters<typeof solveCoupledInRust>[1],
   payload: SolvePayload,
   log: SolveLog,
+  supports: SupportOwners,
 ) {
   const preconditioner: MixedPreconditionerName =
     requestedSolver(payload) === "amg" && amgReason(payload) === null
@@ -673,6 +698,7 @@ function solveMixed(
     payload.cgIterationLimit,
     onCgLimit,
     log,
+    supports,
   );
 }
 
@@ -695,8 +721,9 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
   const hasShells = inp.shellElements.length > 0;
   const reason = amgReason(payload);
   if (!hasShells && reason !== null) throw new Error(solidModelRefusal(reason));
+  const supports = coupledSupportOwners(payload, inp.model);
   const result = hasShells
-    ? await solveMixed(inp, payload, logTo(id))
+    ? await solveMixed(inp, payload, logTo(id), supports)
     : await solveCoupledSolidInRust(
         { ElasticModel, SolveOptions, Couplings },
         inp,
@@ -705,6 +732,7 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
         payload.cgIterationLimit,
         onCgLimit,
         logTo(id),
+        supports,
       );
   const fields = mapMixedResult(payload, inp.model, result);
 
@@ -712,7 +740,7 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
     id,
     log: `Mixed solve complete: ${fields.displacements.length / 3} vertex displacements, ${fields.vonMises.length} element stresses`,
   });
-  postSolveResult(id, fields);
+  postSolveResult(id, fields, result.reactions);
 }
 
 // A body marked Shell: solve it as shells or fail loudly — never fall through
@@ -734,17 +762,26 @@ async function handleAutoShellSolve(
       : pureShellRigidBodyInput(prepared.solve),
     payload,
   );
-  const fields =
+  const { supports } = prepared.solve;
+  const { fields, reactions } =
     prepared.kind === "coupled"
-      ? prepared.solve.mapResult(await solveMixed(prepared.solve, payload, log))
-      : prepared.solve.mapResult(
-          await solveShell(prepared.solve, payload, log),
+      ? await solveMixed(prepared.solve, payload, log, supports).then(
+          (result) => ({
+            fields: prepared.solve.mapResult(result),
+            reactions: result.reactions,
+          }),
+        )
+      : await solveShell(prepared.solve, payload, log, supports).then(
+          (result) => ({
+            fields: prepared.solve.mapResult(result),
+            reactions: result.reactions,
+          }),
         );
   self.postMessage({
     id,
     log: `Shell solve complete: ${fields.displacements.length / 3} vertex displacements`,
   });
-  postSolveResult(id, fields);
+  postSolveResult(id, fields, reactions);
 }
 
 // The solver the request asks for. The app always names one; a request without
@@ -820,7 +857,11 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     id,
     log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.vonMises.length} element stresses`,
   });
-  postSolveResult(id, { displacements, vonMises: result.vonMises });
+  postSolveResult(
+    id,
+    { displacements, vonMises: result.vonMises },
+    result.reactions,
+  );
 }
 
 // Refuse a model whose supports leave a body free to slide or spin, naming

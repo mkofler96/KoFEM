@@ -32,6 +32,7 @@ import {
 } from "../shellize.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
 import { shellTieRefusal } from "./refusals.js";
+import { supportOwners, type SupportOwners } from "./reactions.js";
 import {
   coupledFixedDofs,
   coupledLoads,
@@ -476,6 +477,8 @@ export interface AutoCoupledSolve {
   tetBodies: number[];
   triangleBodies: number[];
   rotationalPool: number[];
+  // Which support holds each pool DOF, through the same mapping as the BCs.
+  supports: SupportOwners;
   mapResult: (result: {
     displacements: Float64Array;
     von_mises_tets: Float64Array;
@@ -629,6 +632,7 @@ export function prepareAutoCoupledSolve(
       () => shells.shellBody,
     ),
     rotationalPool: [...model.shellPool, ...refPoolIndices],
+    supports: supportOwners(constraints, model.pool.length / 3, poolOf),
     mapResult: (result) => ({
       displacements: mapCoupledDisplacements(
         result.displacements,
@@ -660,6 +664,9 @@ export interface PureShellSolve {
   // check (lib/solve/rigidBody.ts), which must see the shell that is solved.
   shellBody: number;
   dirichlet: ShellDirichlet;
+  // Which support holds each mid-surface DOF, through the same mapping as
+  // the BCs.
+  supports: SupportOwners;
   mapResult: (result: {
     displacements: Float64Array;
     von_mises: Float64Array;
@@ -775,6 +782,7 @@ export function preparePureShellSolve(
     bcsJson: JSON.stringify({ ...dirichlet, point_loads }),
     shellBody: shells.shellBody,
     dirichlet,
+    supports: supportOwners(constraints, shells.shellVerts.length / 3, shellOf),
     mapResult: (result) => {
       // Displacements: every store node takes its nearest mid-surface node's
       // three translations (the mid-surface is offset ~t/2 from the original

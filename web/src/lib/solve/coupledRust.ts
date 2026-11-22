@@ -26,6 +26,11 @@ import type { Couplings, MixedModel } from "../../wasm/fem/kofem_wasm.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
 import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
 import { defaultShellIterationLimit } from "./shellRust.js";
+import {
+  readReactions,
+  type ReactionSummary,
+  type SupportOwners,
+} from "./reactions.js";
 
 // The C++ coupled solve's stopping rule: ‖f − K·u‖ / ‖f‖ below 1e-10
 // (CoupledInput::cg_rel_tol).
@@ -66,6 +71,8 @@ export interface CoupledSolveResult {
   von_mises_tets: Float64Array;
   von_mises_tris: Float64Array;
   iterations: number;
+  // Each support's reaction; null when the caller named no supports.
+  reactions: ReactionSummary | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -300,6 +307,9 @@ export async function solveCoupledInRust(
   iterationLimit: number | undefined,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
+  // Which support holds each pool DOF; callers that report no reactions (the
+  // stored-reference tests, the example generators) leave it out.
+  supports?: SupportOwners,
 ): Promise<CoupledSolveResult> {
   const { mesh, coupling, bcs } = args;
   const { model, couplings, fixedDofs, fixedValues, forces, solid } =
@@ -352,6 +362,10 @@ export async function solveCoupledInRust(
           von_mises_tets: Float64Array.from(model.vonMisesTets(dofs)),
           von_mises_tris: Float64Array.from(model.vonMisesTris(dofs)),
           iterations: solution.iterations,
+          reactions:
+            supports === undefined
+              ? null
+              : readReactions(model, solution, forces, supports),
         };
         const seconds = (performance.now() - started) / 1000;
         log(

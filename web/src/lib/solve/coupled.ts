@@ -28,6 +28,7 @@ import {
 } from "../shellize.js";
 import { buildReferenceCouplings, referencePointIds } from "../coupling.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
+import { supportOwners, type SupportOwners } from "./reactions.js";
 import {
   coupledFixedDofs,
   coupledLoads,
@@ -390,6 +391,23 @@ export function buildCoupledEngineInputs(
     couplingCount: coupling.ref.length,
     declaredCouplings: couplings.length,
   };
+}
+
+// The owners of a coupled solve built by buildCoupledEngineInputs: each held
+// node's pool node, as its constraints reach the solve.
+export function coupledSupportOwners(
+  payload: Pick<SolveModel, "nodes" | "constraints">,
+  model: CoupledEngineInputs["model"],
+): SupportOwners {
+  const vid = buildVertexIndexer(payload.nodes);
+  return supportOwners(payload.constraints, model.pool.length / 3, (nodeId) => {
+    const pool = model.poolOfVertex.get(vid(nodeId, "support reaction"));
+    if (pool === undefined)
+      throw new Error(
+        `support reactions: node ${nodeId} is held but is not part of the solved model`,
+      );
+    return pool;
+  });
 }
 
 // Map a coupled-assembler result back onto the store model. Displacements: every

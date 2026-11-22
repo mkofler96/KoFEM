@@ -1254,3 +1254,30 @@
 .probeRow:focus-within .probeDetails {
   display: block;
 }
+
+/* Results → Reactions (KOF-387): a support's force vector under its row, and
+   the check of the reactions against the applied load. */
+.reactionDetail {
+  font-size: 11px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--muted);
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
+.reactionBalance,
+.reactionImbalance {
+  margin: 6px 0 14px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.reactionBalance {
+  background: var(--ok-soft);
+  color: var(--ink-2);
+}
+.reactionImbalance {
+  background: var(--warn-soft);
+  color: var(--warn);
+}

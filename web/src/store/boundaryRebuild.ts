@@ -22,6 +22,9 @@ export interface Constraint {
   nodeId: number;
   dof: number; // 0=Ux 1=Uy 2=Uz 3=Rx 4=Ry 5=Rz
   prescribedValue?: number;
+  // Index of the BC group in bcGroups: the support whose reaction this DOF
+  // adds to (KOF-387).
+  group?: number;
 }
 
 export interface Load {
@@ -55,11 +58,12 @@ export interface SurfaceLoad {
 
 export function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
   const result: Constraint[] = [];
-  for (const g of bcGroups)
+  bcGroups.forEach((g, group) => {
     for (const f of g.faces)
       for (const nodeId of f.nodeIds)
         for (const dof of g.dofs)
-          result.push({ nodeId, dof, prescribedValue: g.value });
+          result.push({ nodeId, dof, prescribedValue: g.value, group });
+  });
   return result;
 }
 

@@ -21,6 +21,11 @@
 import type { ShellModel } from "../../wasm/fem/kofem_wasm.js";
 import type { ShellMesh } from "./contracts.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
+import {
+  readReactions,
+  type ReactionSummary,
+  type SupportOwners,
+} from "./reactions.js";
 
 // The C++ shell solve's stopping rule: ‖f − K·u‖ / ‖f‖ below 1e-10.
 const RELATIVE_TOLERANCE = 1e-10;
@@ -39,6 +44,8 @@ export interface ShellSolveResult {
   // One surface von Mises stress per triangle.
   von_mises: Float64Array;
   iterations: number;
+  // Each support's reaction; null when the caller named no supports.
+  reactions: ReactionSummary | null;
 }
 
 // The C++ solve's default CG budget, max(20000, 400·∛n) for n unknowns
@@ -53,6 +60,9 @@ export async function solveShellInRust(
   iterationLimit: number | undefined,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
+  // Which support holds each vertex DOF; callers that report no reactions
+  // (the stored-reference tests, the example generators) leave it out.
+  supports?: SupportOwners,
 ): Promise<ShellSolveResult> {
   const { model, section, bcs, forces, nodeCount, triangleCount } =
     createShellModel(fem, inputs);
@@ -104,6 +114,10 @@ export async function solveShellInRust(
           displacements,
           von_mises: vonMises,
           iterations: solution.iterations,
+          reactions:
+            supports === undefined
+              ? null
+              : readReactions(model, solution, forces, supports),
         };
       } finally {
         solution.free();

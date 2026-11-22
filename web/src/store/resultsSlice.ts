@@ -7,6 +7,7 @@
 import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
 import type { ResultProbe } from "../lib/resultProbe";
+import type { ReactionSummary } from "../lib/solve/reactions";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
@@ -15,6 +16,9 @@ import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
 export interface SolverResult {
   displacements: Float64Array;
   vonMises?: Float64Array;
+  // Each support's reaction and the applied load (KOF-387); absent on a
+  // result that did not come from a static solve here (a saved file).
+  reactions?: ReactionSummary | null;
 }
 
 export const RESULT_TYPES = [

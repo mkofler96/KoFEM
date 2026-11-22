@@ -7,13 +7,16 @@
 
 use kofem_fem::shell::SHELL_NODE_DOFS;
 use kofem_fem::{
-    assemble_shell_stiffness, assemble_stiffness, prepare_mixed_static, shell_von_mises, von_mises,
-    AmgSettings, AppliedPreconditioner, CsrMatrix, MixedPreconditioner, PcgRun,
-    PreconditionerChoice, PreparedMixed, ShellMesh, ShellPart, StoppingRule, TetMesh,
+    assemble_shell_stiffness, assemble_stiffness, prepare_mixed_static, shell_von_mises,
+    summarize_reactions, von_mises, AmgSettings, AppliedPreconditioner, CsrMatrix,
+    MixedPreconditioner, PcgRun, PreconditionerChoice, PreparedMixed, ShellMesh, ShellPart,
+    StoppingRule, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{parse_materials, to_js, Couplings, RunOutput, SolveRun};
+use crate::{
+    flatten_reactions, parse_materials, to_js, Couplings, ElasticSolution, RunOutput, SolveRun,
+};
 
 /// A validated mixed model: linear tets and, when there are any, Kirchhoff
 /// shell facets (CST membrane + DKT bending) over the same vertices.
@@ -204,6 +207,41 @@ impl MixedModel {
             output: RunOutput::AllDofs,
             tie_report: None,
         })
+    }
+
+    /// The reaction of each support for a solution of this model and the
+    /// `forces` its solve took (6 per vertex), taken through the solve's
+    /// coupling reduction, as `ElasticModel.supportReactions` returns it.
+    ///
+    /// # Errors
+    /// Missing assembly, a solution that is not this model's, or forces or
+    /// owners that do not fit.
+    #[wasm_bindgen(js_name = supportReactions)]
+    pub fn support_reactions(
+        &self,
+        solution: &ElasticSolution,
+        forces: &[f64],
+        owners: &[i32],
+        supports: usize,
+    ) -> Result<Vec<f64>, JsError> {
+        let solid = self
+            .solid_stiffness
+            .as_ref()
+            .ok_or_else(|| JsError::new("assemble() must be called before supportReactions()"))?;
+        let reduction = solution.reduction.as_ref().ok_or_else(|| {
+            JsError::new("supportReactions() needs the solution of this model's startSolve()")
+        })?;
+        let reactions = reduction
+            .mixed_reactions(
+                solid,
+                self.shell_stiffness.as_ref(),
+                &solution.full_dofs,
+                forces,
+            )
+            .map_err(|error| to_js(&error))?;
+        summarize_reactions(self.solid.vertices(), &reactions, forces, owners, supports)
+            .map(|summary| flatten_reactions(&summary))
+            .map_err(|error| to_js(&error))
     }
 
     /// The three translations per vertex of a solution (6 DOFs per vertex).

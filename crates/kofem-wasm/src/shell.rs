@@ -5,12 +5,13 @@
 
 use kofem_fem::shell::SHELL_NODE_DOFS;
 use kofem_fem::{
-    assemble_shell_stiffness, prepare_shell_static, shell_translations, shell_von_mises, CsrMatrix,
-    PcgRun, ShellMesh, ShellPreconditioner, StoppingRule,
+    assemble_shell_stiffness, nodal_residual, prepare_shell_static, shell_translations,
+    shell_von_mises, summarize_reactions, CsrMatrix, PcgRun, ShellMesh, ShellPreconditioner,
+    StoppingRule,
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{parse_materials, to_js, RunOutput, SolveRun};
+use crate::{flatten_reactions, parse_materials, to_js, ElasticSolution, RunOutput, SolveRun};
 
 /// A validated Kirchhoff shell model (CST membrane + DKT bending facets).
 #[wasm_bindgen]
@@ -115,6 +116,31 @@ impl ShellModel {
             output: RunOutput::Translations,
             tie_report: None,
         })
+    }
+
+    /// The reaction of each support for a solution of this model and the
+    /// `forces` its solve took (6 per vertex), as
+    /// `ElasticModel.supportReactions` returns it.
+    ///
+    /// # Errors
+    /// Missing assembly, or a solution, forces or owners that do not fit.
+    #[wasm_bindgen(js_name = supportReactions)]
+    pub fn support_reactions(
+        &self,
+        solution: &ElasticSolution,
+        forces: &[f64],
+        owners: &[i32],
+        supports: usize,
+    ) -> Result<Vec<f64>, JsError> {
+        let stiffness = self
+            .stiffness
+            .as_ref()
+            .ok_or_else(|| JsError::new("assemble() must be called before supportReactions()"))?;
+        let reactions = nodal_residual(stiffness, &solution.full_dofs, forces)
+            .map_err(|error| to_js(&error))?;
+        summarize_reactions(self.mesh.vertices(), &reactions, forces, owners, supports)
+            .map(|summary| flatten_reactions(&summary))
+            .map_err(|error| to_js(&error))
     }
 
     /// Von Mises stress of every facet for a solution (6 DOFs per vertex): the

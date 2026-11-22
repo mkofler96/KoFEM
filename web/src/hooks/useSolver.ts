@@ -11,6 +11,7 @@ import {
   amgUnavailableReason,
   FALLBACK_PRECONDITIONER_LABEL,
 } from "../lib/solve/amg";
+import type { ReactionSummary } from "../lib/solve/reactions";
 import { routeSolve, type SolveRoute } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
@@ -220,12 +221,13 @@ export function useSolver() {
     });
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
-    sendToWorker<{ displacements: Float64Array; vonMises: Float64Array }>(
-      "solve",
-      payload,
-    )
-      .then(({ displacements, vonMises }) => {
-        setResult({ displacements, vonMises });
+    sendToWorker<{
+      displacements: Float64Array;
+      vonMises: Float64Array;
+      reactions: ReactionSummary | null;
+    }>("solve", payload)
+      .then(({ displacements, vonMises, reactions }) => {
+        setResult({ displacements, vonMises, reactions });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",
