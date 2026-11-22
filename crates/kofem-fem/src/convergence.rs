@@ -182,6 +182,21 @@ pub fn extrapolate(sizes: &[f64], values: &[f64]) -> Result<Extrapolation, FemEr
             "the element sizes are all equal, so they give no order",
         ));
     }
+    // φ∞ + C·hᵖ with p > 0 is monotonic in h: results that change direction
+    // between successive meshes are not in the asymptotic range, whatever
+    // order fits them best.
+    let mut by_size: Vec<(f64, f64)> = scaled.iter().copied().zip(values.iter().copied()).collect();
+    by_size.sort_by(|first, second| second.0.total_cmp(&first.0));
+    let steps: Vec<f64> = by_size
+        .windows(2)
+        .map(|pair| pair[1].1 - pair[0].1)
+        .collect();
+    if !(steps.iter().all(|step| *step > 0.0) || steps.iter().all(|step| *step < 0.0)) {
+        return Err(refuse(
+            "the results do not change monotonically as the mesh is refined, so they are not \
+             in the asymptotic range and give no limit",
+        ));
+    }
 
     // Scan log-spaced orders for the smallest residual, then refine it by
     // golden-section search inside the bracketing scan cells.

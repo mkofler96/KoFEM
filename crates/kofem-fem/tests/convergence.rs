@@ -111,6 +111,20 @@ fn extrapolate_refuses_oscillating_values() {
 }
 
 #[test]
+fn extrapolate_refuses_values_that_reverse_even_when_an_interior_order_fits_best() {
+    // Up, down, up again: no φ∞ + C·hᵖ with p > 0 does that, although the
+    // least-squares residual has its minimum inside the order range here.
+    let result = extrapolate(&[1.0, 0.5, 0.25, 0.125], &[1.0, 1.6, 1.55, 1.7]);
+    assert!(
+        matches!(&result, Err(FemError::Convergence { reason }) if reason.contains("monoton")),
+        "{result:?}"
+    );
+    // The same reversal with the levels listed out of order.
+    let result = extrapolate(&[0.25, 1.0, 0.125, 0.5], &[1.55, 1.0, 1.7, 1.6]);
+    assert!(result.is_err(), "{result:?}");
+}
+
+#[test]
 fn extrapolate_refuses_values_that_do_not_change() {
     let result = extrapolate(&[1.0, 0.5, 0.25], &[2.0, 2.0, 2.0]);
     assert!(

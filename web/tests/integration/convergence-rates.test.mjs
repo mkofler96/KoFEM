@@ -99,6 +99,16 @@ describe("analyseStudy", () => {
     ]);
   });
 
+  test("places a mesh at the same size in every series", () => {
+    // P1 is fitted over 4, 2, 1.4 mm and P2 over 8, 4, 2 mm: the 4 mm and
+    // 2 mm meshes must sit at one size on the chart's shared axis.
+    const { def, published } = madeUpStudy({ dimension: 3, linearRate: 1.6 });
+    const [linear, quadratic] = analyseStudy(def, published, fem).series;
+    expect(linear.sizes[0]).toBeCloseTo(quadratic.sizes[1], 12);
+    expect(linear.sizes[1]).toBeCloseTo(quadratic.sizes[2], 12);
+    expect(quadratic.sizes[0]).toBeCloseTo(1, 12);
+  });
+
   test("measures the size of a slab's elements in its plane", () => {
     const { def, published } = madeUpStudy({ dimension: 2, linearRate: 2 });
     const linear = analyseStudy(def, published, fem).series[0];

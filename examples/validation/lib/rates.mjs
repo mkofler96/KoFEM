@@ -135,22 +135,29 @@ export function analyseStudy(def, published, fem) {
     value: finest.fe,
   };
 
-  const series = records.map(({ def: s, record }) => {
-    const candidates = record.points
-      .map((point, index) => ({ point, index }))
-      .filter(({ point }) => point !== finest);
+  const fits = records.map(({ def: s, record }) => {
+    const candidates = record.points.filter((point) => point !== finest);
     if (candidates.length < RATE_LEVELS)
       throw new Error(
         `${where}, ${s.label}: a rate needs ${RATE_LEVELS} levels coarser than the reference, the study has ${candidates.length}`,
       );
-    const fit = candidates.slice(-RATE_LEVELS);
-    const sizes = Array.from(
+    return candidates.slice(-RATE_LEVELS);
+  });
+  // Sizes relative to the coarsest fitted mesh of the whole study, so a mesh
+  // sits at one size in every series on the chart's shared axis.
+  const coarsest = Math.min(...fits.flat().map((point) => point.elements));
+  const sizesOf = (fit) =>
+    Array.from(
       fem.relativeElementSizes(
-        Uint32Array.from(fit.map(({ point }) => point.elements)),
+        Uint32Array.from([coarsest, ...fit.map((point) => point.elements)]),
         def.dimension,
       ),
-    );
-    const errors = fit.map(({ point }) => point.fe - reference.value);
+    ).slice(1);
+
+  const series = records.map(({ def: s }, k) => {
+    const fit = fits[k];
+    const sizes = sizesOf(fit);
+    const errors = fit.map((point) => point.fe - reference.value);
     const magnitudes = errors.map(Math.abs);
     const monotone = magnitudes.every(
       (e, k) => k === 0 || e < magnitudes[k - 1],
@@ -168,7 +175,7 @@ export function analyseStudy(def, published, fem) {
     return {
       label: s.label,
       order: s.order,
-      levels: fit.map(({ point }) => point.mesh),
+      levels: fit.map((point) => point.mesh),
       sizes,
       relErrors: errors.map((e) => e / reference.value),
       observed,
