@@ -10,15 +10,16 @@
 //! a ray from the triangle's centroid goes into the material, and the first
 //! surface triangle it meets is the opposite side. A face is a wall when most
 //! rays reach ONE other face of the body within `max_wall`, at a steady
-//! distance (an offset surface), arriving square to it. Measurement only: the
-//! shell idealisation does not use these walls.
+//! distance (an offset surface), arriving square to it. The linear thin-wall
+//! check measures these walls, and the shell idealisation collapses them to a
+//! mid-surface ([`crate::mid_surface`]).
 
 use std::collections::{HashMap, HashSet};
 
 use crate::geometry::{
     cross, dot, norm, scale, sub, tet_face, triangle_key, ShellizeMesh, Vec3, TET_FACES,
 };
-use crate::walls::{detect_walls, face_props};
+use crate::walls::{detect_walls, face_props, FaceProp, PairedWall, PLANAR};
 
 /// A curved thin wall: the sampled `face`, the `partner` face opposite it, the
 /// median distance between them and the body.
@@ -32,9 +33,6 @@ pub struct CurvedWall {
 
 /// Rays cast per face; a face with fewer triangles casts one per triangle.
 const SAMPLES: usize = 64;
-/// A face with flatness |Σ n·A| / Σ A at or above this is planar (a quarter
-/// bend is about 0.90, a full cylinder 0).
-const PLANAR: f64 = 0.99;
 /// Share of a face's rays that must reach the same partner face.
 const MIN_AGREEMENT: f64 = 0.6;
 /// Spread of the partner distances (10th to 90th percentile) allowed, as a
@@ -228,10 +226,22 @@ fn measure(
 #[must_use]
 pub fn detect_curved_walls(mesh: &ShellizeMesh, max_wall: f64) -> Vec<CurvedWall> {
     let faces = face_props(mesh);
+    let planar = detect_walls(mesh, &faces, max_wall);
+    curved_walls(mesh, &faces, &planar, max_wall)
+}
+
+/// [`detect_curved_walls`] over the measured `faces` (largest first), leaving
+/// out the faces of the `planar` walls.
+pub(crate) fn curved_walls(
+    mesh: &ShellizeMesh,
+    faces: &[FaceProp],
+    planar: &[PairedWall],
+    max_wall: f64,
+) -> Vec<CurvedWall> {
     let Some(largest) = faces.first() else {
         return Vec::new();
     };
-    let paired: HashSet<i32> = detect_walls(mesh, &faces, max_wall)
+    let paired: HashSet<i32> = planar
         .iter()
         .flat_map(|paired| std::iter::once(paired.wall.keep).chain(paired.partners.iter().copied()))
         .collect();
@@ -244,7 +254,7 @@ pub fn detect_curved_walls(mesh: &ShellizeMesh, max_wall: f64) -> Vec<CurvedWall
     let sampling = sample(mesh, &candidates);
     let mut walls: Vec<CurvedWall> = Vec::new();
     // Largest face first, so a wall is reported by its larger face.
-    for face in &faces {
+    for face in faces {
         let (Some(body), Some(rays)) = (face.body, sampling.rays.get(&face.id)) else {
             continue;
         };

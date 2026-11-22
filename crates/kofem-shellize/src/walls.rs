@@ -30,13 +30,28 @@ pub struct FaceProp {
 
 /// A detected thin wall: the CAD face kept as its mid-surface source (the outer
 /// face of the pair), that face's unit normal, the wall thickness and the body.
+///
+/// A `curved` wall (a cylinder, sphere, cone or bend: [`crate::curved_walls`])
+/// collapses along each node's own normal; its `normal` is the kept face's
+/// mean outward normal, for information only (zero for a closed face).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Wall {
     pub keep: i32,
     pub normal: Vec3,
     pub thickness: f64,
     pub body: i32,
+    pub curved: bool,
+    /// The face opposite `keep` — for a planar wall whose inner side is split
+    /// (an I-beam flange), the first of those faces.
+    pub partner: i32,
 }
+
+/// A face with flatness |Σ n·A| / Σ A at or above this is planar: the planar
+/// pass pairs it, the curved pass leaves it alone. A meshed plane reaches 1 to
+/// round-off; a cylindrical arc of 9° reaches 0.999, a 30° panel 0.989 and a
+/// quarter bend 0.90, all of which the curved pass collapses along their
+/// nodes' own normals.
+pub const PLANAR: f64 = 0.999;
 
 /// A wall with the opposite face(s) it was paired against: one for a plain
 /// pair, several for a wall whose inner side is split (an I-beam flange, cut in
@@ -114,7 +129,7 @@ pub fn face_props(mesh: &ShellizeMesh) -> Vec<FaceProp> {
 }
 
 /// CAD faces that share a surface-mesh node (a CAD edge or vertex), per face.
-fn face_adjacency(mesh: &ShellizeMesh) -> HashMap<i32, HashSet<i32>> {
+pub(crate) fn face_adjacency(mesh: &ShellizeMesh) -> HashMap<i32, HashSet<i32>> {
     let mut faces_of_node: HashMap<usize, HashSet<i32>> = HashMap::new();
     for (triangle, tri) in mesh.surf_tris.iter().enumerate() {
         for &vertex in tri {
@@ -168,7 +183,7 @@ pub(crate) fn detect_walls(
     let max_wall = max_wall * (1.0 + MAX_WALL_SLACK);
     let big: Vec<&FaceProp> = faces
         .iter()
-        .filter(|face| face.area > 0.01 * largest.area && face.flat > 0.9)
+        .filter(|face| face.area > 0.01 * largest.area && face.flat >= PLANAR)
         // A face no tet carries belongs to no body, so it can be no body's wall.
         .filter(|face| face.body.is_some())
         .collect();
@@ -222,6 +237,8 @@ pub(crate) fn detect_walls(
                 normal: outer.normal,
                 thickness: best_along,
                 body,
+                curved: false,
+                partner: inner.id,
             },
             partners: vec![inner.id],
         });
@@ -350,6 +367,8 @@ fn split_wall(
             normal: first.normal,
             thickness: along,
             body,
+            curved: false,
+            partner: layer[0].1.id,
         },
         partners: layer.iter().map(|(_, face)| face.id).collect(),
     })

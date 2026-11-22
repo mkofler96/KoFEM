@@ -3,8 +3,8 @@
 
 // KOF-312: a thin-walled tube meshed with linear elements gets the thin-wall
 // pre-flight warning. A tube has no opposite planar faces, so only the
-// curved-wall pass finds it, and the advice leaves out Shell, which collapses
-// planar walls only.
+// curved-wall pass finds it. Shell collapses curved walls too (KOF-448), so
+// the advice offers it as for a flat wall.
 
 import { test, expect } from "./coverage";
 import { annulusStep } from "../../examples/gallery/step-prism.mjs";
@@ -14,7 +14,7 @@ import { openTree } from "./fixtures/tree";
 // 2 mm wall, 40/44 mm bore/outside, 60 mm long.
 const TUBE = Buffer.from(annulusStep(20, 22, 60, "thin tube"));
 
-test("a thin tube with linear elements gets the thin-wall warning, without the Shell advice @pipeline", async ({
+test("a thin tube with linear elements gets the thin-wall warning, with the Shell advice @pipeline", async ({
   page,
 }) => {
   await gotoApp(page);
@@ -34,6 +34,7 @@ test("a thin tube with linear elements gets the thin-wall warning, without the S
     .getByTestId("check-fail")
     .filter({ hasText: "Thin wall on body 1" });
   await expect(warning).toContainText("2.0 mm");
-  await expect(warning).toContainText("Use quadratic elements (Mesh panel).");
-  await expect(warning).not.toContainText("Shell");
+  await expect(warning).toContainText(
+    "Use quadratic elements (Mesh panel) or set the body to Shell.",
+  );
 });

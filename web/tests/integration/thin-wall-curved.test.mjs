@@ -91,13 +91,14 @@ describe("linear thin-wall check on a tube", () => {
     expect(finding.elementsThrough).toBeLessThan(4);
   });
 
-  test("coarse tube: the advice is quadratic elements, not Shell", () => {
-    // Shell idealisation collapses planar walls only, so it would refuse a tube.
+  test("coarse tube: the advice is quadratic elements or Shell", () => {
+    // Shell idealisation collapses curved walls too (KOF-448), so a tube can
+    // be set to Shell like a flat wall.
     const [finding] = thinWallFindings(tube);
     expect(finding.curved).toBe(true);
     const message = thinWallMessage(finding);
     expect(message).toContain("quadratic");
-    expect(message).not.toContain("Shell");
+    expect(message).toContain("set the body to Shell");
   });
 
   test("coarse tube, quadratic elements: no finding", () => {

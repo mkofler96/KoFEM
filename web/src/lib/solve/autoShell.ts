@@ -35,10 +35,12 @@ import {
   type CoupledModel,
   type ShellizeMesh,
   type ShellExtraction,
+  type Vec3,
 } from "../shellize.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
 import { shellTieRefusal } from "./refusals.js";
 import { supportOwners, type SupportOwners } from "./reactions.js";
+import { curvedWallPressures } from "./wallPressure.js";
 import {
   coupledFixedDofs,
   coupledLoads,
@@ -134,6 +136,27 @@ export function buildShellizeMesh(
     surfFace.push(surfaceFaceIds[t]);
   }
   return { V: verts, tet, body, surfTri, surfFace };
+}
+
+// Position of vertex `index` of the flat shellize mesh.
+function vertexOf(mesh: ShellizeMesh, index: number): Vec3 {
+  return [mesh.V[3 * index], mesh.V[3 * index + 1], mesh.V[3 * index + 2]];
+}
+
+// Append forces on local shell nodes to coupled-form (6·pool+dof) loads.
+function addShellForces(
+  loads: { load_dofs: number[]; load_vals: number[] },
+  forces: Map<number, Vec3>,
+  poolOfShellNode: (local: number) => number,
+): void {
+  for (const [local, force] of forces) {
+    const pool = poolOfShellNode(local);
+    for (let axis = 0; axis < 3; axis++) {
+      if (force[axis] === 0) continue;
+      loads.load_dofs.push(6 * pool + axis);
+      loads.load_vals.push(force[axis]);
+    }
+  }
 }
 
 // Extract the Shell body's thin walls, refusing loudly when the body carries
@@ -639,14 +662,27 @@ export function prepareAutoCoupledSolve(
   );
   // Faces wound outward from their tets, so a pressure pushes into the body.
   // Shell nodes and reference points carry rotations, and take a nodal moment.
+  // A pressure on a whole face of a curved wall loads the wall's facets.
+  const pressures = curvedWallPressures(
+    solidFacesOutward(surfaceLoads, elements, nodes, vid),
+    shells,
+    { triangles: input.surfaceTriangles, faceIds: input.surfaceFaceIds },
+    (nodeId) => vertexOf(mesh, vid(nodeId, "surface load face")),
+  );
   const nodalLoads = coupledLoads(
     loads,
-    solidFacesOutward(surfaceLoads, elements, nodes, vid),
+    pressures.remaining,
     poolOf,
     (pi) => isShellPoolIndex(model, pi) || isRefPoint(pi),
     nodes,
     vid,
   );
+  addShellForces(nodalLoads, pressures.shellForces, (local) => {
+    const pool = model.shellPool[local];
+    if (pool === undefined)
+      throw new Error(`auto-shell: shell node ${local} has no pool node`);
+    return pool;
+  });
 
   // Solid bodies that actually contribute solid tets to the pool: the other
   // bodies plus the shelled body when its thick base survived (only its thin walls
@@ -828,15 +864,26 @@ export function preparePureShellSolve(
   );
   // Faces wound outward from their tets, so a pressure pushes into the body.
   // Every node is a shell node, so every node takes a nodal moment.
-  const { load_dofs, load_vals } = coupledLoads(
-    loads,
+  // A pressure on a whole face of a curved wall loads the wall's facets.
+  const pressures = curvedWallPressures(
     solidFacesOutward(payload.surfaceLoads, elements, nodes, vid),
+    shells,
+    { triangles: input.surfaceTriangles, faceIds: input.surfaceFaceIds },
+    (nodeId) => vertexOf(mesh, vid(nodeId, "surface load face")),
+  );
+  const nodalLoads = coupledLoads(
+    loads,
+    pressures.remaining,
     shellOf,
     () => true,
     nodes,
     vid,
   );
-  const point_loads = coupledToShellPointLoads(load_dofs, load_vals);
+  addShellForces(nodalLoads, pressures.shellForces, (local) => local);
+  const point_loads = coupledToShellPointLoads(
+    nodalLoads.load_dofs,
+    nodalLoads.load_vals,
+  );
 
   log(
     `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${shells.shellVerts.length / 3} shell nodes, ${shells.shellTris.length / 3} facets (pure shell, no solid to couple)`,

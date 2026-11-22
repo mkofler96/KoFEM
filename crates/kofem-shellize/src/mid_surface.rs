@@ -2,14 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Collapse the detected thin walls to Kirchhoff shell mid-surface facets, one
-//! thickness per wall, welded where walls meet.
+//! thickness per wall, welded where walls meet. A planar wall moves its kept
+//! face t/2 along the face normal; a curved wall (KOF-448) moves each node of
+//! its kept face t/2 along that node's own normal.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use crate::curved_walls::{curved_walls, CurvedWall};
 use crate::error::ShellizeError;
-use crate::geometry::{add, dot, norm, scale, sub, OrderedMap, ShellizeMesh, Vec3};
+use crate::geometry::{
+    add, cross, dot, norm, scale, sub, tet_face, triangle_key, OrderedMap, ShellizeMesh, Vec3,
+    TET_FACES,
+};
 use crate::junction::{clearance, imprint, Imprint};
-use crate::walls::{detect_walls, face_props, FaceProp, PairedWall, Wall};
+use crate::walls::{detect_walls, face_adjacency, face_props, FaceProp, PairedWall, Wall};
 
 /// The shell mid-surface of one body: facets over their own local node
 /// numbering, one thickness and one source CAD face per facet.
@@ -124,13 +130,14 @@ fn collapse_walls_to_mid_surface(
     mesh: &ShellizeMesh,
     walls: &[PairedWall],
     faces: &[FaceProp],
+    normals: &NodeNormals,
 ) -> Result<ShellExtraction, ShellizeError> {
     let keep: HashMap<i32, Wall> = walls
         .iter()
         .map(|paired| (paired.wall.keep, paired.wall))
         .collect();
     let face_of: HashMap<i32, &FaceProp> = faces.iter().map(|face| (face.id, face)).collect();
-    let placement = wall_nodes(mesh, walls, &keep, &face_of)?;
+    let placement = wall_nodes(mesh, walls, &keep, &face_of, normals)?;
 
     let mut raw = RawShell::default();
     let mut node_of: HashMap<(i32, usize), usize> = HashMap::new();
@@ -156,6 +163,18 @@ fn collapse_walls_to_mid_surface(
                 raw.original.push(original);
                 id
             };
+        }
+        // A curved wall's facets are wound along its kept face's outward
+        // normal, so a pressure on either face of the wall knows its side.
+        if wall.curved {
+            let [first, second, third] = tri.map(|vertex| mesh.vertices[vertex]);
+            let winding = cross(sub(second, first), sub(third, first));
+            let outward = tri.iter().try_fold([0.0; 3], |sum, &vertex| {
+                normals.at(wall.keep, vertex).map(|normal| add(sum, normal))
+            })?;
+            if dot(winding, outward) < 0.0 {
+                nodes.swap(1, 2);
+            }
         }
         raw.triangles.push(nodes);
         raw.thickness.push(wall.thickness);
@@ -233,14 +252,18 @@ fn wall_nodes(
     walls: &[PairedWall],
     keep: &HashMap<i32, Wall>,
     face_of: &HashMap<i32, &FaceProp>,
+    normals: &NodeNormals,
 ) -> Result<WallNodes, ShellizeError> {
     let wall = |face: i32| {
         keep.get(&face)
             .ok_or(ShellizeError::UnknownWallFace { face })
     };
-    // Inner (partner) face → the wall it belongs to.
+    refuse_curved_t_junctions(mesh, walls, keep)?;
+    // Inner (partner) face → the PLANAR wall it belongs to: only a planar wall
+    // takes a T-junction (one on a curved wall is refused above).
     let partner_wall: HashMap<i32, i32> = walls
         .iter()
+        .filter(|paired| !paired.wall.curved)
         .flat_map(|paired| {
             paired
                 .partners
@@ -270,8 +293,13 @@ fn wall_nodes(
         let mut constraints = Vec::with_capacity(node_walls.len());
         for &face in node_walls {
             let kept = wall(face)?;
+            let normal = if kept.curved {
+                normals.at(face, vertex)?
+            } else {
+                kept.normal
+            };
             constraints.push(Constraint {
-                normal: kept.normal,
+                normal,
                 target: -kept.thickness / 2.0,
             });
         }
@@ -300,6 +328,229 @@ fn wall_nodes(
         offset_of_node,
         junction_offset,
     })
+}
+
+/// Each curved wall's kept-face nodes' own outward normals: the area-weighted
+/// mean of the normals of the face's surface triangles at the node, pointing
+/// out of the material (away from the tet each triangle bounds; the winding
+/// is not trusted).
+#[derive(Default)]
+struct NodeNormals {
+    node: HashMap<(i32, usize), Vec3>,
+    /// Per face, the mean outward normal (zero for a closed face).
+    mean: HashMap<i32, Vec3>,
+}
+
+fn unit(vector: Vec3) -> Vec3 {
+    let length = norm(vector);
+    if length > 0.0 {
+        scale(vector, 1.0 / length)
+    } else {
+        vector
+    }
+}
+
+impl NodeNormals {
+    fn of(mesh: &ShellizeMesh, faces: &HashSet<i32>) -> Self {
+        let mut normals = Self::default();
+        if faces.is_empty() {
+            return normals;
+        }
+        let on_faces = || {
+            mesh.surf_tris
+                .iter()
+                .zip(&mesh.surf_face)
+                .filter(|(_, face)| faces.contains(face))
+        };
+        let wanted: HashSet<[usize; 3]> = on_faces().map(|(&tri, _)| triangle_key(tri)).collect();
+        let mut fourth: HashMap<[usize; 3], usize> = HashMap::with_capacity(wanted.len());
+        for &tet in &mesh.tets {
+            for face in TET_FACES {
+                let key = tet_face(tet, face).1;
+                if wanted.contains(&key) {
+                    // Corners are 0..=3, so the one a face leaves out is 6 − Σ face.
+                    fourth.insert(key, tet[6 - face.iter().sum::<usize>()]);
+                }
+            }
+        }
+        let mut sums: HashMap<(i32, usize), Vec3> = HashMap::new();
+        for (&tri, &face) in on_faces() {
+            let Some(&opposite) = fourth.get(&triangle_key(tri)) else {
+                continue;
+            };
+            let [first, second, third] = tri.map(|vertex| mesh.vertices[vertex]);
+            let raw = cross(sub(second, first), sub(third, first));
+            let outward = if dot(raw, sub(mesh.vertices[opposite], first)) > 0.0 {
+                scale(raw, -1.0)
+            } else {
+                raw
+            };
+            for vertex in tri {
+                let sum = sums.entry((face, vertex)).or_insert([0.0; 3]);
+                *sum = add(*sum, outward);
+            }
+            let mean = normals.mean.entry(face).or_insert([0.0; 3]);
+            *mean = add(*mean, outward);
+        }
+        normals.node = sums
+            .into_iter()
+            .map(|(key, sum)| (key, unit(sum)))
+            .collect();
+        for mean in normals.mean.values_mut() {
+            *mean = unit(*mean);
+        }
+        normals
+    }
+
+    /// The outward normal of `vertex` on curved kept face `face`.
+    fn at(&self, face: i32, vertex: usize) -> Result<Vec3, ShellizeError> {
+        self.node
+            .get(&(face, vertex))
+            .copied()
+            .filter(|normal| norm(*normal) > 0.0)
+            .ok_or(ShellizeError::UnknownWallFace { face })
+    }
+}
+
+/// A wall standing on the inside (the partner face) of a curved wall would
+/// need a T-junction weld into the curved mid-surface, which only planar walls
+/// get. Its nodes would stay where they are, t/2 off the curved shell, and the
+/// two would be solved as loose pieces: refuse instead.
+fn refuse_curved_t_junctions(
+    mesh: &ShellizeMesh,
+    walls: &[PairedWall],
+    keep: &HashMap<i32, Wall>,
+) -> Result<(), ShellizeError> {
+    let curved_partner: HashMap<i32, &Wall> = walls
+        .iter()
+        .filter(|paired| paired.wall.curved)
+        .flat_map(|paired| {
+            paired
+                .partners
+                .iter()
+                .map(move |&partner| (partner, &paired.wall))
+        })
+        .collect();
+    if curved_partner.is_empty() {
+        return Ok(());
+    }
+    let mut kept_of_node: HashMap<usize, BTreeSet<i32>> = HashMap::new();
+    for (tri, face) in mesh.surf_tris.iter().zip(&mesh.surf_face) {
+        if keep.contains_key(face) {
+            for &vertex in tri {
+                kept_of_node.entry(vertex).or_default().insert(*face);
+            }
+        }
+    }
+    for (tri, face) in mesh.surf_tris.iter().zip(&mesh.surf_face) {
+        let Some(curved) = curved_partner.get(face) else {
+            continue;
+        };
+        let standing = tri.iter().any(|vertex| {
+            kept_of_node
+                .get(vertex)
+                .is_some_and(|kept| !kept.contains(&curved.keep))
+        });
+        if standing {
+            return Err(ShellizeError::CurvedWallJunction {
+                body: curved.body,
+                face: *face,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Area mismatch allowed between a curved wall's two faces, as for a planar
+/// pair: the offset faces of a thin wall differ by about t·2H (t over the
+/// radius for a cylinder), while a bore facing a flat side face (a hole near a
+/// plate's edge) differs by far more.
+const MAX_AREA_RATIO: f64 = 0.4;
+
+/// The curved walls that collapse, as walls with their partner face: faces of
+/// similar area, neither already part of another wall, and not two edges of
+/// one plate.
+///
+/// The larger (convex) face is kept, as the planar pass keeps the outer face,
+/// so tangent curved walls (a cylinder into its spherical cap) share their
+/// kept faces' edge nodes. Where a planar wall continues the curved one on the
+/// other side — its kept face meets the curved wall's partner and its partner
+/// meets the larger face (a bend whose flat legs are kept on the inside) — the
+/// curved wall follows it, so the walls still share their edge nodes.
+fn collapsible_curved_walls(
+    mesh: &ShellizeMesh,
+    faces: &[FaceProp],
+    planar: &[PairedWall],
+    curved: &[CurvedWall],
+) -> Vec<PairedWall> {
+    if curved.is_empty() {
+        return Vec::new();
+    }
+    let area: HashMap<i32, f64> = faces.iter().map(|face| (face.id, face.area)).collect();
+    let mut used: HashSet<i32> = planar
+        .iter()
+        .flat_map(|paired| std::iter::once(paired.wall.keep).chain(paired.partners.iter().copied()))
+        .collect();
+    let adjacency = face_adjacency(mesh);
+    let touches = |first: i32, second: i32| {
+        adjacency
+            .get(&first)
+            .is_some_and(|neighbours| neighbours.contains(&second))
+    };
+    // A face that both faces of one planar wall meet runs through that wall's
+    // thickness: an edge of a plate (its bore, a rounded end). Two such edges
+    // facing each other across the plate (a hole near a rounded end) are part
+    // of the plate, never a wall of their own. (One curved face met by both
+    // faces of a planar wall is a wall that one stands on: a T-junction.)
+    let plate_edge = |face: i32| {
+        planar.iter().any(|paired| {
+            touches(face, paired.wall.keep)
+                && paired
+                    .partners
+                    .iter()
+                    .any(|&partner| touches(face, partner))
+        })
+    };
+    let mut walls = Vec::new();
+    for wall in curved {
+        let (Some(&larger), Some(&smaller)) = (area.get(&wall.face), area.get(&wall.partner))
+        else {
+            continue;
+        };
+        if (larger - smaller).abs() / larger.max(smaller) > MAX_AREA_RATIO
+            || used.contains(&wall.face)
+            || used.contains(&wall.partner)
+            || (plate_edge(wall.face) && plate_edge(wall.partner))
+        {
+            continue;
+        }
+        used.insert(wall.face);
+        used.insert(wall.partner);
+        let flipped = planar.iter().any(|paired| {
+            touches(paired.wall.keep, wall.partner)
+                && paired
+                    .partners
+                    .iter()
+                    .any(|&partner| touches(partner, wall.face))
+        });
+        let (keep, partner) = if flipped {
+            (wall.partner, wall.face)
+        } else {
+            (wall.face, wall.partner)
+        };
+        walls.push(PairedWall {
+            wall: Wall {
+                keep,
+                normal: [0.0; 3],
+                thickness: wall.thickness,
+                body: wall.body,
+                curved: true,
+                partner,
+            },
+            partners: vec![partner],
+        });
+    }
+    walls
 }
 
 /// The collapsed walls before welding: one node per (wall, original node).
@@ -558,18 +809,21 @@ fn split_facet(
     vec![tri]
 }
 
-/// Detect thin walls (opposite planar CAD-face pairs) and collapse each to a
-/// mid-surface facet with its wall thickness; weld walls at their junctions.
-/// Returns an empty extraction (`shell_body` = `None`) when no thin wall is
-/// found, so the caller can decide what that means.
+/// Detect thin walls — opposite planar CAD-face pairs, and curved walls of
+/// steady thickness (a cylinder, sphere, cone, torus or bend) — and collapse
+/// each to mid-surface facets with its wall thickness; weld walls at their
+/// junctions. Returns an empty extraction (`shell_body` = `None`) when no thin
+/// wall is found, so the caller can decide what that means.
 ///
 /// Only ONE body is shelled — among the requested bodies the one carrying the
-/// largest thin wall — and only that body's walls are collapsed: detection
-/// pairs opposite faces on any body, and collapsing a wall of a body that stays
-/// solid would lay shell facets over solid tets.
+/// largest planar thin wall, or with none the largest curved one — and only
+/// that body's walls are collapsed: detection pairs opposite faces on any
+/// body, and collapsing a wall of a body that stays solid would lay shell
+/// facets over solid tets.
 ///
 /// # Errors
-/// An internal inconsistency in the wall bookkeeping.
+/// [`ShellizeError::CurvedWallJunction`] for a wall standing on the inside of
+/// a curved wall, or an internal inconsistency in the wall bookkeeping.
 pub fn extract_thin_wall_shells(
     mesh: &ShellizeMesh,
     options: &ExtractOptions,
@@ -581,25 +835,52 @@ pub fn extract_thin_wall_shells(
     {
         return Ok(ShellExtraction::default()); // the user chose all-solid
     }
+    let requested = |body: i32| {
+        options
+            .shell_body_ids
+            .as_ref()
+            .is_none_or(|ids| ids.contains(&body))
+    };
     let faces = face_props(mesh);
-    let all_walls: Vec<PairedWall> = detect_walls(mesh, &faces, options.max_wall)
+    let planar = detect_walls(mesh, &faces, options.max_wall);
+    let curved = collapsible_curved_walls(
+        mesh,
+        &faces,
+        &planar,
+        &curved_walls(mesh, &faces, &planar, options.max_wall),
+    );
+    let planar: Vec<PairedWall> = planar
         .into_iter()
-        .filter(|paired| {
-            options
-                .shell_body_ids
-                .as_ref()
-                .is_none_or(|ids| ids.contains(&paired.wall.body))
-        })
+        .filter(|paired| requested(paired.wall.body))
         .collect();
-    let Some(first) = all_walls.first() else {
+    let curved: Vec<PairedWall> = curved
+        .into_iter()
+        .filter(|paired| requested(paired.wall.body))
+        .collect();
+    let Some(shell_body) = planar
+        .first()
+        .or(curved.first())
+        .map(|paired| paired.wall.body)
+    else {
         return Ok(ShellExtraction::default());
     };
-    let shell_body = first.wall.body;
-    let walls: Vec<PairedWall> = all_walls
+    let mut walls: Vec<PairedWall> = planar
         .into_iter()
+        .chain(curved)
         .filter(|paired| paired.wall.body == shell_body)
         .collect();
-    let collapsed = collapse_walls_to_mid_surface(mesh, &walls, &faces)?;
+    let curved_faces: HashSet<i32> = walls
+        .iter()
+        .filter(|paired| paired.wall.curved)
+        .map(|paired| paired.wall.keep)
+        .collect();
+    let normals = NodeNormals::of(mesh, &curved_faces);
+    for paired in walls.iter_mut().filter(|paired| paired.wall.curved) {
+        if let Some(&mean) = normals.mean.get(&paired.wall.keep) {
+            paired.wall.normal = mean;
+        }
+    }
+    let collapsed = collapse_walls_to_mid_surface(mesh, &walls, &faces, &normals)?;
     Ok(ShellExtraction {
         walls: walls.into_iter().map(|paired| paired.wall).collect(),
         shell_body: Some(shell_body),
