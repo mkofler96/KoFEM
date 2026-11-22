@@ -49,7 +49,13 @@ import {
   buildMeshStats,
   buildResultSurface,
 } from "./lib/app-model.mjs";
-import { buildFromRecipe, nodalVonMises, withMesh } from "./lib/pipeline.mjs";
+import {
+  buildFromRecipe,
+  nodalVonMises,
+  rustFem,
+  withMesh,
+} from "./lib/pipeline.mjs";
+import { analyseStudy } from "./lib/rates.mjs";
 import {
   modelStepPath,
   sameModelStep,
@@ -275,6 +281,19 @@ if (report) {
       throw new Error(
         `convergence study "${s.id}": no level matches the mesh its case is gated on — include it so the study connects to the published result`,
       );
+
+  // Observed against expected rates (lib/rates.mjs, KOF-399), stored with the
+  // points they come from; the pages show them and CI re-derives them
+  // (web/tests/integration/convergence-rates.test.mjs).
+  const fem = await rustFem();
+  for (const s of convergence) {
+    const def = studies.find((d) => d.id === s.id);
+    s.rates = analyseStudy(def, s, fem);
+    for (const r of s.rates.series)
+      console.log(
+        `  ${s.id.padEnd(16)} ${r.label.padEnd(15)} rate ${r.observed.toFixed(2)} (expected ${r.expected.toFixed(2)})${r.pass ? "" : "  BELOW"}`,
+      );
+  }
 
   // The builds behind these numbers (lib/provenance.mjs): the C++ engine
   // meshes every case; the Rust module solves it. Like the engine id, the module id is a record, not part of

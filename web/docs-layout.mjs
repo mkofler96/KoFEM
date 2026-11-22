@@ -239,6 +239,17 @@ const FIGURE_SVG_STYLE = `
       }
       svg.conv .hit {
         fill: transparent;
+      }
+      svg.conv .slope {
+        stroke-width: 1.5;
+        stroke-dasharray: 5 4;
+        opacity: 0.8;
+      }
+      svg.conv .slope.s1 {
+        stroke: var(--s1);
+      }
+      svg.conv .slope.s2 {
+        stroke: var(--s2);
       }`;
 const FIGURE_SVG_DARK_STYLE = `
       svg.fig .body,
@@ -812,6 +823,10 @@ const STYLE = `
       }
       .dot.under {
         background: var(--muted);
+      }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
       }
       figure.chart picture.conv img {
         max-width: 560px;
