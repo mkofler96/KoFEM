@@ -5,9 +5,10 @@
 //
 //   prismStep            a simple polygon in the xy plane extruded along +z.
 //   extrudedProfileStep  an outer loop with holes, each loop made of straight
-//                        lines and circular arcs (full circles allowed),
-//                        extruded along +z.
-//   annulusStep, plateWithHoleStep, quarterStripWithHoleStep
+//                        lines, circular arcs and axis-aligned elliptic arcs
+//                        (full circles and ellipses allowed), extruded along +z.
+//   annulusStep, plateWithHoleStep, quarterStripWithHoleStep,
+//   ellipticMembraneStep
 //                        the curved stock the examples use, built on the above.
 //
 // Every line or arc of a loop becomes its own side face, so a user can pick one
@@ -15,7 +16,8 @@
 // one face each (holes are inner bounds of the caps). Gallery support and load
 // pads are cut afterwards with the app's split tool (split_geometry), as a user
 // cuts them, not baked into the profile. The B-rep uses LINE and CIRCLE edge
-// curves on PLANE and CYLINDRICAL_SURFACE faces; OCCT rebuilds the p-curves on
+// curves on PLANE and CYLINDRICAL_SURFACE faces, and ELLIPSE edge curves on
+// SURFACE_OF_LINEAR_EXTRUSION faces; OCCT rebuilds the p-curves on
 // import. A full circle is one closed edge; its cylindrical face carries the
 // usual seam edge (used twice in its loop), at the circle's start point.
 //
@@ -264,7 +266,18 @@ export function prismStep(polygon, depth, name) {
  * @property {Point2} center
  * @property {boolean} ccw  true: the arc runs counter-clockwise about +z
  */
-/** @typedef {LineSegment | ArcSegment} ProfileSegment */
+/**
+ * An arc of the axis-aligned ellipse ((x − cx)/a)² + ((y − cy)/b)² = 1 from the
+ * previous segment's end to `to`, which must both lie on it. When the arc ends
+ * where it starts, it is the full ellipse (a loop of one segment).
+ * @typedef {object} EllipseArcSegment
+ * @property {"ellipseArc"} type
+ * @property {Point2} to
+ * @property {Point2} center
+ * @property {[number, number]} semiAxes  [a, b]: a along x, b along y
+ * @property {boolean} ccw  true: the arc runs counter-clockwise about +z
+ */
+/** @typedef {LineSegment | ArcSegment | EllipseArcSegment} ProfileSegment */
 /**
  * A closed loop: each segment starts where the previous one ends, and the first
  * starts where the last one ends (its `to`).
@@ -294,6 +307,21 @@ export const line = (to) => ({ type: "line", to });
 export const arc = (to, center, ccw) => ({ type: "arc", to, center, ccw });
 
 /**
+ * @param {Point2} to
+ * @param {Point2} center
+ * @param {[number, number]} semiAxes  [a, b]: semi-axis a along x, b along y
+ * @param {boolean} ccw  true: counter-clockwise about +z
+ * @returns {EllipseArcSegment}
+ */
+export const ellipseArc = (to, center, semiAxes, ccw) => ({
+  type: "ellipseArc",
+  to,
+  center,
+  semiAxes,
+  ccw,
+});
+
+/**
  * A full circle as a one-segment loop, starting (and seamed) at
  * center + (radius, 0).
  *
@@ -309,9 +337,25 @@ export const circleLoop = ([cx, cy], radius, ccw) => [
 const TWO_PI = 2 * Math.PI;
 
 /**
+ * The angle from `a0` to `a1` the way `ccw` turns, in [0, 2π); 2π when `closed`.
+ *
+ * @param {number} a0
+ * @param {number} a1
+ * @param {boolean} ccw
+ * @param {boolean} closed
+ */
+function turn(a0, a1, ccw, closed) {
+  if (closed) return TWO_PI;
+  const sweep = ccw ? a1 - a0 : a0 - a1;
+  return ((sweep % TWO_PI) + TWO_PI) % TWO_PI;
+}
+
+/**
  * Start point, end point and signed sweep (rad, + counter-clockwise) of every
- * segment of a loop; throws on an arc whose ends are not on one circle, a
- * zero-length line, or an empty loop.
+ * segment of a loop; for an elliptic arc the sweep is in its parametric angle
+ * t (x = cx + a cos t, y = cy + b sin t). `t0` is the start's angle about the
+ * centre (parametric for an ellipse). Throws on an arc whose ends are not on
+ * one circle or ellipse, a zero-length line, or an empty loop.
  *
  * @param {ProfileLoop} loop
  * @param {string} label  for error messages
@@ -328,8 +372,33 @@ function loopSegments(loop, label) {
         throw new Error(`${label}: line segment ${i} has zero length`);
       return { seg, from, to, sweep: 0, radius: 0 };
     }
+    const closed = Math.hypot(...sub(to, from)) <= 1e-9 * scale;
+    if (seg.type === "ellipseArc") {
+      const [a, b] = seg.semiAxes;
+      if (!(a > 0 && b > 0))
+        throw new Error(
+          `${label}: elliptic arc segment ${i} needs positive semi-axes, got ${a}, ${b}`,
+        );
+      const [cx, cy] = seg.center;
+      /** @param {Point2} p @param {string} which */
+      const angle = (p, which) => {
+        const u = (p[0] - cx) / a;
+        const v = (p[1] - cy) / b;
+        if (Math.abs(Math.hypot(u, v) - 1) > 1e-9)
+          throw new Error(
+            `${label}: elliptic arc segment ${i} ${which} at (${p.join(", ")}), not on its ellipse ((x − ${cx})/${a})² + ((y − ${cy})/${b})² = 1`,
+          );
+        return Math.atan2(v, u);
+      };
+      const t0 = angle(from, "starts");
+      const t1 = angle(to, "ends");
+      const sweep = turn(t0, t1, seg.ccw, closed);
+      return { seg, from, to, sweep: seg.ccw ? sweep : -sweep, radius: 0, t0 };
+    }
     if (seg.type !== "arc")
-      throw new Error(`${label}: segment ${i} is neither a line nor an arc`);
+      throw new Error(
+        `${label}: segment ${i} is neither a line, an arc nor an elliptic arc`,
+      );
     const radius = Math.hypot(...sub(from, seg.center));
     const rTo = Math.hypot(...sub(to, seg.center));
     if (radius <= 1e-9 * scale)
@@ -340,13 +409,13 @@ function loopSegments(loop, label) {
       );
     const a0 = Math.atan2(from[1] - seg.center[1], from[0] - seg.center[0]);
     const a1 = Math.atan2(to[1] - seg.center[1], to[0] - seg.center[0]);
-    const closed = Math.hypot(...sub(to, from)) <= 1e-9 * scale;
-    let sweep = closed ? TWO_PI : seg.ccw ? a1 - a0 : a0 - a1;
-    if (!closed) sweep = ((sweep % TWO_PI) + TWO_PI) % TWO_PI;
-    return { seg, from, to, sweep: seg.ccw ? sweep : -sweep, radius };
+    const sweep = turn(a0, a1, seg.ccw, closed);
+    return { seg, from, to, sweep: seg.ccw ? sweep : -sweep, radius, t0: a0 };
   });
-  if (segs.length === 1 && segs[0].sweep === 0)
-    throw new Error(`${label}: a one-segment loop must be a full circle`);
+  if (segs.length === 1 && Math.abs(segs[0].sweep) !== TWO_PI)
+    throw new Error(
+      `${label}: a one-segment loop must be a full circle or ellipse`,
+    );
   return segs;
 }
 
@@ -357,14 +426,25 @@ function loopSegments(loop, label) {
  */
 function signedArea(segs) {
   let twice = 0;
-  for (const { seg, from, to, sweep, radius } of segs) {
+  for (const { seg, from, to, sweep, radius, t0 } of segs) {
     if (seg.type === "line") {
       twice += from[0] * to[1] - to[0] * from[1];
       continue;
     }
+    if (seg.type === "ellipseArc") {
+      // ∮ (x dy − y dx) along x = c + (a cos t, b sin t), t0 → t0 + sweep.
+      const [cx, cy] = seg.center;
+      const [a, b] = seg.semiAxes;
+      const t1 = t0 + sweep;
+      twice +=
+        cx * b * (Math.sin(t1) - Math.sin(t0)) -
+        cy * a * (Math.cos(t1) - Math.cos(t0)) +
+        a * b * sweep;
+      continue;
+    }
     // ∮ (x dy − y dx) along x = c + r·(cos θ, sin θ), θ0 → θ0 + sweep.
     const [cx, cy] = seg.center;
-    const a0 = Math.atan2(from[1] - cy, from[0] - cx);
+    const a0 = t0;
     const a1 = a0 + sweep;
     twice +=
       radius * cx * (Math.sin(a1) - Math.sin(a0)) -
@@ -424,9 +504,10 @@ function real(v) {
 }
 
 /**
- * STEP solid of a profile (outer loop of lines and arcs, holes likewise)
- * extruded from z = 0 to z = depth. Each segment becomes one side face — a
- * PLANE for a line, a CYLINDRICAL_SURFACE for an arc or circle — and the holes
+ * STEP solid of a profile (outer loop of lines, arcs and elliptic arcs, holes
+ * likewise) extruded from z = 0 to z = depth. Each segment becomes one side
+ * face — a PLANE for a line, a CYLINDRICAL_SURFACE for an arc or circle, a
+ * SURFACE_OF_LINEAR_EXTRUSION of its ELLIPSE for an elliptic arc — and the holes
  * become inner bounds of the two caps. Face order: outer-loop sides, each
  * hole's sides, bottom cap, top cap.
  *
@@ -477,6 +558,44 @@ function extrudedFaces(step, profile, depth) {
   const placement = (origin, axis, ref) =>
     add(`AXIS2_PLACEMENT_3D('',#${point(origin)},#${dir(axis)},#${dir(ref)})`);
 
+  /**
+   * The ELLIPSE of an elliptic arc at height z, running the arc's way (axis
+   * ±z), so the edge follows the curve's own sense. OCCT keeps the major
+   * semi-axis first, so the placement's reference direction lies along the
+   * major axis, on the side whose end (the curve's seam, parameter 0) does not
+   * fall inside the arc when either side allows that.
+   *
+   * @param {ReturnType<typeof loopSegments>[number]} s
+   * @param {number} z
+   */
+  const ellipse = (s, z) => {
+    if (s.seg.type !== "ellipseArc") throw new Error("not an elliptic arc");
+    const [cx, cy] = s.seg.center;
+    const [a, b] = s.seg.semiAxes;
+    const alongX = a >= b;
+    /** @type {[number[], number][]} reference direction, its parametric angle t */
+    const candidates = alongX
+      ? [
+          [[1, 0, 0], 0],
+          [[-1, 0, 0], Math.PI],
+        ]
+      : [
+          [[0, 1, 0], Math.PI / 2],
+          [[0, -1, 0], -Math.PI / 2],
+        ];
+    /** @param {number} t */
+    const inside = (t) => {
+      const along =
+        ((((t - s.t0) * Math.sign(s.sweep)) % TWO_PI) + TWO_PI) % TWO_PI;
+      return along > 1e-12 && along < Math.abs(s.sweep) - 1e-12;
+    };
+    const [ref] = candidates.find(([, t]) => !inside(t)) ?? candidates[0];
+    const axis = [0, 0, s.sweep > 0 ? 1 : -1];
+    return add(
+      `ELLIPSE('',#${placement([cx, cy, z], axis, ref)},${real(alongX ? a : b)},${real(alongX ? b : a)})`,
+    );
+  };
+
   // Edges of one loop: per segment a bottom and a top edge, per vertex (segment
   // start) a vertical edge. A full circle has one vertex, so its vertical edge
   // is the seam of its cylinder.
@@ -497,6 +616,10 @@ function extrudedFaces(step, profile, depth) {
           `VECTOR('',#${dir(unit(d))},${real(Math.hypot(...d))})`,
         );
         const curve = add(`LINE('',#${point(pa)},#${vector})`);
+        return add(`EDGE_CURVE('',#${va},#${vb2},#${curve},.T.)`);
+      }
+      if (s.seg.type === "ellipseArc") {
+        const curve = ellipse(s, z);
         return add(`EDGE_CURVE('',#${va},#${vb2},#${curve},.T.)`);
       }
       // The circle runs the arc's way (axis ±z), its parameter starting at the
@@ -557,6 +680,14 @@ function extrudedFaces(step, profile, depth) {
           `PLANE('',#${placement([s.from[0], s.from[1], 0], [d[1], -d[0], 0], d)})`,
         );
         faces.push(add(`ADVANCED_FACE('',(#${bound}),#${plane},.T.)`));
+      } else if (s.seg.type === "ellipseArc") {
+        // The bottom ellipse swept along +z. Its normal, tangent × +z, is the
+        // loop's right (out of the material), as the curve runs the arc's way.
+        const vector = add(`VECTOR('',#${dir([0, 0, 1])},${real(depth)})`);
+        const surface = add(
+          `SURFACE_OF_LINEAR_EXTRUSION('',#${ellipse(s, 0)},#${vector})`,
+        );
+        faces.push(add(`ADVANCED_FACE('',(#${bound}),#${surface},.T.)`));
       } else {
         // The cylinder's u = 0 seam sits at the arc's counter-clockwise-most
         // end, so the face spans u ∈ [0, |sweep|] without crossing it.
@@ -697,6 +828,34 @@ export function quarterStripWithHoleStep(
       holes: [],
     },
     thickness,
+    name,
+  );
+}
+
+/**
+ * The NAFEMS LE1 / LE10 elliptic membrane quarter, from z = 0 to z = depth: the
+ * region x, y ≥ 0 between the inner ellipse (x/2000)² + (y/1000)² = 1 and the
+ * outer ellipse (x/3250)² + (y/2750)² = 1 (mm), with corners A = (0, 1000),
+ * B = (0, 2750), C = (3250, 0), D = (2000, 0). Six faces: 1 edge DC on y = 0,
+ * 2 outer arc CB, 3 edge BA on x = 0, 4 inner arc AD, 5 face z = 0,
+ * 6 face z = depth.
+ *
+ * @param {number} depth  thickness along +z (mm)
+ * @param {string} name   product name written into the file
+ * @returns {string} the STEP file text
+ */
+export function ellipticMembraneStep(depth, name) {
+  return extrudedProfileStep(
+    {
+      outer: [
+        line([3250, 0]),
+        ellipseArc([0, 2750], [0, 0], [3250, 2750], true),
+        line([0, 1000]),
+        ellipseArc([2000, 0], [0, 0], [2000, 1000], false),
+      ],
+      holes: [],
+    },
+    depth,
     name,
   );
 }
