@@ -85,13 +85,15 @@ export async function runBenchmark(deps, argv) {
       },
     };
   }
-  for (const c of configs.filter((c) => c.includes("@")))
-    if (!femAlt || c.split("@")[1] !== femAlt.name)
-      throw new Error(`${c}: no Rust build "${c.split("@")[1]}" loaded`);
+  for (const config of configs.filter((c) => c.includes("@")))
+    if (!femAlt || config.split("@")[1] !== femAlt.name)
+      throw new Error(
+        `${config}: no Rust build "${config.split("@")[1]}" loaded`,
+      );
 
   // One compiled module per MFEM variant; instantiated afresh for every solve.
   const mfem = new Map();
-  for (const c of configs.filter((c) => c.startsWith("mfem:"))) {
+  for (const c of configs.filter((config) => config.startsWith("mfem:"))) {
     if (!args.variants) throw new Error("--variants is required for mfem:*");
     if (!buildSolidEngineInputs)
       throw new Error("this tree has no C++ solve (buildSolidEngineInputs)");
@@ -134,7 +136,7 @@ export async function runBenchmark(deps, argv) {
       wasmBinary,
       print: stamp,
       printErr: stamp,
-      onCgLimit: async () => 0,
+      onCgLimit: () => Promise.resolve(0),
     });
     engine.cgIterationLimit = BUDGET;
     const vid = buildVertexIndexer(model.nodes);
@@ -249,9 +251,10 @@ export async function runBenchmark(deps, argv) {
     .sort();
   if (files.length === 0) throw new Error("no model files selected");
 
+  // Bun sets process.versions.bun (its version); Node does not.
   const runtime =
-    typeof Bun !== "undefined"
-      ? `bun ${Bun.version} (JavaScriptCore)`
+    process.versions.bun !== undefined
+      ? `bun ${process.versions.bun} (JavaScriptCore)`
       : `node ${process.version} (V8 ${process.versions.v8})`;
   for (const file of files) {
     const spec = JSON.parse(readFileSync(join(args.models, file), "utf8"));

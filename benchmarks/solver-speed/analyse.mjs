@@ -466,7 +466,7 @@ function sizeFigure(points, title) {
   for (let e = x0; e <= x1; e++)
     s += `<line x1="${X(10 ** e)}" x2="${X(10 ** e)}" y1="${P.t}" y2="${H - P.b}" stroke="#e5e7eb"/><text x="${X(10 ** e)}" y="${H - P.b + 16}" font-size="11" text-anchor="middle" fill="#6b7280">10${sup(e)}</text>`;
   for (const t of [1, 2, 5, 10, 20, 50, 100].filter(
-    (t) => lx(t) >= y0 && lx(t) <= y1,
+    (tick) => lx(tick) >= y0 && lx(tick) <= y1,
   ))
     s += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${t === 1 ? "#6b7280" : "#e5e7eb"}"/><text x="${P.l - 6}" y="${Y(t) + 4}" font-size="11" text-anchor="end" fill="#6b7280">${t}×</text>`;
   for (const p of points)
