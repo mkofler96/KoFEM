@@ -105,18 +105,21 @@ const profile = [
 const deg = Math.PI / 180;
 // The (r, z) point at angle θ (degrees) of the sector.
 /** @param {[number, number]} rz @param {number} theta @returns {[number, number, number]} */
-const at = ([r, z], theta) => [r * Math.cos(theta * deg), r * Math.sin(theta * deg), z];
+const at = ([r, z], theta) => [
+  r * Math.cos(theta * deg),
+  r * Math.sin(theta * deg),
+  z,
+];
 // Points at distance ρ from the knuckle and end centres, to pick faces by.
 /** @param {number} rho @param {number} phi  angle from the knuckle's +r ray (degrees) */
-const onKnuckle = (rho, phi) => /** @type {[number, number]} */ ([
-  K[0] + rho * Math.cos(phi * deg),
-  K[1] + rho * Math.sin(phi * deg),
-]);
+const onKnuckle = (rho, phi) =>
+  /** @type {[number, number]} */ ([
+    K[0] + rho * Math.cos(phi * deg),
+    K[1] + rho * Math.sin(phi * deg),
+  ]);
 /** @param {number} rho @param {number} rD  radius along the end */
-const onEnd = (rho, rD) => /** @type {[number, number]} */ ([
-  rD,
-  S[1] - Math.sqrt(rho * rho - rD * rD),
-]);
+const onEnd = (rho, rD) =>
+  /** @type {[number, number]} */ ([rD, S[1] - Math.sqrt(rho * rho - rD * rD)]);
 const midWall = /** @type {[number, number]} */ ([Rc, zB / 2]);
 
 export default {
@@ -129,7 +132,8 @@ export default {
   page: {
     summary:
       "The NAFEMS pressurised shell of revolution with a knuckle and a dished end: the hoop stress at the knuckle, from curved shells.",
-    model: "A 90° sector of the wall as a curved shell of linear triangles, on symmetry supports.",
+    model:
+      "A 90° sector of the wall as a curved shell of linear triangles, on symmetry supports.",
     inputs: [
       ["R cylinder", Rc, "mm"],
       ["R knuckle", Rk, "mm"],
@@ -141,13 +145,15 @@ export default {
     ],
     supports:
       "End A held axially; symmetry on the cuts θ = 0 and θ = 90°, which also holds the pole.",
-    loads: "Internal pressure 1 MPa: −1 MPa on the outer faces of the three walls.",
+    loads:
+      "Internal pressure 1 MPa: −1 MPa on the outer faces of the three walls.",
     measured:
       "σyy on the outer (top) surface at D on the cut θ = 0, read with a probe: the hoop stress.",
     source: "NAFEMS TNSB Rev. 3 (1990), test LE8",
   },
   recipe: {
-    step: () => revolvedSectorStep([profile], sweep, "NAFEMS LE8 shell of revolution"),
+    step: () =>
+      revolvedSectorStep([profile], sweep, "NAFEMS LE8 shell of revolution"),
     splits: [],
     discretization: { kind: "shell", thickness: t },
     mesh: { maxElementSize: h, order: 1 },

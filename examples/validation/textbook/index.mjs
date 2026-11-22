@@ -31,6 +31,7 @@ import nafemsLe4 from "./nafems-le4.mjs";
 import nafemsLe5 from "./nafems-le5.mjs";
 import nafemsLe6 from "./nafems-le6.mjs";
 import nafemsLe7 from "./nafems-le7.mjs";
+import nafemsLe8 from "./nafems-le8.mjs";
 import nafemsLe10 from "./nafems-le10.mjs";
 import nafemsLe11 from "./nafems-le11.mjs";
 
@@ -54,6 +55,7 @@ export default new Map([
   ["nafems-le5", nafemsLe5],
   ["nafems-le6", nafemsLe6],
   ["nafems-le7", nafemsLe7],
+  ["nafems-le8", nafemsLe8],
   ["nafems-le10", nafemsLe10],
   ["nafems-le11", nafemsLe11],
 ]);

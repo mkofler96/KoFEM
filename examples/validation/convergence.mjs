@@ -293,4 +293,18 @@ export default [
       },
     ],
   }),
+  recipeStudy({
+    id: "nafems-le8",
+    caseId: "nafems-le8",
+    title: "NAFEMS LE8, curved shell triangles",
+    note: "Settled within a percent from 7.5 mm down, close to an axisymmetric thin-shell solution of the same geometry and below the NAFEMS target.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "nafems-le8",
+        order: 1,
+        levels: [10, 7.5, 6, 5],
+      },
+    ],
+  }),
 ];
