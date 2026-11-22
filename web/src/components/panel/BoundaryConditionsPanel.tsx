@@ -6,6 +6,7 @@ import { useModelStore } from "../../store/modelStore";
 import type { BoundaryKind, TreeTarget } from "../../store/viewSlice";
 import { BcSection } from "./BcSection";
 import { LoadSection } from "./LoadSection";
+import { TemperatureSection } from "./TemperatureSection";
 import { TieSection } from "./TieSection";
 import { CouplingSection } from "./CouplingSection";
 import { InterfaceSection } from "./InterfaceSection";
@@ -24,6 +25,11 @@ export const BOUNDARY_KINDS: {
     kind: "coupling",
     label: "Coupling",
     hint: "Connect a surface to a reference point",
+  },
+  {
+    kind: "temperature",
+    label: "Temperature change",
+    hint: "ΔT over the model, from a formula in x, y, z",
   },
 ];
 
@@ -100,6 +106,9 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
             {tie !== undefined && <TieSection onError={setError} focus={tie} />}
             {coupling !== undefined && (
               <CouplingSection onError={setError} focus={coupling} />
+            )}
+            {focusFor(target, "temperature") !== undefined && (
+              <TemperatureSection />
             )}
           </>
         )}

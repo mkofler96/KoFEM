@@ -113,3 +113,20 @@ export function surfaceLoadRefusal(
   }
   return null;
 }
+
+// A temperature change on a model that is not solved on the solid path
+// (KOF-449): the shell, coupled and auto-shell solves and the optimizer apply
+// no thermal load yet, so they refuse it rather than solve without it.
+export function temperatureRefusal(
+  where: "shell" | "coupled" | "auto-shell" | "optimization",
+): string {
+  const what =
+    where === "optimization"
+      ? "A topology optimization"
+      : where === "shell"
+        ? "A shell model"
+        : where === "coupled"
+          ? "A model with shells and solids, or with a coupling,"
+          : "A model with a body marked Shell";
+  return `${what} cannot take a temperature change yet: only an all-solid model is solved with one. Remove the temperature change, or make every body Solid.`;
+}

@@ -29,6 +29,15 @@ export interface Material {
   young: number;
   poisson: number;
   density: number;
+  // Coefficient of thermal expansion α (1/°C), KOF-449. Absent: the material
+  // has none set; a temperature load on it is refused.
+  expansion?: number;
+}
+
+// A temperature change ΔT (°C) over the whole model, from the stress-free
+// state, as a formula in x, y, z (mm), evaluated at every node (KOF-449).
+export interface TemperatureLoad {
+  formula: string;
 }
 // Body → material mapping (#317/#353): each body of the assembly is one
 // property (property id = 1-based body index from Netgen's mesh domains), and
@@ -145,6 +154,8 @@ export interface SolveModel {
   constraints: Constraint[];
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
+  // A temperature change; absent: none. Only the solid path applies one.
+  temperature?: TemperatureLoad | null;
   elementOrder?: number;
   // Tie (connector) conditions: each welds the nodes of two picked surfaces so
   // parts that touch without a shared face are joined (#359). Absent/empty =
@@ -185,5 +196,7 @@ export interface TopOptPayload {
   surfaceLoads?: SurfaceLoad[];
   tieGroups?: TieDefinition[];
   couplings?: CouplingDefinition[];
+  // A temperature change; the optimizer refuses one.
+  temperature?: TemperatureLoad | null;
   settings: TopOptSettings;
 }

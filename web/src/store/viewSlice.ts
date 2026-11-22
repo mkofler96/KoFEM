@@ -55,14 +55,18 @@ export type TreeItemKind =
   | "load"
   | "tie"
   | "coupling"
+  | "temperature"
   | "study"
   | "plot";
 
 // The id of the one mesh a model has.
 export const MESH_ITEM_ID = 1;
 
-// The four object kinds "+ Add" under Boundary conditions can create.
-export type BoundaryKind = "bc" | "load" | "tie" | "coupling";
+// The id of the one temperature change a model can have.
+export const TEMPERATURE_ITEM_ID = 1;
+
+// The object kinds "+ Add" under Boundary conditions can create.
+export type BoundaryKind = "bc" | "load" | "tie" | "coupling" | "temperature";
 
 export type TreeTarget =
   // created: the object was just made by its "+ Add" form, so its view opens

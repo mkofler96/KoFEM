@@ -188,6 +188,7 @@ export function buildAnalysisSetup(build, title) {
     loadGroups: build.loadGroups,
     tieGroups: build.tieGroups,
     couplingGroups: [],
+    temperature: build.temperature,
     nextBcGroupId: build.bcGroups.length + 1,
     nextLoadGroupId: build.loadGroups.length + 1,
     nextTieGroupId: build.tieGroups.length + 1,

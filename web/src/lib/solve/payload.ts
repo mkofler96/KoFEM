@@ -17,6 +17,7 @@ export type SolveSource = Pick<
   | "constraints"
   | "loads"
   | "surfaceLoads"
+  | "temperature"
   | "elementOrder"
   | "solverMethod"
   | "tieGroups"
@@ -34,6 +35,7 @@ export function solvePayload(s: SolveSource): SolvePayload {
     constraints: s.constraints,
     loads: s.loads,
     surfaceLoads: s.surfaceLoads,
+    temperature: s.temperature,
     elementOrder: s.elementOrder,
     solverMethod: s.solverMethod,
     tieGroups: s.tieGroups,

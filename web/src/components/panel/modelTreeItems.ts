@@ -21,6 +21,7 @@ import { bodyGroups } from "../../lib/regions";
 import {
   addSelection,
   MESH_ITEM_ID,
+  TEMPERATURE_ITEM_ID,
   type TreeGroup,
   type TreeItemKind,
 } from "../../store/viewSlice";
@@ -61,6 +62,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const temperature = useModelStore((s) => s.temperature);
   const nodeCount = useModelStore((s) => s.nodes.length);
   const meshLabel = useModelStore((s) =>
     s.nodes.length > 0 ? MESH_KIND_LABEL[meshKind(s.elements)] : null,
@@ -162,6 +164,17 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
           id: g.id,
           label: g.name,
         })),
+        // The one temperature change of the model, when it has one.
+        ...(temperature
+          ? [
+              {
+                kind: "temperature" as const,
+                id: TEMPERATURE_ITEM_ID,
+                label: "Temperature change",
+                detail: `ΔT = ${temperature.formula}`,
+              },
+            ]
+          : []),
         // The interface conditions between bodies, detected from the geometry
         // and marked with their type.
         // The cut between two regions of one body is not an interface the user
@@ -201,6 +214,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     loadGroups,
     tieGroups,
     couplingGroups,
+    temperature,
     nodeCount,
     meshLabel,
     meshOutOfDate,

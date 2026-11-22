@@ -41,6 +41,7 @@ export function useSolver() {
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
+  const temperature = useModelStore((s) => s.temperature);
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const setResult = useModelStore((s) => s.setResult);
@@ -213,6 +214,7 @@ export function useSolver() {
       constraints,
       loads,
       surfaceLoads,
+      temperature,
       elementOrder,
       solverMethod,
       tieGroups,

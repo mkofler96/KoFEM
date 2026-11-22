@@ -105,3 +105,26 @@ describe("stress tensors in an analysis file", () => {
     expect(() => serializeAnalysis(copy)).toThrow(/stress/i);
   });
 });
+
+// A temperature change (KOF-449) travels in the setup JSON.
+describe("a temperature change in an analysis file", () => {
+  test("comes back through save and open", () => {
+    const copy = structuredClone(analysis);
+    copy.temperature = { formula: "sqrt(x^2 + y^2) / 1000 + z / 1000" };
+    expect(parseAnalysisFile(serializeAnalysis(copy)).temperature).toEqual(
+      copy.temperature,
+    );
+  });
+
+  test("a file without one opens with none", () => {
+    expect(analysis.temperature).toBeNull();
+  });
+
+  test("a malformed one is refused", () => {
+    const copy = structuredClone(analysis);
+    copy.temperature = { formula: "  " };
+    expect(() => parseAnalysisFile(serializeAnalysis(copy))).toThrow(
+      /"temperature" must be null/,
+    );
+  });
+});

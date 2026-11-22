@@ -15,6 +15,7 @@ import {
   ShellModel,
   SolveOptions,
   Ties,
+  evaluateFieldExpression,
   tieMortarWeights,
   TopologyRun,
   TopologySettings,
@@ -855,7 +856,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
       : null,
   );
   const result = await solveSolidInRust(
-    { ElasticModel, SolveOptions, Ties },
+    { ElasticModel, SolveOptions, Ties, evaluateFieldExpression },
     {
       ...payload,
       nodes: tied.solveNodes,

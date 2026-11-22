@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { TemperatureLoad } from "../workers/solverTypes";
 import {
   cornerCount,
   SHELL_SURFACES,
@@ -89,6 +90,8 @@ export interface AnalysisState {
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
   couplingGroups: CouplingGroup[];
+  // A temperature change over the model (KOF-449), or null for none.
+  temperature: TemperatureLoad | null;
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId: number;
@@ -142,6 +145,9 @@ interface KofemFieldDataV1 {
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
   couplingGroups?: CouplingGroup[];
+  // A temperature change (KOF-449). Absent in files written before it
+  // existed — such a file has none.
+  temperature?: TemperatureLoad | null;
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId?: number;
@@ -301,6 +307,7 @@ export function serializeAnalysis(state: AnalysisState): string {
     loadGroups: state.loadGroups,
     tieGroups: state.tieGroups,
     couplingGroups: state.couplingGroups,
+    temperature: state.temperature,
     nextBcGroupId: state.nextBcGroupId,
     nextLoadGroupId: state.nextLoadGroupId,
     nextTieGroupId: state.nextTieGroupId,
@@ -534,6 +541,19 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     throw new Error(
       `Invalid analysis file: "couplingGroups" must be an array, got ${typeof meta.couplingGroups}`,
     );
+  const temperature: unknown = meta.temperature;
+  if (
+    temperature !== undefined &&
+    temperature !== null &&
+    !(
+      typeof temperature === "object" &&
+      typeof (temperature as { formula?: unknown }).formula === "string" &&
+      (temperature as { formula: string }).formula.trim() !== ""
+    )
+  )
+    throw new Error(
+      `Invalid analysis file: "temperature" must be null or { formula: "…" }, got ${JSON.stringify(temperature)}`,
+    );
 
   // TO settings postdate the first analysis files, so absence is legitimate —
   // but a present block of the wrong shape is not. The numeric fields are the
@@ -755,6 +775,8 @@ export function parseAnalysisFile(text: string): AnalysisState {
     loadGroups: meta.loadGroups,
     tieGroups,
     couplingGroups,
+    // A file written before temperature changes existed (KOF-449) has none.
+    temperature: meta.temperature ?? null,
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
     nextTieGroupId,

@@ -789,8 +789,10 @@ async function checkShellThickness(
   for (const s of sections)
     if (
       s.thickness === undefined ||
+      // A curved wall is measured on its faceted surface, to 1e-4 of t (as
+      // examples/validation/lib/pipeline.mjs checks it).
       Math.abs(s.thickness - discretization.thickness) >
-        1e-6 * discretization.thickness
+        1e-4 * discretization.thickness
     )
       throw new MissingUiCapability(
         `give the shell a thickness of ${discretization.thickness} mm`,
