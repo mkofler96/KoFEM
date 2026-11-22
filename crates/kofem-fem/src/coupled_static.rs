@@ -522,6 +522,7 @@ pub fn prepare_mixed_static(
             rhs,
             levels,
             unused_vertices: held_nodes,
+            eliminated: None,
         },
         reduction,
         preconditioner: applied,

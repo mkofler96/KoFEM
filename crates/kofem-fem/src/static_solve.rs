@@ -7,7 +7,7 @@ use crate::amg::{
     AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel,
 };
 use crate::cg::{solve_pcg_with, CgSettings};
-use crate::constraints::{apply_dirichlet, Dirichlet};
+use crate::constraints::{eliminate_dirichlet, Dirichlet, EliminatedEntries};
 use crate::error::FemError;
 use crate::mesh::{ElementOrder, TetMesh};
 use crate::sparse::CsrMatrix;
@@ -38,7 +38,8 @@ pub struct StaticSolution {
 
 /// A load case ready for CG: the stiffness with its Dirichlet conditions
 /// eliminated, inside the chosen preconditioner, and the matching right-hand
-/// side. [`solve_static`] solves it in one go; the browser module advances a
+/// side. An uncoupled solve works on the assembled matrix itself, not a copy,
+/// and gives it back with [`PreparedStatic::into_stiffness`]. [`solve_static`] solves it in one go; the browser module advances a
 /// [`crate::cg::PcgRun`] on it in steps instead.
 pub struct PreparedStatic {
     pub system: Box<dyn Preconditioner>,
@@ -46,13 +47,39 @@ pub struct PreparedStatic {
     /// Multigrid levels, finest first; empty for Gauss–Seidel.
     pub levels: Vec<LevelInfo>,
     pub unused_vertices: usize,
+    /// What the supports overwrote in the assembled matrix, for
+    /// [`PreparedStatic::into_stiffness`]; `None` on a coupled, tied or mixed
+    /// solve, whose system is a reduction of it.
+    pub eliminated: Option<EliminatedEntries>,
+}
+
+impl PreparedStatic {
+    /// Entries kept of the assembled matrix (0 on a reduced system).
+    #[must_use]
+    pub fn eliminated_entries(&self) -> usize {
+        self.eliminated.as_ref().map_or(0, EliminatedEntries::len)
+    }
+
+    /// The assembled matrix the solve took, given back exactly as it was
+    /// handed in: the system's matrix with the supports' entries restored.
+    ///
+    /// # Errors
+    /// [`FemError::ReducedSystem`] on a coupled, tied or mixed solve, whose
+    /// system is a reduction, not the assembled matrix.
+    pub fn into_stiffness(self) -> Result<CsrMatrix, FemError> {
+        let eliminated = self.eliminated.ok_or(FemError::ReducedSystem)?;
+        let mut matrix = self.system.into_matrix();
+        eliminated.restore(&mut matrix);
+        Ok(matrix)
+    }
 }
 
 /// Solve K·u = f with the given DOFs (3·node + component) prescribed. On a
 /// quadratic mesh a condition on every corner of a boundary face extends to
 /// the face's edge and face nodes (see [`prepare_static`]).
 /// `stiffness` is the matrix `assemble_stiffness` built for `mesh`; it is left
-/// unchanged, so it can serve further load cases.
+/// unchanged, so it can serve further load cases — at the price of a copy.
+/// To solve without one, hand the matrix to [`prepare_static`].
 ///
 /// # Errors
 /// As [`prepare_static`], plus a CG breakdown or non-convergence.
@@ -67,7 +94,7 @@ pub fn solve_static(
 ) -> Result<StaticSolution, FemError> {
     let mut prepared = prepare_static(
         mesh,
-        stiffness,
+        stiffness.clone(),
         fixed_dofs,
         fixed_values,
         forces,
@@ -84,7 +111,10 @@ pub fn solve_static(
     })
 }
 
-/// Check one load case and set it up for CG (see [`PreparedStatic`]).
+/// Check one load case and set it up for CG (see [`PreparedStatic`]). The
+/// solve takes `stiffness` and eliminates the supports in place, keeping the
+/// entries they overwrite so that [`PreparedStatic::into_stiffness`] can give
+/// the assembled matrix back.
 ///
 /// On a quadratic mesh, vertex conditions extend to the nodes of the
 /// supported boundary faces: where every corner of a boundary face (a tet
@@ -103,7 +133,7 @@ pub fn solve_static(
 /// setup that finds the model under-constrained.
 pub fn prepare_static(
     mesh: &TetMesh,
-    stiffness: &CsrMatrix,
+    stiffness: CsrMatrix,
     fixed_dofs: &[u32],
     fixed_values: &[f64],
     forces: &[f64],
@@ -153,9 +183,9 @@ pub fn prepare_static(
     }
     let constraints = Dirichlet::new(dof_count, &dofs, &values)?;
 
-    let mut matrix = stiffness.clone();
+    let mut matrix = stiffness;
     let mut rhs = forces.to_vec();
-    apply_dirichlet(&mut matrix, &mut rhs, &constraints);
+    let eliminated = eliminate_dirichlet(&mut matrix, &mut rhs, &constraints);
     let (system, levels): (Box<dyn Preconditioner>, Vec<LevelInfo>) = match preconditioner {
         PreconditionerChoice::SymmetricGaussSeidel => {
             (Box::new(SymmetricGaussSeidel::new(matrix)), Vec::new())
@@ -179,6 +209,7 @@ pub fn prepare_static(
         rhs,
         levels,
         unused_vertices: mesh.unused_vertex_count(),
+        eliminated: Some(eliminated),
     })
 }
 

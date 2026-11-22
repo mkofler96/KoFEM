@@ -102,6 +102,10 @@ impl Preconditioner for IncompleteCholesky {
         &self.matrix
     }
 
+    fn into_matrix(self: Box<Self>) -> CsrMatrix {
+        self.matrix
+    }
+
     /// z = (L·Lᵀ)⁻¹ r: forward solve L·y = r, backward solve Lᵀ·z = y.
     fn apply(&mut self, residual: &[f64], out: &mut [f64]) {
         let columns = self.matrix.columns();

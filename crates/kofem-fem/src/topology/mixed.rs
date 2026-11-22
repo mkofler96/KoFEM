@@ -324,7 +324,7 @@ impl MixedSimpModel {
             let (mesh, stiffness) =
                 shell.ok_or_else(|| topology_error("the design domain has no elements"))?;
             let mut prepared =
-                prepare_shell_static(mesh, &stiffness, &self.fixed_dofs, &zeros, &self.forces)?;
+                prepare_shell_static(mesh, stiffness, &self.fixed_dofs, &zeros, &self.forces)?;
             let (dofs, outcome) = solve_pcg_with(
                 prepared.prepared.system.as_mut(),
                 &prepared.prepared.rhs,

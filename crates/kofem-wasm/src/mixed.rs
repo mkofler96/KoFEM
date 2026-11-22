@@ -14,6 +14,7 @@ use kofem_fem::{
 };
 use wasm_bindgen::prelude::*;
 
+use crate::stiffness::Loan;
 use crate::{
     flatten_reactions, parse_materials, shell_surface, to_js, Couplings, ElasticSolution,
     RunOutput, SolveRun,
@@ -201,7 +202,7 @@ impl MixedModel {
             }
         };
         Ok(SolveRun {
-            prepared,
+            prepared: Loan::owned(prepared),
             run,
             preconditioner,
             reduction: Some(reduction),

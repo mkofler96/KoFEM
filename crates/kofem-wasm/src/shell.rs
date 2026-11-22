@@ -6,11 +6,12 @@
 use kofem_fem::shell::SHELL_NODE_DOFS;
 use kofem_fem::{
     assemble_shell_stiffness, nodal_residual, prepare_shell_static, shell_corner_stress_tensors,
-    shell_translations, shell_von_mises, summarize_reactions, CsrMatrix, PcgRun, ShellMesh,
+    shell_translations, shell_von_mises, summarize_reactions, PcgRun, ShellMesh,
     ShellPreconditioner, StoppingRule,
 };
 use wasm_bindgen::prelude::*;
 
+use crate::stiffness::Stiffness;
 use crate::{
     flatten_reactions, parse_materials, shell_surface, to_js, ElasticSolution, RunOutput, SolveRun,
 };
@@ -19,7 +20,7 @@ use crate::{
 #[wasm_bindgen]
 pub struct ShellModel {
     pub(crate) mesh: ShellMesh,
-    stiffness: Option<CsrMatrix>,
+    stiffness: Stiffness,
 }
 
 #[wasm_bindgen]
@@ -48,7 +49,7 @@ impl ShellModel {
         .map_err(|error| to_js(&error))?;
         Ok(ShellModel {
             mesh,
-            stiffness: None,
+            stiffness: Stiffness::new(),
         })
     }
 
@@ -63,7 +64,7 @@ impl ShellModel {
     pub fn assemble(&mut self) -> usize {
         let matrix = assemble_shell_stiffness(&self.mesh);
         let nnz = matrix.nnz();
-        self.stiffness = Some(matrix);
+        self.stiffness.set(matrix);
         nnz
     }
 
@@ -85,16 +86,22 @@ impl ShellModel {
         forces: &[f64],
         relative_tolerance: f64,
     ) -> Result<SolveRun, JsError> {
-        let assembled = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before startSolve()"))?;
-        let mut shell =
-            prepare_shell_static(&self.mesh, assembled, fixed_dofs, fixed_values, forces)
-                .map_err(|error| to_js(&error))?;
+        let matrix = self.stiffness.lend("startSolve")?;
+        let shell = match prepare_shell_static(&self.mesh, matrix, fixed_dofs, fixed_values, forces)
+        {
+            Ok(shell) => shell,
+            Err(error) => {
+                // The set-up may have consumed the matrix before it failed;
+                // assemble it again so the model stays as it was, then report.
+                self.stiffness.set(assemble_shell_stiffness(&self.mesh));
+                return Err(to_js(&error));
+            }
+        };
+        let mut prepared = self.stiffness.loan(shell.prepared);
+        let system = prepared.get_mut()?;
         let run = PcgRun::start(
-            shell.prepared.system.as_mut(),
-            &shell.prepared.rhs,
+            system.system.as_mut(),
+            &system.rhs,
             relative_tolerance,
             StoppingRule::ResidualNorm,
         )
@@ -111,7 +118,7 @@ impl ShellModel {
             }
         };
         Ok(SolveRun {
-            prepared: shell.prepared,
+            prepared,
             run,
             preconditioner,
             reduction: None,
@@ -134,12 +141,9 @@ impl ShellModel {
         owners: &[i32],
         supports: usize,
     ) -> Result<Vec<f64>, JsError> {
-        let stiffness = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before supportReactions()"))?;
-        let reactions = nodal_residual(stiffness, &solution.full_dofs, forces)
-            .map_err(|error| to_js(&error))?;
+        let reactions = self.stiffness.with("supportReactions", |stiffness| {
+            nodal_residual(stiffness, &solution.full_dofs, forces).map_err(|error| to_js(&error))
+        })?;
         summarize_reactions(self.mesh.vertices(), &reactions, forces, owners, supports)
             .map(|summary| flatten_reactions(&summary))
             .map_err(|error| to_js(&error))

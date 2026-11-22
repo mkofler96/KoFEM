@@ -82,6 +82,8 @@ pub struct LevelInfo {
 pub trait Preconditioner {
     fn matrix(&self) -> &CsrMatrix;
     fn apply(&mut self, residual: &[f64], out: &mut [f64]);
+    /// The system matrix, dropping the rest of the preconditioner.
+    fn into_matrix(self: Box<Self>) -> CsrMatrix;
 }
 
 /// One symmetric Gauss–Seidel sweep, the engine's (MFEM `GSSmoother`) choice.
@@ -103,6 +105,10 @@ impl Preconditioner for SymmetricGaussSeidel {
 
     fn apply(&mut self, residual: &[f64], out: &mut [f64]) {
         self.matrix.symmetric_gauss_seidel(residual, out);
+    }
+
+    fn into_matrix(self: Box<Self>) -> CsrMatrix {
+        self.matrix
     }
 }
 
@@ -990,6 +996,10 @@ impl SmoothedAggregation {
 impl Preconditioner for SmoothedAggregation {
     fn matrix(&self) -> &CsrMatrix {
         &self.fine
+    }
+
+    fn into_matrix(self: Box<Self>) -> CsrMatrix {
+        self.fine
     }
 
     fn apply(&mut self, residual: &[f64], out: &mut [f64]) {
