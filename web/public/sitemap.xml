@@ -65,6 +65,56 @@
     <image:image><image:loc>https://kofem.org/examples/tie-cantilever.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/tie-cantilever/tie-cantilever-diagram.png</image:loc></image:image>
   </url>
   <url>
+    <loc>https://kofem.org/examples/nafems-le1/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le1.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le1/nafems-le1-elliptic-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le1/nafems-le1-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le2/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le2.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le2/nafems-le2-cylindrical-panel-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le2/nafems-le2-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le3/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le3.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le3/nafems-le3-hemisphere-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le3/nafems-le3-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le4/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le4.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le4/nafems-le4-hyperboloid-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le4/nafems-le4-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le5/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le5.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le5/nafems-le5-z-section-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le5/nafems-le5-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le6/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le6.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le6/nafems-le6-skew-plate-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le6/nafems-le6-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le7/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le7.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le7/nafems-le7-pressure-vessel-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le7/nafems-le7-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le8/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le8.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le8/nafems-le8-knuckle-shell-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le8/nafems-le8-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le10/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le10.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le10/nafems-le10-elliptic-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le10/nafems-le10-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/nafems-le11/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/nafems-le11.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le11/nafems-le11-solid-of-revolution-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le11/nafems-le11-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
     <loc>https://kofem.org/examples/mbb-beam-topopt/</loc>
     <priority>0.6</priority>
     <image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-compliance-history.png</image:loc></image:image>

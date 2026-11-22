@@ -30,7 +30,7 @@ export default {
       name: "solid-of-revolution-diagram",
       label:
         "Meridian section of the solid of revolution: a spherical segment between radii 1 and 1.4 m, a taper and a cylinder up to z = 1.79 m; A is the inner corner on the base",
-      note: "ΔT = r + z (°C, r and z in m)",
+      note: "temperature change r + z (°C; r, z in m)",
     }),
   intro: ({ tex, n, row }) => `
         <p>A solid of revolution, heated so that the temperature rises
