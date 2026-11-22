@@ -21,6 +21,8 @@ export const TESSELLATION_OPTIONS = JSON.stringify({
  * @property {string} label
  * @property {(x: number, y: number, z: number) => number} distance  0 on the face's surface
  * @property {number} area  analytic face area (mm²)
+ * @property {number} [areaTolerance]  this face's relative area tolerance, in
+ *   place of the part's
  */
 
 /**
@@ -139,7 +141,7 @@ export function describePart(
         expect(
           Math.abs(relative),
           `${(relative * 100).toFixed(3)} %`,
-        ).toBeLessThan(areaTolerance);
+        ).toBeLessThan(faces[index].areaTolerance ?? areaTolerance);
       },
     );
 

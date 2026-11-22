@@ -33,7 +33,7 @@
  *
  * @param {(v: number) => string} num  how a real is written
  */
-function stepEntities(num) {
+export function stepEntities(num) {
   /** @type {string[]} */
   const lines = [];
   let next = 1;
@@ -76,9 +76,15 @@ export function stepString(text) {
  * @param {ReturnType<typeof stepEntities>} step
  * @param {number[] | number[][]} faces  ADVANCED_FACE ids of one solid, or one list per solid
  * @param {string} productName    product name written into the file (escaped)
+ * @param {string} [writer]        the writer's path, recorded in the header
  * @returns {string} the STEP file text
  */
-function stepFile({ lines, add, point, dir }, faces, productName) {
+export function stepFile(
+  { lines, add, point, dir },
+  faces,
+  productName,
+  writer = "examples/gallery/step-prism.mjs",
+) {
   const name = stepString(productName);
   const shells = Array.isArray(faces[0]) ? faces : [faces];
   const solids = shells.map((shellFaces) => {
@@ -133,7 +139,7 @@ function stepFile({ lines, add, point, dir }, faces, productName) {
     "ISO-10303-21;",
     "HEADER;",
     `FILE_DESCRIPTION(('${name}'),'2;1');`,
-    `FILE_NAME('${name}','2026-01-01T00:00:00',('KoFEM'),('KoFEM'),'KoFEM examples/gallery/step-prism.mjs','KoFEM','');`,
+    `FILE_NAME('${name}','2026-01-01T00:00:00',('KoFEM'),('KoFEM'),'KoFEM ${stepString(writer)}','KoFEM','');`,
     "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));",
     "ENDSEC;",
     "DATA;",
@@ -145,9 +151,9 @@ function stepFile({ lines, add, point, dir }, faces, productName) {
 }
 
 /** @param {number[]} a @param {number[]} b */
-const sub = (a, b) => a.map((v, i) => v - b[i]);
+export const sub = (a, b) => a.map((v, i) => v - b[i]);
 /** @param {number[]} v */
-const unit = (v) => {
+export const unit = (v) => {
   const len = Math.hypot(...v);
   return v.map((c) => c / len);
 };
@@ -334,7 +340,7 @@ export const circleLoop = ([cx, cy], radius, ccw) => [
   arc([cx + radius, cy], [cx, cy], ccw),
 ];
 
-const TWO_PI = 2 * Math.PI;
+export const TWO_PI = 2 * Math.PI;
 
 /**
  * The angle from `a0` to `a1` the way `ccw` turns, in [0, 2π); 2π when `closed`.
@@ -344,7 +350,7 @@ const TWO_PI = 2 * Math.PI;
  * @param {boolean} ccw
  * @param {boolean} closed
  */
-function turn(a0, a1, ccw, closed) {
+export function turn(a0, a1, ccw, closed) {
   if (closed) return TWO_PI;
   const sweep = ccw ? a1 - a0 : a0 - a1;
   return ((sweep % TWO_PI) + TWO_PI) % TWO_PI;
@@ -494,7 +500,7 @@ export function profileArea(profile) {
  *
  * @param {number} v
  */
-function real(v) {
+export function real(v) {
   if (!Number.isFinite(v))
     throw new Error(`STEP real must be finite, got ${v}`);
   const s = String(Math.abs(v) < 1e-12 ? 0 : v);
