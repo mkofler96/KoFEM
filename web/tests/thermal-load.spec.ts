@@ -12,7 +12,11 @@ import { addBoundary, openTree } from "./fixtures/tree";
 
 async function openExample(page: Page, id: string): Promise<void> {
   await page.goto(`/app/?example=${id}`);
-  await expect(page.locator("nav")).toBeVisible();
+  // The example is loaded, not just the app: it opens on the static solve,
+  // ready to run. A tree pick made earlier is replaced when it lands.
+  await expect(
+    page.getByRole("button", { name: /Run static solve/ }),
+  ).toBeEnabled();
 }
 
 async function setExpansion(page: Page, alpha: string): Promise<void> {
