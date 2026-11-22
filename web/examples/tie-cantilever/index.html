@@ -45,7 +45,7 @@
               "https://kofem.org/examples/tie-cantilever.png",
               "https://kofem.org/examples/tie-cantilever/tie-cantilever-diagram.png"
             ],
-            "dateModified": "2026-11-21",
+            "dateModified": "2026-11-22",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -607,6 +607,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -947,7 +951,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 3,036 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,692 nodes, 17,076 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-22391462c75d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3606d8ab1090</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-515dda6e54a6); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The two halves are separate solids in one STEP file. Netgen meshes

@@ -10,6 +10,7 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod convergence;
 mod mixed;
 mod rigid_body;
 mod section;
@@ -18,6 +19,10 @@ mod shellize;
 mod tie;
 mod topology;
 
+pub use convergence::{
+    clamped_free_wedge_exponent, extrapolate_to_zero_size, fit_convergence_rate,
+    relative_element_sizes, ConvergenceRate, ZeroSizeExtrapolation,
+};
 pub use mixed::MixedModel;
 pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;

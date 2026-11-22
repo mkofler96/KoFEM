@@ -46,7 +46,7 @@
               "https://kofem.org/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png",
               "https://kofem.org/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-21",
+            "dateModified": "2026-11-22",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -608,6 +608,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -947,7 +951,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 1 mm maximum element size: 17,283 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
           <tr><th scope="row">Unknowns</th><td>8,843 nodes, 53,058 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-22391462c75d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3606d8ab1090</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-515dda6e54a6); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The strip is symmetric about <math><mi>x</mi><mo>=</mo><mn>0</mn></math> and <math><mi>y</mi><mo>=</mo><mn>0</mn></math>,
@@ -989,6 +993,7 @@
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
         <p>Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the constant stress of the one or two triangles that meet there. On the finest meshes the peak node is shared by more triangles and reads low.</p>
+        <p>The peak stress is read from the one or two triangles at the cut edge, whose size does not shrink with the maximum element size, so it has no rate to observe.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

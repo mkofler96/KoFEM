@@ -49,7 +49,13 @@ import {
   buildMeshStats,
   buildResultSurface,
 } from "./lib/app-model.mjs";
-import { buildFromRecipe, nodalVonMises, withMesh } from "./lib/pipeline.mjs";
+import {
+  buildFromRecipe,
+  nodalVonMises,
+  rustFem,
+  withMesh,
+} from "./lib/pipeline.mjs";
+import { analyseStudy } from "./lib/rates.mjs";
 import {
   modelStepPath,
   sameModelStep,
@@ -240,8 +246,14 @@ if (report) {
     return r;
   };
   console.log("\nConvergence studies");
-  const convergence = [];
-  for (const study of studies) {
+  // KOFEM_CONVERGENCE_FROM=<file> reuses the raw points a run kept with
+  // KOFEM_CONVERGENCE_DUMP instead of solving the studies again (the rate
+  // analysis and the pages change, the solves do not).
+  const reused = process.env.KOFEM_CONVERGENCE_FROM
+    ? JSON.parse(readFileSync(process.env.KOFEM_CONVERGENCE_FROM, "utf8"))
+    : null;
+  const convergence = reused ?? [];
+  for (const study of reused ? [] : studies) {
     const series = [];
     for (const s of study.series) {
       const ref = rowOf(s.caseId);
@@ -275,6 +287,26 @@ if (report) {
       throw new Error(
         `convergence study "${s.id}": no level matches the mesh its case is gated on — include it so the study connects to the published result`,
       );
+
+  // Observed against expected rates (lib/rates.mjs, KOF-399), stored with the
+  // points they come from; the pages show them and CI re-derives them
+  // (web/tests/integration/convergence-rates.test.mjs).
+  // KOFEM_CONVERGENCE_DUMP=<file> keeps the studies' raw points, so the rate
+  // analysis can be reworked without solving them again.
+  if (process.env.KOFEM_CONVERGENCE_DUMP)
+    writeFileSync(
+      process.env.KOFEM_CONVERGENCE_DUMP,
+      JSON.stringify(convergence),
+    );
+  const fem = await rustFem();
+  for (const s of convergence) {
+    const def = studies.find((d) => d.id === s.id);
+    s.rates = analyseStudy(def, s, fem);
+    for (const r of s.rates.series)
+      console.log(
+        `  ${s.id.padEnd(16)} ${r.label.padEnd(15)} ${r.observed === null ? "no rate (error not monotone)" : `rate ${r.observed.toFixed(2)}`} (expected ${r.expected.toFixed(2)})${r.pass ? "" : "  BELOW"}`,
+      );
+  }
 
   // The builds behind these numbers (lib/provenance.mjs): the C++ engine
   // meshes every case; the Rust module solves it. Like the engine id, the module id is a record, not part of
