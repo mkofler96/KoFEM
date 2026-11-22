@@ -114,10 +114,12 @@ write the minimal code that makes it pass, then clean up with the suite green.
 
 - Linear holds issues, specs, and decisions; GitHub holds code and PRs.
   Keep task-specific findings out of this file.
-- Branch from `develop` and target PRs there. Use `Fixes KOF-nn` only when
-  the PR resolves that issue, and `Refs KOF-nn` otherwise: the link starts the
-  issue and queues it to close on merge. Mention ongoing operational issues
-  in prose.
+- Branch from `develop` and target PRs there. Write `Fixes KOF-nn` for every
+  issue whose scope the PR delivers, parents and sub-issues alike, even when
+  follow-ups are split into new issues; `Fixes` closes the issue on merge.
+  Write `Refs KOF-nn` only for an issue that stays open after the merge,
+  because work in its own scope remains: `Refs` moves it to In Progress and
+  nothing closes it. Mention ongoing operational issues in prose.
 - When you start work on a Linear issue, move it to **In Progress** before
   writing code. After that, let the GitHub integration manage its status.
 - Record meaningful evidence on the Linear issue in one comment, edited in
