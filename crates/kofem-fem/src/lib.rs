@@ -25,6 +25,7 @@ pub mod error;
 pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
+pub mod mesh_outline;
 pub mod mortar;
 pub mod reactions;
 pub mod rigid_body;
@@ -40,7 +41,7 @@ pub mod topology;
 pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
-pub use constraints::{apply_dirichlet, Dirichlet};
+pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
 pub use coupled_static::{
     prepare_coupled_static, prepare_mixed_static, solve_coupled_static, solve_mixed_static,
     AppliedPreconditioner, CoupledReduction, CoupledSolution, MixedPreconditioner, PreparedCoupled,
@@ -51,6 +52,7 @@ pub use error::FemError;
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};
+pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
 pub use mortar::{mortar_weights, MortarFace, MortarRow};
 pub use reactions::{
     fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,

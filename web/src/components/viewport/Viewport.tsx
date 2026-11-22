@@ -14,6 +14,34 @@ import { RefinementChart } from "./RefinementChart";
 import { TopOptChart } from "./TopOptChart";
 import { SampleGuide } from "./SampleGuide";
 import { useModelStore } from "../../store/modelStore";
+import { useFemModule } from "../../hooks/useFemModule";
+
+// The mesh is drawn from what the Rust module finds of it; if the module
+// cannot load, say so instead of showing an empty viewport.
+function FemModuleNotice() {
+  const { error } = useFemModule();
+  if (error === null) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        position: "absolute",
+        top: 10,
+        left: 10,
+        right: 90,
+        zIndex: 10,
+        padding: "6px 10px",
+        background: "#fef2f2",
+        border: "1px solid #fecaca",
+        borderRadius: 5,
+        fontSize: 12,
+        color: "#991b1b",
+      }}
+    >
+      The mesh cannot be drawn: {error}. Reload the page to try again.
+    </div>
+  );
+}
 
 export function Viewport() {
   const pickMode = useModelStore((s) => s.pickMode);
@@ -41,6 +69,8 @@ export function Viewport() {
           Fit View
         </button>
       </div>
+
+      <FemModuleNotice />
 
       {/* Result field legend — static field, or density for a TO run */}
       <ColorBar />

@@ -5,7 +5,7 @@
 
 use crate::amg::{Preconditioner, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
-use crate::constraints::{apply_dirichlet, Dirichlet};
+use crate::constraints::{eliminate_dirichlet, Dirichlet};
 use crate::error::FemError;
 use crate::incomplete_cholesky::IncompleteCholesky;
 use crate::shell::assembly::SHELL_NODE_DOFS;
@@ -41,7 +41,9 @@ pub struct ShellSolution {
 
 /// Solve K·u = f with the given DOFs (6·vertex + component, component 0..5 =
 /// u, v, w, θx, θy, θz) prescribed. `stiffness` is the matrix
-/// `assemble_shell_stiffness` built for `mesh`; it is left unchanged.
+/// `assemble_shell_stiffness` built for `mesh`; it is left unchanged, at the
+/// price of a copy. To solve without one, hand the matrix to
+/// [`prepare_shell_static`].
 ///
 /// # Errors
 /// As [`prepare_shell_static`], plus a CG breakdown or non-convergence.
@@ -56,7 +58,7 @@ pub fn solve_shell_static(
     let PreparedShell {
         mut prepared,
         preconditioner,
-    } = prepare_shell_static(mesh, stiffness, fixed_dofs, fixed_values, forces)?;
+    } = prepare_shell_static(mesh, stiffness.clone(), fixed_dofs, fixed_values, forces)?;
     let (dofs, outcome) = solve_pcg_with(prepared.system.as_mut(), &prepared.rhs, settings)?;
     Ok(ShellSolution {
         dofs,
@@ -70,7 +72,8 @@ pub fn solve_shell_static(
 /// Check one shell load case and set it up for CG. Forces and moments are 6
 /// per vertex. The preconditioner is IC(0), falling back to symmetric
 /// Gauss–Seidel when no diagonal shift lets it factor — the C++ engine's
-/// choice for shells.
+/// choice for shells. The solve takes `stiffness`, as [`crate::prepare_static`]
+/// does.
 ///
 /// # Errors
 /// Malformed forces or constraints, a DOF constrained to two values, or a
@@ -78,7 +81,7 @@ pub fn solve_shell_static(
 /// there would vanish).
 pub fn prepare_shell_static(
     mesh: &ShellMesh,
-    stiffness: &CsrMatrix,
+    stiffness: CsrMatrix,
     fixed_dofs: &[u32],
     fixed_values: &[f64],
     forces: &[f64],
@@ -131,9 +134,9 @@ pub fn prepare_shell_static(
     }
     let constraints = Dirichlet::new(dof_count, &dofs, &values)?;
 
-    let mut matrix = stiffness.clone();
+    let mut matrix = stiffness;
     let mut rhs = forces.to_vec();
-    apply_dirichlet(&mut matrix, &mut rhs, &constraints);
+    let eliminated = eliminate_dirichlet(&mut matrix, &mut rhs, &constraints);
     let (system, preconditioner): (Box<dyn Preconditioner>, ShellPreconditioner) =
         match IncompleteCholesky::new(matrix) {
             Ok(factored) => {
@@ -154,6 +157,7 @@ pub fn prepare_shell_static(
             rhs,
             levels: Vec::new(),
             unused_vertices: mesh.unused_vertex_count(),
+            eliminated: Some(eliminated),
         },
         preconditioner,
     })
