@@ -252,14 +252,15 @@ jobs:
   # hash of the engine sources, so one published from develop is exactly the one
   # main would publish — main finds it and has nothing to do.
   publish-engine:
-    name: Publish engine release
+    name: Publish engine to GHCR
     needs: [engine-id, wasm]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     permissions:
-      contents: write
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -270,46 +271,18 @@ jobs:
           name: kofem-wasm-pkg
           path: engine-dist/
 
-      # Releases are content-addressed, so an existing tag already holds a binary
-      # built from these exact sources — re-uploading would only churn it.
-      - name: Publish release if absent
+      # Leaves an engine already published under this ID alone: it was built
+      # from these exact sources.
+      - name: Publish the engine if absent
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.engine-id.outputs.id }}
+          KOFEM_ENGINE_ID: ${{ needs.engine-id.outputs.id }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already published — nothing to do."
-            exit 0
-          fi
+          KOFEM_ENGINE_IMAGE="ghcr.io/${OWNER,,}/kofem-engine" \
+            bash scripts/publish-wasm-engine.sh engine-dist
 
-          cd engine-dist
-          sha256sum kofem_wasm_emcc.js kofem_wasm_emcc.wasm > SHA256SUMS
-
-          # Marked as a prerelease so these build artifacts never take over the
-          # "Latest release" banner from an actual product release.
-          if gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "WASM engine $TAG" \
-            --prerelease \
-            --notes "Compiled KoFEM WASM engine, built from \`engine/\` at ${GITHUB_SHA}.
-
-          Installed automatically by \`scripts/fetch-wasm-engine.sh\`, which resolves this
-          tag from the engine sources in your checkout — you should not need to download
-          these files by hand." \
-            kofem_wasm_emcc.js kofem_wasm_emcc.wasm SHA256SUMS; then
-            exit 0
-          fi
-
-          # Two pushes carrying the same engine sources can race here. Losing the
-          # race is fine — the winner published a binary built from those same
-          # sources. Anything else is a real failure.
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG was published concurrently — nothing to do."
-            exit 0
-          fi
-          echo "ERROR: publishing $TAG failed and no release exists." >&2
-          exit 1
 
   # --- Web frontend ---------------------------------------------------------
   # The web gates run as parallel jobs: the static checks, the node-side tests,
