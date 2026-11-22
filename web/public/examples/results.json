@@ -1,7 +1,7 @@
 {
   "generated": "2026-11-22",
   "engine": "engine-44314641a642",
-  "fem": "fem-f06aca279e85",
+  "fem": "fem-f8b7c100d147",
   "cases": [
     {
       "id": "axial-bar",
@@ -1291,8 +1291,8 @@
       "reference": -105,
       "referenceLabel": "NAFEMS LE11 target",
       "tolPct": 3,
-      "fe": -103.76745764111875,
-      "errPct": -1.1738498656011878,
+      "fe": -103.76694856106808,
+      "errPct": -1.174334703744689,
       "pass": true,
       "mesh": {
         "order": 2,
@@ -1324,8 +1324,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 30.401751058031103,
-        "max": 146.19826339783032,
+        "min": 30.40168826121691,
+        "max": 146.19822151436802,
         "deform": 200,
         "width": 1200,
         "height": 900
@@ -2473,8 +2473,8 @@
               "dofs": 21846,
               "maxElementSize": 100,
               "minElementSize": 10,
-              "fe": -101.81398938603056,
-              "errPct": -3.0342958228280414,
+              "fe": -101.81399725532589,
+              "errPct": -3.0342883282610598,
               "ci": false
             },
             {
@@ -2487,8 +2487,8 @@
               "dofs": 180945,
               "maxElementSize": 50,
               "minElementSize": 5,
-              "fe": -103.76745764111875,
-              "errPct": -1.1738498656011878,
+              "fe": -103.76694856106808,
+              "errPct": -1.174334703744689,
               "ci": true
             },
             {
@@ -2501,8 +2501,8 @@
               "dofs": 379089,
               "maxElementSize": 35,
               "minElementSize": 3.5,
-              "fe": -104.41598070746687,
-              "errPct": -0.5562088500315505,
+              "fe": -104.41578317161908,
+              "errPct": -0.5563969794103973,
               "ci": false
             }
           ]
