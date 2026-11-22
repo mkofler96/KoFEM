@@ -54,8 +54,19 @@ pub enum FemError {
     TooManyNodes { count: usize, max: usize },
     #[error("the mesh has no elements")]
     EmptyMesh,
+    #[error("{what} connectivity has {len} corner indices, which is not a multiple of {per}")]
+    ConnectivityLength {
+        what: &'static str,
+        len: usize,
+        per: usize,
+    },
     #[error("support reactions: {reason}")]
     ReactionInput { reason: String },
+    #[error(
+        "a coupled, tied or mixed solve works on a reduction of the stiffness matrix, \
+         so it has no assembled matrix to give back"
+    )]
+    ReducedSystem,
     #[error("constrained degree of freedom {dof} is out of range (the model has {count})")]
     DofOutOfRange { dof: u32, count: usize },
     #[error("degree of freedom {dof} is constrained twice, to {first} and {second}")]
@@ -187,6 +198,20 @@ pub enum FemError {
         material: u32,
         count: usize,
     },
+    #[error(
+        "{count} thermal expansion coefficients given for {elements} elements (tetrahedra, \
+         then hexahedra)"
+    )]
+    ExpansionCoefficientCount { count: usize, elements: usize },
+    #[error(
+        "{count} temperature changes given for {nodes} nodes (vertices, then the nodes a \
+         quadratic mesh adds)"
+    )]
+    TemperatureCount { count: usize, nodes: usize },
+    #[error("element {element} is out of range (the mesh has {count})")]
+    ElementOutOfRange { element: usize, count: usize },
     #[error("topology optimization: {reason}")]
     TopologyInput { reason: String },
+    #[error("mesh convergence: {reason}")]
+    Convergence { reason: String },
 }

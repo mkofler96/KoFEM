@@ -808,3 +808,256 @@ export function tieCantileverFigure() {
     parts.join("\n    "),
   );
 }
+
+// ── NAFEMS linear-elastic benchmarks (KOF-446) ───────────────────────────────
+
+/**
+ * The NAFEMS LE1 / LE10 quarter of an elliptic ring, to scale: inner ellipse
+ * (x/2)² + y² = 1 and outer (x/3.25)² + (y/2.75)² = 1 (m), rollers on the
+ * edges AB (x = 0) and CD (y = 0), the read-out point D. `load` "outward" draws
+ * LE1's outward pressure on the outer edge; "top" LE10's pressure on the upper
+ * face, shown as a note.
+ */
+export function ellipticMembraneFigure({ load }) {
+  if (load !== "outward" && load !== "top")
+    throw new Error(
+      `ellipticMembraneFigure: load must be "outward" or "top", got "${load}"`,
+    );
+  const s = 52; // px per metre
+  const ox = 56,
+    oy = 200;
+  const P = (x, y) => [ox + s * x, oy - s * y];
+  const [ax, ay] = P(0, 1),
+    [bx, by] = P(0, 2.75),
+    [cx, cy] = P(3.25, 0),
+    [dx, dy] = P(2, 0);
+  const parts = [
+    `<path class="body" d="M${f(dx)} ${f(dy)}L${f(cx)} ${f(cy)}A${f(3.25 * s)} ${f(2.75 * s)} 0 0 0 ${f(bx)} ${f(by)}L${f(ax)} ${f(ay)}A${f(2 * s)} ${f(s)} 0 0 1 ${f(dx)} ${f(dy)}Z"/>`,
+  ];
+  for (let k = 0; k < 4; k++) {
+    const y = ay - 8 - ((ay - by - 16) * k) / 3;
+    parts.push(`<circle class="hole" cx="${f(ax - 6)}" cy="${f(y)}" r="5"/>`);
+  }
+  for (let k = 0; k < 4; k++) {
+    const x = dx + 8 + ((cx - dx - 16) * k) / 3;
+    parts.push(`<circle class="hole" cx="${f(x)}" cy="${f(dy + 6)}" r="5"/>`);
+  }
+  parts.push(
+    line(ax - 12, by + 2, ax - 12, ay - 2, "wall"),
+    line(dx + 2, dy + 12, cx - 2, dy + 12, "wall"),
+  );
+  if (load === "outward")
+    for (let k = 1; k <= 5; k++) {
+      const t = (Math.PI / 2) * (k / 6);
+      const [px, py] = P(3.25 * Math.cos(t), 2.75 * Math.sin(t));
+      // The outward normal of the ellipse at parameter t.
+      const nx = Math.cos(t) / 3.25,
+        ny = Math.sin(t) / 2.75;
+      const len = Math.hypot(nx, ny);
+      parts.push(arrow(px, py, px + (26 * nx) / len, py - (26 * ny) / len));
+    }
+  parts.push(
+    `<circle class="pt" cx="${f(dx)}" cy="${f(dy)}" r="3.5"/>`,
+    label(ax + 8, ay + 4, "A", { anchor: "start" }),
+    label(bx + 8, by + 14, "B", { anchor: "start" }),
+    label(cx + 4, cy - 8, "C", { anchor: "start" }),
+    label(dx - 4, dy - 8, "D", { anchor: "end" }),
+    triad(ox + 200, oy - 150),
+  );
+  if (load === "top")
+    parts.push(
+      label(ox + 196, oy - 98, "pressure on the", { anchor: "start" }),
+      label(ox + 196, oy - 82, "upper face, 600 mm thick", {
+        anchor: "start",
+      }),
+    );
+  return svg(
+    360,
+    240,
+    load === "outward"
+      ? "Quarter of an elliptic ring, held on the edges AB and CD by rollers, pulled by an outward pressure on its outer edge; D is where the inner ellipse is sharpest"
+      : "Quarter of a thick elliptic plate, held on the faces x = 0 and y = 0 and on its outer face, with a pressure on its upper face; D lies on the upper face where the inner ellipse meets y = 0",
+    parts.join("\n    "),
+    { cls: "fig half", name: "elliptic-membrane-diagram" },
+  );
+}
+
+/**
+ * The NAFEMS LE2 cylindrical panel seen along its axis: the 30° arc of the
+ * mid-surface, clamped at A (θ = 0), with the edge moment m at D (θ = 30°).
+ */
+export function cylindricalPanelFigure() {
+  const R = 520,
+    ox = 20,
+    oy = 560;
+  const P = (deg) => [
+    ox + R * Math.cos((deg * Math.PI) / 180),
+    oy - R * Math.sin((deg * Math.PI) / 180),
+  ];
+  const [x0, y0] = P(52),
+    [x1, y1] = P(82);
+  const parts = [
+    `<path class="curve" d="M${f(x0)} ${f(y0)}A${R} ${R} 0 0 0 ${f(x1)} ${f(y1)}"/>`,
+    `<rect class="clamp" x="${f(x0 - 6)}" y="${f(y0 - 7)}" width="18" height="14"/>`,
+    `<path class="load" d="M${f(x1 + 20)} ${f(y1 + 6)}A16 16 0 1 0 ${f(x1 - 12)} ${f(y1 - 12)}" marker-end="url(#arr-load)" fill="none"/>`,
+    sym(x1 - 30, y1 - 14, "m", "end"),
+    label(x0 + 18, y0 + 4, "A, B (clamped)", { anchor: "start" }),
+    label(x1 - 6, y1 + 22, "D, C", { anchor: "end" }),
+    `<circle class="pt" cx="${f(P(72)[0])}" cy="${f(P(72)[1])}" r="3.5"/>`,
+    label(P(72)[0] + 8, P(72)[1] - 6, "E", { anchor: "start" }),
+  ];
+  return svg(
+    330,
+    150,
+    "The 30° cylindrical panel seen along its axis: clamped along AB, loaded by an edge moment m along DC; E is an interior point",
+    parts.join("\n    "),
+    { cls: "fig half", name: "cylindrical-panel-diagram" },
+  );
+}
+
+/**
+ * A meridian section (r, z) of a body of revolution, to scale: the closed
+ * profile of a solid or the mid-surface of a shell (`closed` false), its
+ * points labelled, the axis dashed. Segments as in examples/gallery/
+ * step-revolve.mjs: { type: "line", to } or { type: "arc", to, center, ccw }.
+ *
+ * @param {{ start: [number, number], segments: object[], closed: boolean,
+ *           points: Record<string, [number, number]>, name: string,
+ *           label: string, note?: string }} options  coordinates in metres
+ */
+export function meridianFigure({
+  start,
+  segments,
+  closed,
+  points,
+  name,
+  label: aria,
+  note,
+}) {
+  const all = [start, ...segments.map((seg) => seg.to)];
+  const rMax = Math.max(...all.map((p) => p[0]));
+  const zMin = Math.min(0, ...all.map((p) => p[1]));
+  const zMax = Math.max(...all.map((p) => p[1]));
+  const s = Math.min(220 / (rMax || 1), 190 / (zMax - zMin || 1));
+  const ox = 40,
+    oy = 30 + s * zMax;
+  const P = ([r, z]) => [ox + s * r, oy - s * z];
+  let d = `M${f(P(start)[0])} ${f(P(start)[1])}`;
+  let from = start;
+  for (const seg of segments) {
+    const [x, y] = P(seg.to);
+    if (seg.type === "line") d += `L${f(x)} ${f(y)}`;
+    else {
+      const rad = Math.hypot(from[0] - seg.center[0], from[1] - seg.center[1]);
+      const a0 = Math.atan2(from[1] - seg.center[1], from[0] - seg.center[0]);
+      const a1 = Math.atan2(
+        seg.to[1] - seg.center[1],
+        seg.to[0] - seg.center[0],
+      );
+      let sweep = seg.ccw ? a1 - a0 : a0 - a1;
+      sweep = ((sweep % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      // (r, z) counter-clockwise is clockwise on screen (y down).
+      d += `A${f(rad * s)} ${f(rad * s)} 0 ${sweep > Math.PI ? 1 : 0} ${seg.ccw ? 0 : 1} ${f(x)} ${f(y)}`;
+    }
+    from = seg.to;
+  }
+  if (closed) d += "Z";
+  const parts = [
+    line(ox, oy - s * zMax - 14, ox, oy - s * zMin + 14, "axis"),
+    `<path class="${closed ? "body" : "curve"}" d="${d}"/>`,
+    sym(ox - 6, oy - s * zMax - 18, "z", "end"),
+    sym(ox + s * rMax + 18, oy + 4, "r", "start"),
+    line(ox, oy, ox + s * rMax + 12, oy, "dim"),
+  ];
+  for (const [key, p] of Object.entries(points)) {
+    const [x, y] = P(p);
+    parts.push(
+      `<circle class="pt" cx="${f(x)}" cy="${f(y)}" r="3"/>`,
+      label(x + 7, y - 5, key, { anchor: "start" }),
+    );
+  }
+  if (note) parts.push(label(ox + 4, oy + 26, note, { anchor: "start" }));
+  return svg(320, Math.ceil(oy - s * zMin + 40), aria, parts.join("\n    "), {
+    cls: "fig half",
+    name,
+  });
+}
+
+/**
+ * The NAFEMS LE5 Z cross-section seen along the beam: web, two flanges, the
+ * end shears S on the flanges and the read-out point A on the lower flange's
+ * free edge.
+ */
+export function zSectionFigure() {
+  const s = 70,
+    ox = 165,
+    oy = 120;
+  const P = (x, y) => [ox + s * x, oy - s * y];
+  const t = 0.1;
+  const pts = [
+    [-1 - t / 2, -1],
+    [-1 + t / 2, -1],
+    [-1 + t / 2, -t / 2],
+    [1 + t / 2, -t / 2],
+    [1 + t / 2, 1],
+    [1 - t / 2, 1],
+    [1 - t / 2, t / 2],
+    [-1 - t / 2, t / 2],
+  ].map(([x, y]) => P(x, y));
+  const [ax, ay] = P(-1, -1);
+  const [u0x, u0y] = P(1, 0.25),
+    [l0x, l0y] = P(-1, -0.25);
+  const parts = [
+    poly(pts, "body"),
+    arrow(u0x + 14, u0y + 20, u0x + 14, u0y - 22),
+    sym(u0x + 22, u0y, "S", "start"),
+    arrow(l0x - 14, l0y - 20, l0x - 14, l0y + 22),
+    sym(l0x - 22, l0y + 8, "S", "end"),
+    `<circle class="pt" cx="${f(ax)}" cy="${f(ay)}" r="3.5"/>`,
+    label(ax + 10, ay + 4, "A", { anchor: "start" }),
+  ];
+  return svg(
+    330,
+    240,
+    "The Z cross-section: a horizontal web and two flanges running to opposite sides, each end flange loaded by a shear S; A sits on the free edge of the lower flange",
+    parts.join("\n    "),
+    { cls: "fig half", name: "z-section-diagram" },
+  );
+}
+
+/**
+ * The NAFEMS LE6 skew plate from above, to scale: the 30° rhombus ABCD with
+ * 1 m sides, simply supported on every edge, and its centre E.
+ */
+export function skewPlateFigure() {
+  const s = 130,
+    ox = 30,
+    oy = 120;
+  const c = Math.cos(Math.PI / 6),
+    sn = Math.sin(Math.PI / 6);
+  const P = (x, y) => [ox + s * x, oy - s * y];
+  const A = P(0, 0),
+    B = P(1, 0),
+    C = P(1 + c, sn),
+    D = P(c, sn),
+    E = P((1 + c) / 2, sn / 2);
+  const parts = [
+    poly([A, B, C, D], "body"),
+    `<circle class="pt" cx="${f(E[0])}" cy="${f(E[1])}" r="3.5"/>`,
+    label(A[0] - 4, A[1] + 16, "A"),
+    label(B[0], B[1] + 16, "B"),
+    label(C[0] + 6, C[1] - 4, "C", { anchor: "start" }),
+    label(D[0] - 6, D[1] - 6, "D", { anchor: "end" }),
+    label(E[0] + 8, E[1] - 6, "E", { anchor: "start" }),
+    label(ox, oy + 36, "simply supported on all edges; uniform pressure", {
+      anchor: "start",
+    }),
+  ];
+  return svg(
+    330,
+    170,
+    "The 30° skew plate ABCD with 1 m sides, simply supported on every edge under a uniform pressure; E is its centre",
+    parts.join("\n    "),
+    { cls: "fig half", name: "skew-plate-diagram" },
+  );
+}

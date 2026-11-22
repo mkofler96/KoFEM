@@ -7,6 +7,11 @@
 // auto-shell path (autoShell.ts) feeds the same assembler and reuses the
 // coupling/BC packing here.
 
+import {
+  cornerCount,
+  mapSurfaces,
+  type ElementStress,
+} from "../stressFields.js";
 import type {
   Element,
   Property,
@@ -445,4 +450,58 @@ export function mapMixedResult(
         : result.von_mises_tets[solidIdx++];
   }
   return { displacements, vonMises };
+}
+
+// The stress tensors of a mixed solve in element order, surface by surface:
+// solid tets and shell facets interleaved as mapMixedResult interleaves their
+// von Mises. Apart from it because the stored C++ results carry no tensors.
+export function mapMixedStress(
+  payload: Pick<SolveModel, "elements">,
+  result: { stress_tets: Float64Array; stress_tris: ElementStress },
+): ElementStress {
+  return mapSurfaces((surface) =>
+    interleaveTensors(
+      payload.elements,
+      result.stress_tets,
+      result.stress_tris[surface],
+    ),
+  );
+}
+
+// The corner tensors of every element in element order, taken from the solid
+// tensors for a solid element and from the shell tensors for a shell facet,
+// each in the order its kind crossed the WASM boundary.
+export function interleaveTensors(
+  elements: readonly Pick<Element, "type" | "nodeIds">[],
+  solid: Float64Array,
+  shell: Float64Array,
+): Float64Array {
+  const corners = elements.reduce((n, el) => n + cornerCount(el), 0);
+  const out = new Float64Array(6 * corners);
+  let solidAt = 0,
+    shellAt = 0,
+    outAt = 0;
+  for (const element of elements) {
+    const size = 6 * cornerCount(element);
+    const onShell = element.type === "CTRIA3";
+    const from = onShell ? shell : solid;
+    const at = onShell ? shellAt : solidAt;
+    if (at + size > from.length)
+      throw new Error(
+        `the solve returned ${from.length / 6} ${onShell ? "shell" : "solid"} corner stress tensors, too few for the mesh's elements`,
+      );
+    out.set(from.subarray(at, at + size), outAt);
+    outAt += size;
+    if (onShell) shellAt += size;
+    else solidAt += size;
+  }
+  for (const [name, from, used] of [
+    ["solid", solid, solidAt],
+    ["shell", shell, shellAt],
+  ] as const)
+    if (used !== from.length)
+      throw new Error(
+        `the solve returned ${from.length / 6} ${name} corner stress tensors, but the mesh's elements have ${used / 6}`,
+      );
+  return out;
 }

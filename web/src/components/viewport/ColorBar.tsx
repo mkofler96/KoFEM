@@ -30,6 +30,7 @@ const gradient = (() => {
 export function ColorBar() {
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
+  const shellSurface = useModelStore((s) => s.shellSurface);
   const mode = useModelStore((s) => s.mode);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -73,7 +74,13 @@ export function ColorBar() {
     ) : null;
   }
 
-  const fieldRange = computeResultRange(result, resultType, nodes, elements);
+  const fieldRange = computeResultRange(
+    result,
+    resultType,
+    nodes,
+    elements,
+    shellSurface,
+  );
   if (!fieldRange) return null;
 
   const { min, max } = legendRange ?? fieldRange;

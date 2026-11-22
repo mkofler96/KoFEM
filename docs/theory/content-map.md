@@ -36,6 +36,7 @@ published. Renames require redirects and preserved heading anchors.
 | Numerical methods      | `/theory/numerical-methods/loads-and-constraints/`   | How do supported load and displacement conditions enter that system?                                       |
 | Numerical methods      | `/theory/numerical-methods/couplings/`               | What does a kinematic or a distributing coupling do to the surface it grips?                               |
 | Numerical methods      | `/theory/numerical-methods/linear-solve/`            | How is the linear system solved, and what do tolerance and non-convergence mean?                           |
+| Numerical methods      | `/theory/numerical-methods/multigrid/`               | How does algebraic multigrid keep CG iterations low as the mesh is refined, and when does it struggle?     |
 | Results                | `/theory/results/displacement-and-stress/`           | How are nodal displacement and element von Mises stress produced and displayed?                            |
 | Results                | `/theory/results/interpretation-and-convergence/`    | Which conclusions are justified by a result, and when must the FEM discretisation be refined?              |
 | Verification           | `/theory/verification/axial-bar/`                    | Does the complete KoFEM path reproduce the analytical extension of a bar in tension?                       |

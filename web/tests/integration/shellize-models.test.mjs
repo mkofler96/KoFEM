@@ -77,11 +77,13 @@ const CASES = [
     shellBody: 1,
     refuses: 'Body 1 is marked "Shell", but 1101 of its 15626 elements (35.0 %',
   },
+  // Still refused, but its 6 mm tube boss now collapses as a curved wall
+  // (KOF-448), so less of the body lies outside every wall (17.8 % before).
   {
     step: "Wall Bracket.stp",
     size: 6,
     shellBody: 1,
-    refuses: 'Body 1 is marked "Shell", but 8047 of its 38206 elements (17.8 %',
+    refuses: 'Body 1 is marked "Shell", but 6536 of its 38206 elements (11.9 %',
   },
   // The web and both flanges, welded along the two web/flange T-junctions
   // (KOF-205). Before, the 15 mm web just missed maxWall = 15 and the split

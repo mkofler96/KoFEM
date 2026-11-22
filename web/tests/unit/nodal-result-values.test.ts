@@ -27,18 +27,19 @@ const result = {
 
 describe("nodalResultValues", () => {
   test("gives each displacement component and the magnitude per node", () => {
-    expect([...nodalResultValues(result, "Ux", nodes, elements)!]).toEqual([
-      0, 3, 0, 0,
-    ]);
-    expect([...nodalResultValues(result, "Uy", nodes, elements)!]).toEqual([
-      0, 4, -2, 0,
-    ]);
+    expect([
+      ...nodalResultValues(result, "Ux", nodes, elements, "top")!,
+    ]).toEqual([0, 3, 0, 0]);
+    expect([
+      ...nodalResultValues(result, "Uy", nodes, elements, "top")!,
+    ]).toEqual([0, 4, -2, 0]);
     expect([
       ...nodalResultValues(
         result,
         "Displacement (magnitude)",
         nodes,
         elements,
+        "top",
       )!,
     ]).toEqual([0, 5, 2, 1]);
   });
@@ -49,10 +50,11 @@ describe("nodalResultValues", () => {
       "Von Mises stress",
       nodes,
       elements,
+      "top",
     )!;
     expect([...values]).toEqual([42, 42, 42, 42]);
     expect(
-      computeResultRange(result, "Von Mises stress", nodes, elements),
+      computeResultRange(result, "Von Mises stress", nodes, elements, "top"),
     ).toEqual({ min: 42, max: 42 });
   });
 
@@ -63,6 +65,7 @@ describe("nodalResultValues", () => {
         "Von Mises stress",
         nodes,
         elements,
+        "top",
       ),
     ).toBeNull();
   });
@@ -74,6 +77,7 @@ describe("nodalResultValues", () => {
         "Ux",
         nodes,
         elements,
+        "top",
       ),
     ).toThrow("stale");
   });

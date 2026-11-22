@@ -238,9 +238,17 @@ describe("studyFingerprint", () => {
         faces: [{ cadFaceId: 4, nodeIds: [5, 6] }],
       },
     ],
+    temperature: null as { formula: string } | null,
     elementOrder: 1,
     solverMethod: "amg",
   };
+
+  test("a temperature change applied, edited or removed changes it", () => {
+    const heated = { ...model, temperature: { formula: "20" } };
+    expect(studyFingerprint(heated)).not.toBe(studyFingerprint(model));
+    const edited = { ...model, temperature: { formula: "0.1 * x" } };
+    expect(studyFingerprint(edited)).not.toBe(studyFingerprint(heated));
+  });
 
   // A re-mesh re-creates a coupling's reference point as a node of the new
   // mesh (KOF-422): a new node id, the same coupling.

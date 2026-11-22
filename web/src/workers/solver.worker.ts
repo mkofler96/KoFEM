@@ -4,6 +4,7 @@
 
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
+import { SHELL_SURFACES, type ElementStress } from "../lib/stressFields";
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
 import {
   Couplings,
@@ -14,6 +15,7 @@ import {
   ShellModel,
   SolveOptions,
   Ties,
+  evaluateFieldExpression,
   tieMortarWeights,
   TopologyRun,
   TopologySettings,
@@ -52,6 +54,7 @@ import {
   buildCoupledEngineInputs,
   coupledSupportOwners,
   mapMixedResult,
+  mapMixedStress,
   type SolveLog,
 } from "../lib/solve/coupled.js";
 import { routeSolve, routeTopOpt, topOptStartLog } from "../lib/solve/route.js";
@@ -599,6 +602,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
 type SolveResultFields = {
   displacements: Float64Array;
   vonMises: Float64Array;
+  stress: ElementStress;
 };
 
 // Each path's reactions are summed in the solve's own numbering, before its
@@ -614,9 +618,18 @@ function postSolveResult(
       ok: true,
       displacements: result.displacements,
       vonMises: result.vonMises,
+      stress: result.stress,
       reactions,
     },
-    [result.displacements.buffer, result.vonMises.buffer],
+    // A model without shells holds one stress array on every surface: each
+    // buffer is transferred once.
+    [
+      ...new Set([
+        result.displacements.buffer,
+        result.vonMises.buffer,
+        ...SHELL_SURFACES.map((s) => result.stress[s].buffer),
+      ]),
+    ],
   );
 }
 
@@ -672,6 +685,7 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
     {
       displacements: result.displacements,
       vonMises: result.von_mises,
+      stress: result.stress,
     },
     result.reactions,
   );
@@ -734,7 +748,10 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
         logTo(id),
         supports,
       );
-  const fields = mapMixedResult(payload, inp.model, result);
+  const fields = {
+    ...mapMixedResult(payload, inp.model, result),
+    stress: mapMixedStress(payload, result),
+  };
 
   self.postMessage({
     id,
@@ -767,13 +784,19 @@ async function handleAutoShellSolve(
     prepared.kind === "coupled"
       ? await solveMixed(prepared.solve, payload, log, supports).then(
           (result) => ({
-            fields: prepared.solve.mapResult(result),
+            fields: {
+              ...prepared.solve.mapResult(result),
+              stress: prepared.solve.mapStress(result),
+            },
             reactions: result.reactions,
           }),
         )
       : await solveShell(prepared.solve, payload, log, supports).then(
           (result) => ({
-            fields: prepared.solve.mapResult(result),
+            fields: {
+              ...prepared.solve.mapResult(result),
+              stress: prepared.solve.mapStress(result),
+            },
             reactions: result.reactions,
           }),
         );
@@ -833,7 +856,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
       : null,
   );
   const result = await solveSolidInRust(
-    { ElasticModel, SolveOptions, Ties },
+    { ElasticModel, SolveOptions, Ties, evaluateFieldExpression },
     {
       ...payload,
       nodes: tied.solveNodes,
@@ -859,7 +882,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   });
   postSolveResult(
     id,
-    { displacements, vonMises: result.vonMises },
+    { displacements, vonMises: result.vonMises, stress: result.stress },
     result.reactions,
   );
 }

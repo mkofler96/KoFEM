@@ -29,6 +29,7 @@ import type {
   Node,
   Property,
   SurfaceLoad,
+  TemperatureLoad,
 } from "../../workers/solverTypes.js";
 import type {
   Couplings,
@@ -52,6 +53,8 @@ import { rustTieTables } from "./solid.js";
 import { shellMarkedBodies } from "./autoShell.js";
 import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
+import { uniformStress, type ElementStress } from "../stressFields.js";
+import { thermalInputs, type EvaluateField } from "./thermal.js";
 import {
   readReactions,
   supportOwners,
@@ -157,9 +160,11 @@ export interface FemModule {
   SolveOptions: typeof SolveOptions;
 }
 
-// The solid solve needs the tie tables too, for constraint ties.
+// The solid solve needs the tie tables too, for constraint ties, and the
+// formula evaluator for a temperature change.
 export interface SolidFemModule extends FemModule {
   Ties: typeof Ties;
+  evaluateFieldExpression: EvaluateField;
 }
 
 // The coupled solve needs the coupling set too.
@@ -175,6 +180,8 @@ export interface AmgSolidModel {
   constraints: Constraint[];
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
+  // A temperature change over the model; absent or null: none.
+  temperature?: TemperatureLoad | null;
   // The constraint-tie equations of the model's "mpc" connections
   // (weldTies), in original node ids; absent or empty when it has none.
   constraintTies?: TieConstraint[];
@@ -214,6 +221,7 @@ export async function solveSolidInRust(
 ): Promise<{
   displacements: Float64Array;
   vonMises: Float64Array;
+  stress: ElementStress;
   reactions: ReactionSummary | null;
 }> {
   const reason = amgUnavailableReason({
@@ -247,6 +255,27 @@ export async function solveSolidInRust(
       model,
       refVid,
     );
+    // A temperature change adds its thermal load to the forces.
+    const thermal = model.temperature
+      ? thermalInputs(
+          fem.evaluateFieldExpression,
+          model.temperature,
+          [
+            ...model.elements.filter((e) => e.type === "CTETRA"),
+            ...model.elements.filter((e) => e.type === "CHEXA"),
+          ],
+          model.materials,
+          model.properties,
+          elastic.nodeCoordinates,
+        )
+      : null;
+    if (thermal) {
+      const thermalForces = elastic.thermalLoad(thermal.alpha, thermal.deltaT);
+      for (let i = 0; i < forces.length; i++) forces[i] += thermalForces[i];
+      log(
+        `Temperature change ${model.temperature?.formula} °C applied as a thermal load`,
+      );
+    }
     const supports = supportOwners(
       model.constraints,
       elastic.vertexCount,
@@ -301,6 +330,15 @@ export async function solveSolidInRust(
         return {
           displacements: nodal.slice(0, 3 * elastic.vertexCount),
           vonMises: elastic.vonMises(nodal),
+          stress: uniformStress(
+            thermal
+              ? elastic.stressTensorsThermal(
+                  nodal,
+                  thermal.alpha,
+                  thermal.deltaT,
+                )
+              : elastic.stressTensors(nodal),
+          ),
           reactions: readReactions(elastic, solution, forces, supports),
         };
       },
@@ -456,6 +494,8 @@ export async function solveCoupledSolidInRust(
   displacements: Float64Array;
   von_mises_tets: Float64Array;
   von_mises_tris: Float64Array;
+  stress_tets: Float64Array;
+  stress_tris: ElementStress;
   reactions: ReactionSummary | null;
 }> {
   const { mesh, coupling, bcs, solidMaterials } = input;
@@ -555,6 +595,8 @@ export async function solveCoupledSolidInRust(
             displacements: nodal.slice(0, 3 * pointCount),
             von_mises_tets: elastic.vonMises(nodal),
             von_mises_tris: new Float64Array(0),
+            stress_tets: elastic.stressTensors(nodal),
+            stress_tris: uniformStress(new Float64Array(0)),
             reactions:
               supports === undefined
                 ? null

@@ -13,6 +13,14 @@ import type {
 } from "../store/modelStore";
 import { loadComponents, loadKind } from "../store/boundaryGroups";
 import { nodeVonMisesField } from "./resultField";
+import { anchorAtPoint, readProbes } from "./resultProbe";
+import {
+  isStressField,
+  SHELL_SURFACES,
+  STRESS_FIELDS,
+  type ShellSurface,
+  type StressField,
+} from "./stressFields";
 
 // A closed-form result an example carries so a user can judge the solve
 // (KOF-261, KOF-322): the quantity read off the solved field, the hand formula
@@ -37,7 +45,16 @@ export type HandCheckProbe =
   | { kind: "twist"; axis: Axis; cadFaceIds: number[] }
   // The largest nodal von Mises stress (MPa), averaged to the nodes exactly as
   // the result plot averages it, over these CAD faces' nodes or all nodes.
-  | { kind: "stress"; field: "vonMises"; stat: "max"; cadFaceIds?: number[] };
+  | { kind: "stress"; field: "vonMises"; stat: "max"; cadFaceIds?: number[] }
+  // A stress component or principal stress (MPa) on a shell surface, at the
+  // surface point nearest `point`, read as a result probe placed there reads it
+  // (KOF-447).
+  | {
+      kind: "stress";
+      field: StressField;
+      surface: ShellSurface;
+      point: [number, number, number];
+    };
 
 // A load the formula assumes, on whole CAD faces: a force vector (N), a
 // pressure (MPa) or a moment about a global axis (N·mm).
@@ -176,6 +193,25 @@ function parseProbe(raw: unknown): HandCheckProbe {
         cadFaceIds: expectFaceIds(probe.cadFaceIds, "probe.cadFaceIds"),
       };
     case "stress":
+      if (probe.point !== undefined) {
+        if (typeof probe.field !== "string" || !isStressField(probe.field))
+          fail(
+            `probe.field of a stress at a point must be one of ${STRESS_FIELDS.map((f) => JSON.stringify(f)).join(", ")}, got ${JSON.stringify(probe.field)}`,
+          );
+        if (
+          typeof probe.surface !== "string" ||
+          !(SHELL_SURFACES as readonly string[]).includes(probe.surface)
+        )
+          fail(
+            `probe.surface must be "top", "middle" or "bottom", got ${JSON.stringify(probe.surface)}`,
+          );
+        return {
+          kind: "stress",
+          field: probe.field as StressField,
+          surface: probe.surface as ShellSurface,
+          point: expectVector(probe.point, "probe.point"),
+        };
+      }
       if (probe.field !== "vonMises")
         fail(
           `probe.field must be "vonMises", got ${JSON.stringify(probe.field)}`,
@@ -561,6 +597,17 @@ function readProbe(probe: HandCheckProbe, model: HandCheckModel): number {
         disp,
       );
     case "stress": {
+      if ("point" in probe) {
+        const [reading] = readProbes(
+          [{ id: 0, ...anchorAtPoint(probe.point, model) }],
+          model,
+          probe.field,
+          probe.surface,
+        );
+        if (reading.kind === "unreadable")
+          throw new Error(`Hand check: ${reading.reason}`);
+        return reading.value;
+      }
       const vm = nodeVonMisesField(result, nodes, model.elements);
       if (!vm)
         throw new Error(

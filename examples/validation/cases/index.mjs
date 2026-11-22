@@ -35,6 +35,16 @@ import surfacePressure from "./surface-pressure.mjs";
 import tiePatchTest from "./tie-patch-test.mjs";
 import tieLameCylinder from "./tie-lame-cylinder.mjs";
 import tieCantilever from "./tie-cantilever.mjs";
+import nafemsLe1 from "./nafems-le1.mjs";
+import nafemsLe10 from "./nafems-le10.mjs";
+import nafemsLe11 from "./nafems-le11.mjs";
+import nafemsLe2 from "./nafems-le2.mjs";
+import nafemsLe3 from "./nafems-le3.mjs";
+import nafemsLe4 from "./nafems-le4.mjs";
+import nafemsLe5 from "./nafems-le5.mjs";
+import nafemsLe6 from "./nafems-le6.mjs";
+import nafemsLe7 from "./nafems-le7.mjs";
+import nafemsLe8 from "./nafems-le8.mjs";
 import { validateRecipe } from "../lib/recipe.mjs";
 
 const CASE_KEYS = new Set([
@@ -92,4 +102,14 @@ export default [
   tiePatchTest,
   tieLameCylinder,
   tieCantilever,
+  nafemsLe1,
+  nafemsLe2,
+  nafemsLe3,
+  nafemsLe4,
+  nafemsLe5,
+  nafemsLe6,
+  nafemsLe7,
+  nafemsLe8,
+  nafemsLe10,
+  nafemsLe11,
 ].map(register);

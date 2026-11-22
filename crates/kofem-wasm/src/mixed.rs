@@ -7,15 +7,17 @@
 
 use kofem_fem::shell::SHELL_NODE_DOFS;
 use kofem_fem::{
-    assemble_shell_stiffness, assemble_stiffness, prepare_mixed_static, shell_von_mises,
-    summarize_reactions, von_mises, AmgSettings, AppliedPreconditioner, CsrMatrix,
-    MixedPreconditioner, PcgRun, PreconditionerChoice, PreparedMixed, ShellMesh, ShellPart,
-    StoppingRule, TetMesh,
+    assemble_shell_stiffness, assemble_stiffness, corner_stress_tensors, prepare_mixed_static,
+    shell_corner_stress_tensors, shell_von_mises, summarize_reactions, von_mises, AmgSettings,
+    AppliedPreconditioner, CsrMatrix, MixedPreconditioner, PcgRun, PreconditionerChoice,
+    PreparedMixed, ShellMesh, ShellPart, StoppingRule, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
+use crate::stiffness::Loan;
 use crate::{
-    flatten_reactions, parse_materials, to_js, Couplings, ElasticSolution, RunOutput, SolveRun,
+    flatten_reactions, parse_materials, shell_surface, to_js, Couplings, ElasticSolution,
+    RunOutput, SolveRun,
 };
 
 /// A validated mixed model: linear tets and, when there are any, Kirchhoff
@@ -200,7 +202,7 @@ impl MixedModel {
             }
         };
         Ok(SolveRun {
-            prepared,
+            prepared: Loan::owned(prepared),
             run,
             preconditioner,
             reduction: Some(reduction),
@@ -281,6 +283,37 @@ impl MixedModel {
         match &self.shell {
             None => Ok(Vec::new()),
             Some(mesh) => shell_von_mises(mesh, dofs).map_err(|error| to_js(&error)),
+        }
+    }
+
+    /// The stress tensor of every tet at its four corners for a solution (6
+    /// DOFs per vertex), six values each: σxx, σyy, σzz, τxy, τyz, τzx.
+    ///
+    /// # Errors
+    /// A solution array that does not fit the model.
+    #[wasm_bindgen(js_name = stressTensorsTets)]
+    pub fn stress_tensors_tets(&self, dofs: &[f64]) -> Result<Vec<f64>, JsError> {
+        let translations = self.translations(dofs)?;
+        corner_stress_tensors(&self.solid, &translations)
+            .map(|tensors| tensors.into_iter().flatten().collect())
+            .map_err(|error| to_js(&error))
+    }
+
+    /// The stress tensor of every shell facet on `surface` ("top", "middle"
+    /// or "bottom") at its three corners, six values each. Empty without
+    /// shell facets.
+    ///
+    /// # Errors
+    /// A solution array that does not fit the model, or an unknown surface.
+    #[wasm_bindgen(js_name = stressTensorsTris)]
+    pub fn stress_tensors_tris(&self, dofs: &[f64], surface: &str) -> Result<Vec<f64>, JsError> {
+        self.check_dofs(dofs)?;
+        let surface = shell_surface(surface)?;
+        match &self.shell {
+            None => Ok(Vec::new()),
+            Some(mesh) => shell_corner_stress_tensors(mesh, dofs, surface)
+                .map(|tensors| tensors.into_iter().flatten().collect())
+                .map_err(|error| to_js(&error)),
         }
     }
 

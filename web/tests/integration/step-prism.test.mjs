@@ -23,6 +23,8 @@ import {
   annulusStep,
   arc,
   circleLoop,
+  ellipseArc,
+  ellipticMembraneStep,
   extrudedProfileStep,
   extrudedProfilesStep,
   line,
@@ -32,13 +34,16 @@ import {
   quarterStripWithHoleStep,
   stepString,
 } from "../../../examples/gallery/step-prism.mjs";
+import {
+  describePart,
+  onRadius,
+  onX,
+  onY,
+  onZ,
+  simpson,
+  TESSELLATION_OPTIONS,
+} from "../support/step-parts.mjs";
 import { loadEngine } from "../support/wasm.mjs";
-
-const TESSELLATION_OPTIONS = JSON.stringify({
-  deflection_relative: 0.001,
-  angular_deflection: 0.5,
-  format: "step",
-});
 
 // ── prismStep is unchanged ────────────────────────────────────────────────────
 // SHA-256 of prismStep's output before the profile writer was added; the
@@ -96,6 +101,40 @@ describe("invalid profiles", () => {
     ).toThrow(/radius/);
   });
 
+  test("elliptic arc ending off its ellipse is rejected", () => {
+    expect(() =>
+      extrudedProfileStep(
+        {
+          outer: [
+            line([2, 0]),
+            ellipseArc([0, 1.5], [0, 0], [2, 1], true),
+            line([0, 0]),
+          ],
+          holes: [],
+        },
+        1,
+        "x",
+      ),
+    ).toThrow(/ellipse/);
+  });
+
+  test("elliptic arc with a non-positive semi-axis is rejected", () => {
+    expect(() =>
+      extrudedProfileStep(
+        {
+          outer: [
+            line([2, 0]),
+            ellipseArc([0, 0], [0, 0], [2, 0], true),
+            line([0, 0]),
+          ],
+          holes: [],
+        },
+        1,
+        "x",
+      ),
+    ).toThrow(/semi-axes/);
+  });
+
   test("non-positive depth is rejected", () => {
     expect(() =>
       extrudedProfileStep({ outer: square, holes: [] }, 0, "x"),
@@ -150,255 +189,6 @@ describe("STEP string escaping", () => {
     expect(() => stepString("Träger")).toThrow(/"ä" is not printable ASCII/);
   });
 });
-
-// ── The engine ────────────────────────────────────────────────────────────────
-
-/**
- * @typedef {object} ExpectedFace
- * @property {string} label
- * @property {(x: number, y: number, z: number) => number} distance  0 on the face's surface
- * @property {number} area  analytic face area (mm²)
- */
-
-/**
- * Import `step`, mesh it and check both against the analytic part.
- *
- * @param {string} label
- * @param {string} step
- * @param {ExpectedFace[]} faces  in CAD face id order (id = index + 1)
- * @param {number} volume         analytic volume (mm³)
- * @param {number} size           extent of the part (mm), for tolerances
- * @param {number} maxElementSize the mesh size to check the volume at (mm)
- */
-function describePart(label, step, faces, volume, size, maxElementSize) {
-  // Float32 display vertices: allow a few ulps of the part's size.
-  const tolerance = 4e-6 * size;
-
-  describe(label, () => {
-    let tess = null;
-    let worst = null;
-    let area = null;
-    let dto = null;
-
-    beforeAll(async () => {
-      const engine = await loadEngine();
-      tess = engine.tessellate_step(
-        new TextEncoder().encode(step),
-        TESSELLATION_OPTIONS,
-      );
-      const points = tess.vertices;
-      const triangles = tess.triangles;
-      const faceIds = tess.triangleFaceIds;
-      worst = faces.map(() => 0);
-      area = faces.map(() => 0);
-      for (let triangle = 0; triangle < faceIds.length; triangle++) {
-        const faceIndex = faceIds[triangle] - 1;
-        if (!faces[faceIndex]) continue;
-        const corners = [0, 1, 2].map((corner) => {
-          const vertex = triangles[3 * triangle + corner];
-          return [
-            points[3 * vertex],
-            points[3 * vertex + 1],
-            points[3 * vertex + 2],
-          ];
-        });
-        for (const [coordX, coordY, coordZ] of corners)
-          worst[faceIndex] = Math.max(
-            worst[faceIndex],
-            Math.abs(faces[faceIndex].distance(coordX, coordY, coordZ)),
-          );
-        const edgeA = [0, 1, 2].map(
-          (axis) => corners[1][axis] - corners[0][axis],
-        );
-        const edgeB = [0, 1, 2].map(
-          (axis) => corners[2][axis] - corners[0][axis],
-        );
-        area[faceIndex] +=
-          Math.hypot(
-            edgeA[1] * edgeB[2] - edgeA[2] * edgeB[1],
-            edgeA[2] * edgeB[0] - edgeA[0] * edgeB[2],
-            edgeA[0] * edgeB[1] - edgeA[1] * edgeB[0],
-          ) / 2;
-      }
-
-      // Mesh with the app worker's exact options.
-      dto = engine.generate_fem_mesh(
-        JSON.stringify({
-          max_element_size: maxElementSize,
-          min_element_size: maxElementSize / 10,
-          grading: 0.3,
-          second_order: false,
-          elementsperedge: 2.0,
-          elementspercurve: 2.0,
-          optsteps_2d: 3,
-          optsteps_3d: 3,
-        }),
-      );
-    });
-
-    test("one body", () => {
-      expect(tess.bodyCount).toBe(1);
-    });
-
-    test(`${faces.length} CAD faces`, () => {
-      const ids = [...new Set(tess.triangleFaceIds)].sort(
-        (left, right) => left - right,
-      );
-      expect(ids).toEqual(faces.map((_, index) => index + 1));
-    });
-
-    test.each(faces.map((face, index) => [index + 1, face.label, index]))(
-      "face %d is %s",
-      (_id, _label, index) => {
-        expect(
-          worst[index],
-          `max distance ${worst[index].toExponential(2)} mm`,
-        ).toBeLessThanOrEqual(tolerance);
-      },
-    );
-
-    // Display tessellation inscribes curved faces; a coarse chord loses ~1 %.
-    test.each(faces.map((face, index) => [index + 1, face.label, index]))(
-      "face %d (%s) has its analytic area",
-      (_id, _label, index) => {
-        const relative = area[index] / faces[index].area - 1;
-        expect(
-          Math.abs(relative),
-          `${(relative * 100).toFixed(3)} %`,
-        ).toBeLessThan(0.02);
-      },
-    );
-
-    test("tets consistently oriented, none degenerate", () => {
-      const verts = dto.vertices;
-      const tetNodes = dto.tetrahedra;
-      const tetCount = tetNodes.length / 4;
-      let positive = 0;
-      let degenerate = 0;
-      for (let element = 0; element < tetCount; element++) {
-        const corners = [0, 1, 2, 3].map((corner) => {
-          const vertex = tetNodes[4 * element + corner];
-          return [
-            verts[3 * vertex],
-            verts[3 * vertex + 1],
-            verts[3 * vertex + 2],
-          ];
-        });
-        const edgeA = [0, 1, 2].map(
-          (axis) => corners[1][axis] - corners[0][axis],
-        );
-        const edgeB = [0, 1, 2].map(
-          (axis) => corners[2][axis] - corners[0][axis],
-        );
-        const edgeC = [0, 1, 2].map(
-          (axis) => corners[3][axis] - corners[0][axis],
-        );
-        const det =
-          edgeA[0] * (edgeB[1] * edgeC[2] - edgeB[2] * edgeC[1]) -
-          edgeA[1] * (edgeB[0] * edgeC[2] - edgeB[2] * edgeC[0]) +
-          edgeA[2] * (edgeB[0] * edgeC[1] - edgeB[1] * edgeC[0]);
-        if (det > 0) positive++;
-        if (Math.abs(det) < 1e-12 * size ** 3) degenerate++;
-      }
-      const detail = `${tetCount} tets, ${positive} positive, ${degenerate} degenerate`;
-      expect(tetCount, detail).toBeGreaterThan(0);
-      expect(positive === 0 || positive === tetCount, detail).toBe(true);
-      expect(degenerate, detail).toBe(0);
-    });
-
-    test("one body in the mesh", () => {
-      expect(Array.from(dto.bodyIds).every((body) => body === 1)).toBe(true);
-    });
-
-    test(`mesh volume within 0.5 % (h = ${maxElementSize} mm)`, () => {
-      const verts = dto.vertices;
-      const tetNodes = dto.tetrahedra;
-      const tetCount = tetNodes.length / 4;
-      let sum = 0;
-      for (let element = 0; element < tetCount; element++) {
-        const corners = [0, 1, 2, 3].map((corner) => {
-          const vertex = tetNodes[4 * element + corner];
-          return [
-            verts[3 * vertex],
-            verts[3 * vertex + 1],
-            verts[3 * vertex + 2],
-          ];
-        });
-        const edgeA = [0, 1, 2].map(
-          (axis) => corners[1][axis] - corners[0][axis],
-        );
-        const edgeB = [0, 1, 2].map(
-          (axis) => corners[2][axis] - corners[0][axis],
-        );
-        const edgeC = [0, 1, 2].map(
-          (axis) => corners[3][axis] - corners[0][axis],
-        );
-        sum +=
-          (edgeA[0] * (edgeB[1] * edgeC[2] - edgeB[2] * edgeC[1]) -
-            edgeA[1] * (edgeB[0] * edgeC[2] - edgeB[2] * edgeC[0]) +
-            edgeA[2] * (edgeB[0] * edgeC[1] - edgeB[1] * edgeC[0])) /
-          6;
-      }
-      const volumeError = Math.abs(sum) / volume - 1;
-      expect(
-        Math.abs(volumeError),
-        `${(volumeError * 100).toFixed(4)} %, ${tetCount} tets`,
-      ).toBeLessThan(0.005);
-    });
-
-    // The Netgen surface mesh keeps the same face ids on the same surfaces.
-    test("mesh surface triangles lie on their CAD faces", () => {
-      const verts = dto.vertices;
-      const surface = dto.surfaceTriangles;
-      const surfaceFaces = dto.surfaceFaceIds;
-      const meshIds = [...new Set(surfaceFaces)];
-      let off = 0;
-      for (let triangle = 0; triangle < surfaceFaces.length; triangle++) {
-        const face = faces[surfaceFaces[triangle] - 1];
-        if (!face) {
-          off = Infinity;
-          continue;
-        }
-        for (let corner = 0; corner < 3; corner++) {
-          const vertex = surface[3 * triangle + corner];
-          off = Math.max(
-            off,
-            Math.abs(
-              face.distance(
-                verts[3 * vertex],
-                verts[3 * vertex + 1],
-                verts[3 * vertex + 2],
-              ),
-            ),
-          );
-        }
-      }
-      const detail = `${meshIds.length} faces, max distance ${off.toExponential(2)} mm`;
-      expect(meshIds.length, detail).toBe(faces.length);
-      expect(off, detail).toBeLessThanOrEqual(tolerance);
-    });
-  });
-}
-
-/** Distance helpers: 0 on the surface. */
-const onX = (/** @type {number} */ offset) => (/** @type {number} */ coordX) =>
-  coordX - offset;
-const onY =
-  (/** @type {number} */ offset) =>
-  /** @type {(x: number, y: number) => number} */ (_x, coordY) =>
-    coordY - offset;
-const onZ =
-  (/** @type {number} */ offset) =>
-  /** @type {(x: number, y: number, z: number) => number} */ (_x, _y, coordZ) =>
-    coordZ - offset;
-const onRadius =
-  (
-    /** @type {number} */ radius,
-    /** @type {number} */ centerX = 0,
-    /** @type {number} */ centerY = 0,
-  ) =>
-  /** @type {(x: number, y: number) => number} */ (coordX, coordY) =>
-    Math.hypot(coordX - centerX, coordY - centerY) - radius;
 
 // ── Hollow shaft (examples/validation/cases/shaft-torsion.mjs) ────────────────
 {
@@ -627,3 +417,128 @@ describe("two blocks 1 mm apart in one file", () => {
     expect([...bodies].sort()).toEqual([1, 2]);
   });
 });
+
+// ── Elliptic arcs ─────────────────────────────────────────────────────────────
+
+/**
+ * Distance (to first order) from (x, y) to the ellipse ((x−cx)/a)² + ((y−cy)/b)² = 1.
+ *
+ * @param {number} a
+ * @param {number} b
+ * @param {number} [centerX]
+ * @param {number} [centerY]
+ */
+const onEllipse =
+  (a, b, centerX = 0, centerY = 0) =>
+  /** @type {(x: number, y: number) => number} */ (coordX, coordY) => {
+    const scaledX = (coordX - centerX) / a;
+    const scaledY = (coordY - centerY) / b;
+    const rho = Math.hypot(scaledX, scaledY);
+    const gradient = Math.hypot(scaledX / a, scaledY / b) / rho;
+    return (rho - 1) / gradient;
+  };
+
+/**
+ * Arc length of x = a cos t, y = b sin t for t0 ≤ t ≤ t1 (composite Simpson).
+ *
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t0
+ * @param {number} t1
+ */
+function ellipseArcLength(a, b, t0, t1) {
+  return simpson((t) => Math.hypot(a * Math.sin(t), b * Math.cos(t)), t0, t1);
+}
+
+// NAFEMS LE1 / LE10: the quarter x, y ≥ 0 between the ellipses
+// (x/2000)² + (y/1000)² = 1 and (x/3250)² + (y/2750)² = 1.
+{
+  const depth = 100;
+  const area = (Math.PI / 4) * (3250 * 2750 - 2000 * 1000);
+  const step = ellipticMembraneStep(depth, "Elliptic membrane");
+
+  test("profileArea of the elliptic membrane is exact", () => {
+    const quarter = {
+      outer: [
+        line([3250, 0]),
+        ellipseArc([0, 2750], [0, 0], [3250, 2750], true),
+        line([0, 1000]),
+        ellipseArc([2000, 0], [0, 0], [2000, 1000], false),
+      ],
+      holes: [],
+    };
+    expect(Math.abs(profileArea(quarter) / area - 1)).toBeLessThan(1e-12);
+  });
+
+  describePart(
+    "ellipticMembraneStep",
+    step,
+    [
+      { label: "edge DC on y = 0", distance: onY(0), area: 1250 * depth },
+      {
+        label: "outer arc CB",
+        distance: onEllipse(3250, 2750),
+        area: ellipseArcLength(3250, 2750, 0, Math.PI / 2) * depth,
+      },
+      { label: "edge BA on x = 0", distance: onX(0), area: 1750 * depth },
+      {
+        label: "inner arc AD",
+        distance: onEllipse(2000, 1000),
+        area: ellipseArcLength(2000, 1000, 0, Math.PI / 2) * depth,
+      },
+      { label: "face z = 0", distance: onZ(0), area },
+      { label: "face z = depth", distance: onZ(depth), area },
+    ],
+    area * depth,
+    3250,
+    250,
+    { areaTolerance: 0.005 },
+  );
+}
+
+// A full elliptic hole, taller than wide (major axis along y), seamed at its
+// start (12, 5), and an elliptic arc that crosses the +x axis.
+{
+  const depth = 5;
+  const profile = {
+    outer: [
+      line([40, -10]),
+      ellipseArc([40, 30], [40, 10], [10, 20], true),
+      line([0, 30]),
+      line([0, -10]),
+    ],
+    holes: [[ellipseArc([12, 5], [8, 5], [4, 9], false)]],
+  };
+  const holeArea = Math.PI * 4 * 9;
+  const area = 40 * 40 + (Math.PI * 10 * 20) / 2 - holeArea;
+
+  test("profileArea with a full elliptic hole is exact", () => {
+    expect(Math.abs(profileArea(profile) / area - 1)).toBeLessThan(1e-12);
+  });
+
+  describePart(
+    "extrudedProfileStep (elliptic arc and hole)",
+    extrudedProfileStep(profile, depth, "Elliptic arc and hole"),
+    [
+      { label: "flat y = −10", distance: onY(-10), area: 40 * depth },
+      {
+        label: "half ellipse about (40, 10)",
+        distance: onEllipse(10, 20, 40, 10),
+        area: ellipseArcLength(10, 20, -Math.PI / 2, Math.PI / 2) * depth,
+      },
+      { label: "flat y = 30", distance: onY(30), area: 40 * depth },
+      { label: "flat x = 0", distance: onX(0), area: 40 * depth },
+      {
+        label: "elliptic hole about (8, 5)",
+        distance: onEllipse(4, 9, 8, 5),
+        area: ellipseArcLength(4, 9, 0, 2 * Math.PI) * depth,
+      },
+      { label: "face z = 0", distance: onZ(0), area },
+      { label: "face z = 5", distance: onZ(depth), area },
+    ],
+    area * depth,
+    60,
+    3,
+    { areaTolerance: 0.005 },
+  );
+}

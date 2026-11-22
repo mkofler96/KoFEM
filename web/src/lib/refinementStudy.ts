@@ -259,6 +259,8 @@ export interface StudyModel {
   loadGroups: unknown[];
   tieGroups: unknown[];
   couplingGroups: unknown[];
+  // A temperature change is a load like the groups (KOF-449).
+  temperature: { formula: string } | null;
   elementOrder: number;
   solverMethod: string;
 }
@@ -273,6 +275,7 @@ export function studyFingerprint(model: StudyModel): string {
       loadGroups: model.loadGroups,
       tieGroups: model.tieGroups,
       couplingGroups: model.couplingGroups,
+      temperature: model.temperature,
       elementOrder: model.elementOrder,
       solverMethod: model.solverMethod,
     },

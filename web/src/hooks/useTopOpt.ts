@@ -182,6 +182,7 @@ export function useTopOpt() {
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
+  const temperature = useModelStore((s) => s.temperature);
   const topOpt = useModelStore((s) => s.topOpt);
   // Couplings join solid bodies and idealised shells in the coupled TO path
   // (KOF-237), exactly as the static solve consumes them. No optimizer applies
@@ -329,6 +330,7 @@ export function useTopOpt() {
       constraints,
       loads,
       surfaceLoads,
+      temperature,
       tieGroups,
       couplings: couplingGroups,
       settings: { ...settings, passive: passiveElements(elements, properties) },

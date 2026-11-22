@@ -7,6 +7,7 @@
 // boundaryRebuild; ties, couplings and the face-pick session have their own
 // slices (tieSlice, couplingSlice, pickSlice).
 
+import type { TemperatureLoad } from "../workers/solverTypes";
 import type { SliceCreator } from "./modelStore";
 import type { Element, Node } from "./geometrySlice";
 import type { CouplingGroup } from "./couplingSlice";
@@ -77,6 +78,13 @@ export interface BoundarySlice {
   removeFaceFromLoadGroup(groupId: number, faceId: number): void;
   deleteLoadGroup(id: number): void;
   clearLoads(): void;
+
+  // A temperature change ΔT (°C) over the whole model, as a formula in x, y,
+  // z (mm), from the stress-free state (KOF-449); null for none. The formula
+  // is parsed by the Rust module when the model is solved.
+  temperature: TemperatureLoad | null;
+  // Throws on a blank formula.
+  setTemperature(formula: string | null): void;
 }
 
 // Both load arrays, rebuilt together after any change to the load groups: a
@@ -108,6 +116,17 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
   nextBcGroupId: 1,
   nextLoadGroupId: 1,
   nextFaceEntryId: 1,
+  temperature: null,
+
+  setTemperature: (formula) =>
+    set((s) => {
+      if (formula !== null && formula.trim() === "")
+        throw new Error(
+          "A temperature change needs a formula, e.g. 20 or 0.1 * x",
+        );
+      s.temperature = formula === null ? null : { formula: formula.trim() };
+      s.result = null;
+    }),
 
   // BC group actions
   createBcGroup: (

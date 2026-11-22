@@ -26,6 +26,7 @@ const KIND_LABEL: Record<TreeItemKind, string> = {
   load: "Load",
   tie: "Tie",
   coupling: "Coupling",
+  temperature: "Temperature change",
   study: "Study",
   plot: "Result plot",
   section: "Section cut",

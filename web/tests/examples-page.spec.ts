@@ -20,7 +20,11 @@ const IDS = readdirSync("examples", { withFileTypes: true })
 type Published = {
   engine: string;
   cases: { id: string; name: string }[];
-  convergence: { id: string; series: { caseId: string }[] }[];
+  convergence: {
+    id: string;
+    series: { caseId: string }[];
+    rates: { noRate?: string };
+  }[];
 };
 
 const published = (): Published =>
@@ -191,12 +195,17 @@ test("every example has its own indexable page with figure, model and result", a
       s.series.some((x) => x.caseId === id),
     );
     await expect(page.locator("[data-study]")).toHaveCount(studies.length);
-    for (const s of studies)
-      await expect(
+    for (const s of studies) {
+      const chart = (name: string) =>
         page.locator(
-          `[data-study="${s.id}"] figure.chart picture.theme-light img`,
-        ),
-      ).toBeVisible();
+          `[data-study="${s.id}"] figure.chart picture.theme-light img[src$="-${name}.png"]`,
+        );
+      await expect(chart("mesh-convergence")).toBeVisible();
+      // Observed against expected rates, unless the study says why it has none.
+      if (s.rates.noRate)
+        await expect(chart("convergence-rate")).toHaveCount(0);
+      else await expect(chart("convergence-rate")).toBeVisible();
+    }
   }
 });
 

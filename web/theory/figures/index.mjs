@@ -13,6 +13,7 @@ import mechanics from "./mechanics.mjs";
 import numerics from "./numerics.mjs";
 import applications from "./applications.mjs";
 import couplings from "./couplings.mjs";
+import multigrid from "./multigrid.mjs";
 
 const all = [
   ...intro,
@@ -20,6 +21,7 @@ const all = [
   ...numerics,
   ...applications,
   ...couplings,
+  ...multigrid,
 ];
 
 export const figures = new Map();

@@ -7,7 +7,7 @@
 // body (planar or curved) and estimates how many elements span it, so the
 // pre-flight can warn.
 
-import { detectCurvedWalls, extractThinWallShells } from "../shellize.js";
+import { detectCurvedWalls, detectPlanarWalls } from "../shellize.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { buildShellizeMesh } from "./autoShell.js";
 import type { Element, Node, Property } from "../../workers/solverTypes.js";
@@ -21,7 +21,7 @@ export interface ThinWallFinding {
   bodyId: number;
   thickness: number; // mm
   elementsThrough: number; // estimated linear elements across the wall
-  // A tube or bend: Shell idealisation collapses planar walls only.
+  // A tube or bend rather than a flat wall.
   curved: boolean;
 }
 
@@ -94,13 +94,10 @@ export function thinWallFindings(input: ThinWallCheckInput): ThinWallFinding[] {
       bodyFaces.push(surfaceFaceIds[t]);
     });
     const mesh = buildShellizeMesh(nodes, bodyTets, bodyTris, bodyFaces, vid);
-    const { walls } = extractThinWallShells(mesh, {
-      shellBodyIds: new Set([property.id]),
-    });
-    // Planar walls come from the shell detector; tubes and bends from the
-    // curved-wall pass (KOF-312).
+    // Planar walls from the planar pass; tubes and bends from the curved-wall
+    // pass (KOF-312).
     const measured = [
-      ...walls.map((wall) => ({
+      ...detectPlanarWalls(mesh).map((wall) => ({
         body: wall.body,
         face: wall.keep,
         thk: wall.thk,
@@ -131,8 +128,6 @@ export function thinWallMessage(finding: ThinWallFinding): string {
   return (
     `Thin wall on body ${finding.bodyId}: about ${finding.elementsThrough.toFixed(1)} ` +
     `linear elements across ${finding.thickness.toFixed(1)} mm — results may be far too stiff. ` +
-    (finding.curved
-      ? "Use quadratic elements (Mesh panel)."
-      : "Use quadratic elements (Mesh panel) or set the body to Shell.")
+    "Use quadratic elements (Mesh panel) or set the body to Shell."
   );
 }

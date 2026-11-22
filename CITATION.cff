@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Michael Kofler
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Citation metadata for GitHub's "Cite this repository" and for Zenodo, which
+# archives every GitHub Release of this repository. No version or release date
+# here on purpose: Zenodo takes them from the release tag, so this file never
+# goes stale (KOF-450).
+cff-version: 1.2.0
+message: "If you use KoFEM in your work, please cite it using these metadata."
+type: software
+title: KoFEM
+abstract: >-
+  KoFEM is a finite element analysis tool that runs entirely in the web
+  browser, without installation and without sending model data to a server.
+  It runs the full pipeline from STEP geometry through OCCT and Netgen
+  meshing to a finite-element solve: geometry and meshing in a C++ engine
+  and the solver in Rust, both compiled to WebAssembly, with a React and
+  Three.js frontend.
+authors:
+  - given-names: Michael
+    family-names: Kofler
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/mkofler96/KoFEM"
+url: "https://kofem.org"
+keywords:
+  - finite element analysis
+  - finite element method
+  - structural analysis
+  - WebAssembly
+  - browser
+  - mesh generation
+  - shell elements
+  - topology optimization

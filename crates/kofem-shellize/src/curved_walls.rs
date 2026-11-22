@@ -10,15 +10,16 @@
 //! a ray from the triangle's centroid goes into the material, and the first
 //! surface triangle it meets is the opposite side. A face is a wall when most
 //! rays reach ONE other face of the body within `max_wall`, at a steady
-//! distance (an offset surface), arriving square to it. Measurement only: the
-//! shell idealisation does not use these walls.
+//! distance (an offset surface), arriving square to it. The linear thin-wall
+//! check measures these walls, and the shell idealisation collapses them to a
+//! mid-surface ([`crate::mid_surface`]).
 
 use std::collections::{HashMap, HashSet};
 
 use crate::geometry::{
-    cross, dot, norm, scale, sub, tet_face, triangle_key, ShellizeMesh, Vec3, TET_FACES,
+    add, cross, dot, norm, scale, sub, tet_face, triangle_key, ShellizeMesh, Vec3, TET_FACES,
 };
-use crate::walls::{detect_walls, face_props};
+use crate::walls::{detect_walls, face_props, FaceProp, PairedWall, PLANAR};
 
 /// A curved thin wall: the sampled `face`, the `partner` face opposite it, the
 /// median distance between them and the body.
@@ -32,9 +33,6 @@ pub struct CurvedWall {
 
 /// Rays cast per face; a face with fewer triangles casts one per triangle.
 const SAMPLES: usize = 64;
-/// A face with flatness |Σ n·A| / Σ A at or above this is planar (a quarter
-/// bend is about 0.90, a full cylinder 0).
-const PLANAR: f64 = 0.99;
 /// Share of a face's rays that must reach the same partner face.
 const MIN_AGREEMENT: f64 = 0.6;
 /// Spread of the partner distances (10th to 90th percentile) allowed, as a
@@ -48,11 +46,38 @@ struct Triangle {
     index: usize,
     corners: [Vec3; 3],
     face: i32,
+    /// Unit normal of the flat triangle into the material.
+    inward: Vec3,
+    /// Unit normal at each corner into the material: the area-weighted mean
+    /// of the inward normals of the face's triangles there.
+    normals: [Vec3; 3],
 }
 
-/// Distance along `direction` (unit) from `origin` to the triangle, if the ray
-/// meets it in front of the origin (Möller–Trumbore).
-fn ray_hit(origin: Vec3, direction: Vec3, corners: [Vec3; 3]) -> Option<f64> {
+impl Triangle {
+    /// How far the curved surface lies from this flat triangle at the
+    /// barycentric point `weights`, along the corner normals (positive into
+    /// the material): the quadratic patch through the corners with the
+    /// corner normals, (1/2)·Σ_{i<j} λᵢλⱼ·(nⱼ − nᵢ)·(pⱼ − pᵢ), signed so a
+    /// convex face, which bulges out of its chords, reads negative.
+    fn sag(&self, weights: [f64; 3]) -> f64 {
+        let mut offset = 0.0;
+        for (first, second) in [(0, 1), (1, 2), (2, 0)] {
+            offset += 0.5
+                * weights[first]
+                * weights[second]
+                * dot(
+                    sub(self.normals[second], self.normals[first]),
+                    sub(self.corners[second], self.corners[first]),
+                );
+        }
+        offset
+    }
+}
+
+/// Distance along `direction` (unit) from `origin` to the triangle and the
+/// barycentric weights of the point it meets, if the ray meets it in front of
+/// the origin (Möller–Trumbore).
+fn ray_hit(origin: Vec3, direction: Vec3, corners: [Vec3; 3]) -> Option<(f64, [f64; 3])> {
     let edge_a = sub(corners[1], corners[0]);
     let edge_b = sub(corners[2], corners[0]);
     let normal_b = cross(direction, edge_b);
@@ -72,7 +97,7 @@ fn ray_hit(origin: Vec3, direction: Vec3, corners: [Vec3; 3]) -> Option<f64> {
         return None;
     }
     let distance = dot(edge_b, normal_a) * inv;
-    (distance > 0.0).then_some(distance)
+    (distance > 0.0).then_some((distance, [1.0 - along_a - along_b, along_a, along_b]))
 }
 
 fn centroid(corners: [Vec3; 3]) -> Vec3 {
@@ -114,6 +139,16 @@ struct Sampling {
     rays: HashMap<i32, Vec<Ray>>,
 }
 
+/// A surface triangle with its body and its unit normal into the material.
+struct Flat {
+    index: usize,
+    body: i32,
+    face: i32,
+    corners: [Vec3; 3],
+    vertices: [usize; 3],
+    inward: Vec3,
+}
+
 fn sample(mesh: &ShellizeMesh, candidates: &HashSet<i32>) -> Sampling {
     // Each surface triangle's inward direction: towards the fourth vertex of
     // the tet it bounds. Winding is not trusted.
@@ -125,38 +160,83 @@ fn sample(mesh: &ShellizeMesh, candidates: &HashSet<i32>) -> Sampling {
             inside.insert(tet_face(tet, face).1, (opposite, mesh.body[element]));
         }
     }
-    let mut sampling = Sampling {
-        by_body: HashMap::new(),
-        rays: HashMap::new(),
-    };
+    // Each surface triangle with its body and inward normal; the corner
+    // normals of each face, area-weighted, from them.
+    let mut flats: Vec<Flat> = Vec::new();
+    let mut corner_normals: HashMap<(i32, usize), Vec3> = HashMap::new();
     for (index, &tri) in mesh.surf_tris.iter().enumerate() {
         let Some(&(opposite, body)) = inside.get(&triangle_key(tri)) else {
             continue;
         };
         let corners = tri.map(|vertex| mesh.vertices[vertex]);
-        let face = mesh.surf_face[index];
-        sampling.by_body.entry(body).or_default().push(Triangle {
-            index,
-            corners,
-            face,
-        });
-        if !candidates.contains(&face) {
-            continue;
-        }
         let Some(normal) = triangle_normal(corners) else {
             continue;
         };
-        let origin = centroid(corners);
-        let inward = if dot(normal, sub(mesh.vertices[opposite], origin)) > 0.0 {
+        let inward = if dot(normal, sub(mesh.vertices[opposite], centroid(corners))) > 0.0 {
             normal
         } else {
             scale(normal, -1.0)
         };
-        sampling.rays.entry(face).or_default().push(Ray {
-            source: index,
-            origin,
+        let area = 0.5
+            * norm(cross(
+                sub(corners[1], corners[0]),
+                sub(corners[2], corners[0]),
+            ));
+        let face = mesh.surf_face[index];
+        for &vertex in &tri {
+            let sum = corner_normals.entry((face, vertex)).or_insert([0.0; 3]);
+            *sum = [0, 1, 2].map(|axis| sum[axis] + area * inward[axis]);
+        }
+        flats.push(Flat {
+            index,
+            body,
+            face,
+            corners,
+            vertices: tri,
             inward,
         });
+    }
+    let unit = |sum: Vec3| {
+        let length = norm(sum);
+        if length > 0.0 {
+            scale(sum, 1.0 / length)
+        } else {
+            sum
+        }
+    };
+    let mut sampling = Sampling {
+        by_body: HashMap::new(),
+        rays: HashMap::new(),
+    };
+    for flat in flats {
+        let triangle = Triangle {
+            index: flat.index,
+            corners: flat.corners,
+            face: flat.face,
+            inward: flat.inward,
+            normals: flat
+                .vertices
+                .map(|vertex| unit(corner_normals[&(flat.face, vertex)])),
+        };
+        // The ray starts on the curved surface, not on the flat triangle,
+        // which a curved face's chords cut by the sag.
+        let origin = add(
+            centroid(flat.corners),
+            scale(flat.inward, triangle.sag([1.0 / 3.0; 3])),
+        );
+        let face = flat.face;
+        sampling
+            .by_body
+            .entry(flat.body)
+            .or_default()
+            .push(triangle);
+        if candidates.contains(&face) {
+            sampling.rays.entry(face).or_default().push(Ray {
+                source: flat.index,
+                origin,
+                inward: flat.inward,
+            });
+        }
     }
     sampling
 }
@@ -165,18 +245,20 @@ fn sample(mesh: &ShellizeMesh, candidates: &HashSet<i32>) -> Sampling {
 /// the distance: `None` when it meets nothing, its own face, or a face at a
 /// slant.
 fn opposite(ray: Ray, face: i32, triangles: &[Triangle], max_wall: f64) -> Option<(i32, f64)> {
-    let mut nearest: Option<(f64, &Triangle)> = None;
+    let mut nearest: Option<(f64, [f64; 3], &Triangle)> = None;
     for triangle in triangles {
         if triangle.index == ray.source {
             continue;
         }
-        if let Some(distance) = ray_hit(ray.origin, ray.inward, triangle.corners) {
-            if nearest.is_none_or(|(best, _)| distance < best) {
-                nearest = Some((distance, triangle));
+        if let Some((distance, weights)) = ray_hit(ray.origin, ray.inward, triangle.corners) {
+            if nearest.is_none_or(|(best, _, _)| distance < best) {
+                nearest = Some((distance, weights, triangle));
             }
         }
     }
-    let (distance, hit) = nearest?;
+    let (flat_distance, weights, hit) = nearest?;
+    // To the curved surface behind the flat triangle the ray met.
+    let distance = flat_distance + hit.sag(weights) * dot(hit.inward, ray.inward);
     if hit.face == face || distance > max_wall {
         return None;
     }
@@ -228,10 +310,22 @@ fn measure(
 #[must_use]
 pub fn detect_curved_walls(mesh: &ShellizeMesh, max_wall: f64) -> Vec<CurvedWall> {
     let faces = face_props(mesh);
+    let planar = detect_walls(mesh, &faces, max_wall);
+    curved_walls(mesh, &faces, &planar, max_wall)
+}
+
+/// [`detect_curved_walls`] over the measured `faces` (largest first), leaving
+/// out the faces of the `planar` walls.
+pub(crate) fn curved_walls(
+    mesh: &ShellizeMesh,
+    faces: &[FaceProp],
+    planar: &[PairedWall],
+    max_wall: f64,
+) -> Vec<CurvedWall> {
     let Some(largest) = faces.first() else {
         return Vec::new();
     };
-    let paired: HashSet<i32> = detect_walls(mesh, &faces, max_wall)
+    let paired: HashSet<i32> = planar
         .iter()
         .flat_map(|paired| std::iter::once(paired.wall.keep).chain(paired.partners.iter().copied()))
         .collect();
@@ -244,14 +338,29 @@ pub fn detect_curved_walls(mesh: &ShellizeMesh, max_wall: f64) -> Vec<CurvedWall
     let sampling = sample(mesh, &candidates);
     let mut walls: Vec<CurvedWall> = Vec::new();
     // Largest face first, so a wall is reported by its larger face.
-    for face in &faces {
+    for face in faces {
         let (Some(body), Some(rays)) = (face.body, sampling.rays.get(&face.id)) else {
             continue;
         };
         if walls.iter().any(|wall| wall.partner == face.id) {
             continue;
         }
-        if let Some(wall) = measure(face.id, body, rays, &sampling.by_body[&body], max_wall) {
+        let triangles = &sampling.by_body[&body];
+        if let Some(mut wall) = measure(face.id, body, rays, triangles, max_wall) {
+            // Measured back from the partner as well: a ray starts at a
+            // triangle centroid, which lies inside a curved surface by the
+            // chord sag, and ends on a chord; from both faces the two sags
+            // cancel to first order.
+            let back = sampling
+                .rays
+                .get(&wall.partner)
+                .and_then(|partner_rays| {
+                    measure(wall.partner, body, partner_rays, triangles, max_wall)
+                })
+                .filter(|back| back.partner == face.id);
+            if let Some(back) = back {
+                wall.thickness = f64::midpoint(wall.thickness, back.thickness);
+            }
             walls.push(wall);
         }
     }

@@ -93,9 +93,11 @@ Fixes KOF-nn
 - [ ] **UI change:** before/after screenshots (desktop and phone width) are on the Linear issue and linked above, or N/A
 ~~~
 
-Keep `Fixes KOF-nn` only when the PR resolves that issue; otherwise write
-`Refs KOF-nn`. Keep the Checklist from `.github/pull_request_template.md` in
-sync with this template if either changes.
+Write `Fixes KOF-nn` for every issue whose scope the PR delivers, even when
+follow-ups are split into new issues. Write `Refs KOF-nn` only for an issue
+that stays open because work in its own scope remains; nothing closes it.
+Keep the Checklist from `.github/pull_request_template.md` in sync with this
+template if either changes.
 
 ## Sections
 

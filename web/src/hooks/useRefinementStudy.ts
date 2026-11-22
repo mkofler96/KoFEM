@@ -10,6 +10,7 @@
 // faces onto each mesh. The model ends on the finest mesh with its result; the
 // Mesh settings stay as the user typed them.
 
+import type { ElementStress } from "../lib/stressFields";
 import { useMemo } from "react";
 import { useModelStore, type ModelState } from "../store/modelStore";
 import type { MeshSizes } from "../store/geometrySlice";
@@ -165,6 +166,7 @@ function levelMetrics(s: ModelState, sizes: MeshSizes): StudyLevel {
     "Displacement (magnitude)",
     s.nodes,
     s.elements,
+    s.shellSurface,
   );
   if (disp === null)
     throw new Error("The level's solve returned no displacement to measure");
@@ -173,6 +175,7 @@ function levelMetrics(s: ModelState, sizes: MeshSizes): StudyLevel {
     "Von Mises stress",
     s.nodes,
     s.elements,
+    s.shellSurface,
   );
   return {
     sizes,
@@ -355,11 +358,12 @@ export function useRefinementStudy() {
           step: `${label} · solving ${model.nodes.length.toLocaleString("en-US")} nodes`,
           phase: "solving",
         });
-        const { displacements, vonMises } = await sendToWorker<{
+        const { displacements, vonMises, stress } = await sendToWorker<{
           displacements: Float64Array;
           vonMises: Float64Array;
+          stress: ElementStress;
         }>("solve", solvePayload(model));
-        get().setResult({ displacements, vonMises });
+        get().setResult({ displacements, vonMises, stress });
         assertUnchanged();
         const level = levelMetrics(get(), sizes);
         checkLevelDisplacement(level.maxDisplacement, sizes.max);

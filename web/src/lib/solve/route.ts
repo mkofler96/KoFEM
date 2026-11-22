@@ -14,6 +14,7 @@ import {
   shellOrderRefusal,
   shellTieRefusal,
   surfaceLoadRefusal,
+  temperatureRefusal,
   topOptTieRefusal,
 } from "./refusals.js";
 
@@ -31,6 +32,14 @@ export type SolveRoute =
   | { path: "solid" };
 
 export function routeSolve(payload: SolveModel): SolveRoute {
+  const route = routeModel(payload);
+  // Only the solid solve applies a temperature change (KOF-449).
+  if (payload.temperature && route.path !== "solid")
+    throw new Error(temperatureRefusal(route.path));
+  return route;
+}
+
+function routeModel(payload: SolveModel): SolveRoute {
   // A load no path can apply in full is refused on every path (KOF-411).
   const loadRefusal = surfaceLoadRefusal(
     payload.elements,
@@ -119,6 +128,9 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   // A load no path can apply in full is refused here as by the solve (KOF-411).
   const loadRefusal = surfaceLoadRefusal(elements, payload.surfaceLoads);
   if (loadRefusal !== null) throw new Error(loadRefusal);
+
+  // No optimizer applies a temperature change (KOF-449).
+  if (payload.temperature) throw new Error(temperatureRefusal("optimization"));
 
   // No optimizer applies a tie (C++ or Rust, any design domain): a tied
   // assembly would be optimized as separate parts.

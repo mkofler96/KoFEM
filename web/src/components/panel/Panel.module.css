@@ -1434,3 +1434,22 @@ label.sectionHeadAction {
   width: auto;
   flex-shrink: 0;
 }
+
+/* A point's x, y and z side by side with its button: the inputs share the
+   width and may shrink below their intrinsic size, so the row never widens
+   the panel (KOF-447). */
+.coordRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.coordRow .formInput {
+  min-width: 0;
+}
+
+/* A note under a section heading rather than under a labelled field. */
+.formNoteFull {
+  margin-left: 0;
+}

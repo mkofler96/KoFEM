@@ -13,9 +13,9 @@ use kofem_shellize::coupled_model::{CoupledModel, ExplicitCoupledModel};
 use kofem_shellize::geometry::Vec3;
 use kofem_shellize::{
     build_coupled_model, build_explicit_coupled_model, build_shell_transition_model,
-    detect_curved_walls, extract_thin_wall_shells, shell_body_tets, shell_wall_tets,
-    CouplingOptions, CouplingSet, ExtractOptions, ShellExtraction, ShellizeError, ShellizeMesh,
-    TieCouplingDrop, TieCouplingReport, TieSide, TieSurfaces, Wall,
+    detect_curved_walls, detect_wall_pairs, extract_thin_wall_shells, face_props, shell_body_tets,
+    shell_wall_tets, CouplingOptions, CouplingSet, ExtractOptions, ShellExtraction, ShellizeError,
+    ShellizeMesh, TieCouplingDrop, TieCouplingReport, TieSide, TieSurfaces, Wall,
 };
 use wasm_bindgen::prelude::*;
 
@@ -132,7 +132,9 @@ pub struct ShellSet {
 #[wasm_bindgen]
 impl ShellSet {
     /// Rebuild a shell set from its flat form (`wall_normal` holds x,y,z per
-    /// wall); `shell_body` is `undefined` for an empty extraction.
+    /// wall, `wall_curved` 1 for a curved wall and 0 for a planar one,
+    /// `wall_partner` the face opposite the kept one);
+    /// `shell_body` is `undefined` for an empty extraction.
     ///
     /// # Errors
     /// The first malformed array or out-of-range index.
@@ -147,6 +149,8 @@ impl ShellSet {
         wall_normal: &[f64],
         wall_thickness: &[f64],
         wall_body: &[i32],
+        wall_curved: &[u8],
+        wall_partner: &[i32],
         vertices: &[f64],
         triangles: &[u32],
         thicknesses: &[f64],
@@ -157,8 +161,15 @@ impl ShellSet {
         if wall_normal.len() != 3 * count
             || wall_thickness.len() != count
             || wall_body.len() != count
+            || wall_curved.len() != count
+            || wall_partner.len() != count
         {
             return Err(JsError::new("wall arrays disagree on the number of walls"));
+        }
+        if let Some(flag) = wall_curved.iter().find(|&&flag| flag > 1) {
+            return Err(JsError::new(&format!(
+                "wall curved flag must be 0 or 1, got {flag}"
+            )));
         }
         let walls = (0..count)
             .map(|i| Wall {
@@ -170,6 +181,8 @@ impl ShellSet {
                 ],
                 thickness: wall_thickness[i],
                 body: wall_body[i],
+                curved: wall_curved[i] == 1,
+                partner: wall_partner[i],
             })
             .collect();
         let shells = ShellExtraction::from_parts(
@@ -221,6 +234,22 @@ impl ShellSet {
     #[must_use]
     pub fn wall_body(&self) -> Vec<i32> {
         self.shells.walls.iter().map(|wall| wall.body).collect()
+    }
+
+    #[wasm_bindgen(getter, js_name = wallPartner)]
+    #[must_use]
+    pub fn wall_partner(&self) -> Vec<i32> {
+        self.shells.walls.iter().map(|wall| wall.partner).collect()
+    }
+
+    #[wasm_bindgen(getter, js_name = wallCurved)]
+    #[must_use]
+    pub fn wall_curved(&self) -> Vec<u8> {
+        self.shells
+            .walls
+            .iter()
+            .map(|wall| u8::from(wall.curved))
+            .collect()
     }
 
     #[wasm_bindgen(getter)]
@@ -277,8 +306,8 @@ pub fn extract_shells(
     Ok(ShellSet { shells })
 }
 
-/// Curved thin walls (a tube, a sheet-metal bend), one entry per wall:
-/// measurement for the linear thin-wall check, not idealised as shells.
+/// Curved thin walls (a tube, a sheet-metal bend), one entry per wall, as the
+/// linear thin-wall check measures them.
 #[wasm_bindgen]
 pub struct CurvedWallSet {
     face: Vec<i32>,
@@ -293,6 +322,34 @@ getters!(CurvedWallSet {
     "thickness" => thickness: Vec<f64>,
     "body" => body: Vec<i32>,
 });
+
+/// Planar thin walls (opposite planar face pairs), one entry per wall: the
+/// kept face, the thickness and the body, as the linear thin-wall check
+/// measures them. Detection only, so it never refuses a body.
+#[wasm_bindgen]
+pub struct PlanarWallSet {
+    keep: Vec<i32>,
+    thickness: Vec<f64>,
+    body: Vec<i32>,
+}
+
+getters!(PlanarWallSet {
+    "keep" => keep: Vec<i32>,
+    "thickness" => thickness: Vec<f64>,
+    "body" => body: Vec<i32>,
+});
+
+/// The planar thin walls of every body, no thicker than `max_wall`.
+#[wasm_bindgen(js_name = detectPlanarWalls)]
+#[must_use]
+pub fn planar_walls(mesh: &ShellizeInput, max_wall: f64) -> PlanarWallSet {
+    let walls = detect_wall_pairs(&mesh.mesh, &face_props(&mesh.mesh), max_wall);
+    PlanarWallSet {
+        keep: walls.iter().map(|wall| wall.keep).collect(),
+        thickness: walls.iter().map(|wall| wall.thickness).collect(),
+        body: walls.iter().map(|wall| wall.body).collect(),
+    }
+}
 
 /// The curved thin walls of every body, no thicker than `max_wall`.
 #[wasm_bindgen(js_name = detectCurvedWalls)]

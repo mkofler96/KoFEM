@@ -44,9 +44,10 @@
             "image": [
               "https://kofem.org/examples/cooks-membrane.png",
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png",
-              "https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png"
+              "https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png",
+              "https://kofem.org/examples/cooks-membrane/cooks-membrane-convergence-rate.png"
             ],
-            "dateModified": "2026-11-21",
+            "dateModified": "2026-11-22",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -608,6 +609,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -822,6 +827,16 @@
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
+            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -852,6 +867,16 @@
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
+            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -863,7 +888,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 8 of 11</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 8 of 21</p>
       <h1>Cook's membrane</h1>
       <div class="lede">
         <p>Cook's membrane (1974) is a tapered panel, clamped on one edge and
@@ -955,7 +980,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 2 mm maximum element size: 2,697 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,711 nodes, 17,133 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-22391462c75d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3606d8ab1090</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>KoFEM is a 3-D solver, so the panel is a slab of thickness
@@ -988,6 +1013,36 @@
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
         <p>Linear elements lock in the panel's bending and approach from below; quadratic ones are within half a percent even at 16 mm and level off at 23.94, 0.1 % under the plane-stress reference, since the slab clamped over its whole end face is slightly stiffer than the plane-stress panel.</p>
+        <h4>Convergence rate</h4>
+        <figure class="chart">
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dash"></span>expected slope</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/cooks-membrane/cooks-membrane-convergence-rate.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-convergence-rate.png" width="440" height="250" alt="Cook's membrane, P1 vs. P2: discretisation error against element size, logarithmic axes, with the expected slopes dashed" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/cooks-membrane/cooks-membrane-convergence-rate-dark.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-convergence-rate.png" width="440" height="250" alt="Cook's membrane, P1 vs. P2: discretisation error against element size, logarithmic axes, with the expected slopes dashed" loading="lazy" decoding="async" /></picture>
+          <figcaption>Error against the finest P2 mesh (1 mm, 23.942&nbsp;mm), fitted over the 3 finest meshes of each order coarser than that. Element size from the element count, h ∝ N<sup>−1/2</sup>.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Order</th>
+                <th scope="col" class="num">Observed rate</th>
+                <th scope="col" class="num">Expected rate</th>
+              </tr>
+            </thead>
+            <tbody>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td class="num">1.78</td>
+                  <td class="num">1.25</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td class="num">2.10</td>
+                  <td class="num">1.25</td>
+                </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Expected: a displacement at a point converges at p + 1 on a smooth solution (P1: 2, P2: 3), but the clamped edge's upper corners (clamped meeting free at 108.43°, ν = 0.33) are singular, u ~ r<sup>λ</sup> with λ = 0.62, which caps it at 2λ = 1.25. The error shrinks as h<sup>rate</sup>. <a href="https://github.com/mkofler96/KoFEM/blob/main/examples/validation/lib/rates.mjs">Method</a>.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

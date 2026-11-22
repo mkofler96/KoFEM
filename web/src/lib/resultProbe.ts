@@ -19,7 +19,8 @@ import type {
   SolverResult,
 } from "../store/modelStore";
 import { meshCadFaceTriangles, type CadFacedMesh } from "./handCheck";
-import { nodeVonMisesField } from "./resultField";
+import { nodalResultValues } from "./resultField";
+import type { ShellSurface } from "./stressFields";
 
 type Vec3 = [number, number, number];
 type Tri = [number, number, number];
@@ -124,6 +125,7 @@ const sentence = (message: string) => {
 function nodalField(
   model: ProbeModel,
   field: ResultType,
+  surface: ShellSurface,
 ): (i: number) => number {
   const { nodes, elements, result } = model;
   const disp = result.displacements;
@@ -131,15 +133,61 @@ function nodalField(
     throw new Error(
       `The result has ${disp.length} displacement values for ${nodes.length} nodes; it belongs to a different mesh.`,
     );
-  if (field === "Von Mises stress") {
-    const vm = nodeVonMisesField(result, nodes, elements);
-    if (!vm) throw new Error("The result has no von Mises stress.");
-    return (i) => vm[i];
-  }
-  if (field === "Displacement (magnitude)")
-    return (i) => Math.hypot(disp[3 * i], disp[3 * i + 1], disp[3 * i + 2]);
-  const component = field === "Ux" ? 0 : field === "Uy" ? 1 : 2;
-  return (i) => disp[3 * i + component];
+  const values = nodalResultValues(result, field, nodes, elements, surface);
+  if (!values)
+    throw new Error(
+      field === "Von Mises stress"
+        ? "The result has no von Mises stress."
+        : `The result has no ${field.toLowerCase()}; solve again to compute it.`,
+    );
+  return (i) => values[i];
+}
+
+// A probe anchor for a point given by its coordinates (KOF-447): the CAD face
+// of the surface triangle nearest the point (or that triangle, where it has no
+// CAD face), so the probe reads the point as one placed there by a click. A
+// point on an edge between faces reads the same either way: the plotted field
+// is continuous at the nodes.
+export function anchorAtPoint(
+  point: Vec3,
+  model: CadFacedMesh & { nodes: Node[] },
+): { point: Vec3 } & ({ cadFaceId: number } | { triangle: Tri }) {
+  if (!point.every(Number.isFinite))
+    throw new Error(`A probe point must be finite, got ${point.join(", ")}`);
+  const { surfaceTriangles, surfaceFaceIds, nodes } = model;
+  if (!surfaceTriangles || surfaceTriangles.length === 0)
+    throw new Error("The mesh has no surface triangles to place a probe on");
+  if (surfaceFaceIds && surfaceFaceIds.length !== surfaceTriangles.length)
+    throw new Error(
+      `the mesh has ${surfaceTriangles.length} surface triangles but ${surfaceFaceIds.length} CAD face ids`,
+    );
+  const index = new Map(nodes.map((node, i) => [node.id, i]));
+  const position = (id: number): Vec3 => {
+    const i = index.get(id);
+    if (i === undefined)
+      throw new Error(
+        `A surface triangle refers to node ${id}, which is not in the mesh`,
+      );
+    return [nodes[i].x, nodes[i].y, nodes[i].z];
+  };
+  let best = -1;
+  let bestDist = Infinity;
+  surfaceTriangles.forEach((tri, t) => {
+    const [a, b, c] = tri.map(position);
+    const at = blend(closestWeights(point, a, b, c), a, b, c);
+    const dist =
+      (at[0] - point[0]) ** 2 +
+      (at[1] - point[1]) ** 2 +
+      (at[2] - point[2]) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = t;
+    }
+  });
+  const cadFaceId = surfaceFaceIds?.[best];
+  return cadFaceId !== undefined
+    ? { point, cadFaceId }
+    : { point, triangle: [...surfaceTriangles[best]] };
 }
 
 export interface ExtremeReading {
@@ -156,10 +204,11 @@ export interface ExtremeReading {
 export function fieldExtremes(
   model: ProbeModel,
   field: ResultType,
+  surface: ShellSurface,
 ): { min: ExtremeReading; max: ExtremeReading } {
   const { nodes, result } = model;
   if (nodes.length === 0) throw new Error("The mesh has no nodes.");
-  const nodal = nodalField(model, field);
+  const nodal = nodalField(model, field, surface);
   let lo = 0;
   let hi = 0;
   for (let i = 1; i < nodes.length; i++) {
@@ -184,12 +233,13 @@ export function readProbes(
   probes: readonly ResultProbe[],
   model: ProbeModel,
   field: ResultType,
+  surface: ShellSurface,
 ): ProbeReading[] {
   const { nodes } = model;
   const disp = model.result.displacements;
   let nodal: (i: number) => number;
   try {
-    nodal = nodalField(model, field);
+    nodal = nodalField(model, field, surface);
   } catch (err) {
     const reason = sentence(err instanceof Error ? err.message : String(err));
     return probes.map(() => ({ kind: "unreadable", reason }));

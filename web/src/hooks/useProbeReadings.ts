@@ -34,6 +34,7 @@ export function useProbeReadings(): ProbeReadings {
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
+  const shellSurface = useModelStore((s) => s.shellSurface);
   return useMemo((): ProbeReadings => {
     if (!result)
       return {
@@ -41,10 +42,13 @@ export function useProbeReadings(): ProbeReadings {
         extremes: null,
       };
     const model = { nodes, elements, surfaceTriangles, surfaceFaceIds, result };
-    const readings = readProbes(probes, model, resultType);
+    const readings = readProbes(probes, model, resultType, shellSurface);
     let extremes: ProbeReadings["extremes"];
     try {
-      extremes = { kind: "value", ...fieldExtremes(model, resultType) };
+      extremes = {
+        kind: "value",
+        ...fieldExtremes(model, resultType, shellSurface),
+      };
     } catch (err) {
       extremes = {
         kind: "unreadable",
@@ -63,5 +67,6 @@ export function useProbeReadings(): ProbeReadings {
     surfaceFaceIds,
     result,
     resultType,
+    shellSurface,
   ]);
 }
