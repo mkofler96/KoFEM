@@ -167,12 +167,18 @@ const PANEL_THICKNESS: f64 = 10.0;
 /// Faces: 1 outer, 2 inner, 3 side θ = 0, 4 side θ = 30°, 5 end z = 0,
 /// 6 end z = 500.
 fn cylindrical_panel() -> ShellizeMesh {
+    cylindrical_panel_of(PANEL_THICKNESS)
+}
+
+/// The cylindrical panel with a wall `thickness` thick about the same mid
+/// radius.
+fn cylindrical_panel_of(thickness: f64) -> ShellizeMesh {
     let cells = [2, 12, 10];
     mapped_mesh(
         cells,
         |_| true,
         |[layer, around, along]| {
-            let radius = MID_RADIUS - PANEL_THICKNESS / 2.0 + PANEL_THICKNESS * layer as f64 / 2.0;
+            let radius = MID_RADIUS - thickness / 2.0 + thickness * layer as f64 / 2.0;
             let angle = PI / 6.0 * around as f64 / 12.0;
             [
                 radius * angle.cos(),
@@ -223,6 +229,38 @@ fn cylindrical_panel_facets_carry_the_wall_thickness() {
             "{thickness}"
         );
     }
+}
+
+/// A wall thicker than the absolute limit (25 mm against 15 mm) is still thin
+/// for a body the user marked Shell when it is thin for the body's size: here
+/// a fortieth of the mid radius and a twentieth of the panel's diagonal.
+#[test]
+fn thick_wall_of_a_large_shell_body_collapses() {
+    let thickness = 25.0;
+    let shells = extract(&cylindrical_panel_of(thickness)).expect("extraction");
+    assert_eq!(shells.shell_body, Some(1));
+    assert_eq!(shells.walls.len(), 1, "{:?}", shells.walls);
+    for &measured in &shells.thicknesses {
+        assert!(
+            (measured - thickness).abs() < 1e-3 * thickness,
+            "{measured}"
+        );
+    }
+}
+
+/// The detection alone, with no Shell choice, keeps the absolute limit: the
+/// 25 mm wall is no thin wall there.
+#[test]
+fn thick_wall_is_not_found_without_a_shell_choice() {
+    let shells = extract_thin_wall_shells(
+        &cylindrical_panel_of(25.0),
+        &ExtractOptions {
+            max_wall: 15.0,
+            shell_body_ids: None,
+        },
+    )
+    .expect("extraction");
+    assert_eq!(shells.shell_body, None);
 }
 
 /// One wall, kept on its outer (convex) face: one shell node per node of it.

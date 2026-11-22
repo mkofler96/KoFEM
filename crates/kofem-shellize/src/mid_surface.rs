@@ -37,7 +37,9 @@ pub struct ShellExtraction {
 /// Options of [`extract_thin_wall_shells`].
 #[derive(Debug, Clone)]
 pub struct ExtractOptions {
-    /// Thickest gap still treated as a wall.
+    /// Thickest gap still treated as a wall. For bodies the user marked Shell
+    /// it is raised to [`SHELL_BODY_WALL_SHARE`] of the largest such body's
+    /// size ([`shell_max_wall`]).
     pub max_wall: f64,
     /// Bodies the user marked Shell; `None` lets the largest wall's body win.
     pub shell_body_ids: Option<Vec<i32>>,
@@ -50,6 +52,40 @@ impl Default for ExtractOptions {
             shell_body_ids: None,
         }
     }
+}
+
+/// Share of a Shell body's size (its bounding-box diagonal) up to which a wall
+/// counts as thin. The absolute `max_wall` suits machined parts in mm; a
+/// pressure vessel or a dome the user marked Shell has walls of 25 or 40 mm
+/// that are thin for its metres of size (t/L well below 0.1).
+pub const SHELL_BODY_WALL_SHARE: f64 = 0.1;
+
+/// The thickest wall treated as thin: `max_wall`, raised for an explicit
+/// Shell choice to [`SHELL_BODY_WALL_SHARE`] of the largest requested body's
+/// bounding-box diagonal.
+#[must_use]
+pub fn shell_max_wall(mesh: &ShellizeMesh, options: &ExtractOptions) -> f64 {
+    let Some(ids) = options.shell_body_ids.as_ref() else {
+        return options.max_wall;
+    };
+    let mut bounds: HashMap<i32, (Vec3, Vec3)> = HashMap::new();
+    for (tet, &body) in mesh.tets.iter().zip(&mesh.body) {
+        if !ids.contains(&body) {
+            continue;
+        }
+        for &vertex in tet {
+            let point = mesh.vertices[vertex];
+            let (low, high) = bounds.entry(body).or_insert((point, point));
+            for axis in 0..3 {
+                low[axis] = low[axis].min(point[axis]);
+                high[axis] = high[axis].max(point[axis]);
+            }
+        }
+    }
+    bounds
+        .values()
+        .map(|&(low, high)| SHELL_BODY_WALL_SHARE * norm(sub(high, low)))
+        .fold(options.max_wall, f64::max)
 }
 
 /// A base wall's facets, and the junction nodes and segments to imprint there.
@@ -842,12 +878,13 @@ pub fn extract_thin_wall_shells(
             .is_none_or(|ids| ids.contains(&body))
     };
     let faces = face_props(mesh);
-    let planar = detect_walls(mesh, &faces, options.max_wall);
+    let max_wall = shell_max_wall(mesh, options);
+    let planar = detect_walls(mesh, &faces, max_wall);
     let curved = collapsible_curved_walls(
         mesh,
         &faces,
         &planar,
-        &curved_walls(mesh, &faces, &planar, options.max_wall),
+        &curved_walls(mesh, &faces, &planar, max_wall),
     );
     let planar: Vec<PairedWall> = planar
         .into_iter()
