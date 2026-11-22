@@ -21,7 +21,7 @@ const studyRows = multigridStudy
 
 export default {
   slug: "numerical-methods/multigrid",
-  searchTitle: "Algebraic multigrid (AMG) preconditioner for elasticity",
+  searchTitle: "Algebraic multigrid (AMG) preconditioner",
   description:
     "How smoothed-aggregation algebraic multigrid builds coarse levels from the rigid-body modes, why it keeps conjugate-gradient iterations nearly constant as the mesh is refined, and where it struggles.",
   sections: [
