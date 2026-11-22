@@ -10,8 +10,35 @@ import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
 import type { ViewRepr } from "../../store/viewSlice";
-import { HEX_EDGES, TET_EDGES, TRI_EDGES } from "./useMeshTopology";
 import type { MeshTopology } from "./useMeshTopology";
+import {
+  edgeSegmentPositions,
+  meshEdges,
+  outlineEdges,
+} from "../../lib/meshOutline";
+
+// Line segments for `edges` (node-id pairs), or null when there are none.
+function undeformedSegments(
+  edges: Uint32Array | null,
+  nodeMap: MeshTopology["nodeMap"],
+): Float32Array | null {
+  return edges && edges.length > 0
+    ? edgeSegmentPositions(edges, nodeMap, null, 1)
+    : null;
+}
+
+// As undeformedSegments, the nodes moved by the scaled displacements; null
+// without displacements that fit the mesh.
+function deformedSegments(
+  edges: Uint32Array | null,
+  nodeMap: MeshTopology["nodeMap"],
+  displacements: Float64Array | null,
+  scale: number,
+): Float32Array | null {
+  return edges && edges.length > 0 && displacements
+    ? edgeSegmentPositions(edges, nodeMap, displacements, scale)
+    : null;
+}
 
 interface FemMeshLayerProps {
   topology: MeshTopology;
@@ -44,134 +71,81 @@ export function FemMeshLayer({
     triElements,
     boundaryQuadFaceIds,
     boundaryTriFaceIds,
+    femReady,
   } = topology;
 
-  const undeformedEdgePositions = useMemo(() => {
-    const segs: number[] = [];
-    const coord = (id: number) => {
-      const entry = nodeMap.get(id);
-      if (!entry)
-        throw new Error(
-          `element references node ${id} which is not in the mesh node list`,
-        );
-      return [entry.n.x, entry.n.y, entry.n.z];
-    };
-    for (const el of hexElements) {
-      for (const [a, b] of HEX_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    for (const el of tetElements) {
-      for (const [a, b] of TET_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    for (const el of triElements) {
-      for (const [a, b] of TRI_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [hexElements, tetElements, triElements, nodeMap]);
+  // Edge overlays per representation: Geometry → none, Surface → boundary edges,
+  // Volume → every element edge, Wireframe → every element edge with no fill.
+  const showSolid = repr !== "wireframe";
+  const showSurfaceEdges = repr === "surface";
+  const showAllEdges = repr === "volume" || repr === "wireframe";
 
-  const undeformedSurfaceEdgePositions = useMemo(() => {
-    const seen = new Set<string>();
-    const segs: number[] = [];
-    const addEdge = (a: number, b: number) => {
-      const key = a < b ? `${a},${b}` : `${b},${a}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const na = nodeMap.get(a)?.n,
-        nb = nodeMap.get(b)?.n;
-      if (!na || !nb) return;
-      segs.push(na.x, na.y, na.z, nb.x, nb.y, nb.z);
-    };
-    for (const [a, b, c, d] of boundaryQuadFaceIds) {
-      addEdge(a, b);
-      addEdge(b, c);
-      addEdge(c, d);
-      addEdge(d, a);
-    }
-    for (const [a, b, c] of boundaryTriFaceIds) {
-      addEdge(a, b);
-      addEdge(b, c);
-      addEdge(c, a);
-    }
-    return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap]);
+  // Every element edge once (lib/meshOutline), built only while a
+  // representation shows them: on a large mesh it is the biggest buffer here.
+  const allEdges = useMemo(
+    () =>
+      showAllEdges && femReady
+        ? meshEdges(tetElements, hexElements, triElements)
+        : null,
+    [showAllEdges, femReady, tetElements, hexElements, triElements],
+  );
+  // The outline of the outer faces, for the Surface representation and the
+  // undeformed overlay over a result.
+  const surfaceEdges = useMemo(
+    () =>
+      femReady && (showSurfaceEdges || (showResult && showUndeformedOverlay))
+        ? outlineEdges(boundaryTriFaceIds, boundaryQuadFaceIds)
+        : null,
+    [
+      femReady,
+      showSurfaceEdges,
+      showResult,
+      showUndeformedOverlay,
+      boundaryTriFaceIds,
+      boundaryQuadFaceIds,
+    ],
+  );
 
-  const deformedEdgePositions = useMemo(() => {
-    if (!result) return null;
-    const disp = result.displacements;
-    // A remesh can change the node count/ids after a solve completes but
-    // before `result` is invalidated. Rendering `disp` against a mismatched
-    // nodeMap would silently zero-fill out-of-range nodes and draw a
-    // plausible-looking but wrong deformed shape — bail instead.
-    if (disp.length !== nodeMap.size * 3) return null;
-    const coord = (id: number) => {
-      const { n, i } = nodeMap.get(id)!;
-      return [
-        n.x + disp[i * 3] * deformScale,
-        n.y + disp[i * 3 + 1] * deformScale,
-        n.z + disp[i * 3 + 2] * deformScale,
-      ];
-    };
-    const segs: number[] = [];
-    for (const el of hexElements) {
-      for (const [a, b] of HEX_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    for (const el of tetElements) {
-      for (const [a, b] of TET_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    for (const el of triElements) {
-      for (const [a, b] of TRI_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [result, hexElements, tetElements, triElements, nodeMap, deformScale]);
+  // A remesh can change the node count/ids after a solve completes but before
+  // `result` is invalidated. Drawing the displacements against a mismatched
+  // nodeMap would draw a plausible-looking but wrong deformed shape — draw no
+  // deformed edges instead.
+  const displacements =
+    result && result.displacements.length === nodeMap.size * 3
+      ? result.displacements
+      : null;
 
-  // Boundary (surface) edges of the deformed mesh — the Surface representation in
-  // results mode. Mirrors undeformedSurfaceEdgePositions but on deformed coords.
-  const deformedSurfaceEdgePositions = useMemo(() => {
-    if (!result) return null;
-    const disp = result.displacements;
-    if (disp.length !== nodeMap.size * 3) return null;
-    const seen = new Set<string>();
-    const segs: number[] = [];
-    const addEdge = (a: number, b: number) => {
-      const key = a < b ? `${a},${b}` : `${b},${a}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const na = nodeMap.get(a),
-        nb = nodeMap.get(b);
-      if (!na || !nb) return;
-      segs.push(
-        na.n.x + disp[na.i * 3] * deformScale,
-        na.n.y + disp[na.i * 3 + 1] * deformScale,
-        na.n.z + disp[na.i * 3 + 2] * deformScale,
-        nb.n.x + disp[nb.i * 3] * deformScale,
-        nb.n.y + disp[nb.i * 3 + 1] * deformScale,
-        nb.n.z + disp[nb.i * 3 + 2] * deformScale,
-      );
-    };
-    for (const [a, b, c, dd] of boundaryQuadFaceIds) {
-      addEdge(a, b);
-      addEdge(b, c);
-      addEdge(c, dd);
-      addEdge(dd, a);
-    }
-    for (const [a, b, c] of boundaryTriFaceIds) {
-      addEdge(a, b);
-      addEdge(b, c);
-      addEdge(c, a);
-    }
-    return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [result, boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, deformScale]);
+  const undeformedEdgePositions = useMemo(
+    () => (showResult ? null : undeformedSegments(allEdges, nodeMap)),
+    [showResult, allEdges, nodeMap],
+  );
+  const deformedEdgePositions = useMemo(
+    () =>
+      showResult
+        ? deformedSegments(allEdges, nodeMap, displacements, deformScale)
+        : null,
+    [showResult, allEdges, nodeMap, displacements, deformScale],
+  );
+  const undeformedSurfaceEdgePositions = useMemo(
+    () => undeformedSegments(surfaceEdges, nodeMap),
+    [surfaceEdges, nodeMap],
+  );
+  // Boundary edges of the deformed mesh — the Surface representation in
+  // results mode.
+  const deformedSurfaceEdgePositions = useMemo(
+    () =>
+      showResult && showSurfaceEdges
+        ? deformedSegments(surfaceEdges, nodeMap, displacements, deformScale)
+        : null,
+    [
+      showResult,
+      showSurfaceEdges,
+      surfaceEdges,
+      nodeMap,
+      displacements,
+      deformScale,
+    ],
+  );
 
   // Undeformed surface for display and face picking
   const undeformedSurface = useMemo(() => {
@@ -230,12 +204,6 @@ export function FemMeshLayer({
     };
   }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap]);
 
-  // Edge overlays per representation: Geometry → none, Surface → boundary edges,
-  // Volume → every element edge, Wireframe → every element edge with no fill.
-  const showSolid = repr !== "wireframe";
-  const showSurfaceEdges = repr === "surface";
-  const showAllEdges = repr === "volume" || repr === "wireframe";
-
   // In the Geometry representation the CAD tessellation (GeometryLayer) stands
   // in for the part, so the FEM boundary surface must not also draw — otherwise
   // the two overlap and z-fight. The edge overlays are already representation-
@@ -267,7 +235,10 @@ export function FemMeshLayer({
 
       {/* Surface (boundary) edges — Surface representation */}
       {!showResult && showSurfaceEdges && undeformedSurfaceEdgePositions && (
-        <lineSegments>
+        <lineSegments
+          name="fem-surface-edges"
+          userData={{ segments: undeformedSurfaceEdgePositions.length / 6 }}
+        >
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
@@ -280,7 +251,10 @@ export function FemMeshLayer({
 
       {/* All element edges — Volume and Wireframe representations */}
       {!showResult && showAllEdges && undeformedEdgePositions && (
-        <lineSegments>
+        <lineSegments
+          name="fem-element-edges"
+          userData={{ segments: undeformedEdgePositions.length / 6 }}
+        >
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
@@ -293,7 +267,10 @@ export function FemMeshLayer({
 
       {/* Deformed surface (boundary) edges — Surface representation */}
       {showResult && showSurfaceEdges && deformedSurfaceEdgePositions && (
-        <lineSegments>
+        <lineSegments
+          name="fem-surface-edges"
+          userData={{ segments: deformedSurfaceEdgePositions.length / 6 }}
+        >
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
@@ -311,7 +288,10 @@ export function FemMeshLayer({
 
       {/* Deformed element edges — Volume and Wireframe representations */}
       {showResult && showAllEdges && deformedEdgePositions && (
-        <lineSegments>
+        <lineSegments
+          name="fem-element-edges"
+          userData={{ segments: deformedEdgePositions.length / 6 }}
+        >
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"

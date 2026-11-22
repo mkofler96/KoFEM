@@ -12,10 +12,12 @@
 
 mod convergence;
 mod mixed;
+mod outline;
 mod rigid_body;
 mod section;
 mod shell;
 mod shellize;
+mod stiffness;
 mod tie;
 mod topology;
 
@@ -24,6 +26,7 @@ pub use convergence::{
     relative_element_sizes, ConvergenceRate, ZeroSizeExtrapolation,
 };
 pub use mixed::MixedModel;
+pub use outline::{outer_faces, unique_edges, MeshOuterFaces};
 pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;
 pub use shellize::{
@@ -35,13 +38,15 @@ pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
     assemble_stiffness, fold_onto_vertices, load_on_held_nodes, nodal_residual,
-    prepare_coupled_static, prepare_static, prepare_tied_static, solve_static, summarize_reactions,
-    von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction,
-    Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
-    PreconditionerChoice, PreparedCoupled, PreparedStatic, PreparedTied, ReactionSummary,
-    StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
+    prepare_coupled_static, prepare_static, prepare_tied_static, solve_pcg_with,
+    summarize_reactions, von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings,
+    CoupledReduction, Coupling, CouplingKind, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
+    PreconditionerChoice, PreparedCoupled, PreparedTied, ReactionSummary, StoppingRule,
+    SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
 };
 use wasm_bindgen::prelude::*;
+
+use stiffness::{Loan, Stiffness};
 
 fn to_js(error: &FemError) -> JsError {
     JsError::new(&error.to_string())
@@ -106,7 +111,7 @@ fn parse_materials(materials: &[f64]) -> Result<Vec<Isotropic>, JsError> {
 #[wasm_bindgen]
 pub struct ElasticModel {
     mesh: TetMesh,
-    stiffness: Option<CsrMatrix>,
+    stiffness: Stiffness,
     /// Built on the first surface load and kept for the next ones.
     boundary: Option<BoundaryFaces>,
 }
@@ -148,7 +153,7 @@ impl ElasticModel {
             .map_err(|error| to_js(&error))?;
         Ok(ElasticModel {
             mesh,
-            stiffness: None,
+            stiffness: Stiffness::new(),
             boundary: None,
         })
     }
@@ -285,24 +290,22 @@ impl ElasticModel {
         owners: &[i32],
         supports: usize,
     ) -> Result<Vec<f64>, JsError> {
-        let stiffness = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before supportReactions()"))?;
         let wide_forces = if forces.len() == self.mesh.dof_count() {
             widen_translations(forces)
         } else {
             forces.to_vec()
         };
-        let residual = match &solution.reduction {
-            Some(reduction) => reduction
-                .reactions(stiffness, &solution.full_dofs, &wide_forces)
-                .map_err(|error| to_js(&error))?,
-            None => widen_translations(
-                &nodal_residual(stiffness, &solution.full_dofs, forces)
-                    .map_err(|error| to_js(&error))?,
-            ),
-        };
+        let residual =
+            self.stiffness
+                .with("supportReactions", |stiffness| match &solution.reduction {
+                    Some(reduction) => reduction
+                        .reactions(stiffness, &solution.full_dofs, &wide_forces)
+                        .map_err(|error| to_js(&error)),
+                    None => Ok(widen_translations(
+                        &nodal_residual(stiffness, &solution.full_dofs, forces)
+                            .map_err(|error| to_js(&error))?,
+                    )),
+                })?;
         let reactions = fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
         let loads = fold_onto_vertices(&self.mesh, &wide_forces).map_err(|error| to_js(&error))?;
         let mut summary =
@@ -319,7 +322,7 @@ impl ElasticModel {
     pub fn assemble(&mut self) -> usize {
         let matrix = assemble_stiffness(&self.mesh);
         let nnz = matrix.nnz();
-        self.stiffness = Some(matrix);
+        self.stiffness.set(matrix);
         nnz
     }
 
@@ -337,27 +340,18 @@ impl ElasticModel {
         forces: &[f64],
         options: &SolveOptions,
     ) -> Result<ElasticSolution, JsError> {
-        let assembled = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before solve()"))?;
-        let solution = solve_static(
-            &self.mesh,
-            assembled,
-            fixed_dofs,
-            fixed_values,
-            forces,
-            options.settings,
-            options.preconditioner,
-        )
-        .map_err(|error| to_js(&error))?;
+        let mut loan = self.lend_prepared("solve", fixed_dofs, fixed_values, forces, options)?;
+        let prepared = loan.get_mut()?;
+        let (displacements, outcome) =
+            solve_pcg_with(prepared.system.as_mut(), &prepared.rhs, options.settings)
+                .map_err(|error| to_js(&error))?;
         Ok(ElasticSolution {
-            full_dofs: solution.displacements.clone(),
-            displacements: solution.displacements,
-            iterations: solution.iterations,
-            relative_residual: solution.relative_residual,
-            unused_vertices: solution.unused_vertices,
-            level_sizes: solution.levels.iter().map(|level| level.unknowns).collect(),
+            full_dofs: displacements.clone(),
+            displacements,
+            iterations: outcome.iterations,
+            relative_residual: outcome.relative_residual,
+            unused_vertices: prepared.unused_vertices,
+            level_sizes: prepared.levels.iter().map(|level| level.unknowns).collect(),
             reduction: None,
         })
     }
@@ -379,22 +373,12 @@ impl ElasticModel {
         forces: &[f64],
         options: &SolveOptions,
     ) -> Result<SolveRun, JsError> {
-        let assembled = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before startSolve()"))?;
-        let mut prepared = prepare_static(
-            &self.mesh,
-            assembled,
-            fixed_dofs,
-            fixed_values,
-            forces,
-            options.preconditioner,
-        )
-        .map_err(|error| to_js(&error))?;
+        let mut prepared =
+            self.lend_prepared("startSolve", fixed_dofs, fixed_values, forces, options)?;
+        let system = prepared.get_mut()?;
         let run = PcgRun::start(
-            prepared.system.as_mut(),
-            &prepared.rhs,
+            system.system.as_mut(),
+            &system.rhs,
             options.settings.relative_tolerance,
             options.settings.stopping,
         )
@@ -433,23 +417,21 @@ impl ElasticModel {
         forces: &[f64],
         options: &SolveOptions,
     ) -> Result<SolveRun, JsError> {
-        let assembled = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before startCoupledSolve()"))?;
         let PreparedCoupled {
             mut prepared,
             reduction,
-        } = prepare_coupled_static(
-            &self.mesh,
-            assembled,
-            &couplings.couplings,
-            fixed_dofs,
-            fixed_values,
-            forces,
-            options.preconditioner,
-        )
-        .map_err(|error| to_js(&error))?;
+        } = self.stiffness.with("startCoupledSolve", |assembled| {
+            prepare_coupled_static(
+                &self.mesh,
+                assembled,
+                &couplings.couplings,
+                fixed_dofs,
+                fixed_values,
+                forces,
+                options.preconditioner,
+            )
+            .map_err(|error| to_js(&error))
+        })?;
         let run = PcgRun::start(
             prepared.system.as_mut(),
             &prepared.rhs,
@@ -458,7 +440,7 @@ impl ElasticModel {
         )
         .map_err(|error| to_js(&error))?;
         Ok(SolveRun {
-            prepared,
+            prepared: Loan::owned(prepared),
             run,
             preconditioner: preconditioner_name(options.preconditioner).to_owned(),
             reduction: Some(reduction),
@@ -488,10 +470,7 @@ impl ElasticModel {
         forces: &[f64],
         options: &SolveOptions,
     ) -> Result<SolveRun, JsError> {
-        let assembled = self
-            .stiffness
-            .as_ref()
-            .ok_or_else(|| JsError::new("assemble() must be called before startTiedSolve()"))?;
+        self.stiffness.with("startTiedSolve", |_| Ok(()))?;
         let vertex_ties = VertexTies::new(
             self.mesh.vertex_count(),
             &ties.slaves,
@@ -505,16 +484,18 @@ impl ElasticModel {
             mut prepared,
             reduction,
             report,
-        } = prepare_tied_static(
-            &self.mesh,
-            assembled,
-            &vertex_ties,
-            fixed_dofs,
-            fixed_values,
-            forces,
-            options.preconditioner,
-        )
-        .map_err(|error| to_js(&error))?;
+        } = self.stiffness.with("startTiedSolve", |assembled| {
+            prepare_tied_static(
+                &self.mesh,
+                assembled,
+                &vertex_ties,
+                fixed_dofs,
+                fixed_values,
+                forces,
+                options.preconditioner,
+            )
+            .map_err(|error| to_js(&error))
+        })?;
         let run = PcgRun::start(
             prepared.system.as_mut(),
             &prepared.rhs,
@@ -523,7 +504,7 @@ impl ElasticModel {
         )
         .map_err(|error| to_js(&error))?;
         Ok(SolveRun {
-            prepared,
+            prepared: Loan::owned(prepared),
             run,
             preconditioner: preconditioner_name(options.preconditioner).to_owned(),
             reduction: Some(reduction),
@@ -633,6 +614,37 @@ impl Couplings {
     }
 }
 
+impl ElasticModel {
+    /// The model's matrix, lent to an uncoupled load case set up for CG.
+    fn lend_prepared(
+        &self,
+        caller: &str,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: &[f64],
+        options: &SolveOptions,
+    ) -> Result<Loan, JsError> {
+        let matrix = self.stiffness.lend(caller)?;
+        match prepare_static(
+            &self.mesh,
+            matrix,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            options.preconditioner,
+        ) {
+            Ok(prepared) => Ok(self.stiffness.loan(prepared)),
+            Err(error) => {
+                // The set-up consumed the matrix before it failed (a
+                // multigrid that finds the model under-constrained); assemble
+                // it again so the model stays as it was, then report.
+                self.stiffness.set(assemble_stiffness(&self.mesh));
+                Err(to_js(&error))
+            }
+        }
+    }
+}
+
 /// What a run's solution holds once expanded through the coupling
 /// reduction (a run without one returns its solution as it is).
 #[derive(Clone, Copy)]
@@ -648,7 +660,9 @@ enum RunOutput {
 /// `startCoupledSolve`, `ShellModel.startSolve` or `MixedModel.startSolve`).
 #[wasm_bindgen]
 pub struct SolveRun {
-    prepared: PreparedStatic,
+    /// The system; on an uncoupled solve, the model's matrix on loan, given
+    /// back when the run is finished or freed.
+    prepared: Loan,
     run: PcgRun,
     /// The preconditioner, in words for the solve log.
     preconditioner: String,
@@ -669,7 +683,7 @@ impl SolveRun {
         let until = self.run.iterations().saturating_add(steps);
         let status = self
             .run
-            .advance(self.prepared.system.as_mut(), until)
+            .advance(self.prepared.get_mut()?.system.as_mut(), until)
             .map_err(|error| to_js(&error))?;
         Ok(status == PcgStatus::Converged)
     }
@@ -735,13 +749,17 @@ impl SolveRun {
 
     /// Unknowns per multigrid level, finest first; empty for Gauss–Seidel.
     #[wasm_bindgen(getter, js_name = levelSizes)]
-    #[must_use]
-    pub fn level_sizes(&self) -> Vec<usize> {
-        self.prepared
+    ///
+    /// # Errors
+    /// None while the run exists: only a finished run has no system.
+    pub fn level_sizes(&self) -> Result<Vec<usize>, JsError> {
+        Ok(self
+            .prepared
+            .get()?
             .levels
             .iter()
             .map(|level| level.unknowns)
-            .collect()
+            .collect())
     }
 
     /// The solution, once converged. Consumes the run.
@@ -749,8 +767,8 @@ impl SolveRun {
     /// # Errors
     /// The run has not converged.
     pub fn finish(self) -> Result<ElasticSolution, JsError> {
-        let level_sizes = self.level_sizes();
-        let unused_vertices = self.prepared.unused_vertices;
+        let level_sizes = self.level_sizes()?;
+        let unused_vertices = self.prepared.get()?.unused_vertices;
         let (solution, outcome) = self.run.into_solution().map_err(|error| to_js(&error))?;
         let full_dofs = match &self.reduction {
             None => solution,

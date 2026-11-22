@@ -336,8 +336,15 @@ fn stepwise_run_matches_a_single_solve() {
     let stiffness = assemble_stiffness(&built.mesh);
     let values = vec![0.0; fixed.len()];
     let choice = PreconditionerChoice::SmoothedAggregation(DEEP);
-    let mut prepared = prepare_static(&built.mesh, &stiffness, &fixed, &values, &forces, choice)
-        .expect("prepares");
+    let mut prepared = prepare_static(
+        &built.mesh,
+        stiffness.clone(),
+        &fixed,
+        &values,
+        &forces,
+        choice,
+    )
+    .expect("prepares");
     let mut run = PcgRun::start(
         prepared.system.as_mut(),
         &prepared.rhs,
@@ -387,7 +394,7 @@ fn continuation_is_offered_only_while_descending() {
     let stiffness = assemble_stiffness(&built.mesh);
     let mut prepared = prepare_static(
         &built.mesh,
-        &stiffness,
+        stiffness,
         &fixed,
         &vec![0.0; fixed.len()],
         &forces,

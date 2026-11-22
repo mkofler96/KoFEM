@@ -344,7 +344,7 @@ function edgeKey(a: number, b: number): string {
 
 /**
  * Boundary edges of a surface mesh: the triangle edges used by exactly one
- * facet. This is the used-once extraction of `extractBoundaryTriFaceIds` one
+ * facet. This is the used-once rule of the outer faces (`meshOuterFaces`) one
  * dimension down — for a shell sheet it yields the outer rim and any hole rims;
  * for a closed solid boundary (every edge shared by two facets) it is empty.
  * Returned as `[min, max]` node-id pairs (matching `edgeToTris` keys).

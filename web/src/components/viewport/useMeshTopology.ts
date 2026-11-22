@@ -18,6 +18,8 @@ import {
 import type { BoundaryMeshTopo, Tri, Vec3 } from "../../lib/facePick";
 import { modelShellRim, type ShellRim } from "../../lib/shellRim";
 import { modelExtent } from "../../lib/deformScale";
+import { meshOuterFaces, type OuterFaces } from "../../lib/meshOutline";
+import { useFemModule } from "../../hooks/useFemModule";
 
 export type NodeMap = Map<number, { n: Node; i: number }>;
 
@@ -30,114 +32,12 @@ export interface MeshTopology {
   boundaryQuadFaceIds: [number, number, number, number][];
   boundaryTriFaceIds: [number, number, number][];
   boundaryMeshTopo: BoundaryMeshTopo | null;
+  // Whether the Rust module that finds the outer faces and edges is loaded;
+  // until it is, the mesh has none to draw.
+  femReady: boolean;
   // The CAD faces a shell idealisation collapsed onto the mesh's rim, for edge
   // picking (lib/shellRim).
   shellRim: ShellRim;
-}
-
-// ── CHEXA geometry ────────────────────────────────────────────────────────────
-
-export const HEX_EDGES: [number, number][] = [
-  [0, 1],
-  [1, 2],
-  [2, 3],
-  [3, 0],
-  [4, 5],
-  [5, 6],
-  [6, 7],
-  [7, 4],
-  [0, 4],
-  [1, 5],
-  [2, 6],
-  [3, 7],
-];
-
-const HEX_FACE_DEFS: [number, number, number, number][] = [
-  [0, 1, 2, 3],
-  [4, 5, 6, 7],
-  [0, 1, 5, 4],
-  [2, 3, 7, 6],
-  [0, 3, 7, 4],
-  [1, 2, 6, 5],
-];
-
-function extractBoundaryQuadFaceIds(
-  hexElems: { nodeIds: number[] }[],
-): [number, number, number, number][] {
-  const faceMap = new Map<
-    string,
-    { face: [number, number, number, number]; count: number }
-  >();
-  for (const el of hexElems) {
-    for (const [a, b, c, d] of HEX_FACE_DEFS) {
-      const face: [number, number, number, number] = [
-        el.nodeIds[a],
-        el.nodeIds[b],
-        el.nodeIds[c],
-        el.nodeIds[d],
-      ];
-      const key = [...face].sort((x, y) => x - y).join(",");
-      const entry = faceMap.get(key);
-      if (entry) {
-        entry.count++;
-      } else {
-        faceMap.set(key, { face, count: 1 });
-      }
-    }
-  }
-  return [...faceMap.values()].filter((e) => e.count === 1).map((e) => e.face);
-}
-
-// ── CTETRA geometry ───────────────────────────────────────────────────────────
-
-export const TET_EDGES: [number, number][] = [
-  [0, 1],
-  [0, 2],
-  [0, 3],
-  [1, 2],
-  [1, 3],
-  [2, 3],
-];
-
-// ── CTRIA3 (shell) geometry ───────────────────────────────────────────────────
-
-export const TRI_EDGES: [number, number][] = [
-  [0, 1],
-  [1, 2],
-  [2, 0],
-];
-
-const TET_FACE_DEFS: [number, number, number][] = [
-  [0, 1, 2],
-  [0, 1, 3],
-  [0, 2, 3],
-  [1, 2, 3],
-];
-
-function extractBoundaryTriFaceIds(
-  tetElems: { nodeIds: number[] }[],
-): [number, number, number][] {
-  const faceMap = new Map<
-    string,
-    { face: [number, number, number]; count: number }
-  >();
-  for (const el of tetElems) {
-    for (const [a, b, c] of TET_FACE_DEFS) {
-      const face: [number, number, number] = [
-        el.nodeIds[a],
-        el.nodeIds[b],
-        el.nodeIds[c],
-      ];
-      const key = [...face].sort((x, y) => x - y).join(",");
-      const entry = faceMap.get(key);
-      if (entry) {
-        entry.count++;
-      } else {
-        faceMap.set(key, { face, count: 1 });
-      }
-    }
-  }
-  return [...faceMap.values()].filter((e) => e.count === 1).map((e) => e.face);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -236,15 +136,22 @@ export function useMeshTopology(): MeshTopology {
     [visibleElements],
   );
 
-  const boundaryQuadFaceIds = useMemo(
-    () => extractBoundaryQuadFaceIds(hexElements),
-    [hexElements],
+  // Only the outer faces are drawn (a face exactly one solid element uses),
+  // found in Rust; the elements inside never reach the GPU.
+  const { ready: femReady } = useFemModule();
+  const outerFaces = useMemo<OuterFaces>(
+    () =>
+      femReady
+        ? meshOuterFaces(tetElements, hexElements)
+        : { triangles: [], quadrilaterals: [] },
+    [femReady, tetElements, hexElements],
   );
-  // Solid boundary faces (tet faces used exactly once) plus every shell facet —
-  // a shell element IS surface, so its facet always renders and picks.
+  const boundaryQuadFaceIds = outerFaces.quadrilaterals;
+  // Solid boundary faces plus every shell facet — a shell element IS surface,
+  // so its facet always renders and picks.
   const boundaryTriFaceIds = useMemo(
     () => [
-      ...extractBoundaryTriFaceIds(tetElements),
+      ...outerFaces.triangles,
       ...triElements.map(
         (el) =>
           [el.nodeIds[0], el.nodeIds[1], el.nodeIds[2]] as [
@@ -254,7 +161,7 @@ export function useMeshTopology(): MeshTopology {
           ],
       ),
     ],
-    [tetElements, triElements],
+    [outerFaces, triElements],
   );
 
   // Boundary mesh topology for face picking.
@@ -322,6 +229,7 @@ export function useMeshTopology(): MeshTopology {
       boundaryQuadFaceIds,
       boundaryTriFaceIds,
       boundaryMeshTopo,
+      femReady,
       shellRim,
     }),
     [
@@ -333,6 +241,7 @@ export function useMeshTopology(): MeshTopology {
       boundaryQuadFaceIds,
       boundaryTriFaceIds,
       boundaryMeshTopo,
+      femReady,
       shellRim,
     ],
   );
