@@ -22,7 +22,6 @@ import {
   onRadius,
   onY,
   onZ,
-  simpson,
   TESSELLATION_OPTIONS,
 } from "../support/step-parts.mjs";
 import { loadEngine } from "../support/wasm.mjs";
@@ -122,33 +121,71 @@ const onCone =
       (coordZ - z0) * (r1 - r0)) /
     Math.hypot(r1 - r0, z1 - z0);
 
-/** 0 (to first order) on the hyperboloid r²/a² − z²/b² = 1. */
-const onHyperboloid =
-  (/** @type {number} */ a, /** @type {number} */ b) =>
+/**
+ * The curve offset by `offset` (+ away from the axis) from the hyperbola
+ * r²/a² − z²/b² = 1, as a function of the hyperbola's parameter u, the point
+ * (a cosh u, b sinh u).
+ *
+ * @param {number} a @param {number} b @param {number} offset
+ */
+const offsetHyperbolic = (a, b, offset) => (/** @type {number} */ u) => {
+  const normal = [b * Math.cosh(u), -a * Math.sinh(u)];
+  const length = Math.hypot(...normal);
+  return /** @type {[number, number]} */ ([
+    a * Math.cosh(u) + (offset * normal[0]) / length,
+    b * Math.sinh(u) + (offset * normal[1]) / length,
+  ]);
+};
+
+/**
+ * Signed distance from the hyperboloid r²/a² − z²/b² = 1 (+ away from the
+ * axis), to the nearest point of its meridian found by golden-section search.
+ *
+ * @param {number} a @param {number} b
+ */
+const signedHyperbolaDistance =
+  (a, b) =>
   /** @type {(x: number, y: number, z: number) => number} */ (
     coordX,
     coordY,
     coordZ,
   ) => {
     const radius = Math.hypot(coordX, coordY);
+    const squared = (/** @type {number} */ u) =>
+      (radius - a * Math.cosh(u)) ** 2 + (coordZ - b * Math.sinh(u)) ** 2;
+    let [low, high] = [
+      Math.asinh(coordZ / b) - 0.1,
+      Math.asinh(coordZ / b) + 0.1,
+    ];
+    const ratio = (Math.sqrt(5) - 1) / 2;
+    for (let i = 0; i < 80; i++) {
+      const left = high - ratio * (high - low);
+      const right = low + ratio * (high - low);
+      if (squared(left) < squared(right)) high = right;
+      else low = left;
+    }
+    const foot = (low + high) / 2;
     const level = (radius / a) ** 2 - (coordZ / b) ** 2 - 1;
-    return level / Math.hypot((2 * radius) / a ** 2, (2 * coordZ) / b ** 2);
+    return Math.sign(level) * Math.sqrt(squared(foot));
   };
 
-/** Area of the hyperboloid r²/a² − z²/b² = 1, z0 ≤ z ≤ z1, over `sweep` rad. */
-function hyperboloidArea(a, b, z0, z1, sweep) {
-  return (
-    sweep *
-    simpson(
-      (height) => {
-        const radius = a * Math.sqrt(1 + (height / b) ** 2);
-        const slope = (a * a * height) / (b * b * radius);
-        return radius * Math.hypot(1, slope);
-      },
-      z0,
-      z1,
-    )
-  );
+/**
+ * Area of the meridian curve `piece` (t ∈ [0, 1] to (r, z)) revolved through
+ * `sweep` rad: sweep · ∫ r ds, on dense chords.
+ *
+ * @param {(t: number) => [number, number]} piece @param {number} sweep
+ */
+function revolvedArea(piece, sweep) {
+  const samples = 20000;
+  let sum = 0;
+  let [r0, z0] = piece(0);
+  for (let i = 1; i <= samples; i++) {
+    const [r1, z1] = piece(i / samples);
+    sum += ((r0 + r1) / 2) * Math.hypot(r1 - r0, z1 - z0);
+    r0 = r1;
+    z0 = z1;
+  }
+  return sweep * sum;
 }
 
 /** Area of the cone frustum between meridian points p and q over `sweep` rad. */
@@ -232,6 +269,23 @@ describe("invalid revolved profiles", () => {
         "x",
       ),
     ).toThrow(/hyperbola/);
+  });
+
+  test("an offset hyperbolic arc ending on its hyperbola, not its offset, is rejected", () => {
+    expect(() =>
+      revolvedSectorStep(
+        [
+          [
+            line([110, 0]),
+            line([110, 50]),
+            line([100 * Math.sqrt(1.25), 50]),
+            hyperbolaArc([100, 0], { a: 100, b: 100, offset: 2 }),
+          ],
+        ],
+        90,
+        "x",
+      ),
+    ).toThrow(/offset/);
   });
 });
 
@@ -396,28 +450,24 @@ describe("invalid revolved profiles", () => {
 {
   const sweep = 90 * DEG;
   const [waist, height, thickness] = [1000, 1000, 10];
-  // Mid-surface r² − z² = 1000²; the faces offset it by ± t/2 along its normal
-  // at both ends: at the waist, and at the top, where the end face is normal to
-  // the mid-surface.
-  const midTop = [Math.SQRT2 * waist, height];
-  const normal = [midTop[0], -midTop[1]].map((c) => c / Math.hypot(...midTop));
-  const offset = (/** @type {number} */ sign) =>
-    /** @type {[number, number]} */ ([
-      midTop[0] + (sign * thickness * normal[0]) / 2,
-      midTop[1] + (sign * thickness * normal[1]) / 2,
-    ]);
-  const [topIn, topOut] = [offset(-1), offset(1)];
-  const aIn = waist - thickness / 2;
-  const aOut = waist + thickness / 2;
-  const imaginary = (a, [r, z]) => z / Math.sqrt((r / a) ** 2 - 1);
-  const bIn = imaginary(aIn, topIn);
-  const bOut = imaginary(aOut, topOut);
+  // Mid-surface r² − z² = 1000² from the waist to z = 1000; the faces are its
+  // offsets by ± t/2 along its normal, so the wall is t thick everywhere. The
+  // top end is normal to the mid-surface (a cone).
+  const uTop = Math.asinh(height / waist);
+  const [inner, outer] = [
+    offsetHyperbolic(waist, waist, -thickness / 2),
+    offsetHyperbolic(waist, waist, thickness / 2),
+  ];
+  const [topIn, topOut] = [inner(uTop), outer(uTop)];
+  const along = (curve, u0, u1) => (/** @type {number} */ t) =>
+    curve(u0 + t * (u1 - u0));
   const { area, moment } = section([
-    segment([aIn, 0], [aOut, 0]),
-    hyperbolic(aOut, bOut, 0, topOut[1]),
+    segment(inner(0), outer(0)),
+    along(outer, 0, uTop),
     segment(topOut, topIn),
-    hyperbolic(aIn, bIn, topIn[1], 0),
+    along(inner, uTop, 0),
   ]);
+  const midDistance = signedHyperbolaDistance(waist, waist);
   describePart(
     "hyperboloidShellStep (NAFEMS LE4)",
     hyperboloidShellStep(waist, waist, height, thickness, 90, "Hyperboloid"),
@@ -425,12 +475,12 @@ describe("invalid revolved profiles", () => {
       {
         label: "waist z = 0",
         distance: onZ(0),
-        area: (sweep / 2) * (aOut ** 2 - aIn ** 2),
+        area: (sweep / 2) * (outer(0)[0] ** 2 - inner(0)[0] ** 2),
       },
       {
-        label: "outer hyperboloid",
-        distance: onHyperboloid(aOut, bOut),
-        area: hyperboloidArea(aOut, bOut, 0, topOut[1], sweep),
+        label: "outer face, t/2 outside the mid-surface",
+        distance: (x, y, z) => midDistance(x, y, z) - thickness / 2,
+        area: revolvedArea(along(outer, 0, uTop), sweep),
       },
       {
         label: "top edge (normal to the mid-surface)",
@@ -438,9 +488,9 @@ describe("invalid revolved profiles", () => {
         area: frustumArea(topOut, topIn, sweep),
       },
       {
-        label: "inner hyperboloid",
-        distance: onHyperboloid(aIn, bIn),
-        area: hyperboloidArea(aIn, bIn, 0, topIn[1], sweep),
+        label: "inner face, t/2 inside the mid-surface",
+        distance: (x, y, z) => midDistance(x, y, z) + thickness / 2,
+        area: revolvedArea(along(inner, 0, uTop), sweep),
       },
       { label: "edge θ = 0", distance: onY(0), area },
       { label: "edge θ = 90°", distance: onMeridian(sweep), area },

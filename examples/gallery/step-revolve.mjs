@@ -49,13 +49,17 @@ const WRITER = "examples/gallery/step-revolve.mjs";
 /** @typedef {[number, number]} MeridianPoint  (r, z), r ≥ 0 */
 /**
  * An arc of the hyperbola r²/a² − z²/b² = 1 (its branch r > 0, centred on the
- * axis at z = 0) from the previous segment's end to `to`, which must both lie
- * on it.
+ * axis at z = 0), or of its offset curve, from the previous segment's end to
+ * `to`, which must both lie on it. The offset curve is the hyperbola moved by
+ * `offset` along its normal (+ away from the axis): the faces of a wall of
+ * uniform thickness about a hyperbolic mid-surface, which no hyperbola is.
  * @typedef {object} HyperbolaArcSegment
  * @property {"hyperbolaArc"} type
  * @property {MeridianPoint} to
- * @property {number} a  real semi-axis, along r
- * @property {number} b  imaginary semi-axis, along z
+ * @property {number} a       real semi-axis, along r
+ * @property {number} b       imaginary semi-axis, along z
+ * @property {number} offset  along the normal, + away from the axis; 0 on the
+ *                            hyperbola itself
  */
 /**
  * A segment of a meridian profile: a line or circular arc of step-prism.mjs
@@ -74,15 +78,56 @@ const WRITER = "examples/gallery/step-revolve.mjs";
 
 /**
  * @param {MeridianPoint} to
- * @param {{ a: number, b: number }} axes  r²/a² − z²/b² = 1
+ * @param {{ a: number, b: number, offset?: number }} axes  r²/a² − z²/b² = 1,
+ *   and the offset along its normal (+ away from the axis; default 0)
  * @returns {HyperbolaArcSegment}
  */
-export const hyperbolaArc = (to, { a, b }) => ({
+export const hyperbolaArc = (to, { a, b, offset = 0 }) => ({
   type: "hyperbolaArc",
   to,
   a,
   b,
+  offset,
 });
+
+/**
+ * The point at parameter u of the hyperbola (a cosh u, b sinh u) moved by
+ * `offset` along its unit normal (b cosh u, −a sinh u)/|…|, away from the axis.
+ *
+ * @param {number} a @param {number} b @param {number} offset @param {number} u
+ * @returns {MeridianPoint}
+ */
+function offsetHyperbolaPoint(a, b, offset, u) {
+  const normal = [b * Math.cosh(u), -a * Math.sinh(u)];
+  const length = Math.hypot(normal[0], normal[1]);
+  return [
+    a * Math.cosh(u) + (offset * normal[0]) / length,
+    b * Math.sinh(u) + (offset * normal[1]) / length,
+  ];
+}
+
+/**
+ * The hyperbola parameter u of the foot of the normal through p, by Newton's
+ * method on (p − H(u))·H′(u) = 0 from the parameter of p's height.
+ *
+ * @param {number} a @param {number} b @param {MeridianPoint} p
+ */
+function hyperbolaFoot(a, b, [r, z]) {
+  let u = Math.asinh(z / b);
+  for (let i = 0; i < 50; i++) {
+    const [c, s] = [Math.cosh(u), Math.sinh(u)];
+    const f = (r - a * c) * a * s + (z - b * s) * b * c;
+    const df =
+      -a * a * s * s +
+      (r - a * c) * a * c -
+      b * b * c * c +
+      (z - b * s) * b * s;
+    const step = f / df;
+    u -= step;
+    if (Math.abs(step) < 1e-15) break;
+  }
+  return u;
+}
 
 /**
  * The checked segments of a profile: start, end (r within round-off of the
@@ -158,27 +203,47 @@ function meridianSegments(profile, label) {
       };
     }
     if (seg.type === "hyperbolaArc") {
-      const { a, b } = seg;
+      const { a, b, offset } = seg;
       if (!(a > 0 && b > 0))
         throw new Error(
           `${label}: hyperbolic arc segment ${i} needs positive semi-axes, got a = ${a}, b = ${b}`,
         );
-      for (const [p, which] of [
-        [from, "starts"],
-        [to, "ends"],
-      ])
-        if (
-          !(p[0] > 0) ||
-          Math.abs((p[0] / a) ** 2 - (p[1] / b) ** 2 - 1) > 1e-9
-        )
+      // Away from the axis the offset curve forms a cusp once the offset
+      // reaches the least radius of curvature, b²/a at the vertex; towards
+      // the axis it must stay off it.
+      if (!(Number.isFinite(offset) && offset < (b * b) / a && offset > -a))
+        throw new Error(
+          `${label}: hyperbolic arc segment ${i} has offset ${offset}; it needs −a < offset < b²/a = ${(b * b) / a}`,
+        );
+      if (offset === 0) {
+        for (const [p, which] of [
+          [from, "starts"],
+          [to, "ends"],
+        ])
+          if (
+            !(p[0] > 0) ||
+            Math.abs((p[0] / a) ** 2 - (p[1] / b) ** 2 - 1) > 1e-9
+          )
+            throw new Error(
+              `${label}: hyperbolic arc segment ${i} ${which} at (${p.join(", ")}), not on its hyperbola r²/${a}² − z²/${b}² = 1, r > 0`,
+            );
+        return {
+          ...base,
+          u0: Math.asinh(from[1] / b),
+          u1: Math.asinh(to[1] / b),
+        };
+      }
+      /** @param {MeridianPoint} p @param {string} which */
+      const foot = (p, which) => {
+        const u = hyperbolaFoot(a, b, p);
+        const q = offsetHyperbolaPoint(a, b, offset, u);
+        if (!(p[0] > 0) || Math.hypot(p[0] - q[0], p[1] - q[1]) > tol)
           throw new Error(
-            `${label}: hyperbolic arc segment ${i} ${which} at (${p.join(", ")}), not on its hyperbola r²/${a}² − z²/${b}² = 1, r > 0`,
+            `${label}: hyperbolic arc segment ${i} ${which} at (${p.join(", ")}), not on its hyperbola r²/${a}² − z²/${b}² = 1 offset by ${offset}`,
           );
-      return {
-        ...base,
-        u0: Math.asinh(from[1] / b),
-        u1: Math.asinh(to[1] / b),
+        return u;
       };
+      return { ...base, u0: foot(from, "starts"), u1: foot(to, "ends") };
     }
     throw new Error(
       `${label}: segment ${i} is neither a line, an arc nor a hyperbolic arc`,
@@ -210,8 +275,24 @@ function signedArea(segs) {
       s.u0 !== undefined &&
       s.u1 !== undefined
     )
-      // Along (a cosh u, b sinh u): r dz − z dr = a·b du.
-      twice += seg.a * seg.b * (s.u1 - s.u0);
+      if (seg.offset === 0)
+        // Along (a cosh u, b sinh u): r dz − z dr = a·b du.
+        twice += seg.a * seg.b * (s.u1 - s.u0);
+      else {
+        // The offset curve on dense chords: only the sign is used.
+        const samples = 1000;
+        let [r0, z0] = from;
+        for (let k = 1; k <= samples; k++) {
+          const [r1, z1] = offsetHyperbolaPoint(
+            seg.a,
+            seg.b,
+            seg.offset,
+            s.u0 + ((s.u1 - s.u0) * k) / samples,
+          );
+          twice += r0 * z1 - r1 * z0;
+          [r0, z0] = [r1, z1];
+        }
+      }
   }
   return twice / 2;
 }
@@ -326,8 +407,13 @@ function revolvedFaces(step, segs, sweep) {
       );
       return add(`EDGE_CURVE('',#${va},#${vb},#${curve},.T.)`);
     }
-    // The hyperbola (a cosh u, b sinh u) in (r, z) rises with u.
-    const curve = hyperbola(s, theta);
+    // The hyperbola (a cosh u, b sinh u) in (r, z) rises with u. An offset
+    // hyperbola is trimmed to the arc: OCCT transfers no edge on the whole,
+    // unbounded OFFSET_CURVE_3D.
+    const curve =
+      s.seg.type === "hyperbolaArc" && s.seg.offset !== 0
+        ? trimmed(s, theta)
+        : hyperbola(s, theta);
     const rising = s.to[1] > s.from[1];
     return add(
       `EDGE_CURVE('',#${va},#${vb},#${curve},${rising ? ".T." : ".F."})`,
@@ -336,18 +422,39 @@ function revolvedFaces(step, segs, sweep) {
   /**
    * HYPERBOLA of a hyperbolic segment in the half-plane θ: centred on the
    * origin, real axis radial, imaginary axis +z (placement axis −tangential).
+   * An offset segment is the OFFSET_CURVE_3D of it, which keeps the
+   * hyperbola's parameter and moves it along ref_direction × tangent (OCCT's
+   * reading): away from the axis for ref_direction +tangential and a positive
+   * distance.
    *
    * @param {ReturnType<typeof meridianSegments>[number]} s
    * @param {number} theta
    */
   const hyperbola = (s, theta) => {
     if (s.seg.type !== "hyperbolaArc") throw new Error("not a hyperbolic arc");
+    const axis = tangential(theta).map((c) => -c);
+    const basis = add(
+      `HYPERBOLA('',#${placement([0, 0, 0], axis, radial(theta))},${real(s.seg.a)},${real(s.seg.b)})`,
+    );
+    if (s.seg.offset === 0) return basis;
     return add(
-      `HYPERBOLA('',#${placement(
-        [0, 0, 0],
-        tangential(theta).map((c) => -c),
-        radial(theta),
-      )},${real(s.seg.a)},${real(s.seg.b)})`,
+      `OFFSET_CURVE_3D('',#${basis},${real(s.seg.offset)},.F.,#${dir(tangential(theta))})`,
+    );
+  };
+  /**
+   * The curve of `hyperbola` trimmed to the segment, in the direction of
+   * rising u.
+   *
+   * @param {ReturnType<typeof meridianSegments>[number]} s
+   * @param {number} theta
+   */
+  const trimmed = (s, theta) => {
+    const [lo, hi] = [
+      Math.min(s.u0 ?? 0, s.u1 ?? 0),
+      Math.max(s.u0 ?? 0, s.u1 ?? 0),
+    ];
+    return add(
+      `TRIMMED_CURVE('',#${hyperbola(s, theta)},(PARAMETER_VALUE(${real(lo)})),(PARAMETER_VALUE(${real(hi)})),.T.,.PARAMETER.)`,
     );
   };
 
@@ -436,11 +543,7 @@ function revolvedFaces(step, segs, sweep) {
         `AXIS1_PLACEMENT('',#${point([0, 0, 0])},#${dir([0, 0, 1])})`,
       );
       surface = [
-        add(
-          `SURFACE_OF_REVOLUTION('',#${add(
-            `TRIMMED_CURVE('',#${hyperbola(s, 0)},(PARAMETER_VALUE(${real(Math.min(s.u0 ?? 0, s.u1 ?? 0))})),(PARAMETER_VALUE(${real(Math.max(s.u0 ?? 0, s.u1 ?? 0))})),.T.,.PARAMETER.)`,
-          )},#${axis})`,
-        ),
+        add(`SURFACE_OF_REVOLUTION('',#${trimmed(s, 0)},#${axis})`),
         rising,
       ];
     }
@@ -589,11 +692,10 @@ export function sphericalShellStep(
  * 1000, height 1000, thickness 10, sweep 90°): the wall about the mid-surface
  * r²/a² − z²/b² = 1 from its waist z = 0 to z = height, θ from 0 to sweepDeg.
  * The end at the waist is the plane z = 0; the top end is normal to the
- * mid-surface (a cone). Inner and outer faces are hyperboloids through the
- * mid-surface offset by ∓ thickness/2 along its normal at both ends: their
- * real semi-axes are a ∓ thickness/2, their imaginary semi-axes fitted
- * through the offset top points. Six faces: 1 waist z = 0, 2 outer
- * hyperboloid, 3 top edge, 4 inner hyperboloid, 5 edge θ = 0, 6 edge
+ * mid-surface (a cone). Inner and outer faces are the mid-surface offset by
+ * ∓ thickness/2 along its normal (surfaces of revolution of offset
+ * hyperbolas), so the wall is exactly `thickness` thick. Six faces: 1 waist
+ * z = 0, 2 outer face, 3 top edge, 4 inner face, 5 edge θ = 0, 6 edge
  * θ = sweep.
  *
  * @param {number} a          mid-surface real semi-axis: the waist radius (mm)
@@ -610,31 +712,21 @@ export function hyperboloidShellStep(a, b, height, thickness, sweepDeg, name) {
     throw new Error(
       `hyperboloid shell needs b > 0 and height > 0, got b ${b}, height ${height}`,
     );
-  const top = [a * Math.sqrt(1 + (height / b) ** 2), height];
-  const normal = unit([top[0] / a ** 2, -top[1] / b ** 2]);
-  /** @param {number} sign @param {number} semi */
-  const offset = (sign, semi) => {
-    /** @type {MeridianPoint} */
-    const p = [
-      top[0] + (sign * thickness * normal[0]) / 2,
-      top[1] + (sign * thickness * normal[1]) / 2,
-    ];
-    const excess = (p[0] / semi) ** 2 - 1;
-    if (!(p[1] > 0 && excess > 0))
-      throw new Error(
-        `hyperboloid shell: thickness ${thickness} is too large for a = ${a}, b = ${b}, height ${height}`,
-      );
-    return { p, b: p[1] / Math.sqrt(excess) };
-  };
-  const outer = offset(1, aOut);
-  const inner = offset(-1, aIn);
+  if (!(thickness / 2 < (b * b) / a))
+    throw new Error(
+      `hyperboloid shell: thickness ${thickness} reaches the least radius of curvature b²/a = ${(b * b) / a} of the mid-surface`,
+    );
+  const uTop = Math.asinh(height / b);
+  const half = thickness / 2;
+  const outer = offsetHyperbolaPoint(a, b, half, uTop);
+  const inner = offsetHyperbolaPoint(a, b, -half, uTop);
   return revolvedSectorStep(
     [
       [
         line([aOut, 0]),
-        hyperbolaArc(outer.p, { a: aOut, b: outer.b }),
-        line(inner.p),
-        hyperbolaArc([aIn, 0], { a: aIn, b: inner.b }),
+        hyperbolaArc(outer, { a, b, offset: half }),
+        line(inner),
+        hyperbolaArc([aIn, 0], { a, b, offset: -half }),
       ],
     ],
     sweepDeg,
