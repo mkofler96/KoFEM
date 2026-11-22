@@ -38,6 +38,9 @@ export const ORDER = [
   "tie-patch-test",
   "tie-lame-cylinder",
   "tie-cantilever",
+  "nafems-le1",
+  "nafems-le2",
+  "nafems-le10",
   "mbb-beam-topopt",
 ];
 
