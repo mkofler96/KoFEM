@@ -31,9 +31,12 @@
 //     point +z and "bottom" is z = 0, the tension side of the sagging plate
 //     (it reads +0.804 MPa, the top surface the mirror −0.804 MPa as σ3).
 //     The two faces have the same area, and which one is kept changes with
-//     the mesh: at 100 and 50 mm the lower face is kept. The recipe then
-//     stops with an error, since the pressure is picked on the upper face,
-//     which is no longer on the shell; it never reads the wrong surface.
+//     the mesh: at 100 and 50 mm the lower face is kept (KOF-451). The recipe
+//     then stops with an error, since the pressure is picked on the upper
+//     face, which is no longer on the shell; it never reads the wrong
+//     surface. The case runs at 12.5 mm so that the re-mesh check of every
+//     example, at twice its own size, stays on meshes that keep the upper
+//     face.
 //   - The pressure acts on the top face along its inward normal, −z.
 //
 // Read-out: the largest principal stress on the bottom surface at E, the
@@ -45,7 +48,7 @@
 // 8 mm → +0.5 % (18131). At 100 and 50 mm the lower face is kept, so those
 // two were run with the pressure picked on it and the read-out on "top", the
 // same physical model. The value settles about 0.5 % above NAFEMS' target;
-// 2 % covers every mesh from 50 mm down. The case runs at 25 mm.
+// 2 % covers every mesh from 50 mm down. The case runs at 12.5 mm.
 
 import { prismStep } from "../../gallery/step-prism.mjs";
 import { APP_STEEL } from "../lib/recipe.mjs";
@@ -56,7 +59,7 @@ const a = 1000; // side (mm)
 const skew = 30; // degrees
 const t = 10; // thickness (mm)
 const p = 0.7e-3; // pressure (MPa): 0.7 kPa
-const h = 25; // Netgen maximum element size (mm)
+const h = 12.5; // Netgen maximum element size (mm)
 
 const c = a * Math.cos((skew * Math.PI) / 180);
 const s = a * Math.sin((skew * Math.PI) / 180);
