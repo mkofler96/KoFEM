@@ -10,6 +10,7 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod field;
 mod mixed;
 mod rigid_body;
 mod section;
@@ -18,6 +19,7 @@ mod shellize;
 mod tie;
 mod topology;
 
+pub use field::{check_field_expression, evaluate_field_expression};
 pub use mixed::MixedModel;
 pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;
@@ -37,6 +39,7 @@ use kofem_fem::{
     ReactionSummary, ShellSurface, StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies,
     DOFS_PER_NODE,
 };
+use kofem_fem::{thermal_load, thermal_strains_at_centres};
 use wasm_bindgen::prelude::*;
 
 fn to_js(error: &FemError) -> JsError {
@@ -162,6 +165,49 @@ impl ElasticModel {
     #[must_use]
     pub fn vertex_count(&self) -> usize {
         self.mesh.vertex_count()
+    }
+
+    /// Node coordinates, x,y,z per node: the vertices, then (quadratic) the
+    /// edge midpoints, hex face centres and hex centres — the points to
+    /// evaluate a nodal field such as a temperature change at.
+    #[wasm_bindgen(getter, js_name = nodeCoordinates)]
+    #[must_use]
+    pub fn node_coordinates(&self) -> Vec<f64> {
+        self.mesh.node_coordinates().as_flattened().to_vec()
+    }
+
+    /// Equivalent nodal forces of a thermal strain, 3 per node like a force
+    /// vector, to add to the mechanical forces before the solve.
+    /// `alpha_per_element`: expansion coefficient (1/°C) of every element,
+    /// tets first, then hexes. `delta_t_per_node`: temperature change from
+    /// the stress-free state at every node (see `nodeCoordinates`).
+    ///
+    /// # Errors
+    /// An array of the wrong length or a value that is not finite.
+    #[wasm_bindgen(js_name = thermalLoad)]
+    pub fn thermal_load(
+        &self,
+        alpha_per_element: &[f64],
+        delta_t_per_node: &[f64],
+    ) -> Result<Vec<f64>, JsError> {
+        thermal_load(&self.mesh, alpha_per_element, delta_t_per_node).map_err(|error| to_js(&error))
+    }
+
+    /// The free thermal strain α·ΔT of every element (tets, then hexes) at its
+    /// centre, where stresses are recovered: each normal strain component, to
+    /// subtract before applying the elasticity matrix (`σ = D·(ε − ε_th)`).
+    /// Inputs as for `thermalLoad`.
+    ///
+    /// # Errors
+    /// An array of the wrong length or a value that is not finite.
+    #[wasm_bindgen(js_name = thermalStrains)]
+    pub fn thermal_strains(
+        &self,
+        alpha_per_element: &[f64],
+        delta_t_per_node: &[f64],
+    ) -> Result<Vec<f64>, JsError> {
+        thermal_strains_at_centres(&self.mesh, alpha_per_element, delta_t_per_node)
+            .map_err(|error| to_js(&error))
     }
 
     /// Add the work-equivalent nodal forces of one surface load to `forces`
