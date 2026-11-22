@@ -107,3 +107,71 @@ export function shellStressAtCentroid(
   // eslint-disable-next-line kofem/no-silent-fallback -- a mid-surface node not touched by any facet (isolated weld artefact) carries no recovered stress
   return vmByShellNode.get(pi) ?? 0;
 }
+
+// Per shell node, the mean stress tensor (six components) of the facets
+// around it. A component cannot take the "worst" facet as von Mises does, so
+// the facets are averaged, as the result plot averages them at a node.
+export function meanFacetTensorPerNode(
+  triangles: ArrayLike<number>,
+  facetTensors: Float64Array,
+): Map<number, Float64Array> {
+  if (facetTensors.length !== 2 * triangles.length)
+    throw new Error(
+      `stress mapping: ${facetTensors.length / 6} facet tensors for ${triangles.length / 3} facets`,
+    );
+  const sums = new Map<number, { sum: Float64Array; count: number }>();
+  for (let t = 0; t < triangles.length / 3; t++)
+    for (const node of [
+      triangles[3 * t],
+      triangles[3 * t + 1],
+      triangles[3 * t + 2],
+    ]) {
+      let entry = sums.get(node);
+      if (!entry) {
+        entry = { sum: new Float64Array(6), count: 0 };
+        sums.set(node, entry);
+      }
+      for (let k = 0; k < 6; k++) entry.sum[k] += facetTensors[6 * t + k];
+      entry.count++;
+    }
+  const means = new Map<number, Float64Array>();
+  for (const [node, { sum, count }] of sums)
+    means.set(
+      node,
+      sum.map((v) => v / count),
+    );
+  return means;
+}
+
+// The recovered stress tensor of an original element: the mean tensor at the
+// shell node nearest its centroid. Throws for an element that references a node
+// the model does not have, or whose nearest shell node touches no facet.
+export function shellTensorAtCentroid(
+  element: Element,
+  nodeById: Map<number, Node>,
+  nearestShell: NearestLocator,
+  tensorByShellNode: Map<number, Float64Array>,
+  context: string,
+): Float64Array {
+  let cx = 0,
+    cy = 0,
+    cz = 0;
+  for (const nid of element.nodeIds) {
+    const nd = nodeById.get(nid);
+    if (!nd)
+      throw new Error(
+        `${context}: element ${element.id} references unknown node id ${nid}`,
+      );
+    cx += nd.x;
+    cy += nd.y;
+    cz += nd.z;
+  }
+  const k = element.nodeIds.length;
+  const pi = nearestShell([cx / k, cy / k, cz / k]);
+  const tensor = tensorByShellNode.get(pi);
+  if (!tensor)
+    throw new Error(
+      `${context}: element ${element.id} lies nearest mid-surface node ${pi}, which no shell facet uses`,
+    );
+  return tensor;
+}

@@ -133,30 +133,3 @@ pub fn stress_tensors(mesh: &TetMesh, displacements: &[f64]) -> Result<Vec<[f64;
         })
         .collect())
 }
-
-/// The principal stresses σ1 ≥ σ2 ≥ σ3 of `[σxx, σyy, σzz, τxy, τyz, τzx]`:
-/// the eigenvalues of the symmetric tensor, in closed form from its
-/// invariants (Smith, Comm. ACM 4 (1961) 168).
-#[must_use]
-pub fn principal_stresses(tensor: [f64; 6]) -> [f64; 3] {
-    let [sx, sy, sz, txy, tyz, tzx] = tensor;
-    let off = txy * txy + tyz * tyz + tzx * tzx;
-    let mean = (sx + sy + sz) / 3.0;
-    let (dx, dy, dz) = (sx - mean, sy - mean, sz - mean);
-    let p2 = dx * dx + dy * dy + dz * dz + 2.0 * off;
-    if p2
-        <= f64::EPSILON * f64::EPSILON * (sx * sx + sy * sy + sz * sz + off).max(f64::MIN_POSITIVE)
-    {
-        return [mean; 3];
-    }
-    let scale = (p2 / 6.0).sqrt();
-    // det((σ − mean·I) / p) / 2 = cos(3φ).
-    let det =
-        dx * (dy * dz - tyz * tyz) - txy * (txy * dz - tyz * tzx) + tzx * (txy * tyz - dy * tzx);
-    let half_det = (det / (scale * scale * scale) / 2.0).clamp(-1.0, 1.0);
-    let phi = half_det.acos() / 3.0;
-    let s1 = mean + 2.0 * scale * phi.cos();
-    let s3 = mean + 2.0 * scale * (phi + 2.0 * std::f64::consts::FRAC_PI_3).cos();
-    let s2 = 3.0 * mean - s1 - s3;
-    [s1, s2, s3]
-}

@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import {
+  SHELL_SURFACES,
+  uniformStress,
+  type ElementStress,
+} from "./stressFields";
 import type {
   AppMode,
   CouplingGroup,
@@ -94,7 +99,11 @@ export interface AnalysisState {
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
-  result: { displacements: Float64Array; vonMises?: Float64Array } | null;
+  result: {
+    displacements: Float64Array;
+    vonMises?: Float64Array;
+    stress?: ElementStress;
+  } | null;
   resultType: ResultType;
   // Topology-optimization setup (KOF-232). Absent in files written before TO
   // existed — such a file restores the default settings. The density field a
@@ -247,6 +256,12 @@ export function serializeAnalysis(state: AnalysisState): string {
     throw new Error(
       `Cannot save analysis: von Mises field has ${result.vonMises.length} values but the mesh has ${elements.length} elements (von Mises is stored per element)`,
     );
+  if (result?.stress)
+    for (const surface of SHELL_SURFACES)
+      if (result.stress[surface].length !== 6 * elements.length)
+        throw new Error(
+          `Cannot save analysis: the ${surface} stress tensors have ${result.stress[surface].length} values but the mesh has ${elements.length} elements (expected six per element)`,
+        );
 
   const idToIndex = new Map(nodes.map((n, i) => [n.id, i]));
   const connectivity: string[] = [];
@@ -326,6 +341,20 @@ export function serializeAnalysis(state: AnalysisState): string {
     cellData.push(
       dataArray("Float64", "VonMises", joinTuples(result.vonMises, 1)),
     );
+  // One tensor per element (σxx σyy σzz τxy τyz τzx); a model with shells
+  // keeps each surface, one without holds the same tensor on all three.
+  if (result?.stress) {
+    const { top, middle, bottom } = result.stress;
+    if (top === middle && middle === bottom)
+      cellData.push(dataArray("Float64", "Stress", joinTuples(top, 6), 6));
+    else
+      for (const [name, values] of [
+        ["StressTop", top],
+        ["StressMiddle", middle],
+        ["StressBottom", bottom],
+      ] as const)
+        cellData.push(dataArray("Float64", name, joinTuples(values, 6), 6));
+  }
 
   const points = nodes.map((n) => `${n.x} ${n.y} ${n.z}`).join("\n");
   const encodedMeta = encodeVtkBinary(JSON.stringify(meta));
@@ -674,6 +703,20 @@ export function parseAnalysisFile(text: string): AnalysisState {
       expectLength(vm.length, nCells, "VonMises");
       result.vonMises = new Float64Array(vm);
     }
+    const tensors = (name: string): Float64Array => {
+      const values = parseNumbers(dataArrayContent(text, name), name);
+      expectLength(values.length, 6 * nCells, name);
+      return new Float64Array(values);
+    };
+    const has = (name: string) =>
+      new RegExp(`<DataArray[^>]*Name="${name}"`).test(text);
+    if (has("Stress")) result.stress = uniformStress(tensors("Stress"));
+    else if (has("StressTop") || has("StressMiddle") || has("StressBottom"))
+      result.stress = {
+        top: tensors("StressTop"),
+        middle: tensors("StressMiddle"),
+        bottom: tensors("StressBottom"),
+      };
   }
 
   // A file written before ties existed carries none. The counter is then not

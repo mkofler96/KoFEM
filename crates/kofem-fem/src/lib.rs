@@ -67,7 +67,7 @@ pub use sparse::CsrMatrix;
 pub use static_solve::{
     prepare_static, solve_static, PreconditionerChoice, PreparedStatic, StaticSolution,
 };
-pub use stress::{principal_stresses, stress_tensors, von_mises};
+pub use stress::{stress_tensors, von_mises};
 pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};
 pub use tie::{
     node_ties, prepare_tied_static, solve_tied_static, NodeTie, PreparedTied, TieReport,

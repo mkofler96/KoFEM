@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { ElementStress } from "../lib/stressFields";
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
@@ -224,10 +225,11 @@ export function useSolver() {
     sendToWorker<{
       displacements: Float64Array;
       vonMises: Float64Array;
+      stress: ElementStress;
       reactions: ReactionSummary | null;
     }>("solve", payload)
-      .then(({ displacements, vonMises, reactions }) => {
-        setResult({ displacements, vonMises, reactions });
+      .then(({ displacements, vonMises, stress, reactions }) => {
+        setResult({ displacements, vonMises, stress, reactions });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",

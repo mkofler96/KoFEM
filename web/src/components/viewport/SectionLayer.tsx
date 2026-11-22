@@ -43,6 +43,7 @@ export function SectionLayer({ topology, section }: SectionLayerProps) {
   const elements = useModelStore((s) => s.elements);
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
+  const shellSurface = useModelStore((s) => s.shellSurface);
   const legendRange = useModelStore((s) => s.legendRange);
   const setSectionRange = useModelStore((s) => s.setSectionRange);
   const setSectionError = useModelStore((s) => s.setSectionError);
@@ -64,7 +65,13 @@ export function SectionLayer({ topology, section }: SectionLayerProps) {
   const { nodeMap, tetElements, hexElements, triElements } = topology;
   const cut = useMemo(() => {
     if (!ready || !result) return null;
-    const values = nodalResultValues(result, resultType, nodes, elements);
+    const values = nodalResultValues(
+      result,
+      resultType,
+      nodes,
+      elements,
+      shellSurface,
+    );
     if (!values) return null;
     let min = Infinity;
     let max = -Infinity;
@@ -104,6 +111,7 @@ export function SectionLayer({ topology, section }: SectionLayerProps) {
     ready,
     result,
     resultType,
+    shellSurface,
     nodes,
     elements,
     nodeMap,

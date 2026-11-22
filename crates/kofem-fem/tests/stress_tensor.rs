@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Stress tensors (KOF-447): the six global components per element, for solid
-//! elements at the centre and for shell facets on a chosen surface, and the
-//! principal stresses of a tensor.
+//! elements at the centre and for shell facets on a chosen surface.
 
 #![allow(
     clippy::expect_used,
@@ -22,8 +21,8 @@
 mod support;
 
 use kofem_fem::{
-    principal_stresses, shell_stress_tensors, stress_tensors, von_mises, ElementOrder, Isotropic,
-    ShellMesh, ShellSurface, TetMesh,
+    shell_stress_tensors, stress_tensors, von_mises, ElementOrder, Isotropic, ShellMesh,
+    ShellSurface, TetMesh,
 };
 use support::box_mesh;
 
@@ -137,35 +136,6 @@ fn von_mises_of_the_tensor_matches_von_mises() {
 fn stress_tensors_refuse_a_displacement_of_the_wrong_length() {
     let mesh = box_mesh([1, 1, 1], [1.0, 1.0, 1.0], steel()).mesh;
     assert!(stress_tensors(&mesh, &[0.0; 5]).is_err());
-}
-
-#[test]
-fn principal_stresses_of_a_diagonal_tensor_are_its_entries_sorted() {
-    let principal = principal_stresses([5.0, -2.0, 7.0, 0.0, 0.0, 0.0]);
-    for (got, want) in principal.iter().zip([7.0, 5.0, -2.0]) {
-        assert!((got - want).abs() < 1e-12, "{principal:?}");
-    }
-}
-
-#[test]
-fn principal_stresses_of_pure_shear_are_plus_and_minus_tau() {
-    let [s1, s2, s3] = principal_stresses([0.0, 0.0, 0.0, 4.0, 0.0, 0.0]);
-    assert!((s1 - 4.0).abs() < 1e-12 && s2.abs() < 1e-12 && (s3 + 4.0).abs() < 1e-12);
-}
-
-#[test]
-fn principal_stresses_keep_the_invariants() {
-    let tensor = [10.0, -3.0, 2.0, 4.0, -1.5, 2.5];
-    let [sx, sy, sz, txy, tyz, tzx] = tensor;
-    let [s1, s2, s3] = principal_stresses(tensor);
-    assert!(s1 >= s2 && s2 >= s3);
-    let i1 = sx + sy + sz;
-    let i2 = sx * sy + sy * sz + sz * sx - txy * txy - tyz * tyz - tzx * tzx;
-    let i3 =
-        sx * sy * sz + 2.0 * txy * tyz * tzx - sx * tyz * tyz - sy * tzx * tzx - sz * txy * txy;
-    assert!((s1 + s2 + s3 - i1).abs() < 1e-9);
-    assert!((s1 * s2 + s2 * s3 + s3 * s1 - i2).abs() < 1e-9);
-    assert!((s1 * s2 * s3 - i3).abs() < 1e-8);
 }
 
 /// One flat facet in the plane z = 0 (normal +z) with a prescribed membrane

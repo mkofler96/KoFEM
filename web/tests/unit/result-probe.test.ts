@@ -111,7 +111,12 @@ const expectVec = (actual: number[], expected: number[]) =>
 
 describe("readProbes", () => {
   test("reads the field and the displacement vector at a node", () => {
-    const [reading] = readProbes([onFace(1, [10, 10, 0], 1)], coarse, "Ux");
+    const [reading] = readProbes(
+      [onFace(1, [10, 10, 0], 1)],
+      coarse,
+      "Ux",
+      "top",
+    );
     const value = expectValue(reading);
     expectVec(value.at, [10, 10, 0]);
     expectVec(value.displacement, field([10, 10, 0]));
@@ -120,7 +125,7 @@ describe("readProbes", () => {
 
   test("interpolates inside a triangle", () => {
     const point: Vec3 = [7, 2, 0];
-    const [reading] = readProbes([onFace(1, point, 1)], coarse, "Uz");
+    const [reading] = readProbes([onFace(1, point, 1)], coarse, "Uz", "top");
     const value = expectValue(reading);
     expectVec(value.displacement, field(point));
     expect(value.value).toBeCloseTo(field(point)[2], 12);
@@ -138,6 +143,7 @@ describe("readProbes", () => {
       [onFace(1, centroid, 1)],
       coarse,
       "Displacement (magnitude)",
+      "top",
     );
     const expected =
       corners.reduce((sum, corner) => sum + norm(field(corner)), 0) / 3;
@@ -146,7 +152,12 @@ describe("readProbes", () => {
 
   test("a point off the face reads the nearest point of its own CAD face", () => {
     // Nearer to face 1 than to face 2, but the probe was placed on face 2.
-    const [reading] = readProbes([onFace(1, [9, 5, 0.1], 2)], coarse, "Uy");
+    const [reading] = readProbes(
+      [onFace(1, [9, 5, 0.1], 2)],
+      coarse,
+      "Uy",
+      "top",
+    );
     const value = expectValue(reading);
     expectVec(value.at, [10, 5, 0.1]);
     expectVec(value.displacement, field([10, 5, 0.1]));
@@ -154,8 +165,8 @@ describe("readProbes", () => {
 
   test("after a re-mesh the probe reads the same point of its CAD face on the new triangles", () => {
     const probes = [onFace(1, [2, 3, 0], 1), onFace(2, [10, 4, 6], 2)];
-    const before = readProbes(probes, coarse, "Uz").map(expectValue);
-    const after = readProbes(probes, fine, "Uz").map(expectValue);
+    const before = readProbes(probes, coarse, "Uz", "top").map(expectValue);
+    const after = readProbes(probes, fine, "Uz", "top").map(expectValue);
     after.forEach((value, i) => {
       expectVec(value.at, before[i].at);
       expectVec(value.displacement, field(probes[i].point));
@@ -164,7 +175,12 @@ describe("readProbes", () => {
   });
 
   test("a CAD face the mesh no longer has is unreadable, with the reason", () => {
-    const [reading] = readProbes([onFace(1, [5, 5, 0], 7)], coarse, "Ux");
+    const [reading] = readProbes(
+      [onFace(1, [5, 5, 0], 7)],
+      coarse,
+      "Ux",
+      "top",
+    );
     expect(reading).toEqual({
       kind: "unreadable",
       reason: "CAD face 7 is not on the current mesh's surface.",
@@ -177,10 +193,10 @@ describe("readProbes", () => {
       point: [10, 4, 6],
       triangle: [2, 5, 6],
     };
-    const [reading] = readProbes([probe], coarse, "Ux");
+    const [reading] = readProbes([probe], coarse, "Ux", "top");
     expectVec(expectValue(reading).displacement, field([10, 4, 6]));
     // That triangle's nodes are gone after a re-mesh.
-    const [stale] = readProbes([probe], fine, "Ux");
+    const [stale] = readProbes([probe], fine, "Ux", "top");
     expect(stale).toEqual({
       kind: "unreadable",
       reason: "Its triangle refers to node 2, which is not in the mesh.",
@@ -192,7 +208,7 @@ describe("readProbes", () => {
       ...fine,
       result: coarse.result,
     };
-    const [reading] = readProbes([onFace(1, [5, 5, 0], 1)], stale, "Ux");
+    const [reading] = readProbes([onFace(1, [5, 5, 0], 1)], stale, "Ux", "top");
     expect(reading).toEqual({
       kind: "unreadable",
       reason:
@@ -225,9 +241,12 @@ describe("readProbes", () => {
       onFace(1, [10, 0, 0], 1),
       onFace(2, [20 / 3, 10 / 3, 0], 1),
     ];
-    const [atNode, inside] = readProbes(probes, shell, "Von Mises stress").map(
-      expectValue,
-    );
+    const [atNode, inside] = readProbes(
+      probes,
+      shell,
+      "Von Mises stress",
+      "top",
+    ).map(expectValue);
     expect(atNode.value).toBeCloseTo(100, 12);
     expect(inside.value).toBeCloseTo((150 + 100 + 150) / 3, 12);
   });
@@ -237,6 +256,7 @@ describe("readProbes", () => {
       [onFace(1, [5, 5, 0], 1)],
       coarse,
       "Von Mises stress",
+      "top",
     );
     expect(reading).toEqual({
       kind: "unreadable",
@@ -250,7 +270,7 @@ describe("fieldExtremes", () => {
   // highest, the values the legend and the Result summary show.
   test("finds the nodes of the field's min and max, the first one on a tie", () => {
     // Ux = 0.001·x + 0.002·y: lowest at node 1, highest at nodes 3 and 6.
-    const { min, max } = fieldExtremes(coarse, "Ux");
+    const { min, max } = fieldExtremes(coarse, "Ux", "top");
     expect(min.nodeId).toBe(1);
     expect(min.value).toBeCloseTo(0, 12);
     expectVec(min.at, [0, 0, 0]);
@@ -262,7 +282,7 @@ describe("fieldExtremes", () => {
 
   test("follows the plotted field", () => {
     // Uy = −0.003·x: lowest on x = 10 (node 2 first), highest on x = 0.
-    const { min, max } = fieldExtremes(coarse, "Uy");
+    const { min, max } = fieldExtremes(coarse, "Uy", "top");
     expect(min.nodeId).toBe(2);
     expect(min.value).toBeCloseTo(-0.03, 12);
     expect(max.nodeId).toBe(1);
@@ -270,7 +290,7 @@ describe("fieldExtremes", () => {
 
   test("a result of another mesh is an error", () => {
     expect(() =>
-      fieldExtremes({ ...fine, result: coarse.result }, "Ux"),
+      fieldExtremes({ ...fine, result: coarse.result }, "Ux", "top"),
     ).toThrow(
       "The result has 18 displacement values for 7 nodes; it belongs to a different mesh.",
     );

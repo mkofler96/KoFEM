@@ -8,6 +8,7 @@
 // result back onto the original mesh. The mid-surface extraction itself lives
 // in shellize.ts.
 
+import { mapSurfaces, type ElementStress } from "../stressFields.js";
 import type {
   Element,
   Node,
@@ -54,7 +55,9 @@ import {
 import {
   buildNearestVertexLocator,
   maxFacetStressPerNode,
+  meanFacetTensorPerNode,
   shellStressAtCentroid,
+  shellTensorAtCentroid,
   type NearestLocator,
 } from "./shellMapping.js";
 
@@ -459,6 +462,47 @@ export function mapCoupledVonMises(
   return vonMises;
 }
 
+// The stress tensors of the coupled solve per original element, on each
+// surface: a solid tet takes its own tensor, a wall tet of the shelled body the
+// mean tensor at its nearest shell node, as mapCoupledVonMises walks them.
+export function mapCoupledStress(
+  stressTets: Float64Array,
+  stressTris: ElementStress,
+  nodes: Node[],
+  elements: Element[],
+  model: CoupledModel,
+  nearestShell: NearestLocator,
+  shellBody: number,
+  wallTets: Set<number>,
+): ElementStress {
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  return mapSurfaces((surface) => {
+    const byShellNode = meanFacetTensorPerNode(
+      model.triangles,
+      stressTris[surface],
+    );
+    const out = new Float64Array(6 * elements.length);
+    let solidIdx = 0;
+    for (let e = 0; e < elements.length; e++) {
+      if (!(elements[e].propertyId === shellBody && wallTets.has(e))) {
+        out.set(stressTets.subarray(6 * solidIdx, 6 * solidIdx + 6), 6 * e);
+        solidIdx++;
+      } else
+        out.set(
+          shellTensorAtCentroid(
+            elements[e],
+            nodeById,
+            nearestShell,
+            byShellNode,
+            "stress mapping",
+          ),
+          6 * e,
+        );
+    }
+    return out;
+  });
+}
+
 // The coupled-assembler inputs of an auto-shell model, plus the mapping of the
 // engine's pool result back onto the original store mesh.
 export interface AutoCoupledSolve {
@@ -484,6 +528,12 @@ export interface AutoCoupledSolve {
     von_mises_tets: Float64Array;
     von_mises_tris: Float64Array;
   }) => SolveFields;
+  // The stress tensors per original element; apart from mapResult because the
+  // stored C++ results carry no tensors.
+  mapStress: (result: {
+    stress_tets: Float64Array;
+    stress_tris: ElementStress;
+  }) => ElementStress;
 }
 
 // Build the coupled solve of an all-tet multibody model whose Shell body is
@@ -651,6 +701,17 @@ export function prepareAutoCoupledSolve(
         wallTets,
       ),
     }),
+    mapStress: (result) =>
+      mapCoupledStress(
+        result.stress_tets,
+        result.stress_tris,
+        nodes,
+        elements,
+        model,
+        nearestShell,
+        shells.shellBody,
+        wallTets,
+      ),
   };
 }
 
@@ -671,6 +732,8 @@ export interface PureShellSolve {
     displacements: Float64Array;
     von_mises: Float64Array;
   }) => SolveFields;
+  // The stress tensors per original element, as for AutoCoupledSolve.
+  mapStress: (result: { stress: ElementStress }) => ElementStress;
 }
 
 // A thin single body (or an assembly where EVERY body is marked Shell) has no
@@ -812,6 +875,28 @@ export function preparePureShellSolve(
           "pure shell stress mapping",
         );
       return { displacements, vonMises };
+    },
+    mapStress: (result) => {
+      const nodeById = new Map(nodes.map((nd) => [nd.id, nd]));
+      return mapSurfaces((surface) => {
+        const byShellNode = meanFacetTensorPerNode(
+          shells.shellTris,
+          result.stress[surface],
+        );
+        const out = new Float64Array(6 * elements.length);
+        for (let e = 0; e < elements.length; e++)
+          out.set(
+            shellTensorAtCentroid(
+              elements[e],
+              nodeById,
+              nearestShell,
+              byShellNode,
+              "pure shell stress mapping",
+            ),
+            6 * e,
+          );
+        return out;
+      });
     },
   };
 }

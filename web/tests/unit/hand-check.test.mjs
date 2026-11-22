@@ -332,6 +332,55 @@ describe("Hand check: probes", () => {
     ).toBeLessThanOrEqual(tolerance(0.05));
   });
 
+  // Facet 0 (nodes 0 1 2) and facet 1 (nodes 0 2 3) of equal area: σyy is
+  // 10 / 30 on the top surface, −10 / −30 on the bottom.
+  const tensors = (a, b) =>
+    new Float64Array([0, a, 0, 0, 0, 0, 0, b, 0, 0, 0, 0]);
+  const stressedShell = model({
+    ...shellModel,
+    result: {
+      ...shellModel.result,
+      stress: {
+        top: tensors(10, 30),
+        middle: tensors(0, 0),
+        bottom: tensors(-10, -30),
+      },
+    },
+  });
+
+  test("stress at a point: a component on the chosen surface, interpolated on the surface", () => {
+    const at = (point, surface) =>
+      evaluateHandCheck(
+        shellCheck({
+          kind: "stress",
+          field: "Normal stress σyy",
+          surface,
+          point,
+        }),
+        stressedShell,
+      );
+    // Node 1 lies on facet 0 only; node 3 on facet 1 only; node 0 on both.
+    expect(at([100, 0, 0], "top")).toEqual({ kind: "compare", fe: 10 });
+    expect(at([0, 50, 0], "bottom")).toEqual({ kind: "compare", fe: -30 });
+    expect(at([0, 0, 0], "top")).toEqual({ kind: "compare", fe: 20 });
+    // A point off the surface reads its nearest surface point: node 1.
+    expect(at([120, -5, 3], "top")).toEqual({ kind: "compare", fe: 10 });
+  });
+
+  test("stress at a point on a result without stress tensors is an error", () => {
+    expect(() =>
+      evaluateHandCheck(
+        shellCheck({
+          kind: "stress",
+          field: "Normal stress σyy",
+          surface: "top",
+          point: [0, 0, 0],
+        }),
+        shellModel,
+      ),
+    ).toThrow(/normal stress σyy/);
+  });
+
   test("shell: a face the idealisation collapsed is an error naming the face", () => {
     expect(() =>
       evaluateHandCheck(
@@ -634,6 +683,25 @@ describe("Hand check: parsing", () => {
       expect(() => parseHandCheck(raw)).toThrow(expected);
     },
   );
+
+  test("a stress probe at a point parses as written, and refuses an unknown field or surface", () => {
+    const probe = {
+      kind: "stress",
+      field: "Max principal stress σ1",
+      surface: "bottom",
+      point: [1, 2, 3],
+    };
+    expect(handCheck({ unit: "MPa", probe }).probe).toEqual(probe);
+    expect(() =>
+      handCheck({ unit: "MPa", probe: { ...probe, field: "σ2" } }),
+    ).toThrow(/probe.field/);
+    expect(() =>
+      handCheck({ unit: "MPa", probe: { ...probe, surface: "outer" } }),
+    ).toThrow(/probe.surface/);
+    expect(() =>
+      handCheck({ unit: "MPa", probe: { ...probe, point: [1, 2] } }),
+    ).toThrow(/probe.point/);
+  });
 
   test("a stress probe without faces and a divideBy parse as written", () => {
     const parsed = parseHandCheck({

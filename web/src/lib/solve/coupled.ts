@@ -7,6 +7,7 @@
 // auto-shell path (autoShell.ts) feeds the same assembler and reuses the
 // coupling/BC packing here.
 
+import { mapSurfaces, type ElementStress } from "../stressFields.js";
 import type {
   Element,
   Property,
@@ -445,4 +446,40 @@ export function mapMixedResult(
         : result.von_mises_tets[solidIdx++];
   }
   return { displacements, vonMises };
+}
+
+// The stress tensors of a mixed solve in element order, surface by surface:
+// solid tets and shell facets interleaved as mapMixedResult interleaves their
+// von Mises. Apart from it because the stored C++ results carry no tensors.
+export function mapMixedStress(
+  payload: Pick<SolveModel, "elements">,
+  result: { stress_tets: Float64Array; stress_tris: ElementStress },
+): ElementStress {
+  const isShell = payload.elements.map((el) => el.type === "CTRIA3");
+  return mapSurfaces((surface) =>
+    interleaveTensors(isShell, result.stress_tets, result.stress_tris[surface]),
+  );
+}
+
+// One tensor per element in element order, taken from the solid tensors for
+// a solid element and from the shell tensors for a shell facet, each in the
+// order its kind crossed the WASM boundary.
+export function interleaveTensors(
+  isShell: readonly boolean[],
+  solid: Float64Array,
+  shell: Float64Array,
+): Float64Array {
+  const out = new Float64Array(6 * isShell.length);
+  let solidIdx = 0,
+    shellIdx = 0;
+  isShell.forEach((onShell, e) => {
+    const from = onShell ? shell : solid;
+    const at = onShell ? shellIdx++ : solidIdx++;
+    if (6 * at + 6 > from.length)
+      throw new Error(
+        `the solve returned ${from.length / 6} ${onShell ? "shell" : "solid"} stress tensors, too few for the mesh's elements`,
+      );
+    out.set(from.subarray(6 * at, 6 * at + 6), 6 * e);
+  });
+  return out;
 }

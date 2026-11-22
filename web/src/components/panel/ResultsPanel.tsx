@@ -19,6 +19,7 @@ import {
   formatHandCheckValue,
   type HandCheck,
 } from "../../lib/handCheck";
+import { isStressField, type ShellSurface } from "../../lib/stressFields";
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { DeformScaleControl } from "./DeformScaleControl";
@@ -29,10 +30,13 @@ import { TopOptResult } from "./TopOptResult";
 import { SupportReactions } from "./SupportReactions";
 import styles from "./Panel.module.css";
 
-// "Von Mises stress" → "von-mises-stress", for test ids.
+// "Von Mises stress" → "von-mises-stress", "Normal stress σxx" →
+// "normal-stress-sigmaxx", for test ids.
 function fieldSlug(field: ResultType): string {
   return field
     .toLowerCase()
+    .replace(/σ/g, "sigma")
+    .replace(/τ/g, "tau")
     .replace(/[^a-z]+/g, "-")
     .replace(/^-|-$/g, "");
 }
@@ -343,6 +347,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const deleteResultPlot = useModelStore((s) => s.deleteResultPlot);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
+  const shellSurface = useModelStore((s) => s.shellSurface);
+  const setShellSurface = useModelStore((s) => s.setShellSurface);
   const handCheck = useModelStore((s) => s.handCheck);
   const refinementStudy = useModelStore((s) => s.refinementStudy);
 
@@ -393,7 +399,16 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const resultType = plot.field;
   // Min/max of the selected scalar field over all nodes — the same field and
   // node averaging used for the viewport coloring and colorbar legend.
-  const stats = computeResultRange(result, resultType, nodes, elements);
+  const stats = computeResultRange(
+    result,
+    resultType,
+    nodes,
+    elements,
+    shellSurface,
+  );
+  // The surface choice matters only for a stress component on a shell.
+  const surfaceChoice =
+    isStressField(resultType) && elements.some((e) => e.type === "CTRIA3");
 
   const fieldSymbol = resultFieldSymbol(resultType);
   const unit = resultUnit(resultType);
@@ -415,6 +430,23 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
             </option>
           ))}
         </select>
+
+        {surfaceChoice && (
+          <>
+            <div className={styles.sectionLabel}>Shell surface</div>
+            <select
+              className={styles.formSelect}
+              style={{ marginBottom: 12 }}
+              data-testid="shell-surface"
+              value={shellSurface}
+              onChange={(e) => setShellSurface(e.target.value as ShellSurface)}
+            >
+              <option value="top">Top (+normal)</option>
+              <option value="middle">Middle</option>
+              <option value="bottom">Bottom (−normal)</option>
+            </select>
+          </>
+        )}
 
         <DeformScaleControl />
 
@@ -445,8 +477,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           </>
         ) : (
           <div className={styles.empty}>
-            {resultType === "Von Mises stress"
-              ? "Von Mises data not available — re-run the solver"
+            {resultType === "Von Mises stress" || isStressField(resultType)
+              ? "Stress data not available — re-run the solver"
               : "No nodal data"}
           </div>
         )}

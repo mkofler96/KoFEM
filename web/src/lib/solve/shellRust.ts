@@ -18,6 +18,7 @@
 //               point_loads?: [{vertex, force?, moment?}] }
 // DOF components are 0..5 = (u, v, w, θx, θy, θz).
 
+import type { ElementStress } from "../stressFields.js";
 import type { ShellModel } from "../../wasm/fem/kofem_wasm.js";
 import type { ShellMesh } from "./contracts.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
@@ -43,6 +44,8 @@ export interface ShellSolveResult {
   displacements: Float64Array;
   // One surface von Mises stress per triangle.
   von_mises: Float64Array;
+  // The stress tensor of every triangle on each surface.
+  stress: ElementStress;
   iterations: number;
   // Each support's reaction; null when the caller named no supports.
   reactions: ReactionSummary | null;
@@ -105,6 +108,11 @@ export async function solveShellInRust(
         const dofs = solution.displacements;
         const displacements = Float64Array.from(model.translations(dofs));
         const vonMises = Float64Array.from(model.vonMises(dofs));
+        const stress: ElementStress = {
+          top: model.stressTensors(dofs, "top"),
+          middle: model.stressTensors(dofs, "middle"),
+          bottom: model.stressTensors(dofs, "bottom"),
+        };
         const seconds = (performance.now() - started) / 1000;
         log(
           `[shell] converged: ${solution.iterations} iterations, relative residual ` +
@@ -113,6 +121,7 @@ export async function solveShellInRust(
         return {
           displacements,
           von_mises: vonMises,
+          stress,
           iterations: solution.iterations,
           reactions:
             supports === undefined

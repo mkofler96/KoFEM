@@ -52,6 +52,7 @@ import { rustTieTables } from "./solid.js";
 import { shellMarkedBodies } from "./autoShell.js";
 import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
+import { uniformStress, type ElementStress } from "../stressFields.js";
 import {
   readReactions,
   supportOwners,
@@ -214,6 +215,7 @@ export async function solveSolidInRust(
 ): Promise<{
   displacements: Float64Array;
   vonMises: Float64Array;
+  stress: ElementStress;
   reactions: ReactionSummary | null;
 }> {
   const reason = amgUnavailableReason({
@@ -301,6 +303,7 @@ export async function solveSolidInRust(
         return {
           displacements: nodal.slice(0, 3 * elastic.vertexCount),
           vonMises: elastic.vonMises(nodal),
+          stress: uniformStress(elastic.stressTensors(nodal)),
           reactions: readReactions(elastic, solution, forces, supports),
         };
       },
@@ -456,6 +459,8 @@ export async function solveCoupledSolidInRust(
   displacements: Float64Array;
   von_mises_tets: Float64Array;
   von_mises_tris: Float64Array;
+  stress_tets: Float64Array;
+  stress_tris: ElementStress;
   reactions: ReactionSummary | null;
 }> {
   const { mesh, coupling, bcs, solidMaterials } = input;
@@ -555,6 +560,8 @@ export async function solveCoupledSolidInRust(
             displacements: nodal.slice(0, 3 * pointCount),
             von_mises_tets: elastic.vonMises(nodal),
             von_mises_tris: new Float64Array(0),
+            stress_tets: elastic.stressTensors(nodal),
+            stress_tris: uniformStress(new Float64Array(0)),
             reactions:
               supports === undefined
                 ? null

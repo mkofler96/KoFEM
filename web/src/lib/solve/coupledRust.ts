@@ -22,6 +22,7 @@
 //   matJson   { solid, shell }: each one { young_modulus, poisson_ratio }
 //             or an ARRAY of them selected by the matching attributes
 
+import type { ElementStress } from "../stressFields.js";
 import type { Couplings, MixedModel } from "../../wasm/fem/kofem_wasm.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
 import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
@@ -70,6 +71,9 @@ export interface CoupledSolveResult {
   // One von Mises stress per tet, then one surface stress per shell facet.
   von_mises_tets: Float64Array;
   von_mises_tris: Float64Array;
+  // The stress tensor of every tet, and of every shell facet on each surface.
+  stress_tets: Float64Array;
+  stress_tris: ElementStress;
   iterations: number;
   // Each support's reaction; null when the caller named no supports.
   reactions: ReactionSummary | null;
@@ -361,6 +365,12 @@ export async function solveCoupledInRust(
           displacements: Float64Array.from(model.translations(dofs)),
           von_mises_tets: Float64Array.from(model.vonMisesTets(dofs)),
           von_mises_tris: Float64Array.from(model.vonMisesTris(dofs)),
+          stress_tets: model.stressTensorsTets(dofs),
+          stress_tris: {
+            top: model.stressTensorsTris(dofs, "top"),
+            middle: model.stressTensorsTris(dofs, "middle"),
+            bottom: model.stressTensorsTris(dofs, "bottom"),
+          },
           iterations: solution.iterations,
           reactions:
             supports === undefined
