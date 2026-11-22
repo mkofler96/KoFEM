@@ -39,6 +39,7 @@ import nafemsLe1 from "./nafems-le1.mjs";
 import nafemsLe10 from "./nafems-le10.mjs";
 import nafemsLe11 from "./nafems-le11.mjs";
 import nafemsLe2 from "./nafems-le2.mjs";
+import nafemsLe5 from "./nafems-le5.mjs";
 import nafemsLe6 from "./nafems-le6.mjs";
 import { validateRecipe } from "../lib/recipe.mjs";
 
@@ -99,6 +100,7 @@ export default [
   tieCantilever,
   nafemsLe1,
   nafemsLe2,
+  nafemsLe5,
   nafemsLe6,
   nafemsLe10,
   nafemsLe11,

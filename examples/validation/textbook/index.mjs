@@ -24,6 +24,10 @@ import surfacePressure from "./surface-pressure.mjs";
 import tiePatchTest from "./tie-patch-test.mjs";
 import tieLameCylinder from "./tie-lame-cylinder.mjs";
 import tieCantilever from "./tie-cantilever.mjs";
+import nafemsLe1 from "./nafems-le1.mjs";
+import nafemsLe2 from "./nafems-le2.mjs";
+import nafemsLe10 from "./nafems-le10.mjs";
+import nafemsLe11 from "./nafems-le11.mjs";
 
 export default new Map([
   ["axial-bar", axialBar],
@@ -38,4 +42,8 @@ export default new Map([
   ["tie-patch-test", tiePatchTest],
   ["tie-lame-cylinder", tieLameCylinder],
   ["tie-cantilever", tieCantilever],
+  ["nafems-le1", nafemsLe1],
+  ["nafems-le2", nafemsLe2],
+  ["nafems-le10", nafemsLe10],
+  ["nafems-le11", nafemsLe11],
 ]);

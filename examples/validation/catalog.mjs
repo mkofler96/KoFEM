@@ -40,6 +40,7 @@ export const ORDER = [
   "tie-cantilever",
   "nafems-le1",
   "nafems-le2",
+  "nafems-le5",
   "nafems-le6",
   "nafems-le10",
   "nafems-le11",

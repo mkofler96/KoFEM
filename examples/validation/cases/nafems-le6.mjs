@@ -73,7 +73,13 @@ const rhombus = [
 const side = (i) => {
   const [x0, y0] = rhombus[i];
   const [x1, y1] = rhombus[(i + 1) % 4];
-  return { at: /** @type {[number, number, number]} */ ([(x0 + x1) / 2, (y0 + y1) / 2, t / 2]) };
+  return {
+    at: /** @type {[number, number, number]} */ ([
+      (x0 + x1) / 2,
+      (y0 + y1) / 2,
+      t / 2,
+    ]),
+  };
 };
 const centre = [(a + c) / 2, s / 2]; // E = (A + C) / 2
 

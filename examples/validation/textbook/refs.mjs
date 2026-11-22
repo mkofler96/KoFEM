@@ -4,6 +4,8 @@
 // Literature cited on the example pages.
 
 export const REF = {
+  nafems:
+    "NAFEMS, <cite>The Standard NAFEMS Benchmarks</cite>, publication TNSB, Rev. 3, National Agency for Finite Element Methods and Standards, 1990: linear elastic tests LE1–LE11.",
   gere: "J. M. Gere and B. J. Goodno, <cite>Mechanics of Materials</cite>, Cengage Learning: axially loaded members, torsion, deflections of beams.",
   timoshenkoGoodier:
     "S. P. Timoshenko and J. N. Goodier, <cite>Theory of Elasticity</cite>, 3rd ed., McGraw-Hill, 1970.",
