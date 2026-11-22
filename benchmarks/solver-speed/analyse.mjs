@@ -16,7 +16,7 @@
 //   writes <out-dir>/results.md and SVG figures
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const [outDir, ...files] = process.argv.slice(2);
 if (!outDir || files.length === 0)
@@ -58,11 +58,14 @@ const percentile = (a, q) => {
 };
 const B = 10000;
 
-// group[runtime][model][config] = rows
+// One section per run file: a file is one randomised experiment (one runtime,
+// one set of builds, one seed), and rounds of different experiments are never
+// pooled. group[run][model][config] = rows
+const runName = (r) => basename(r.file, ".jsonl");
 const group = {};
 for (const r of rows) {
-  ((group[r.runtime] ??= {})[modelKey(r)] ??= {})[r.config] ??= [];
-  group[r.runtime][modelKey(r)][r.config].push(r);
+  ((group[runName(r)] ??= {})[modelKey(r)] ??= {})[r.config] ??= [];
+  group[runName(r)][modelKey(r)][r.config].push(r);
 }
 
 const metric = {
@@ -119,8 +122,19 @@ out.push(
 );
 
 const rand = rng(12345);
-for (const [runtime, models] of Object.entries(group)) {
-  out.push(`## ${runtime}`, "");
+for (const [run, models] of Object.entries(group)) {
+  const runRows = rows.filter((r) => runName(r) === run);
+  const runtimes = [...new Set(runRows.map((r) => r.runtime))];
+  if (runtimes.length !== 1)
+    throw new Error(
+      `${run}: one runtime per run file, found ${runtimes.join(", ")}`,
+    );
+  out.push(`## ${run}`, "", `Runtime: ${runtimes[0]}. Builds:`, "");
+  for (const [config, build] of new Map(
+    runRows.map((r) => [r.config, r.build]),
+  ))
+    out.push(`- \`${config}\`: \`${build}\``);
+  out.push("");
   const keys = Object.keys(models).sort();
   const configs = [
     ...new Set(keys.flatMap((k) => Object.keys(models[k]))),
@@ -144,9 +158,18 @@ for (const [runtime, models] of Object.entries(group)) {
   out.push("");
 
   const has = (...cs) => keys.filter((k) => cs.every((c) => models[k][c]));
+  const summary = [];
   const factor = (title, a, b, m) => {
     const ks = has(a, b);
     if (!ks.length) return;
+    const all = pooled(
+      ks.map((k) => models[k]),
+      a,
+      b,
+      m,
+      rand,
+    );
+    summary.push({ title, metric: m, ...all });
     out.push(`### ${title}: ${a} / ${b} (${m})`, "");
     out.push("| Model | Ratio [95 % CI] |", "| --- | ---: |");
     for (const k of ks)
@@ -154,15 +177,7 @@ for (const [runtime, models] of Object.entries(group)) {
         `| ${k} | ${fmtR(ratio(models[k][a], models[k][b], m, rand))} |`,
       );
     out.push(
-      `| **Geometric mean over ${ks.length} models** | **${fmtR(
-        pooled(
-          ks.map((k) => models[k]),
-          a,
-          b,
-          m,
-          rand,
-        ),
-      )}** |`,
+      `| **Geometric mean over ${ks.length} models** | **${fmtR(all)}** |`,
       "",
     );
   };
@@ -204,6 +219,36 @@ for (const [runtime, models] of Object.entries(group)) {
     "rust-gs",
     "iterations",
   );
+  factor(
+    "SIMD off against on, Rust Gauss–Seidel",
+    "rust-gs@nosimd",
+    "rust-gs",
+    "total",
+  );
+  factor(
+    "SIMD off against on, Rust Gauss–Seidel, time per iteration",
+    "rust-gs@nosimd",
+    "rust-gs",
+    "perIteration",
+  );
+  factor(
+    "SIMD off against on, Rust Gauss–Seidel, assembly",
+    "rust-gs@nosimd",
+    "rust-gs",
+    "assembly",
+  );
+  factor(
+    "SIMD off against on, Rust AMG",
+    "rust-amg@nosimd",
+    "rust-amg",
+    "total",
+  );
+  factor(
+    "SIMD off against on, Rust AMG, setup",
+    "rust-amg@nosimd",
+    "rust-amg",
+    "setup",
+  );
   factor("Gauss–Seidel against AMG, Rust", "rust-gs", "rust-amg", "total");
   factor(
     "Shipped C++ against Rust AMG (the change users saw)",
@@ -211,6 +256,80 @@ for (const [runtime, models] of Object.entries(group)) {
     "rust-amg",
     "total",
   );
+
+  if (summary.length)
+    writeFileSync(join(outDir, `factors-${run}.svg`), forestFigure(summary));
+
+  // How a speed-up grows with model size: ln(ratio of medians) against
+  // ln(DOF), least squares, per element order (quadratic elements iterate far
+  // more under Gauss–Seidel, so the orders are not pooled). The interval
+  // resamples models, and each model's rounds, together.
+  const trend = (title, a, b) => {
+    const rowsOut = [];
+    const points = [];
+    for (const order of [1, 2]) {
+      const ks = has(a, b).filter((k) => models[k][a][0].order === order);
+      if (ks.length < 5) continue;
+      const pairs = ks.map((k) => ({
+        dofs: models[k][a][0].dofs,
+        a: models[k][a].map(metric.total),
+        b: models[k][b].map(metric.total),
+      }));
+      const slope = (ps, pick) => {
+        const xs = ps.map((p) => Math.log(p.dofs));
+        const ys = ps.map((p) => Math.log(pick(p)));
+        const mx = xs.reduce((u, v) => u + v, 0) / xs.length;
+        const my = ys.reduce((u, v) => u + v, 0) / ys.length;
+        let sxy = 0,
+          sxx = 0;
+        xs.forEach((x, i) => {
+          sxy += (x - mx) * (ys[i] - my);
+          sxx += (x - mx) ** 2;
+        });
+        return sxy / sxx;
+      };
+      const point = slope(pairs, (p) => median(p.a) / median(p.b));
+      const boot = [];
+      for (let i = 0; i < B; i++) {
+        const pick = resample(pairs, rand);
+        // A resample that repeats one model only has no slope.
+        if (new Set(pick.map((p) => p.dofs)).size < 2) continue;
+        boot.push(
+          slope(
+            pick,
+            (p) => median(resample(p.a, rand)) / median(resample(p.b, rand)),
+          ),
+        );
+      }
+      rowsOut.push(
+        `| P${order} | ${ks.length} | ${fmtR({ point, lo: percentile(boot, 0.025), hi: percentile(boot, 0.975) })} |`,
+      );
+      for (const p of pairs)
+        points.push({ order, dofs: p.dofs, ratio: median(p.a) / median(p.b) });
+    }
+    if (!rowsOut.length) return;
+    out.push(
+      `### ${title} against model size: ${a} / ${b}`,
+      "",
+      "Exponent b of speed-up ∝ DOF^b, fitted to the ratios of medians.",
+      "",
+      "| Order | Models | b [95 % CI] |",
+      "| --- | ---: | ---: |",
+      ...rowsOut,
+      "",
+    );
+    const slug = `${a}-over-${b}`.replace(/[^a-z0-9-]+/gi, "-");
+    writeFileSync(
+      join(outDir, `size-${slug}-${run}.svg`),
+      sizeFigure(points, title),
+    );
+  };
+  trend(
+    "Speed-up of Rust AMG over the shipped C++",
+    "mfem:A-shipped",
+    "rust-amg",
+  );
+  trend("Speed-up of AMG over Gauss–Seidel, Rust", "rust-gs", "rust-amg");
 
   // Phase breakdown of the medians.
   out.push("### Phases (medians)", "");
@@ -235,7 +354,7 @@ for (const [runtime, models] of Object.entries(group)) {
   // Figure: iterations and time against DOFs, GS vs AMG (and MFEM where run).
   const scaling = keys.map((k) => ({ k, m: models[k] }));
   writeFileSync(
-    join(outDir, `scaling-${runtime.split(" ")[0]}.svg`),
+    join(outDir, `scaling-${run}.svg`),
     scalingFigure(scaling, configs),
   );
 }
@@ -245,9 +364,9 @@ console.log(`wrote ${join(outDir, "results.md")}`);
 // ── Figure ────────────────────────────────────────────────────────────────────
 
 function scalingFigure(scaling, configs) {
-  const W = 760,
+  const W = 840,
     H = 320,
-    P = { l: 56, r: 150, t: 28, b: 44 };
+    P = { l: 56, r: 210, t: 28, b: 44 };
   const pw = (W - P.l - P.r) / 2 - 20,
     ph = H - P.t - P.b;
   const colours = {
@@ -298,6 +417,65 @@ function scalingFigure(scaling, configs) {
     legend += `<circle cx="${W - P.r + 16}" cy="${P.t + 10 + 18 * i}" r="4" fill="${colours[c]}"/><text x="${W - P.r + 26}" y="${P.t + 14 + 18 * i}" font-size="11" fill="#374151">${names[c]}</text>`;
   });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="system-ui, sans-serif"><rect width="${W}" height="${H}" fill="#fff"/>${panel(P.l, "iterations", "CG iterations")}${panel(P.l + pw + 60, "total", "solve time (ms)")}${legend}</svg>\n`;
+}
+
+/** Forest plot of the pooled factor effects of one run (log axis). */
+function forestFigure(summary) {
+  const W = 900,
+    row = 26,
+    P = { l: 440, r: 30, t: 30, b: 40 };
+  const H = P.t + P.b + row * summary.length;
+  const lo = Math.min(0.8, ...summary.map((s) => s.lo));
+  const hi = Math.max(1.25, ...summary.map((s) => s.hi));
+  const [x0, x1] = [Math.log10(lo) - 0.05, Math.log10(hi) + 0.05];
+  const X = (v) => P.l + ((Math.log10(v) - x0) / (x1 - x0)) * (W - P.l - P.r);
+  const ticks = [0.5, 0.8, 1, 1.25, 2, 4, 8, 16].filter(
+    (t) => t >= 10 ** x0 && t <= 10 ** x1,
+  );
+  let s = "";
+  for (const t of ticks)
+    s += `<line x1="${X(t)}" x2="${X(t)}" y1="${P.t - 6}" y2="${H - P.b}" stroke="${t === 1 ? "#6b7280" : "#e5e7eb"}"/><text x="${X(t)}" y="${H - P.b + 16}" font-size="11" text-anchor="middle" fill="#6b7280">${t}</text>`;
+  summary.forEach((f, i) => {
+    const y = P.t + row * i + row / 2;
+    s += `<text x="${P.l - 10}" y="${y + 4}" font-size="11" text-anchor="end" fill="#374151">${f.title}</text>`;
+    s += `<line x1="${X(f.lo).toFixed(1)}" x2="${X(f.hi).toFixed(1)}" y1="${y}" y2="${y}" stroke="#0f766e" stroke-width="2"/>`;
+    s += `<circle cx="${X(f.point).toFixed(1)}" cy="${y}" r="4" fill="#0f766e"><title>${f.point.toFixed(3)} [${f.lo.toFixed(3)}, ${f.hi.toFixed(3)}]</title></circle>`;
+  });
+  s += `<text x="${W - P.r}" y="${H - 6}" font-size="11" text-anchor="end" fill="#6b7280">ratio of median times, geometric mean over models, 95 % CI (above 1: first slower)</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="system-ui, sans-serif"><rect width="${W}" height="${H}" fill="#fff"/>${s}</svg>\n`;
+}
+
+/** A speed-up against degrees of freedom, log–log, by element order. */
+function sizeFigure(points, title) {
+  const W = 560,
+    H = 320,
+    P = { l: 56, r: 110, t: 32, b: 44 };
+  const lx = Math.log10;
+  const [x0, x1] = [
+    Math.floor(lx(Math.min(...points.map((p) => p.dofs)))),
+    Math.ceil(lx(Math.max(...points.map((p) => p.dofs)))),
+  ];
+  const [y0, y1] = [
+    Math.min(0, Math.floor(lx(Math.min(...points.map((p) => p.ratio))))),
+    Math.ceil(lx(Math.max(...points.map((p) => p.ratio)))),
+  ];
+  const X = (v) => P.l + ((lx(v) - x0) / (x1 - x0)) * (W - P.l - P.r);
+  const Y = (v) => P.t + ((y1 - lx(v)) / (y1 - y0)) * (H - P.t - P.b);
+  const colour = { 1: "#7c3aed", 2: "#0f766e" };
+  let s = "";
+  for (let e = x0; e <= x1; e++)
+    s += `<line x1="${X(10 ** e)}" x2="${X(10 ** e)}" y1="${P.t}" y2="${H - P.b}" stroke="#e5e7eb"/><text x="${X(10 ** e)}" y="${H - P.b + 16}" font-size="11" text-anchor="middle" fill="#6b7280">10${sup(e)}</text>`;
+  for (const t of [1, 2, 5, 10, 20, 50, 100].filter(
+    (t) => lx(t) >= y0 && lx(t) <= y1,
+  ))
+    s += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${t === 1 ? "#6b7280" : "#e5e7eb"}"/><text x="${P.l - 6}" y="${Y(t) + 4}" font-size="11" text-anchor="end" fill="#6b7280">${t}×</text>`;
+  for (const p of points)
+    s += `<circle cx="${X(p.dofs).toFixed(1)}" cy="${Y(p.ratio).toFixed(1)}" r="4" fill="${colour[p.order]}" opacity="0.85"><title>P${p.order}, ${p.dofs} DOF: ${p.ratio.toFixed(2)}×</title></circle>`;
+  [1, 2].forEach((o, i) => {
+    s += `<circle cx="${W - P.r + 16}" cy="${P.t + 10 + 18 * i}" r="4" fill="${colour[o]}"/><text x="${W - P.r + 26}" y="${P.t + 14 + 18 * i}" font-size="11" fill="#374151">${o === 1 ? "linear" : "quadratic"}</text>`;
+  });
+  s += `<text x="${P.l}" y="${P.t - 12}" font-size="12" fill="#374151">${title}</text><text x="${W - P.r}" y="${H - 6}" font-size="11" text-anchor="end" fill="#6b7280">degrees of freedom</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" font-family="system-ui, sans-serif"><rect width="${W}" height="${H}" fill="#fff"/>${s}</svg>\n`;
 }
 
 function sup(e) {

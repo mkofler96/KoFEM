@@ -10,6 +10,9 @@
 //                    --variants (build-engine-variant.sh)
 //   rust-gs          the Rust module's PCG with symmetric Gauss–Seidel
 //   rust-amg         the Rust module's PCG with smoothed-aggregation AMG
+//   rust-gs@<name>,  the same with a second build of the Rust module, loaded
+//   rust-amg@<name>  side by side (make-entry.mjs --alt <name>=<dir>), so two
+//                    builds are randomised within the same rounds
 //
 // The app code and the Rust module come from a source tree (make-entry.mjs
 // writes an entry that imports them statically), so the same code runs
@@ -67,6 +70,24 @@ export async function runBenchmark(deps, argv) {
     Ties: femGlue.Ties,
   };
   const femId = sha1(femWasm);
+  // A second build of the Rust module, as its own glue instance.
+  let femAlt = null;
+  if (deps.femAlt) {
+    const bytes = readFileSync(deps.femAlt.wasmPath);
+    await deps.femAlt.glue.default({ module_or_path: bytes });
+    femAlt = {
+      name: deps.femAlt.name,
+      id: sha1(bytes),
+      fem: {
+        ElasticModel: deps.femAlt.glue.ElasticModel,
+        SolveOptions: deps.femAlt.glue.SolveOptions,
+        Ties: deps.femAlt.glue.Ties,
+      },
+    };
+  }
+  for (const c of configs.filter((c) => c.includes("@")))
+    if (!femAlt || c.split("@")[1] !== femAlt.name)
+      throw new Error(`${c}: no Rust build "${c.split("@")[1]}" loaded`);
 
   // One compiled module per MFEM variant; instantiated afresh for every solve.
   const mfem = new Map();
@@ -151,12 +172,12 @@ export async function runBenchmark(deps, argv) {
     };
   }
 
-  async function solveRust(method, model, order) {
+  async function solveRust(method, model, order, build = fem) {
     const lines = [];
     const vid = buildVertexIndexer(model.nodes);
     const t0 = performance.now();
     const result = await solveSolidInRust(
-      fem,
+      build,
       model,
       order,
       method,
@@ -193,6 +214,10 @@ export async function runBenchmark(deps, argv) {
     if (config.startsWith("mfem:")) return solveMfem(config, model, order);
     if (config === "rust-gs") return solveRust("gauss-seidel", model, order);
     if (config === "rust-amg") return solveRust("amg", model, order);
+    if (femAlt && config === `rust-gs@${femAlt.name}`)
+      return solveRust("gauss-seidel", model, order, femAlt.fem);
+    if (femAlt && config === `rust-amg@${femAlt.name}`)
+      return solveRust("amg", model, order, femAlt.fem);
     throw new Error(`unknown configuration ${config}`);
   }
 
@@ -204,6 +229,17 @@ export async function runBenchmark(deps, argv) {
       diff = Math.max(diff, Math.abs(reference[i] - other[i]));
     }
     return diff / peak;
+  }
+
+  // The largest nodal displacement magnitude: a global read-out to follow
+  // across meshes (displacements are x, y, z per node).
+  function maxDisplacement(u) {
+    if (u.length % 3 !== 0)
+      throw new Error(`displacements: ${u.length} values, not 3 per node`);
+    let peak = 0;
+    for (let i = 0; i < u.length; i += 3)
+      peak = Math.max(peak, Math.hypot(u[i], u[i + 1], u[i + 2]));
+    return peak;
   }
 
   const only = args.only ? args.only.split(",") : null;
@@ -233,7 +269,11 @@ export async function runBenchmark(deps, argv) {
           elements: spec.elements,
           dofs: r.dofs,
           config,
-          build: config.startsWith("mfem:") ? mfem.get(config).id : femId,
+          build: config.startsWith("mfem:")
+            ? mfem.get(config).id
+            : config.includes("@")
+              ? femAlt.id
+              : femId,
           round,
           warmup: round < warmup,
           totalMs: r.totalMs,
@@ -241,6 +281,7 @@ export async function runBenchmark(deps, argv) {
           iterations: r.iterations,
           levels: r.levels ?? null,
           maxRelDiffToFirst: diff,
+          maxDisplacement: maxDisplacement(r.displacements),
           firstConfig: reference.get("first").config,
           runtime,
           seed: Number(args.seed ?? 1),
