@@ -72,7 +72,10 @@ pub use static_solve::{
 };
 pub use stress::{corner_stress_tensors, stress_tensors, von_mises};
 pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};
-pub use thermal::{thermal_load, thermal_strain_at_centre, thermal_strains_at_centres};
+pub use thermal::{
+    corner_stress_tensors_thermal, thermal_load, thermal_strain_at_centre,
+    thermal_strains_at_centres,
+};
 pub use tie::{
     node_ties, prepare_tied_static, solve_tied_static, NodeTie, PreparedTied, TieReport,
     TiedSolution, VertexTies,

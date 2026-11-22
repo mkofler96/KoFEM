@@ -218,3 +218,39 @@ pub fn thermal_strains_at_centres(
         .map(|element| centre_strain(mesh, element, alpha, delta_t))
         .collect())
 }
+
+/// The stress tensor of every element at each of its corner vertices, as
+/// [`crate::corner_stress_tensors`] gives it, with the thermal strain
+/// removed: `σ = D·(ε − α·ΔT·I)`, so each normal component drops by
+/// `(3λ + 2μ)·α·ΔT` with ΔT at that corner. A corner is a vertex node, where
+/// the interpolated ΔT is its nodal value.
+///
+/// # Errors
+/// The displacement error of [`crate::corner_stress_tensors`] and the input
+/// errors of [`thermal_load`].
+pub fn corner_stress_tensors_thermal(
+    mesh: &TetMesh,
+    displacements: &[f64],
+    alpha: &[f64],
+    delta_t: &[f64],
+) -> Result<Vec<[f64; 6]>, FemError> {
+    check_input(mesh, alpha, delta_t)?;
+    let mut tensors = crate::stress::corner_stress_tensors(mesh, displacements)?;
+    let mut corner = 0;
+    for (element, &expansion) in alpha.iter().enumerate() {
+        let corners = match mesh.shape(element) {
+            ElementShape::Tetrahedron => 4,
+            ElementShape::Hexahedron => 8,
+        };
+        let (lambda, mu) = mesh.material(element).lame();
+        let stiffness = (3.0 * lambda + 2.0 * mu) * expansion;
+        for &node in &mesh.element_nodes(element)[..corners] {
+            let thermal = stiffness * delta_t[node as usize];
+            for component in &mut tensors[corner][..3] {
+                *component -= thermal;
+            }
+            corner += 1;
+        }
+    }
+    Ok(tensors)
+}

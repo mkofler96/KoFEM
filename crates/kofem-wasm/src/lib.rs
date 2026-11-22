@@ -39,7 +39,7 @@ use kofem_fem::{
     ReactionSummary, ShellSurface, StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies,
     DOFS_PER_NODE,
 };
-use kofem_fem::{thermal_load, thermal_strains_at_centres};
+use kofem_fem::{corner_stress_tensors_thermal, thermal_load, thermal_strains_at_centres};
 use wasm_bindgen::prelude::*;
 
 fn to_js(error: &FemError) -> JsError {
@@ -191,6 +191,30 @@ impl ElasticModel {
         delta_t_per_node: &[f64],
     ) -> Result<Vec<f64>, JsError> {
         thermal_load(&self.mesh, alpha_per_element, delta_t_per_node).map_err(|error| to_js(&error))
+    }
+
+    /// The corner stress tensors as `stressTensors` gives them, with the
+    /// thermal strain of `alphaPerElement` (1/°C) and `deltaTPerNode` (°C)
+    /// removed: σ = D·(ε − α·ΔT·I).
+    ///
+    /// # Errors
+    /// A displacement, expansion or temperature array that does not fit the
+    /// mesh, or a value that is not finite.
+    #[wasm_bindgen(js_name = stressTensorsThermal)]
+    pub fn stress_tensors_thermal(
+        &self,
+        displacements: &[f64],
+        alpha_per_element: &[f64],
+        delta_t_per_node: &[f64],
+    ) -> Result<Vec<f64>, JsError> {
+        corner_stress_tensors_thermal(
+            &self.mesh,
+            displacements,
+            alpha_per_element,
+            delta_t_per_node,
+        )
+        .map(|tensors| tensors.into_iter().flatten().collect())
+        .map_err(|error| to_js(&error))
     }
 
     /// The free thermal strain α·ΔT of every element (tets, then hexes) at its

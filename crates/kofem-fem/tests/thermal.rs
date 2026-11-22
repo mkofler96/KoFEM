@@ -25,9 +25,9 @@ use kofem_fem::element::{
     tet4_gradients, CENTROID, HEX_CENTRE,
 };
 use kofem_fem::{
-    assemble_stiffness, solve_static, thermal_load, thermal_strain_at_centre,
-    thermal_strains_at_centres, CgSettings, ElementOrder, ElementShape, FemError, Isotropic,
-    PreconditionerChoice, StoppingRule, TetMesh,
+    assemble_stiffness, corner_stress_tensors_thermal, solve_static, thermal_load,
+    thermal_strain_at_centre, thermal_strains_at_centres, CgSettings, ElementOrder, ElementShape,
+    FemError, Isotropic, PreconditionerChoice, StoppingRule, TetMesh,
 };
 use support::box_mesh;
 
@@ -246,6 +246,14 @@ fn assert_free_expansion(mesh: &TetMesh) {
             "element {element}: stress {stress:?}"
         );
     }
+    // The corner stresses the app shows, with the thermal strain removed.
+    let corners = corner_stress_tensors_thermal(mesh, &displacements, &alpha, &temperatures)
+        .expect("valid thermal input");
+    for tensor in corners {
+        for value in tensor {
+            assert!(value.abs() <= 1e-7 * restrained, "corner stress {tensor:?}");
+        }
+    }
 }
 
 #[test]
@@ -309,6 +317,18 @@ fn assert_restrained(mesh: &TetMesh) {
                     "element {element} σ[{row}][{col}] = {value}, expected {target}"
                 );
             }
+        }
+    }
+
+    let corners = corner_stress_tensors_thermal(mesh, &displacements, &alpha, &temperatures)
+        .expect("valid thermal input");
+    for tensor in corners {
+        for (index, value) in tensor.iter().enumerate() {
+            let target = if index < 3 { expected } else { 0.0 };
+            assert!(
+                (value - target).abs() <= 1e-8 * expected.abs(),
+                "corner {tensor:?}, expected {target} at {index}"
+            );
         }
     }
 
