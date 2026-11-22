@@ -201,4 +201,6 @@ pub enum FemError {
     ElementOutOfRange { element: usize, count: usize },
     #[error("topology optimization: {reason}")]
     TopologyInput { reason: String },
+    #[error("mesh convergence: {reason}")]
+    Convergence { reason: String },
 }

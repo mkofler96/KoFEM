@@ -570,6 +570,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -776,7 +780,7 @@
     </details><details class="docs-group">
       <summary>Solid mechanics</summary><ul><li><a href="/theory/solid-mechanics/linear-elasticity/">Linear elasticity</a></li><li><a href="/theory/solid-mechanics/equilibrium-and-weak-form/">Equilibrium and weak form</a></li></ul>
     </details><details class="docs-group">
-      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/">Linear solve</a></li></ul>
+      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/">Linear solve</a></li><li><a href="/theory/numerical-methods/multigrid/">Algebraic multigrid</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Results</summary><ul><li><a href="/theory/results/displacement-and-stress/" aria-current="page">Displacement and stress</a></li><li><a href="/theory/results/interpretation-and-convergence/">Interpretation and convergence</a></li></ul>
     </details><details class="docs-group">
@@ -796,7 +800,7 @@
     </details><details class="docs-group">
       <summary>Solid mechanics</summary><ul><li><a href="/theory/solid-mechanics/linear-elasticity/">Linear elasticity</a></li><li><a href="/theory/solid-mechanics/equilibrium-and-weak-form/">Equilibrium and weak form</a></li></ul>
     </details><details class="docs-group">
-      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/">Linear solve</a></li></ul>
+      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/">Linear solve</a></li><li><a href="/theory/numerical-methods/multigrid/">Algebraic multigrid</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Results</summary><ul><li><a href="/theory/results/displacement-and-stress/" aria-current="page">Displacement and stress</a></li><li><a href="/theory/results/interpretation-and-convergence/">Interpretation and convergence</a></li></ul>
     </details><details class="docs-group">
@@ -1000,7 +1004,7 @@
         Timoshenko and Goodier, <cite>Theory of Elasticity</cite>, third edition
         (1970), the circular-hole solution.</li>
     </ul><nav class="pager" aria-label="Reading order">
-      <a class="prev" rel="prev" href="/theory/numerical-methods/linear-solve/"><small>Previous</small>← Linear solve</a>
+      <a class="prev" rel="prev" href="/theory/numerical-methods/multigrid/"><small>Previous</small>← Algebraic multigrid</a>
       <a class="next" rel="next" href="/theory/results/interpretation-and-convergence/"><small>Next</small>Interpretation and convergence →</a></nav>
       </main>
       <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#recovery">From displacement to stress</a></li><li><a href="#von-mises">What von Mises measures</a></li><li><a href="#worked-example">Worked example: recover a stress tensor</a></li><li><a href="#sampling">What the solid solver returns</a></li><li><a href="#averaging">From element samples to a contour</a></li><li><a href="#display">Fields, units and deformation scale</a></li><li><a href="#verification">A public stress verification case</a></li><li><a href="#sources">Implementation and references</a></li></ul></nav>

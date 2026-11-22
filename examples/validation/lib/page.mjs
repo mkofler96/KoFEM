@@ -376,6 +376,148 @@ function chart(study, tolPct) {
           </svg>`;
 }
 
+// ── Convergence-rate chart (inline SVG, log–log) ─────────────────────────────
+//
+// The discretisation error of each series' finest levels against element
+// size, with the line of the fitted rate through them and, dashed, the slope
+// theory expects, drawn through the finest level (lib/rates.mjs, KOF-399).
+
+const fixed2 = (v) => v.toFixed(2);
+
+function rateChart(study, rates) {
+  const series = rates.series;
+  const points = series.flatMap((s) =>
+    s.sizes.map((h, k) => ({ h, e: Math.abs(s.relErrors[k]) * 100 })),
+  );
+  for (const p of points)
+    if (!(p.e > 0))
+      throw new Error(
+        `study "${study.id}": a level equals the extrapolated result, so its error has no place on the log axis`,
+      );
+  // Sizes relative to the coarsest fitted level of the study.
+  const hMax = Math.max(...points.map((p) => p.h));
+  const hs = points.map((p) => p.h / hMax);
+  const [x0, x1] = decadeRange(hs);
+  const lineEnds = series.flatMap((s) => {
+    const fine = Math.min(...s.sizes) / hMax;
+    const coarse = Math.max(...s.sizes) / hMax;
+    const at =
+      Math.abs(s.relErrors[s.sizes.indexOf(Math.min(...s.sizes))]) * 100;
+    return [at, at * (coarse / fine) ** s.expected];
+  });
+  const [y0, y1] = decadeRange([...points.map((p) => p.e), ...lineEnds]);
+  const pw = W - PAD.l - PAD.r,
+    ph = H - PAD.t - PAD.b;
+  const X = (v) => PAD.l + ((Math.log10(v) - x0) / (x1 - x0)) * pw;
+  const Y = (v) => PAD.t + ((y1 - Math.log10(v)) / (y1 - y0)) * ph;
+  const f = (v) => v.toFixed(1);
+  const grid = [];
+  for (let e = x0; e <= x1; e++)
+    grid.push(
+      `<line class="grid" x1="${f(X(10 ** e))}" x2="${f(X(10 ** e))}" y1="${PAD.t}" y2="${PAD.t + ph}"/>`,
+      `<text class="tick" x="${f(X(10 ** e))}" y="${PAD.t + ph + 15}" text-anchor="middle">${pctTick(e)}</text>`,
+    );
+  for (let e = y0; e <= y1; e++)
+    grid.push(
+      `<line class="grid" x1="${PAD.l}" x2="${PAD.l + pw}" y1="${f(Y(10 ** e))}" y2="${f(Y(10 ** e))}"/>`,
+      `<text class="tick" x="${PAD.l - 6}" y="${f(Y(10 ** e) + 3.5)}" text-anchor="end">${pctTick(e)}</text>`,
+    );
+  const drawn = series
+    .map((s, i) => {
+      const rel = s.sizes.map((h) => h / hMax);
+      const errs = s.relErrors.map((e) => Math.abs(e) * 100);
+      const k = rel.indexOf(Math.min(...rel));
+      const coarse = Math.max(...rel);
+      // The expected slope through the finest level.
+      const guide =
+        s.observed === null
+          ? ""
+          : `<line class="slope s${i + 1}" x1="${f(X(rel[k]))}" y1="${f(Y(errs[k]))}" x2="${f(X(coarse))}" y2="${f(Y(errs[k] * (coarse / rel[k]) ** s.expected))}"/>`;
+      const path = rel
+        .map((h, j) => `${j ? "L" : "M"}${f(X(h))} ${f(Y(errs[j]))}`)
+        .join(" ");
+      const marks = rel
+        .map((h, j) => {
+          const tip = `${s.label}, ${s.levels[j]}: discretisation error ${errs[j].toPrecision(2)} %`;
+          return `<g><title>${esc(tip)}</title><circle class="hit" cx="${f(X(h))}" cy="${f(Y(errs[j]))}" r="10"/><circle class="mark s${i + 1} under" cx="${f(X(h))}" cy="${f(Y(errs[j]))}" r="4.5"/></g>`;
+        })
+        .join("");
+      return `${guide}<path class="line s${i + 1}" d="${path}"/>${marks}`;
+    })
+    .join("");
+  return `<svg class="conv" viewBox="0 0 ${W} ${H}" data-name="convergence-rate" role="img" aria-label="${esc(`${study.title}: discretisation error against element size, logarithmic axes, with the expected slopes dashed`)}">
+            <text class="axis-title" x="${PAD.l}" y="${PAD.t - 11}">|discretisation error| %</text>
+            ${grid.join("\n            ")}
+            <line class="axis" x1="${PAD.l}" x2="${PAD.l + pw}" y1="${PAD.t + ph}" y2="${PAD.t + ph}"/>
+            <line class="axis" x1="${PAD.l}" x2="${PAD.l}" y1="${PAD.t}" y2="${PAD.t + ph}"/>
+            ${drawn}
+            <text class="axis-title" x="${PAD.l + pw}" y="${H - 5}" text-anchor="end">relative element size</text>
+          </svg>`;
+}
+
+function rateSection(study, def, row) {
+  const rates = study.rates;
+  if (!rates)
+    throw new Error(
+      `study "${study.id}" has no rates (regenerate with bun run validate:report)`,
+    );
+  if (rates.noRate) return `\n        <p>${esc(rates.noRate)}</p>`;
+  const rows = rates.series
+    .map(
+      (s) => `
+                <tr>
+                  <td>${esc(s.label)}</td>
+                  <td class="num">${s.observed === null ? "—" : fixed2(s.observed)}</td>
+                  <td class="num">${fixed2(s.expected)}</td>
+                </tr>`,
+    )
+    .join("");
+  // Theory once for the study: the read-out's smooth rate per order, then
+  // the caps (the same for every order of a study).
+  const short = (label) => label.split(" ")[0];
+  const caps = [...new Set(rates.series.flatMap((s) => s.caps))];
+  const sup = (text) => esc(text).replace("r^λ", "r<sup>λ</sup>");
+  const theory = `Expected: ${esc(rates.series[0].readout)} (${rates.series
+    .map((s) => `${esc(short(s.label))}: ${s.smooth}`)
+    .join(
+      ", ",
+    )})${caps.length ? `, but ${caps.map(sup).join("; and ")}` : ""}.`;
+  const noRate = rates.series
+    .filter((s) => s.observed === null)
+    .map(
+      (s) =>
+        ` ${esc(s.label)}: its error does not fall monotonically on these meshes, so it has no rate yet.`,
+    )
+    .join("");
+  const legend = rates.series
+    .map(
+      (s, i) =>
+        `<span class="key"><span class="swatch s${i + 1}"></span>${esc(s.label)}</span>`,
+    )
+    .join("");
+  return `
+        <h4>Convergence rate</h4>
+        <figure class="chart">
+          <div class="legend">${legend}<span class="key"><span class="dash"></span>expected slope</span></div>
+          ${rateChart(study, rates)}
+          <figcaption>Error against the finest ${esc(short(rates.reference.series))} mesh (${esc(rates.reference.mesh)}, ${withUnit(num(rates.reference.value), row.unit)}), fitted over the ${rates.series[0].levels.length} finest meshes of each order coarser than that. Element size from the element count, h ∝ N<sup>−1/${def.dimension}</sup>.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Order</th>
+                <th scope="col" class="num">Observed rate</th>
+                <th scope="col" class="num">Expected rate</th>
+              </tr>
+            </thead>
+            <tbody>${rows}
+            </tbody>
+          </table>
+        </div>
+        <p>${theory}${noRate} The error shrinks as h<sup>rate</sup>. <a href="${REPO}/blob/main/examples/validation/lib/rates.mjs">Method</a>.</p>`;
+}
+
 function convergenceSection(study, def, row) {
   const legend = study.series
     .map(
@@ -405,7 +547,7 @@ function convergenceSection(study, def, row) {
           ${chart(study, row.tolPct)}
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>${esc(def.note)}</p>
+        <p>${esc(def.note)}</p>${rateSection(study, def, row)}
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

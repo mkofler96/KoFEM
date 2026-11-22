@@ -44,7 +44,8 @@
             "image": [
               "https://kofem.org/examples/shaft-torsion.png",
               "https://kofem.org/examples/shaft-torsion/shaft-torsion-diagram.png",
-              "https://kofem.org/examples/shaft-torsion/shaft-torsion-mesh-convergence.png"
+              "https://kofem.org/examples/shaft-torsion/shaft-torsion-mesh-convergence.png",
+              "https://kofem.org/examples/shaft-torsion/shaft-torsion-convergence-rate.png"
             ],
             "dateModified": "2026-11-22",
             "isPartOf": {
@@ -608,6 +609,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -974,7 +979,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 10 mm maximum element size: 9,570 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>18,898 nodes, 56,694 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-f8b7c100d147); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The tube is the STEP file a user imports, meshed by Netgen with
@@ -1007,6 +1012,36 @@
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
         <p>Quadratic elements approach the reference from above as the polygons of the circles close in on them. Linear elements are too stiff in torsion and approach from below, so their errors partly cancel.</p>
+        <h4>Convergence rate</h4>
+        <figure class="chart">
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dash"></span>expected slope</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/shaft-torsion/shaft-torsion-convergence-rate.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-convergence-rate.png" width="440" height="250" alt="Hollow shaft, P1 vs. P2: discretisation error against element size, logarithmic axes, with the expected slopes dashed" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/shaft-torsion/shaft-torsion-convergence-rate-dark.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-convergence-rate.png" width="440" height="250" alt="Hollow shaft, P1 vs. P2: discretisation error against element size, logarithmic axes, with the expected slopes dashed" loading="lazy" decoding="async" /></picture>
+          <figcaption>Error against the finest P2 mesh (5 mm, 1.4593&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad), fitted over the 3 finest meshes of each order coarser than that. Element size from the element count, h ∝ N<sup>−1/3</sup>.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Order</th>
+                <th scope="col" class="num">Observed rate</th>
+                <th scope="col" class="num">Expected rate</th>
+              </tr>
+            </thead>
+            <tbody>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td class="num">1.29</td>
+                  <td class="num">1.00</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td class="num">1.82</td>
+                  <td class="num">1.00</td>
+                </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Expected: an energy-type result converges at 2p on a smooth solution (P1: 2, P2: 4), but the clamped edges (clamped meeting free at 90°, ν = 0.3) are singular, u ~ r<sup>λ</sup> with λ = 0.71, which caps it at 2λ = 1.42; and the moment is applied as point forces at the vertices of the loaded face, where the twist is read, and their local give shrinks only as h, which caps it at 1. The error shrinks as h<sup>rate</sup>. <a href="https://github.com/mkofler96/KoFEM/blob/main/examples/validation/lib/rates.mjs">Method</a>.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

@@ -31,7 +31,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 # Copy the rest of the source. src/wasm/pkg must already hold the compiled engine
-# (a build output published as a GitHub Release rather than committed, KOF-186)
+# (a build output published to GHCR rather than committed, KOF-186)
 # and src/wasm/fem the Rust finite-element module, so populate both first:
 #
 #   bash scripts/fetch-wasm-engine.sh && bash scripts/build-fem-wasm.sh &&

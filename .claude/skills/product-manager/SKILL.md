@@ -89,7 +89,7 @@ stale state is available, say so and lower confidence.
 
    - Establish the last actual product `vX.Y.Z` tag reachable from `main` and its
      commit. Ignore
-     `engine-<id>` releases when selecting the product baseline. Compare it with
+     the legacy `engine-<id>` releases when selecting the product baseline. Compare it with
      current `main` and `develop`; distinguish released changes, production
      changes without a product tag, and dev work awaiting promotion. Check for
      an existing release plan or PR and a version already on `develop` awaiting

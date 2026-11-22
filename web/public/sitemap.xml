@@ -12,7 +12,7 @@
   <url>
     <loc>https://kofem.org/examples/axial-bar/</loc>
     <priority>0.6</priority>
-    <image:image><image:loc>https://kofem.org/examples/axial-bar.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/axial-bar/axial-bar-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/axial-bar/axial-bar-mesh-convergence.png</image:loc></image:image>
+    <image:image><image:loc>https://kofem.org/examples/axial-bar.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/axial-bar/axial-bar-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/axial-bar/axial-bar-mesh-convergence.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/axial-bar/axial-bar-convergence-rate.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/surface-pressure/</loc>
@@ -22,17 +22,17 @@
   <url>
     <loc>https://kofem.org/examples/cantilever-beam/</loc>
     <priority>0.6</priority>
-    <image:image><image:loc>https://kofem.org/examples/cantilever-beam.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-beam/cantilever-beam-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-beam/cantilever-beam-mesh-convergence.png</image:loc></image:image>
+    <image:image><image:loc>https://kofem.org/examples/cantilever-beam.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-beam/cantilever-beam-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-beam/cantilever-beam-mesh-convergence.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-beam/cantilever-beam-convergence-rate.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/beam-torsion/</loc>
     <priority>0.6</priority>
-    <image:image><image:loc>https://kofem.org/examples/beam-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-mesh-convergence.png</image:loc></image:image>
+    <image:image><image:loc>https://kofem.org/examples/beam-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-mesh-convergence.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-convergence-rate.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/shaft-torsion/</loc>
     <priority>0.6</priority>
-    <image:image><image:loc>https://kofem.org/examples/shaft-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-mesh-convergence.png</image:loc></image:image>
+    <image:image><image:loc>https://kofem.org/examples/shaft-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-mesh-convergence.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-convergence-rate.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/plate-with-hole/</loc>
@@ -47,7 +47,7 @@
   <url>
     <loc>https://kofem.org/examples/cooks-membrane/</loc>
     <priority>0.6</priority>
-    <image:image><image:loc>https://kofem.org/examples/cooks-membrane.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png</image:loc></image:image>
+    <image:image><image:loc>https://kofem.org/examples/cooks-membrane.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-convergence-rate.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/tie-patch-test/</loc>
@@ -141,6 +141,7 @@
   <url><loc>https://kofem.org/theory/numerical-methods/loads-and-constraints/</loc><image:image><image:loc>https://kofem.org/theory/figures/rigid-body-modes.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/three-two-one-support.png</image:loc></image:image></url>
   <url><loc>https://kofem.org/theory/numerical-methods/couplings/</loc><image:image><image:loc>https://kofem.org/theory/figures/coupling-bolt-idealisation.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/coupling-screw-sections.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/coupling-torsion-decay.png</image:loc></image:image></url>
   <url><loc>https://kofem.org/theory/numerical-methods/linear-solve/</loc><image:image><image:loc>https://kofem.org/theory/figures/cg-convergence.png</image:loc></image:image></url>
+  <url><loc>https://kofem.org/theory/numerical-methods/multigrid/</loc><image:image><image:loc>https://kofem.org/theory/figures/multigrid-smoothing.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/multigrid-aggregates.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/multigrid-v-cycle.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/multigrid-prolongator.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/multigrid-scaling.png</image:loc></image:image></url>
   <url><loc>https://kofem.org/theory/results/displacement-and-stress/</loc><image:image><image:loc>https://kofem.org/theory/figures/stress-averaging.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/plate-hole-concentration.png</image:loc></image:image></url>
   <url><loc>https://kofem.org/theory/results/interpretation-and-convergence/</loc><image:image><image:loc>https://kofem.org/theory/figures/convergence-rates.png</image:loc></image:image></url>
   <url><loc>https://kofem.org/theory/verification/axial-bar/</loc><image:image><image:loc>https://kofem.org/theory/figures/axial-bar.png</image:loc></image:image></url>

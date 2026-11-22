@@ -570,6 +570,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -773,7 +777,7 @@
     </details><details class="docs-group">
       <summary>Solid mechanics</summary><ul><li><a href="/theory/solid-mechanics/linear-elasticity/">Linear elasticity</a></li><li><a href="/theory/solid-mechanics/equilibrium-and-weak-form/">Equilibrium and weak form</a></li></ul>
     </details><details class="docs-group" open>
-      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/" aria-current="page">Linear solve</a></li></ul>
+      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/" aria-current="page">Linear solve</a></li><li><a href="/theory/numerical-methods/multigrid/">Algebraic multigrid</a></li></ul>
     </details><details class="docs-group">
       <summary>Results</summary><ul><li><a href="/theory/results/displacement-and-stress/">Displacement and stress</a></li><li><a href="/theory/results/interpretation-and-convergence/">Interpretation and convergence</a></li></ul>
     </details><details class="docs-group">
@@ -793,7 +797,7 @@
     </details><details class="docs-group">
       <summary>Solid mechanics</summary><ul><li><a href="/theory/solid-mechanics/linear-elasticity/">Linear elasticity</a></li><li><a href="/theory/solid-mechanics/equilibrium-and-weak-form/">Equilibrium and weak form</a></li></ul>
     </details><details class="docs-group" open>
-      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/" aria-current="page">Linear solve</a></li></ul>
+      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a></li><li><a href="/theory/numerical-methods/couplings/">Kinematic and distributing couplings</a></li><li><a href="/theory/numerical-methods/linear-solve/" aria-current="page">Linear solve</a></li><li><a href="/theory/numerical-methods/multigrid/">Algebraic multigrid</a></li></ul>
     </details><details class="docs-group">
       <summary>Results</summary><ul><li><a href="/theory/results/displacement-and-stress/">Displacement and stress</a></li><li><a href="/theory/results/interpretation-and-convergence/">Interpretation and convergence</a></li></ul>
     </details><details class="docs-group">
@@ -863,7 +867,8 @@
         rigid-body motions, and applies one V-cycle per CG step, with a
         forward Gauss–Seidel sweep before and a backward sweep after each
         coarse correction. The coarsest level is solved directly when it
-        is small enough.</li>
+        is small enough. <a href="/theory/numerical-methods/multigrid/">Algebraic multigrid</a>
+        explains how the levels are built.</li>
       <li><strong>Gauss–Seidel</strong>: one symmetric Gauss–Seidel sweep,
         a forward and a backward pass, per application. These local sweeps
         reduce error cheaply but remove long-range, slowly varying errors
@@ -1101,7 +1106,7 @@
         edition (2003), preconditioned CG and stopping criteria.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/numerical-methods/couplings/"><small>Previous</small>← Kinematic and distributing couplings</a>
-      <a class="next" rel="next" href="/theory/results/displacement-and-stress/"><small>Next</small>Displacement and stress →</a></nav>
+      <a class="next" rel="next" href="/theory/numerical-methods/multigrid/"><small>Next</small>Algebraic multigrid →</a></nav>
       </main>
       <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#system">The system after constraints</a></li><li><a href="#method">Conjugate gradients and preconditioning</a></li><li><a href="#residual">Which residual does the solver measure?</a></li><li><a href="#stopping">Tolerances and stopping</a></li><li><a href="#worked-example">Worked example: two free bar DOFs</a></li><li><a href="#conditioning">Conditioning, scaling and rigid modes</a></li><li><a href="#failure">Iteration budgets and failure</a></li><li><a href="#accuracy">Three different accuracy questions</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#decision">Why KoFEM uses this method</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
     </div><footer class="site-footer">

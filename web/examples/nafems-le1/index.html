@@ -608,6 +608,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -964,7 +968,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 50 mm maximum element size: 14,455 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>29,511 nodes, 88,533 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-f8b7c100d147); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The ring is 100&nbsp;mm thick and in plane stress, so it
@@ -996,6 +1000,7 @@
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
         <p>The corner stresses of the few elements at D scatter around the peak: 1–2 % high on coarse meshes, a few tenths of a percent on the finest.</p>
+        <p>The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

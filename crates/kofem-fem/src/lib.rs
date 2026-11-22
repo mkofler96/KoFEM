@@ -18,6 +18,7 @@ pub mod amg;
 pub mod assembly;
 pub mod cg;
 pub mod constraints;
+pub mod convergence;
 pub mod coupled_static;
 pub mod coupling;
 pub mod element;

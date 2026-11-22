@@ -608,6 +608,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -963,7 +967,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 1,010 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
           <tr><th scope="row">Unknowns</th><td>554 nodes, 3,324 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-f8b7c100d147); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The panel is imported as a 10&nbsp;mm thick solid and
@@ -993,6 +997,7 @@
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
         <p>The difference stays near 1.6 % as the mesh is refined: it comes from flat facets standing in for the curved panel, not from the mesh size.</p>
+        <p>The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

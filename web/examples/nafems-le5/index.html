@@ -608,6 +608,10 @@
       .dot.under {
         background: var(--muted);
       }
+      .dash {
+        width: 16px;
+        border-top: 2px dashed var(--muted);
+      }
       figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
@@ -967,7 +971,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 100 mm maximum element size: 26,977 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>54,792 nodes, 164,376 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-f8b7c100d147); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The beam is imported as one solid, its end face cut into web and
@@ -997,6 +1001,7 @@
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
         <p>The solid settles about 1.5 % beyond NAFEMS' thin-shell value: the walls are a tenth of a flange wide.</p>
+        <p>The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">

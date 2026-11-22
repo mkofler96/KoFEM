@@ -121,7 +121,7 @@ export async function freshEngine() {
 let femModule = null;
 
 /** The Rust finite-element module (web/src/wasm/fem), loaded once. */
-async function rustFem() {
+export async function rustFem() {
   if (femModule) return femModule;
   const wasm = join(FEM, "kofem_wasm_bg.wasm");
   if (!existsSync(wasm))
