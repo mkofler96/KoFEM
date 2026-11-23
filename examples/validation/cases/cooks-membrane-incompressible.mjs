@@ -51,7 +51,7 @@ export default {
   expectedFailure: { order: 1, errPct: -43.3, bandPct: 2 },
   page: {
     summary:
-      "Linear tetrahedra lock when ν is near ½. A known limitation: use quadratic tetrahedra.",
+      "Rubber-like material in plane strain: linear tetrahedra lock, quadratic tetrahedra get the answer.",
     model:
       "Trapezoid (0, 0)–(48, 44)–(48, 60)–(0, 44), extruded by t, in plane strain.",
     inputs: [

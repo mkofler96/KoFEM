@@ -693,7 +693,7 @@ function byHand(e) {
       : `Run the static study. The Results panel compares ${esc(r.readout.quantity.toLowerCase())} with ${esc(r.readout.formula)}.`,
     ...(e.expectedFailure
       ? [
-          `Mesh again with the same settings but ${e.expectedFailure.order === 2 ? "quadratic" : "linear"} elements, and run the static study again. The ${esc(r.readout.quantity.toLowerCase())} is now ${withUnit(num(e.expectedFailure.fe), e.unit)}, ${errHtml(e.expectedFailure.errPct)} from the reference.`,
+          `Mesh again with the same ${trim(r.mesh.maxElementSize)} mm maximum and ${trim(r.mesh.minElementSize ?? r.mesh.maxElementSize / 10)} mm minimum element size, now with ${e.expectedFailure.order === 2 ? "quadratic" : "linear"} elements, and run the static study again. The ${esc(r.readout.quantity.charAt(0).toLowerCase() + r.readout.quantity.slice(1))} is now ${withUnit(num(e.expectedFailure.fe), e.unit)}, ${errHtml(e.expectedFailure.errPct)} from the reference.`,
         ]
       : []),
   ];
