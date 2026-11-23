@@ -26,3 +26,15 @@ export function loadCounts(nodalLoadDofs: number, faceLoads: number): string[] {
 export function loadsSummary(nodalLoadDofs: number, faceLoads: number): string {
   return `Loads applied · ${loadCounts(nodalLoadDofs, faceLoads).join(" · ")}`;
 }
+
+// The mesh row of the Solve and Optimize pre-flight checks. A mesh made before
+// a body was suppressed or restored is stale, and `stale` says why.
+export function meshCheckLabel(
+  nodeCount: number,
+  elementCount: number,
+  stale: string | null,
+): string {
+  if (stale !== null) return stale;
+  if (nodeCount === 0) return "No mesh";
+  return `Mesh ready · ${nodeCount} nodes · ${elementCount} elements`;
+}

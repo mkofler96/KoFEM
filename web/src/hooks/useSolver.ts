@@ -4,7 +4,7 @@
 import type { ElementStress } from "../lib/stressFields";
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import { fmt, loadsSummary } from "../lib/modelDisplay";
+import { fmt, loadsSummary, meshCheckLabel } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
 import {
@@ -263,12 +263,7 @@ export function useSolver() {
   });
 
   const checks: [boolean, string][] = [
-    [
-      meshOk,
-      suppressionStale !== null
-        ? suppressionStale
-        : `Mesh ready · ${nodes.length} nodes · ${elements.length} elements`,
-    ],
+    [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
     [
       matOk,
       materials.length === 0

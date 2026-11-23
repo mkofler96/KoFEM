@@ -11,7 +11,7 @@ import type {
   TopOptHistoryEntry,
   TopOptSettings,
 } from "../lib/solve/contracts.js";
-import { fmt, loadsSummary } from "../lib/modelDisplay";
+import { fmt, loadsSummary, meshCheckLabel } from "../lib/modelDisplay";
 import { resultUnit } from "../lib/resultField";
 import {
   resetWorker,
@@ -430,12 +430,7 @@ export function useTopOpt() {
         : `${plural(nSolid, "solid element")} + ${plural(nShell, "shell facet")}${couplingNote}`;
 
   const checks: [boolean, string][] = [
-    [
-      meshOk,
-      suppressionStale !== null
-        ? suppressionStale
-        : `Mesh ready · ${nodes.length} nodes · ${elements.length} elements`,
-    ],
+    [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
     [
       matOk,
       materials.length === 0
