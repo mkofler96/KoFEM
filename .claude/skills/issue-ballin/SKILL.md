@@ -71,7 +71,19 @@ Context: other cloud sessions are working in parallel on KOF-aa (<area>),
 KOF-bb (<area>) ... Stay out of those areas. <Known conflict risk, if any.>
 Branch from develop, target develop, write `Fixes KOF-nn` in the PR
 (`Refs KOF-nn` if the acceptance criteria may not be met).
+
+Show the proof in this chat too, not only on Linear. When you post or update
+the Linear evidence comment, also send it here: the before/after screenshots
+as files (desktop and phone width; look at each one first), the red and
+green test output, and the numbers that show the fix (measured vs reference,
+before vs after). End with the PR link.
 ```
+
+The last paragraph goes into every brief. Linear stays the record, but the
+user follows the session in its chat and should see the proof there without
+opening Linear. For a UI change, the screenshots themselves belong in the
+chat, sent as files the user can open (`SendUserFile` in a cloud session),
+not just a link to the Linear comment.
 
 Guards worth stating whenever they apply:
 
