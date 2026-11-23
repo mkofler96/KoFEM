@@ -57,7 +57,14 @@ export type TreeItemKind =
   | "coupling"
   | "temperature"
   | "study"
-  | "plot";
+  | "plot"
+  // A result plot's section cut, under the plot; its id is the plot's.
+  | "section"
+  // The support reactions of the static solve (one per model).
+  | "reactions";
+
+// The id of the one reactions output a model has.
+export const REACTIONS_ITEM_ID = 1;
 
 // The id of the one mesh a model has.
 export const MESH_ITEM_ID = 1;
@@ -149,15 +156,24 @@ export function modeSelection(mode: AppMode, s: ModelState): TreeSelection {
   }
 }
 
-// Make `selection` the tree selection; a result plot also puts its run and
-// field on the viewport.
+// Make `selection` the tree selection; a result plot, or its section cut, also
+// puts the plot's run, field and cut on the viewport, and the reactions put
+// their own view there.
 export function applyTreeSelection(
   s: ModelState,
   selection: TreeSelection,
 ): void {
   s.treeSelection = selection;
   const { target } = selection;
-  if (target.type !== "item" || target.kind !== "plot") return;
+  s.reactionsShown = target.type === "item" && target.kind === "reactions";
+  // The reactions come from the static solve: show it, even when an
+  // optimization's density was on view.
+  if (s.reactionsShown) s.activeResult = "static";
+  if (
+    target.type !== "item" ||
+    (target.kind !== "plot" && target.kind !== "section")
+  )
+    return;
   const plot = s.resultPlots.find((p) => p.id === target.id);
   if (plot) showPlot(s, plot);
 }

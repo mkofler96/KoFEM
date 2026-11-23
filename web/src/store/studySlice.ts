@@ -7,7 +7,7 @@
 // result, and a plot whose run is gone shows that instead of disappearing.
 
 import type { ModelState, SliceCreator } from "./modelStore";
-import type { ActiveResult, ResultType } from "./resultsSlice";
+import type { ActiveResult, ResultSection, ResultType } from "./resultsSlice";
 import {
   DEFAULT_REFINEMENT_INPUT,
   studyFingerprint,
@@ -16,6 +16,13 @@ import {
   type StudyLevel,
 } from "../lib/refinementStudy";
 import { endPickSessionOutside } from "./pickSlice";
+import type { ReactionDisplay } from "../lib/reactionArrows";
+import {
+  addSelection,
+  applyTreeSelection,
+  itemSelection,
+  REACTIONS_ITEM_ID,
+} from "./viewSlice";
 
 export type StudyKind = "static" | "topopt" | "refinement";
 
@@ -40,11 +47,42 @@ export function isDerivedKind(kind: StudyKind): kind is DerivedStudyKind {
 // viewport shows the refinement study's finest solve, a static result.
 export type PlotSource = ActiveResult | "refinement";
 
-// One result view: which run it shows and, for a static run, which field.
+// One result view: which run it shows and, for a static run, which field and
+// its section cut (KOF-390), a result output the user adds under the plot.
 export interface ResultPlot {
   id: number;
   source: PlotSource;
   field: ResultType | null;
+  section: ResultSection | null;
+}
+
+// Where a new cut starts: across x, through the middle, keeping the part below.
+export const NEW_SECTION: ResultSection = {
+  axis: 0,
+  position: 0.5,
+  flipped: false,
+};
+
+function checkSection(section: ResultSection): void {
+  if (!(
+    [0, 1, 2].includes(section.axis) &&
+    Number.isFinite(section.position) &&
+    section.position >= 0 &&
+    section.position <= 1
+  ))
+    throw new Error(
+      `section needs axis 0, 1 or 2 and a position in [0, 1], got axis ${section.axis}, position ${section.position}`,
+    );
+}
+
+// The cut the viewport draws: the shown plot's. A new or removed cut drops the
+// last cut's measured range and error.
+function drawSection(s: ModelState, section: ResultSection | null): void {
+  if (section === null || s.section === null) {
+    s.sectionRange = null;
+    s.sectionError = null;
+  }
+  s.section = section === null ? null : { ...section };
 }
 
 export const STUDY_KIND_LABEL: Record<StudyKind, string> = {
@@ -75,13 +113,16 @@ export function ensurePlot(s: ModelState, source: PlotSource): ResultPlot {
     id: s.nextPlotId++,
     source,
     field: source === "static" ? "Displacement (magnitude)" : null,
+    section: null,
   };
   s.resultPlots.push(plot);
   return plot;
 }
 
-// What the viewport shows for a plot: its run, and its field.
+// What the viewport shows for a plot: its run, its field and its cut.
 export function showPlot(s: ModelState, plot: ResultPlot): void {
+  s.shownPlotId = plot.id;
+  drawSection(s, plot.section);
   s.activeResult = plot.source === "refinement" ? "static" : plot.source;
   if (plot.field !== null && s.resultType !== plot.field) {
     s.resultType = plot.field;
@@ -158,6 +199,16 @@ export interface StudySlice {
   studies: Study[];
   nextStudyId: number;
   resultPlots: ResultPlot[];
+  // The plot on the viewport (its run, field and cut), or null.
+  shownPlotId: number | null;
+  // Whether Results lists the support reactions, a result output added from
+  // + Add (KOF-387). One per model; it reads the latest static solve.
+  showReactions: boolean;
+  // Whether the view draws one reaction arrow per support or per held node.
+  reactionsDisplay: ReactionDisplay;
+  // Whether the view shows the reactions (their tree row is selected) instead
+  // of the shown plot's field.
+  reactionsShown: boolean;
   nextPlotId: number;
   refinementStudy: RefinementStudyRun | null;
   // The level the centre shows in 3D, or null for the convergence chart.
@@ -170,6 +221,14 @@ export interface StudySlice {
   setStudyStatic(id: number, staticId: number): void;
   deleteStudy(id: number): void;
   addResultPlot(source: PlotSource, field: ResultType | null): number;
+  // The section cut of a static plot: added as a result output under it,
+  // changed or (null) removed from its own panel.
+  addPlotSection(plotId: number): void;
+  // Add the reactions output and open it; it needs a static solve.
+  addReactions(): void;
+  deleteReactions(): void;
+  setReactionsDisplay(display: ReactionDisplay): void;
+  setPlotSection(plotId: number, section: ResultSection | null): void;
   setPlotField(id: number, field: ResultType): void;
   deleteResultPlot(id: number): void;
   setRefinementStudy(run: RefinementStudyRun | null): void;
@@ -189,6 +248,10 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
   studies: [],
   nextStudyId: 1,
   resultPlots: [],
+  shownPlotId: null,
+  showReactions: false,
+  reactionsDisplay: "nodal",
+  reactionsShown: false,
   nextPlotId: 1,
   refinementStudy: null,
   refinementLevelShown: null,
@@ -238,6 +301,7 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
         id,
         source,
         field: source === "static" ? field : null,
+        section: null,
       });
       s.nextPlotId = id + 1;
     });
@@ -254,6 +318,52 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
   deleteResultPlot: (id) =>
     set((s) => {
       s.resultPlots = s.resultPlots.filter((p) => p.id !== id);
+      if (s.shownPlotId === id) {
+        s.shownPlotId = null;
+        drawSection(s, null);
+      }
+    }),
+  addReactions: () =>
+    set((s) => {
+      if (s.result === null)
+        throw new Error("reactions need a static solve to read");
+      if (s.showReactions) throw new Error("Results already lists reactions");
+      s.showReactions = true;
+      applyTreeSelection(
+        s,
+        itemSelection("results", "reactions", REACTIONS_ITEM_ID),
+      );
+    }),
+  deleteReactions: () =>
+    set((s) => {
+      if (!s.showReactions) throw new Error("Results lists no reactions");
+      s.showReactions = false;
+      applyTreeSelection(s, addSelection("results"));
+    }),
+  setReactionsDisplay: (display) =>
+    set((s) => {
+      s.reactionsDisplay = display;
+    }),
+  addPlotSection: (plotId) =>
+    set((s) => {
+      const plot = s.resultPlots.find((p) => p.id === plotId);
+      if (!plot || plot.source !== "static")
+        throw new Error(`Result plot ${plotId} has no field to cut`);
+      if (plot.section !== null)
+        throw new Error(`Result plot ${plotId} already has a section cut`);
+      plot.section = { ...NEW_SECTION };
+      applyTreeSelection(s, itemSelection("results", "section", plotId));
+    }),
+  setPlotSection: (plotId, section) =>
+    set((s) => {
+      const plot = s.resultPlots.find((p) => p.id === plotId);
+      if (!plot || plot.section === null)
+        throw new Error(`Result plot ${plotId} has no section cut`);
+      if (section !== null) checkSection(section);
+      plot.section = section === null ? null : { ...section };
+      if (s.shownPlotId === plotId) drawSection(s, section);
+      if (section === null)
+        applyTreeSelection(s, itemSelection("results", "plot", plotId));
     }),
   setRefinementStudy: (run) =>
     set((s) => {

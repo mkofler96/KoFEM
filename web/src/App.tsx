@@ -10,6 +10,7 @@ import { useTreeSelectionSync } from "./components/panel/modelTreeItems";
 import { Viewport } from "./components/viewport/Viewport";
 import { StatusBar } from "./components/statusbar/StatusBar";
 import { CgContinuationDialog } from "./components/CgContinuationDialog";
+import { ConfirmDeleteDialog } from "./components/ConfirmDeleteDialog";
 import { useModelStore } from "./store/modelStore";
 import { SMALL_SCREEN_QUERY } from "./store/viewSlice";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -79,6 +80,7 @@ function Workspace() {
       </div>
       <StatusBar />
       <CgContinuationDialog />
+      <ConfirmDeleteDialog />
     </div>
   );
 }

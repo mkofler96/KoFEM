@@ -106,6 +106,7 @@ export function ProbeLayer({
   modelSize: number;
 }) {
   const { placed, extremes } = useProbeReadings();
+  const showExtremes = useModelStore((s) => s.showExtremeProbes);
   const resultType = useModelStore((s) => s.resultType);
   // The refinement chart covers the 3D view; its labels would float over it.
   const chartShown = useModelStore(refinementChartVisible);
@@ -114,7 +115,8 @@ export function ProbeLayer({
   if (chartShown) return null;
   return (
     <group name="result-probes">
-      {extremes?.kind === "value" &&
+      {showExtremes &&
+        extremes?.kind === "value" &&
         (["min", "max"] as const).map((end) => (
           <ProbeMarker
             key={end}

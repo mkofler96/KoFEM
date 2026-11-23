@@ -75,3 +75,18 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.actions .danger {
+  background: #c62828;
+  border-color: #c62828;
+  color: #ffffff;
+}

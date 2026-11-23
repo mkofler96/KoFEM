@@ -200,7 +200,7 @@ export interface ExtremeReading {
 
 // The min/max probes: the nodes where the plotted field is lowest and highest
 // (the first such node on a tie). Over every node, like the legend range and
-// the Result summary, so the probes show the same numbers.
+// the panel's Min and max rows, so the probes show the same numbers.
 export function fieldExtremes(
   model: ProbeModel,
   field: ResultType,

@@ -46,7 +46,12 @@ test("a static study runs and its result is plotted, field by field", async ({
   // The run lands on a plot of its displacement.
   await expect(title).toHaveText("Displacement (magnitude)");
   expect((await state(page)).plots).toEqual([
-    { id: 1, source: "static", field: "Displacement (magnitude)" },
+    {
+      id: 1,
+      source: "static",
+      field: "Displacement (magnitude)",
+      section: null,
+    },
   ]);
 
   // + Add → Von Mises stress: a second plot, shown as soon as it is made.

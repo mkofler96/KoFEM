@@ -57,7 +57,7 @@ export default {
     const l1 = p1[p1.length - 1],
       l2 = p2[p2.length - 1],
       c2 = p2[0];
-    // The Result summary's Max Uy, e.g. "2.513e+1 mm": the top corner C.
+    // The Min and max rows' Max Uy, e.g. "2.513e+1 mm": the top corner C.
     const corner = parseFloat(row.readout.value);
     return `
         <p>KoFEM gives ${num(row.fe)} mm at M, ${pct(row.errPct)} from 23.96.
@@ -70,7 +70,7 @@ export default {
         quadratic ones at ${c2.mesh} (${pct(c2.errPct)}) with
         ${Math.round(l1.dofs / c2.dofs)} times fewer unknowns. That is why the example uses quadratic elements.</p>
         <p>The largest vertical displacement, at the top corner C, is
-        ${num(corner)} mm (Max Uy in the Result summary),
+        ${num(corner)} mm (Max Uy under Min and max),
         ${pct(((corner - row.reference) / row.reference) * 100)} from 23.96.
         An earlier version of this page compared C with the reference, so
         refinement moved past it.</p>`;

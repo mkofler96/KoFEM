@@ -204,7 +204,7 @@ test.describe("Tutorial figure capture", () => {
       ).__kofemTriggerSolve?.();
     });
     await Promise.race([
-      expect(page.getByText("Result summary")).toBeVisible(),
+      expect(page.getByText("Min and max", { exact: true })).toBeVisible(),
       fatalError,
     ]);
     await settleViewport(page);

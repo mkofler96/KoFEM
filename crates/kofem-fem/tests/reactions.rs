@@ -515,3 +515,30 @@ fn load_on_a_free_edge_node_is_not_load_on_a_support() {
     let held = load_on_held_nodes(&mesh, &forces, &owners).expect("fits the mesh");
     assert_eq!(held, [0.0, 0.0, -11.0]);
 }
+
+#[test]
+fn each_held_vertex_reports_its_own_reaction_for_drawing() {
+    // Vertex 0 is held in x, y, z by support 0; vertex 1 only in x by
+    // support 1; vertex 2 is free. A free DOF's residual (solver noise) is
+    // not a reaction, so it is left out of the vertex's force.
+    let vertices = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
+    let mut owners = vec![-1; 3 * DOFS_PER_NODE];
+    owners[..3].copy_from_slice(&[0, 0, 0]);
+    owners[DOFS_PER_NODE] = 1;
+    let mut reactions = vec![0.0; 3 * DOFS_PER_NODE];
+    reactions[..3].copy_from_slice(&[1.0, 2.0, 3.0]);
+    reactions[DOFS_PER_NODE..DOFS_PER_NODE + 3].copy_from_slice(&[4.0, 1e-9, 0.0]);
+    reactions[2 * DOFS_PER_NODE] = 7.0;
+    let forces = vec![0.0; 3 * DOFS_PER_NODE];
+
+    let summary =
+        summarize_reactions(&vertices, &reactions, &forces, &owners, 2).expect("valid owners");
+
+    assert_eq!(summary.nodal.len(), 2);
+    assert_eq!(summary.nodal[0].support, 0);
+    assert_eq!(summary.nodal[0].position, [0.0, 0.0, 0.0]);
+    assert_eq!(summary.nodal[0].force, [1.0, 2.0, 3.0]);
+    assert_eq!(summary.nodal[1].support, 1);
+    assert_eq!(summary.nodal[1].position, [1.0, 0.0, 0.0]);
+    assert_eq!(summary.nodal[1].force, [4.0, 0.0, 0.0]);
+}

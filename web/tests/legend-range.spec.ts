@@ -49,6 +49,8 @@ test("the colorbar limits can be pinned, rejected when inverted, and reset (#390
   // override, the colorbar says so, and the top tick reads as a clamp. Two
   // significant digits, so the three-digit tick shows the limit exactly.
   const pinnedMax = Number((fieldMax / 2).toPrecision(2));
+  // The limits are edited in the popup the legend's pencil opens.
+  await page.getByTestId("legend-edit").click();
   await page.getByTestId("legend-max").fill(String(pinnedMax));
   await page.getByTestId("legend-max").press("Enter");
 
@@ -104,6 +106,7 @@ test("the colorbar limits apply as you type, without Enter (KOF-384)", async ({
   // typed stays as typed: trailing zeros are not reformatted away.
   const pinnedMax = Number((fieldMax / 2).toPrecision(2));
   const typed = `${pinnedMax.toFixed(6)}0`;
+  await page.getByTestId("legend-edit").click();
   const max = page.getByTestId("legend-max");
   await max.fill(typed);
   await expect(page.getByTestId("colorbar-manual")).toBeVisible();

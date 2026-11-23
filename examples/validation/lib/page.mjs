@@ -571,7 +571,7 @@ function convergenceSection(study, def, row) {
 
 // ── Reproduction ──────────────────────────────────────────────────────────────
 
-/** Open in KoFEM, solve, read the Result summary: what the app shows. */
+/** Open in KoFEM, solve, read the Min and max rows: what the app shows. */
 function inApp(e) {
   if (!e.readout)
     return `<p>In the app: <a href="/app/?example=${encodeURIComponent(e.id)}" data-testid="reproduce-open">open the model</a>, with its supports, loads and settings.</p>`;
@@ -580,7 +580,7 @@ function inApp(e) {
   return `<p>
         In the app: <a href="/app/?example=${encodeURIComponent(e.id)}" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
-        ${esc(plotField)}. The Result summary shows
+        ${esc(plotField)}. Under Min and max, the panel shows
         <span class="readout" data-testid="app-readout" data-field="${esc(plotField)}" data-stat="${esc(`${stat} ${field}`)}" data-value="${esc(value)}">${esc(`${stat} ${field}`)} ${esc(value)}</span>.
       </p>`;
 }

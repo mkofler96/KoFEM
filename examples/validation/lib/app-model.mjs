@@ -145,7 +145,7 @@ export function readAnalysisSetup(vtu) {
 const COMPONENT = { Ux: 0, Uy: 1, Uz: 2 };
 
 /**
- * A displacement read-out of the app's Result summary ("Max Ux", "Min Uy",
+ * A displacement read-out of the app's Min and max rows ("Max Ux", "Min Uy",
  * "Max |U|"), printed as the app prints it: toExponential(3) and the unit.
  */
 export function appReadout(result, field, stat) {

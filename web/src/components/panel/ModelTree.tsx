@@ -10,6 +10,7 @@ import {
 } from "../../store/viewSlice";
 import { useTreeItems } from "./modelTreeItems";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
+import { requestDelete } from "../../store/confirmDelete";
 import styles from "./ModelTree.module.css";
 
 // The dividers in order; each lists its objects and ends in "+ Add". No label
@@ -44,7 +45,13 @@ const isDeletable = (kind: TreeItemKind): kind is DeletableKind =>
   DELETABLE_KINDS.includes(kind);
 
 // Analysis objects carry the hollow square instead of a dot.
-const SQUARE_KINDS: TreeItemKind[] = ["mesh", "study", "plot"];
+const SQUARE_KINDS: TreeItemKind[] = [
+  "mesh",
+  "study",
+  "plot",
+  "section",
+  "reactions",
+];
 
 function Chevron({ open }: { open: boolean }) {
   return (
@@ -133,7 +140,8 @@ export function ModelTree() {
     target.type === "item" &&
     target.kind === kind &&
     target.id === id;
-  // Delete a boundary object; the panel showing it goes back to "+ Add".
+  // Delete a boundary object, once the user confirms; the panel showing it
+  // goes back to "+ Add".
   function deleteItem(kind: DeletableKind, itemId: number) {
     if (isItem("boundary", kind, itemId))
       selectTreeNode(addSelection("boundary"));
@@ -283,10 +291,13 @@ export function ModelTree() {
                       <DeleteButton
                         testId={`tree-delete-${item.kind}-${item.id}`}
                         label={item.label}
-                        onClick={() =>
-                          isDeletable(item.kind) &&
-                          deleteItem(item.kind, item.id)
-                        }
+                        onClick={() => {
+                          const kind = item.kind;
+                          if (isDeletable(kind))
+                            requestDelete(item.label, () =>
+                              deleteItem(kind, item.id),
+                            );
+                        }}
                       />
                     ) : (
                       isBody &&

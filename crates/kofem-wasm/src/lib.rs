@@ -59,12 +59,16 @@ fn to_js(error: &FemError) -> JsError {
 /// centroid, centroid, held vertex count.
 pub const REACTION_STRIDE: usize = 10;
 
+/// Values per held vertex at the end of a `supportReactions` result.
+pub const NODAL_STRIDE: usize = 7;
+
 /// A reaction summary as `supportReactions` returns it: `REACTION_STRIDE`
 /// values per support (Fx, Fy, Fz, Mx, My, Mz, the centroid x, y, z, the
-/// vertices it holds), then the applied force (3) and the applied force on
-/// supported DOFs (3).
+/// vertices it holds), then the applied force (3), the applied force on
+/// supported DOFs (3), the number of held vertices and `NODAL_STRIDE` values
+/// for each (support, x, y, z, Fx, Fy, Fz).
 fn flatten_reactions(summary: &ReactionSummary) -> Vec<f64> {
-    let mut out = Vec::with_capacity(REACTION_STRIDE * summary.supports.len() + 6);
+    let mut out = Vec::with_capacity(REACTION_STRIDE * summary.supports.len() + 7);
     for support in &summary.supports {
         out.extend_from_slice(&support.force);
         out.extend_from_slice(&support.moment);
@@ -77,6 +81,19 @@ fn flatten_reactions(summary: &ReactionSummary) -> Vec<f64> {
     }
     out.extend_from_slice(&summary.applied);
     out.extend_from_slice(&summary.applied_on_supports);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "vertex counts and support indices are far below 2^52"
+    )]
+    {
+        out.push(summary.nodal.len() as f64);
+        out.reserve(NODAL_STRIDE * summary.nodal.len());
+        for node in &summary.nodal {
+            out.push(node.support as f64);
+            out.extend_from_slice(&node.position);
+            out.extend_from_slice(&node.force);
+        }
+    }
     out
 }
 

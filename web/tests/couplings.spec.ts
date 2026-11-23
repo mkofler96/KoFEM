@@ -197,6 +197,10 @@ test("a coupling's kind, DOFs and point are editable, and deleting it removes th
   expect(moved?.x).toBe(14);
 
   await page.getByTitle("Delete coupling").click();
+  await page
+    .getByRole("dialog", { name: /^Delete / })
+    .getByRole("button", { name: "Delete" })
+    .click();
   const after = await state(page);
   expect(after.couplingGroups).toHaveLength(0);
   expect(after.nodes).toHaveLength(model.nodes.length);
@@ -237,6 +241,10 @@ test("a BC can act on a coupling's reference point, and goes when the coupling d
   // named it must go too rather than constrain a node that no longer exists.
   await page.locator('[data-testid^="tree-coupling-"]').click();
   await page.getByTitle("Delete coupling").click();
+  await page
+    .getByRole("dialog", { name: /^Delete / })
+    .getByRole("button", { name: "Delete" })
+    .click();
   const after = await state(page);
   expect(after.couplingGroups).toHaveLength(0);
   expect(after.bcGroups).toHaveLength(0);

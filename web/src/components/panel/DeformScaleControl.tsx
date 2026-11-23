@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Deformation scale of the result view (KOF-383): shows the real factor the
-// displacements are drawn at, "×1 240 (auto)", and sets it by a log slider,
-// a typed factor, or the Auto and True scale presets. A valid factor applies
+// Deformation scale of the result view (KOF-383): the real factor the
+// displacements are drawn at, in one number box beside a log slider. 1 is true
+// scale; clearing the box returns to the automatic factor. A valid factor applies
 // as the user types; an invalid one is reported on Enter or blur.
 
 import { useEffect, useRef, useState } from "react";
@@ -12,7 +12,6 @@ import { useDeformFactor } from "../../hooks/useDeformFactor";
 import {
   AUTO_DEFORM_SCALE,
   DEFORM_SLIDER_STEP,
-  TRUE_DEFORM_SCALE,
   deformSliderMax,
   factorToSlider,
   formatDeformFactor,
@@ -55,16 +54,18 @@ export function DeformScaleControl() {
     }
   };
 
+  // Enter and blur: an empty box hands the factor back to the automatic
+  // one; anything else that is not a factor is reported.
   const apply = () => {
+    if (text.trim() === "") {
+      applied.current = null;
+      setError(null);
+      setText(String(autoFactor));
+      setDeformScale(AUTO_DEFORM_SCALE);
+      return;
+    }
     const parsed = parseDeformFactor(text);
     if ("error" in parsed) setError(parsed.error);
-  };
-
-  const preset = (auto: boolean) => {
-    applied.current = null;
-    setError(null);
-    setText(String(auto ? autoFactor : 1));
-    setDeformScale(auto ? AUTO_DEFORM_SCALE : TRUE_DEFORM_SCALE);
   };
 
   const sliderMax = deformSliderMax(autoFactor);
@@ -75,19 +76,11 @@ export function DeformScaleControl() {
       : isTrue
         ? " (true scale)"
         : "";
-  const readout = `×${formatDeformFactor(factor)}${note}`;
 
   return (
     <>
       <div className={styles.sectionLabel}>Deformation scale</div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
+      <div className={styles.sliderRow}>
         <input
           type="range"
           min={0}
@@ -97,20 +90,11 @@ export function DeformScaleControl() {
           onChange={(e) => setManual(sliderToFactor(Number(e.target.value)))}
           style={{ flex: 1, minWidth: 0 }}
           aria-label="Deformation scale"
-          aria-valuetext={readout}
+          aria-valuetext={`×${formatDeformFactor(factor)}${note}`}
         />
-        <span
-          className={styles.statVal}
-          style={{ textAlign: "right", whiteSpace: "nowrap" }}
-          data-testid="deform-scale-value"
-        >
-          {readout}
-        </span>
-      </div>
-      <div className={styles.formRow}>
-        <span className={styles.formLabel}>Factor</span>
+        <span className={styles.sliderRowUnit}>×</span>
         <input
-          className={styles.formInput}
+          className={`${styles.formInput} ${styles.sliderRowInput}`}
           data-testid="deform-scale-input"
           type="number"
           min={0}
@@ -124,6 +108,7 @@ export function DeformScaleControl() {
             }
           }}
           aria-label="Deformation factor"
+          title="Clear to use the automatic factor"
           aria-invalid={error !== null}
         />
       </div>
@@ -132,24 +117,6 @@ export function DeformScaleControl() {
           {error}
         </div>
       )}
-      <div className={styles.segToggle} style={{ marginBottom: 12 }}>
-        <button
-          className={`${styles.segBtn} ${isAuto ? styles.segBtnActive : ""}`}
-          data-testid="deform-scale-auto"
-          aria-pressed={isAuto}
-          onClick={() => preset(true)}
-        >
-          Auto
-        </button>
-        <button
-          className={`${styles.segBtn} ${isTrue ? styles.segBtnActive : ""}`}
-          data-testid="deform-scale-true"
-          aria-pressed={isTrue}
-          onClick={() => preset(false)}
-        >
-          True scale
-        </button>
-      </div>
     </>
   );
 }

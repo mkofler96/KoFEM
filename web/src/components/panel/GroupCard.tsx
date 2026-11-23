@@ -3,6 +3,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 import type { BcFaceEntry } from "../../store/modelStore";
+import { requestDelete } from "../../store/confirmDelete";
 import styles from "./Panel.module.css";
 
 // One entry in the BC / load group list: name + summary header with the
@@ -61,7 +62,7 @@ export function GroupCard({
           <button
             className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
             title={deleteTitle}
-            onClick={onDelete}
+            onClick={() => requestDelete(name, onDelete)}
           >
             ✕
           </button>

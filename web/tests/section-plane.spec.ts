@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Section plane (KOF-390): in Results, a plane along x, y or z cuts the model
+// Section plane (KOF-390): a result output of a plot, added from Results →
+// + Add. A plane along x, y or z cuts the model
 // so the field inside it shows. The cut face is filled and coloured by the
 // plotted field; the legend keeps referring to the whole model; the min and
 // max on the cut can be shown. Shells are cut as lines.
@@ -16,6 +17,13 @@ async function solveExample(page: Page, id: string): Promise<void> {
   await expect(run).toBeEnabled();
   await run.click();
   await expect(page.getByTestId("colorbar")).toBeVisible();
+}
+
+// Results → + Add → Section cut: a cut of the plot on screen, across x.
+async function addSection(page: Page): Promise<void> {
+  await page.getByTestId("tree-add-results").click();
+  await page.getByTestId("add-plot-section").click();
+  await expect(page.getByTestId("section-axis")).toHaveValue("x");
 }
 
 async function cutValue(page: Page, end: "min" | "max"): Promise<number> {
@@ -39,9 +47,7 @@ test("a section plane cuts the solved bar and shows the field on the cut @pipeli
   const canvas = page.locator("canvas").first();
   const whole = await canvas.screenshot();
 
-  const axis = page.getByTestId("section-axis");
-  await expect(axis).toHaveValue("off");
-  await axis.selectOption("x");
+  await addSection(page);
   const position = page.getByLabel("Section position");
   await position.fill("0.5");
   await expect
@@ -63,9 +69,10 @@ test("a section plane cuts the solved bar and shows the field on the cut @pipeli
   await expect(flip).toHaveAttribute("aria-pressed", "true");
   expect(await cutValue(page, "max")).toBeCloseTo(DELTA / 2, 2);
 
-  // Off restores the whole model, and the position has nothing to move.
-  await axis.selectOption("off");
-  await expect(position).toBeDisabled();
+  // Deleting the cut restores the whole model.
+  await page.getByTestId("delete-section").click();
+  await expect(page.getByTestId("tree-section-1")).toHaveCount(0);
+  await expect(position).toHaveCount(0);
   await expect(page.getByTestId("section-min")).toHaveCount(0);
 });
 
@@ -74,6 +81,7 @@ test("a shell model is cut as lines, coloured by the field @pipeline", async ({
 }) => {
   await solveExample(page, "plate-with-hole-shell");
   await page.getByTestId("plot-field").selectOption("Von Mises stress");
+  await addSection(page);
   await page.getByTestId("section-axis").selectOption("y");
   await page.getByLabel("Section position").fill("0.5");
   await page.getByTestId("section-range").check();

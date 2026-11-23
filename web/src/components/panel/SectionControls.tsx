@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Section plane of the result view (KOF-390): cut the model along x, y or z
-// to see the field inside it. A slider places the plane across the model, Flip
-// keeps the other side, and the min and max on the cut can be shown. The
-// legend keeps referring to the whole model.
+// A result plot's section cut (KOF-390), the panel of its row under the plot:
+// cut the model along x, y or z to see the field inside it. A slider places the
+// plane across the model, Flip keeps the other side, and the min and max on the
+// cut can be shown. The legend keeps referring to the whole model.
 
 import { useModelStore } from "../../store/modelStore";
 import type { ResultSection, ResultType } from "../../store/modelStore";
@@ -13,14 +13,16 @@ import styles from "./Panel.module.css";
 
 const AXES = ["x", "y", "z"] as const;
 
-// Where a new section starts: through the middle of the model, keeping the
-// part below the plane. A section already set keeps its own position and flip
-// when its axis changes.
-const NEW_SECTION = { position: 0.5, flipped: false };
-
-export function SectionControls({ field }: { field: ResultType }) {
-  const section = useModelStore((s) => s.section);
-  const setSection = useModelStore((s) => s.setSection);
+export function SectionControls({
+  plotId,
+  section,
+  field,
+}: {
+  plotId: number;
+  section: ResultSection;
+  field: ResultType;
+}) {
+  const setPlotSection = useModelStore((s) => s.setPlotSection);
   const showRange = useModelStore((s) => s.showSectionRange);
   const setShowRange = useModelStore((s) => s.setShowSectionRange);
   const range = useModelStore((s) => s.sectionRange);
@@ -28,57 +30,40 @@ export function SectionControls({ field }: { field: ResultType }) {
   const symbol = resultFieldSymbol(field);
   const unit = resultUnit(field);
 
-  const update = (change: Partial<ResultSection>) => {
-    if (!section) return;
-    setSection({ ...section, ...change });
-  };
+  const update = (change: Partial<ResultSection>) =>
+    setPlotSection(plotId, { ...section, ...change });
 
   return (
     <>
-      <div className={styles.sectionLabel}>Section</div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Cut</span>
+        <span className={styles.formLabel}>Along</span>
         <select
           className={styles.formSelect}
           data-testid="section-axis"
-          aria-label="Section"
-          value={section ? AXES[section.axis] : "off"}
-          onChange={(e) => {
-            const axis = AXES.indexOf(e.target.value as (typeof AXES)[number]);
-            setSection(
-              axis < 0
-                ? null
-                : {
-                    axis: axis as 0 | 1 | 2,
-                    position: section ? section.position : NEW_SECTION.position,
-                    flipped: section ? section.flipped : NEW_SECTION.flipped,
-                  },
-            );
-          }}
+          aria-label="Section axis"
+          value={AXES[section.axis]}
+          onChange={(e) =>
+            update({
+              axis: AXES.indexOf(
+                e.target.value as (typeof AXES)[number],
+              ) as ResultSection["axis"],
+            })
+          }
         >
-          <option value="off">Off</option>
           {AXES.map((name) => (
             <option key={name} value={name}>
-              Along {name.toUpperCase()}
+              {name.toUpperCase()}
             </option>
           ))}
         </select>
       </div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
+      <div className={styles.sliderRow}>
         <input
           type="range"
           min={0}
           max={1}
           step={0.005}
-          value={section ? section.position : NEW_SECTION.position}
-          disabled={!section}
+          value={section.position}
           onChange={(e) => update({ position: Number(e.target.value) })}
           style={{ flex: 1, minWidth: 0 }}
           aria-label="Section position"
@@ -86,9 +71,8 @@ export function SectionControls({ field }: { field: ResultType }) {
         <button
           className={styles.outlineBtn}
           data-testid="section-flip"
-          aria-pressed={section ? section.flipped : NEW_SECTION.flipped}
-          disabled={!section}
-          onClick={() => section && update({ flipped: !section.flipped })}
+          aria-pressed={section.flipped}
+          onClick={() => update({ flipped: !section.flipped })}
           style={{ width: "auto", marginTop: 0 }}
         >
           Flip
@@ -99,21 +83,18 @@ export function SectionControls({ field }: { field: ResultType }) {
           The section cannot be drawn: {error}
         </div>
       )}
-      {section && (
-        <label className={styles.statRow} style={{ justifyContent: "start" }}>
-          <input
-            type="checkbox"
-            data-testid="section-range"
-            checked={showRange}
-            onChange={(e) => setShowRange(e.target.checked)}
-          />
-          <span className={styles.statKey} style={{ marginLeft: 6 }}>
-            Show min and max on the cut
-          </span>
-        </label>
-      )}
-      {section &&
-        showRange &&
+      <label className={styles.statRow} style={{ justifyContent: "start" }}>
+        <input
+          type="checkbox"
+          data-testid="section-range"
+          checked={showRange}
+          onChange={(e) => setShowRange(e.target.checked)}
+        />
+        <span className={styles.statKey} style={{ marginLeft: 6 }}>
+          Show min and max on the cut
+        </span>
+      </label>
+      {showRange &&
         (range ? (
           (["min", "max"] as const).map((end) => (
             <div className={styles.statRow} key={end}>
@@ -134,7 +115,13 @@ export function SectionControls({ field }: { field: ResultType }) {
             The plane does not cut the model.
           </div>
         ))}
-      <div style={{ marginBottom: 12 }} />
+      <button
+        className={styles.dangerLink}
+        data-testid="delete-section"
+        onClick={() => setPlotSection(plotId, null)}
+      >
+        Delete section cut
+      </button>
     </>
   );
 }

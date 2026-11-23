@@ -37,10 +37,23 @@ pub struct SupportReaction {
     pub vertices: usize,
 }
 
+/// The reaction force at one vertex a support holds, for drawing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodalReaction {
+    /// The support that holds the vertex's first held translation.
+    pub support: usize,
+    pub position: [f64; 3],
+    /// The reaction on the vertex's held translations; 0 on a free one.
+    pub force: [f64; 3],
+}
+
 /// Every support's reaction, and the applied loads they should balance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReactionSummary {
     pub supports: Vec<SupportReaction>,
+    /// The reaction at each vertex a support holds in translation, in vertex
+    /// order.
+    pub nodal: Vec<NodalReaction>,
     /// Σ of every applied nodal force.
     pub applied: [f64; 3],
     /// Σ of the applied forces on DOFs a support holds: load that goes
@@ -273,8 +286,22 @@ pub fn summarize_reactions(
 
     let mut applied = [0.0; 3];
     let mut applied_on_supports = [0.0; 3];
+    let mut nodal = Vec::new();
     for (vertex, row) in owned.iter().enumerate() {
         let at = DOFS_PER_NODE * vertex;
+        if let Some(support) = row[..3].iter().flatten().next().copied() {
+            let mut force = [0.0; 3];
+            for (axis, owner) in row[..3].iter().enumerate() {
+                if owner.is_some() {
+                    force[axis] = reactions[at + axis];
+                }
+            }
+            nodal.push(NodalReaction {
+                support,
+                position: vertices[vertex],
+                force,
+            });
+        }
         for axis in 0..3 {
             applied[axis] += forces[at + axis];
         }
@@ -298,6 +325,7 @@ pub fn summarize_reactions(
     }
     Ok(ReactionSummary {
         supports: result,
+        nodal,
         applied,
         applied_on_supports,
     })

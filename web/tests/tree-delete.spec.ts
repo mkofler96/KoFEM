@@ -5,7 +5,8 @@
 // (KOF-423): hovering an entry shows a delete button at the row's end, so the
 // user need not open the object first. Interfaces come from the geometry and
 // cannot be deleted. Deleting the entry the panel shows sends the panel back
-// to "Boundary conditions / Add".
+// to "Boundary conditions / Add". Every delete asks first, until the user
+// ticks "Don't ask again" for the rest of the session.
 
 import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
@@ -34,6 +35,13 @@ const bcEntry = (page: Page) => page.locator('[data-testid^="tree-bc-"]');
 const loadEntry = (page: Page) => page.locator('[data-testid^="tree-load-"]');
 const bcDelete = (page: Page) =>
   page.locator('[data-testid^="tree-delete-bc-"]');
+const confirmDialog = (page: Page) =>
+  page.getByRole("dialog", { name: /^Delete / });
+
+async function confirmDelete(page: Page): Promise<void> {
+  await confirmDialog(page).getByRole("button", { name: "Delete" }).click();
+  await expect(confirmDialog(page)).toHaveCount(0);
+}
 
 test("hovering a support shows its delete button, which deletes only that support", async ({
   page,
@@ -47,6 +55,7 @@ test("hovering a support shows its delete button, which deletes only that suppor
   await expect(bcDelete(page)).toHaveAttribute("aria-label", "Delete BC1");
 
   await bcDelete(page).click();
+  await confirmDelete(page);
   await expect(bcEntry(page)).toHaveCount(0);
   await expect(loadEntry(page)).toHaveText("Load1");
   expect(await groupIds(page)).toEqual({ bc: [], load: [loadId] });
@@ -83,11 +92,65 @@ test("deleting the open entry sends the panel back to Add", async ({
 
   await loadEntry(page).hover();
   await page.locator('[data-testid^="tree-delete-load-"]').click();
+  await confirmDelete(page);
   await expect(loadEntry(page)).toHaveCount(0);
   await expect(page.getByTestId("panel-title")).toHaveText(
     "Add boundary condition",
   );
   await expect(page.getByTestId("add-boundary-bc")).toBeVisible();
+});
+
+test("a delete asks first, and Cancel keeps the support", async ({ page }) => {
+  await bootstrapCantilever(page);
+  await bcEntry(page).hover();
+  await bcDelete(page).click();
+
+  const dialog = confirmDialog(page);
+  await expect(dialog).toHaveAccessibleName("Delete BC1?");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(bcEntry(page)).toHaveText("BC1");
+
+  // Escape cancels too.
+  await bcEntry(page).hover();
+  await bcDelete(page).click();
+  await page.keyboard.press("Escape");
+  await expect(confirmDialog(page)).toHaveCount(0);
+  await expect(bcEntry(page)).toHaveText("BC1");
+});
+
+test("ticking Don't ask again deletes without asking for the rest of the session", async ({
+  page,
+}) => {
+  await bootstrapCantilever(page);
+  await bcEntry(page).hover();
+  await bcDelete(page).click();
+  await confirmDialog(page)
+    .getByRole("checkbox", { name: "Don't ask again this session" })
+    .check();
+  await confirmDelete(page);
+  await expect(bcEntry(page)).toHaveCount(0);
+
+  // The next delete, from the panel this time, goes straight through.
+  await loadEntry(page).click();
+  await page.getByTitle("Delete load").click();
+  await expect(confirmDialog(page)).toHaveCount(0);
+  await expect(loadEntry(page)).toHaveCount(0);
+
+  // A reload starts a new session, which asks again.
+  await bootstrapCantilever(page);
+  await bcEntry(page).hover();
+  await bcDelete(page).click();
+  await expect(confirmDialog(page)).toBeVisible();
+});
+
+test("deleting from the panel asks too", async ({ page }) => {
+  await bootstrapCantilever(page);
+  await bcEntry(page).click();
+  await page.getByTitle("Delete BC").click();
+  await expect(confirmDialog(page)).toHaveAccessibleName("Delete BC1?");
+  await confirmDelete(page);
+  await expect(bcEntry(page)).toHaveCount(0);
 });
 
 test("only boundary objects get a delete button", async ({ page }) => {

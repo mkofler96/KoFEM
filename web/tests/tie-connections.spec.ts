@@ -200,6 +200,10 @@ test("a tie's extent is editable after creation, and the tie is deletable", asyn
   await expect(page.getByText("full surface · 9 node pairs")).toBeVisible();
 
   await page.getByTitle("Delete tie").click();
+  await page
+    .getByRole("dialog", { name: /^Delete / })
+    .getByRole("button", { name: "Delete" })
+    .click();
   expect(await tieState(page)).toHaveLength(0);
 });
 

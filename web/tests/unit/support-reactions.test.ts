@@ -71,7 +71,7 @@ describe("supportOwners", () => {
 });
 
 describe("parseReactions", () => {
-  test("reads force, moment, centroid and vertex count per support, then the loads", () => {
+  test("reads force, moment, centroid and vertex count per support, the loads, then each held node", () => {
     const flat = Float64Array.from([
       1,
       2,
@@ -99,6 +99,21 @@ describe("parseReactions", () => {
       0,
       0,
       1,
+      2, // held nodes: support, position, force
+      0,
+      0,
+      5,
+      5,
+      1,
+      2,
+      3,
+      1,
+      0,
+      0,
+      0,
+      -1,
+      0,
+      0,
     ]);
     const summary = parseReactions(flat, 2);
     expect(summary.supports[0]).toEqual({
@@ -111,12 +126,20 @@ describe("parseReactions", () => {
     expect(summary.supports[1].vertices).toBe(0);
     expect(summary.applied).toEqual([10, 20, 30]);
     expect(summary.appliedOnSupports).toEqual([0, 0, 1]);
+    expect(summary.nodal).toEqual([
+      { support: 0, position: [0, 5, 5], force: [1, 2, 3] },
+      { support: 1, position: [0, 0, 0], force: [-1, 0, 0] },
+    ]);
   });
 
   test("a result of the wrong length is refused", () => {
     expect(() => parseReactions(new Float64Array(15), 1)).toThrow(
-      /expected 16/,
+      /expected at least 17/,
     );
+    // One held node announced, none given.
+    const short = new Float64Array(17);
+    short[16] = 1;
+    expect(() => parseReactions(short, 1)).toThrow(/expected 24/);
   });
 });
 

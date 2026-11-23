@@ -243,8 +243,12 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         });
       s.nextStudyId = s.studies.length + 1;
       s.resultPlots = a.result
-        ? [{ id: 1, source: "static", field: a.resultType }]
+        ? [{ id: 1, source: "static", field: a.resultType, section: null }]
         : [];
+      s.shownPlotId = null;
+      s.showReactions = false;
+      s.reactionsShown = false;
+      s.section = null;
       s.nextPlotId = s.resultPlots.length + 1;
       s.refinementStudy = null;
       s.refinementLevelShown = null;
@@ -322,6 +326,10 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.studies = [];
       s.nextStudyId = 1;
       s.resultPlots = [];
+      s.shownPlotId = null;
+      s.showReactions = false;
+      s.reactionsShown = false;
+      s.section = null;
       s.nextPlotId = 1;
       s.refinementStudy = null;
       s.refinementLevelShown = null;

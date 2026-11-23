@@ -108,7 +108,8 @@ export interface ResultsSlice {
   probing: boolean;
   // Whether the min and max probes mark where the plotted field peaks.
   showExtremeProbes: boolean;
-  // The section plane, or null for the whole model.
+  // The section plane drawn: the shown plot's cut (studySlice), or null for
+  // the whole model.
   section: ResultSection | null;
   // Whether Results shows the min and max of the field on the cut.
   showSectionRange: boolean;
@@ -128,7 +129,6 @@ export interface ResultsSlice {
   setShellSurface(surface: ShellSurface): void;
   setProbing(on: boolean): void;
   setShowExtremeProbes(on: boolean): void;
-  setSection(section: ResultSection | null): void;
   setShowSectionRange(on: boolean): void;
   setSectionRange(range: LegendRange | null): void;
   setSectionError(message: string | null): void;
@@ -227,26 +227,6 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setShowExtremeProbes: (on) =>
     set((s) => {
       s.showExtremeProbes = on;
-    }),
-  setSection: (section) =>
-    set((s) => {
-      if (
-        section !== null &&
-        !(
-          [0, 1, 2].includes(section.axis) &&
-          Number.isFinite(section.position) &&
-          section.position >= 0 &&
-          section.position <= 1
-        )
-      )
-        throw new Error(
-          `section needs axis 0, 1 or 2 and a position in [0, 1], got axis ${section.axis}, position ${section.position}`,
-        );
-      s.section = section;
-      if (section === null) {
-        s.sectionRange = null;
-        s.sectionError = null;
-      }
     }),
   setShowSectionRange: (on) =>
     set((s) => {
