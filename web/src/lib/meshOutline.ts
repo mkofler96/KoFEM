@@ -10,6 +10,7 @@
 
 import { outerFaces, uniqueEdges } from "../wasm/fem/kofem_wasm.js";
 import type { Element, Node } from "../store/modelStore";
+import { release } from "./solve/rustFailure.js";
 
 // Node by id, with its index into the node list (the viewport's NodeMap).
 type NodeLookup = ReadonlyMap<
@@ -68,7 +69,7 @@ export function meshOuterFaces(
       ),
     };
   } finally {
-    faces.free();
+    release(faces);
   }
 }
 

@@ -61,6 +61,7 @@ import {
   type ReactionSummary,
   type SupportOwners,
 } from "./reactions.js";
+import { release } from "./rustFailure.js";
 
 export type { ContinuationPrompt } from "./cgRun.js";
 
@@ -313,7 +314,7 @@ export async function solveSolidInRust(
               );
               return run;
             } finally {
-              ties.free();
+              release(ties);
             }
           };
     return await runRustSolve(
@@ -344,7 +345,7 @@ export async function solveSolidInRust(
       },
     );
   } finally {
-    elastic.free();
+    release(elastic);
   }
 }
 
@@ -605,10 +606,10 @@ export async function solveCoupledSolidInRust(
         },
       );
     } finally {
-      couplings.free();
+      release(couplings);
     }
   } finally {
-    elastic.free();
+    release(elastic);
   }
 }
 
@@ -640,7 +641,7 @@ async function runRustSolve<T>(
   try {
     run = start(options);
   } finally {
-    options.free();
+    release(options);
   }
   if (method === "amg")
     log(
@@ -670,11 +671,11 @@ async function runRustSolve<T>(
       );
       return result;
     } finally {
-      solution.free();
+      release(solution);
     }
   } finally {
     // finish() consumes the run; free it only when it was not reached.
-    if (!finished) run.free();
+    if (!finished) release(run);
   }
 }
 

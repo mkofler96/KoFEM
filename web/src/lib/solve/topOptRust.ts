@@ -36,6 +36,7 @@ import {
   type MixedFemModule,
 } from "./coupledRust.js";
 import { createShellModel, type ShellFemModule } from "./shellRust.js";
+import { release } from "./rustFailure.js";
 
 // The classes of the Rust module the optimizer needs, passed in so the worker
 // and the node-side tests can each load the module their own way.
@@ -264,7 +265,7 @@ function buildSettings(
       moveLimit,
     };
   } catch (error) {
-    rust.free();
+    release(rust);
     throw error;
   }
 }
@@ -335,7 +336,7 @@ export function optimizeSolidInRust(
         log(describeLevelSetUpdate(run));
         return runToCompletion(run, settings.objective, log, onDensity);
       } finally {
-        run.free();
+        release(run);
       }
     }
     return runRust(
@@ -350,7 +351,7 @@ export function optimizeSolidInRust(
       onDensity,
     );
   } finally {
-    elastic.free();
+    release(elastic);
   }
 }
 
@@ -374,13 +375,13 @@ function runRust(
   try {
     run = start(rust);
   } finally {
-    rust.free();
+    release(rust);
   }
   try {
     log(describe(run, header, penalty, moveLimit));
     return runToCompletion(run, settings.objective, log, onDensity);
   } finally {
-    run.free();
+    release(run);
   }
 }
 
@@ -436,7 +437,7 @@ export function optimizeShellInRust(
       onDensity,
     );
   } finally {
-    model.free();
+    release(model);
   }
 }
 
@@ -480,8 +481,8 @@ export function optimizeCoupledInRust(
       onDensity,
     );
   } finally {
-    couplings.free();
-    model.free();
+    release(couplings);
+    release(model);
   }
 }
 
@@ -521,7 +522,7 @@ function runToCompletion(
         break;
       }
     } finally {
-      step.free();
+      release(step);
     }
   }
   // A capped run that fell back to its last feasible design drops the steps

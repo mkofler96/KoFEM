@@ -32,6 +32,7 @@ import {
   type ReactionSummary,
   type SupportOwners,
 } from "./reactions.js";
+import { release } from "./rustFailure.js";
 
 // The C++ coupled solve's stopping rule: ‖f − K·u‖ / ‖f‖ below 1e-10
 // (CoupledInput::cg_rel_tol).
@@ -299,7 +300,7 @@ export function createMixedModel(
       shell: { count: shell.count },
     };
   } catch (error) {
-    model.free();
+    release(model);
     throw error;
   }
 }
@@ -384,14 +385,14 @@ export async function solveCoupledInRust(
         );
         return result;
       } finally {
-        solution.free();
+        release(solution);
       }
     } finally {
       // finish() consumes the run; free it only when it was not reached.
-      if (!finished) run.free();
+      if (!finished) release(run);
     }
   } finally {
-    couplings.free();
-    model.free();
+    release(couplings);
+    release(model);
   }
 }
