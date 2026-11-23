@@ -29,7 +29,11 @@ function unreachableTrap(message: string): Error {
 describe("release", () => {
   test("frees the object", () => {
     let freed = 0;
-    release({ free: () => void freed++ });
+    release({
+      free: () => {
+        freed++;
+      },
+    });
     expect(freed).toBe(1);
   });
 
@@ -126,22 +130,18 @@ const properties: Property[] = [{ id: 1, materialId: 1 }];
 
 // A Rust module whose model traps in assemble() and then, still borrowed,
 // refuses to be freed — what wasm-bindgen does after an out-of-memory trap.
+// The solve stops at assemble(), so the module needs no other class.
 function trappingModule(trap: Error): SolidFemModule {
   class ElasticModel {
     readonly vertexCount = nodes.length;
-    assemble(): number {
+    readonly assemble = (): number => {
       throw trap;
-    }
-    free(): void {
+    };
+    readonly free = (): void => {
       throw new Error(BORROWED);
-    }
+    };
   }
-  return {
-    ElasticModel,
-    SolveOptions: class {},
-    Ties: class {},
-    evaluateFieldExpression: () => new Float64Array(0),
-  } as unknown as SolidFemModule;
+  return { ElasticModel } as unknown as SolidFemModule;
 }
 
 describe("a solid solve that traps", () => {
