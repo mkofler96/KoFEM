@@ -135,6 +135,10 @@ ruleTester.run("no-silent-fallback", noSilentFallback, {
       code: "area.set(face, (area.get(face) ?? 0) + triangleArea(t));",
       options: valueDefaults,
     },
+    {
+      code: "normals.set(id, (normals.get(id) ?? new Vector3()).add(normal));",
+      options: valueDefaults,
+    },
     // Absence markers stay allowed: they flow into explicit emptiness checks.
     { code: "const ids = payload.ids ?? [];", options: valueDefaults },
     { code: "const name = prop.name ?? null;", options: valueDefaults },
@@ -212,6 +216,23 @@ ruleTester.run("no-silent-fallback", noSilentFallback, {
     },
     {
       code: "const count = counts.get(key) ?? 0;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    // Only the identity of a reduction: a direct write fabricates the value,
+    // and a non-identity start corrupts the sum.
+    {
+      code: "stresses.set(node, stresses.get(node) ?? 0);",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "counts.set(key, (counts.get(key) ?? 42) + 1);",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "peaks.set(node, Math.max(peaks.get(node) ?? 7, vm));",
       options: valueDefaults,
       errors: [{ messageId: "valueDefault" }],
     },
