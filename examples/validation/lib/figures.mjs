@@ -560,7 +560,16 @@ export function quarterPlateFigure() {
  * The panel, its clamp and shear load, the point M where the deflection is
  * read (the middle of the loaded edge) and the corner C.
  */
-export function cookFigure() {
+/**
+ * Cook's membrane. `at` names the measured point: "M", the middle of the
+ * loaded edge (the plane-stress benchmark), or "C", its top corner (the
+ * nearly incompressible one).
+ */
+export function cookFigure({ at = "M" } = {}) {
+  if (at !== "M" && at !== "C")
+    throw new Error(
+      `cookFigure: at must be "M" or "C", got ${JSON.stringify(at)}`,
+    );
   const k = 3.4,
     ox = 150,
     oy = 236;
@@ -580,14 +589,19 @@ export function cookFigure() {
     const y = ry0 - 4 - ((ry0 - ry1 - 8) * j) / 4;
     parts.push(arrow(rx + 14, y, rx + 14, y - 11));
   }
+  const measured = at === "M" ? M : C;
   parts.push(
     sym(rx + 26, (ry0 + ry1) / 2 + 5, "F", "start"),
-    `<circle class="pt" cx="${f(P(M)[0])}" cy="${f(P(M)[1])}" r="3.5"/>`,
-    label(P(M)[0] - 8, P(M)[1] + 4, "M (48, 52)", { anchor: "end" }),
-    label(P(C)[0] + 10, P(C)[1] - 8, "C (48, 60)", {
-      anchor: "start",
-      cls: "coord",
-    }),
+    `<circle class="pt" cx="${f(P(measured)[0])}" cy="${f(P(measured)[1])}" r="3.5"/>`,
+    ...(at === "M"
+      ? [
+          label(P(M)[0] - 8, P(M)[1] + 4, "M (48, 52)", { anchor: "end" }),
+          label(P(C)[0] + 10, P(C)[1] - 8, "C (48, 60)", {
+            anchor: "start",
+            cls: "coord",
+          }),
+        ]
+      : [label(P(C)[0] - 8, P(C)[1] - 6, "C (48, 60)", { anchor: "end" })]),
     label(P(A)[0] - 20, P(A)[1] + 4, "(0, 0)", { anchor: "end", cls: "coord" }),
     label(P(D)[0] - 20, P(D)[1] + 4, "(0, 44)", {
       anchor: "end",
@@ -602,7 +616,9 @@ export function cookFigure() {
   return svg(
     640,
     260,
-    "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; M, the middle of the loaded edge, is where the deflection is measured, C the top-right corner",
+    at === "M"
+      ? "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; M, the middle of the loaded edge, is where the deflection is measured, C the top-right corner"
+      : "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; the deflection is measured at C, the top-right corner",
     parts.join("\n    "),
   );
 }

@@ -225,6 +225,29 @@ export default [
     ],
   }),
   recipeStudy({
+    id: "cooks-membrane-incompressible",
+    caseId: "cooks-membrane-incompressible",
+    title: "Nearly incompressible Cook's membrane, P1 vs. P2",
+    note: "Linear tetrahedra lock: each halving of the element size closes only part of the gap, and the finest linear mesh, with many times the unknowns, is still further off than the coarsest quadratic one. Quadratic tetrahedra are within about a percent from 8 mm on.",
+    expect: null,
+    noRate:
+      "Linear tetrahedra lock at ν = 0.4999, so their error is not in the asymptotic range on any mesh solved here; quadratic tetrahedra are converged to the scatter of the read-out from the coarsest level on.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "cooks-membrane-incompressible",
+        order: 1,
+        levels: [8, 4, 2, 1, 0.5],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "cooks-membrane-incompressible",
+        order: 2,
+        levels: [8, 4, 2],
+      },
+    ],
+  }),
+  recipeStudy({
     id: "plate-with-hole-shell",
     caseId: "plate-with-hole-shell",
     title: "Plate with a hole, shell triangles",

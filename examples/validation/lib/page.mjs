@@ -233,9 +233,45 @@ function resultFigure(e) {
 
 const hasReference = (e) => e.reference !== undefined;
 
-/** The one-row table under the figure: reference, KoFEM, difference. */
+const ORDER_NAMES = { 1: "Linear tetrahedra", 2: "Quadratic tetrahedra" };
+
+// A case's expected failure (cases/index.mjs): the order that misses, as text.
+const expectedBand = (xf) =>
+  `<span class="band fail">expected failure, recorded ${errHtml(xf.recordedErrPct)}</span>`;
+
+/**
+ * The table under the figure: reference, KoFEM, difference; with a row per
+ * element order when the case also publishes an expected failure.
+ */
 function keyResult(e) {
   if (!hasReference(e)) return "";
+  const xf = e.expectedFailure;
+  if (xf)
+    return `
+      <div class="table-wrap">
+        <table class="key-result" data-entry="${e.id}">
+          <caption>${esc(capitalise(e.quantity))}; reference ${esc(e.referenceLabel)} = ${withUnit(num(e.reference), e.unit)}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Elements</th>
+              <th scope="col" class="num">KoFEM</th>
+              <th scope="col" class="num">Difference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">${ORDER_NAMES[e.mesh.order]}</th>
+              <td class="num"><strong data-testid="fe-value">${withUnit(num(e.fe), e.unit)}</strong></td>
+              <td class="num">${errHtml(e.errPct)}<br />${bandText(e)}</td>
+            </tr>
+            <tr data-testid="expected-failure">
+              <th scope="row">${ORDER_NAMES[xf.order]}</th>
+              <td class="num">${withUnit(num(xf.fe), e.unit)}</td>
+              <td class="num">${errHtml(xf.errPct)}<br />${expectedBand(xf)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
   return `
       <div class="table-wrap">
         <table class="key-result" data-entry="${e.id}">
@@ -271,7 +307,18 @@ function resultsTable(entries) {
               <td class="num" data-label="Reference">${withUnit(num(e.reference), e.unit)}</td>
               <td class="num" data-label="KoFEM">${withUnit(num(e.fe), e.unit)}</td>
               <td class="num" data-label="Difference">${errHtml(e.errPct)}</td>
-            </tr>`,
+            </tr>${
+              e.expectedFailure
+                ? `
+            <tr>
+              <th scope="row"><a href="${pageUrl(e.id)}">${esc(e.name)}</a>, ${ORDER_NAMES[e.expectedFailure.order].toLowerCase()} (a known limitation)</th>
+              <td class="wide">${esc(e.quantity)}</td>
+              <td class="num" data-label="Reference">${withUnit(num(e.reference), e.unit)}</td>
+              <td class="num" data-label="KoFEM">${withUnit(num(e.expectedFailure.fe), e.unit)}</td>
+              <td class="num" data-label="Difference">${errHtml(e.expectedFailure.errPct)}</td>
+            </tr>`
+                : ""
+            }`,
     )
     .join("");
   return `
@@ -644,6 +691,11 @@ function byHand(e) {
     r.optimize
       ? `${optimizeStep(r.optimize)} The Results panel's run summary shows the ${esc(r.readout.quantity.toLowerCase())}.`
       : `Run the static study. The Results panel compares ${esc(r.readout.quantity.toLowerCase())} with ${esc(r.readout.formula)}.`,
+    ...(e.expectedFailure
+      ? [
+          `Mesh again with the same settings but ${e.expectedFailure.order === 2 ? "quadratic" : "linear"} elements, and run the static study again. The ${esc(r.readout.quantity.toLowerCase())} is now ${withUnit(num(e.expectedFailure.fe), e.unit)}, ${errHtml(e.expectedFailure.errPct)} from the reference.`,
+        ]
+      : []),
   ];
   return `
       <p>Or build it yourself, as this page's number was built:</p>
@@ -661,7 +713,7 @@ export function renderIndexPage(data, allEntries) {
 
   const item = (e) => {
     const line = hasReference(e)
-      ? `${esc(capitalise(e.quantity))}: ${withUnit(num(e.fe), e.unit)}, ${errHtml(e.errPct)} from the reference`
+      ? `${esc(capitalise(e.quantity))}: ${withUnit(num(e.fe), e.unit)}, ${errHtml(e.errPct)} from the reference${e.expectedFailure ? `; ${ORDER_NAMES[e.expectedFailure.order].toLowerCase()} ${errHtml(e.expectedFailure.errPct)}, a known limitation` : ""}`
       : esc(e.headline);
     return `
         <li data-entry="${e.id}">
@@ -901,6 +953,10 @@ export function renderExamplePage(
   const text = textbook.get(id);
   if (!text)
     throw new Error(`no page text for "${id}" (examples/validation/textbook/)`);
+  if (e.expectedFailure && !text.limitation)
+    throw new Error(
+      `"${id}" publishes an expected failure, so its page text needs a limitation notice`,
+    );
   const ctx = textContext(e, entries, data, studies);
   const page = e.page;
   const literal =
@@ -959,6 +1015,18 @@ export function renderExamplePage(
           "Difference",
           `${errHtml(e.errPct)}${e.tolPct === undefined ? "" : ` ${bandText(e)}`}`,
         ],
+        ...(e.expectedFailure
+          ? [
+              [
+                `KoFEM, ${ORDER_NAMES[e.expectedFailure.order].toLowerCase()}`,
+                withUnit(num(e.expectedFailure.fe), e.unit),
+              ],
+              [
+                "Difference",
+                `${errHtml(e.expectedFailure.errPct)} ${expectedBand(e.expectedFailure)}; CI fails if it moves by more than ${e.expectedFailure.bandPct} points`,
+              ],
+            ]
+          : []),
       ])}${page.note ? `\n      <p>${esc(page.note)}</p>` : ""}${ctx.study ? convergenceSection(ctx.study, ctx.studyDef, e) : ""}`;
   sections.push(`
       <h2 id="results">Results</h2>${results}`);
@@ -977,7 +1045,13 @@ export function renderExamplePage(
       <p class="crumbs"><a href="/examples/#${section.id}">${section.name}</a> / ${inSection.indexOf(e) + 1} of ${inSection.length}</p>
       <h1>${esc(e.name)}</h1>
       <div class="lede">${text.intro(ctx)}
-      </div>
+      </div>${
+        text.limitation
+          ? `
+      <p class="note" data-testid="limitation"><strong>Limitation.</strong>${text.limitation(ctx)}
+      </p>`
+          : ""
+      }
       ${resultFigure(e)}
       ${keyResult(e)}
       <p class="actions">${openButton(e.id)}<span class="meta">${esc(text.opens ?? "Opens the model in the app, ready to run.")}</span></p>

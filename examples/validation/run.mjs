@@ -157,7 +157,28 @@ function caseRow(c, fe, mesh, result) {
 async function runCase(c) {
   const build = await buildFromRecipe(c.id, c.recipe);
   const row = caseRow(c, build.fe, buildMeshStats(build), build.result);
+  if (c.expectedFailure) row.expectedFailure = await expectedFailureRow(c);
   return { c, build, row };
+}
+
+// A published limitation (cases/index.mjs): the recipe at the other element
+// order, its error, and whether that error is still the recorded one.
+async function expectedFailureRow(c) {
+  const xf = c.expectedFailure;
+  const build = await buildFromRecipe(
+    c.id,
+    withMesh(c.recipe, { order: xf.order }),
+  );
+  const errPct = relErrPct(build.fe, c.reference);
+  return {
+    order: xf.order,
+    fe: build.fe,
+    errPct,
+    recordedErrPct: xf.errPct,
+    bandPct: xf.bandPct,
+    holds: Math.abs(errPct - xf.errPct) <= xf.bandPct,
+    mesh: buildMeshStats(build),
+  };
 }
 
 // One level of a convergence study: the case's recipe with only the mesher
@@ -197,13 +218,27 @@ function caseSurface(run) {
     );
   return { fig, field, surface, payload };
 }
-const failed = rows.filter((r) => !r.pass).length;
+// A case fails when it leaves its tolerance, or when its expected failure is
+// no longer the recorded one.
+const failed = rows.filter(
+  (r) => !r.pass || (r.expectedFailure && !r.expectedFailure.holds),
+).length;
 
 // ── Console table ─────────────────────────────────────────────────────────────
 console.log("\nKoFEM validation suite — FE result vs. analytical reference\n");
 console.log(consoleHeader());
 console.log(CONSOLE_RULE);
-for (const r of rows) console.log(consoleRow(r));
+for (const r of rows) {
+  console.log(consoleRow(r));
+  const xf = r.expectedFailure;
+  if (xf)
+    console.log(
+      `  └ expected failure, P${xf.order}: ${fmt(xf.fe)}, ${fmtErr(xf.errPct)}% ` +
+        (xf.holds
+          ? `(recorded ${fmtErr(xf.recordedErrPct)}% ±${xf.bandPct})`
+          : `— LEFT its recorded ${fmtErr(xf.recordedErrPct)}% ±${xf.bandPct}: locking ${Math.abs(xf.errPct) < Math.abs(xf.recordedErrPct) ? "eased" : "grew"}; update the case and its page`),
+    );
+}
 console.log(CONSOLE_RULE);
 console.log(
   `${rows.length - failed}/${rows.length} passed` +
@@ -415,6 +450,25 @@ async function checkPublished() {
       out.push(
         `${r.name}: mesh changed (published ${JSON.stringify(p.mesh)}, now ${JSON.stringify(r.mesh)})`,
       );
+    const xf = r.expectedFailure,
+      pxf = p.expectedFailure;
+    if (Boolean(xf) !== Boolean(pxf))
+      out.push(
+        `${r.name}: ${xf ? "the page has no expected failure" : "the page shows an expected failure the case no longer has"}`,
+      );
+    else if (xf) {
+      if (!close(xf.fe, pxf.fe))
+        out.push(
+          `${r.name}, P${xf.order}: published ${fmt(pxf.fe)}, this run ${fmt(xf.fe)}`,
+        );
+      if (
+        xf.order !== pxf.order ||
+        xf.recordedErrPct !== pxf.recordedErrPct ||
+        xf.bandPct !== pxf.bandPct ||
+        JSON.stringify(xf.mesh) !== JSON.stringify(pxf.mesh)
+      )
+        out.push(`${r.name}: expected failure changed`);
+    }
     if (JSON.stringify(r.inputs) !== JSON.stringify(p.inputs))
       out.push(`${r.name}: inputs changed`);
     if (JSON.stringify(r.readout) !== JSON.stringify(p.readout))
@@ -532,10 +586,18 @@ function markdownReport(rs) {
     "",
     "| Case | Quantity | FE result | Reference | Error | Tol | Status |",
     "| --- | --- | ---: | ---: | ---: | ---: | :---: |",
-    ...rs.map(
-      (r) =>
-        `| ${r.name} | ${r.quantity} | ${fmt(r.fe)}${r.unit ? " " + r.unit : ""} | ${r.referenceLabel} | ${fmtErr(r.errPct)}% | ${r.tolPct}% | ${r.pass ? "✅" : "❌"} |`,
-    ),
+    ...rs.flatMap((r) => {
+      const unit = r.unit ? " " + r.unit : "";
+      const xf = r.expectedFailure;
+      return [
+        `| ${r.name} | ${r.quantity} | ${fmt(r.fe)}${unit} | ${r.referenceLabel} | ${fmtErr(r.errPct)}% | ${r.tolPct}% | ${r.pass ? "✅" : "❌"} |`,
+        ...(xf
+          ? [
+              `| ${r.name}, P${xf.order} (expected failure) | ${r.quantity} | ${fmt(xf.fe)}${unit} | ${r.referenceLabel} | ${fmtErr(xf.errPct)}% | ${fmtErr(xf.recordedErrPct)} ± ${xf.bandPct}% | ${xf.holds ? "⚠️ as recorded" : "❌"} |`,
+            ]
+          : []),
+      ];
+    }),
     "",
   ].join("\n");
 }

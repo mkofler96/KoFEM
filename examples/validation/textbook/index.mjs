@@ -6,7 +6,9 @@
 // the example's name), opens (optional: what Open in KoFEM opens, if not the
 // model ready to run), figure (the sketch), intro, theory (optional, with an
 // optional theoryTitle), model (notes on the finite element model), results
-// (optional; replaces the default results table), discussion and references.
+// (optional; replaces the default results table), limitation (required for a
+// case with an expected failure: the notice under the title), discussion and
+// references.
 // The functions receive the page context built in ../lib/page.mjs: the
 // example's published row or record, its inputs, its convergence study and
 // formatting helpers. Every number in the text is computed from those, never
@@ -17,6 +19,7 @@ import beamTorsion from "./beam-torsion.mjs";
 import plateWithHole from "./plate-with-hole.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
 import cooksMembrane from "./cooks-membrane.mjs";
+import cooksMembraneIncompressible from "./cooks-membrane-incompressible.mjs";
 import cantileverBeam from "./cantilever-beam.mjs";
 import plateWithHoleShell from "./plate-with-hole-shell.mjs";
 import mbbBeamTopopt from "./mbb-beam-topopt.mjs";
@@ -41,6 +44,7 @@ export default new Map([
   ["plate-with-hole", plateWithHole],
   ["shaft-torsion", shaftTorsion],
   ["cooks-membrane", cooksMembrane],
+  ["cooks-membrane-incompressible", cooksMembraneIncompressible],
   ["cantilever-beam", cantileverBeam],
   ["plate-with-hole-shell", plateWithHoleShell],
   ["mbb-beam-topopt", mbbBeamTopopt],

@@ -19,6 +19,7 @@ export default {
     ["element-loads", "Element load vectors"],
     ["size-and-order", "Mesh size versus element order"],
     ["thin-walls", "Thin walls and linear tetrahedra"],
+    ["incompressible", "Nearly incompressible materials"],
     ["implementation", "KoFEM implementation"],
     ["references", "Sources and further reading"],
   ],
@@ -305,6 +306,27 @@ export default {
       <li>refine through the thickness, not just along the surface; and</li>
       <li>consider a shell idealisation of the wall.</li>
     </ul>
+
+    <h2 id="incompressible">Nearly incompressible materials</h2>
+    <p>Rubber and other elastomers have ${tex("ν")} close to ½: changing their
+      volume takes far more stress than changing their shape. The solution
+      then has almost no volume change, ${tex("\nabla \cdot \mathbf{u} \approx 0")}.
+      A linear tetrahedron has one constant strain, so this asks every
+      element to keep its own volume. A tetrahedral mesh has about as many
+      elements as unknowns, so few displacement fields satisfy all those
+      constraints, and the mesh comes out far too stiff. This is volumetric
+      locking, and refining the mesh removes it only slowly.</p>
+    <p><strong>Measured in KoFEM.</strong> The
+      <a href="/examples/cooks-membrane-incompressible/">nearly incompressible
+      Cook's membrane</a> (${tex("ν = 0.4999")}, plane strain) deflects less
+      than 60% of the reference with linear tetrahedra. Quadratic tetrahedra on
+      the same element size are within 1%. CI checks both numbers on every
+      change.</p>
+    <p>KoFEM solves standard displacement elements only. It has no mixed,
+      B-bar or reduced-integration elements, which are the usual cures, and
+      the app does not warn about this case. For a material with ${tex("ν")}
+      above about 0.45, mesh with quadratic elements and compare two element
+      sizes.</p>
 
     <h2 id="implementation">KoFEM implementation</h2>
     <p>KoFEM’s solid solve runs in its own Rust finite-element module. It
