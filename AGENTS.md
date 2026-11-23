@@ -36,6 +36,11 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
   and explicit errors for invalid or missing required data. No silent fallbacks.
   See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed conventions.
+- Agents copy what they find, so a comment or lint exemption becomes a
+  template. Comments say why the code does something it cannot say itself;
+  they never narrate removed code. Keep `KOF-nn` tags. A repeated exemption
+  means the shape is wrong: fix the shape, or the rule. `/no-comments` reviews
+  a diff for this.
 - Analytics require opt-in consent. Use `web/src/lib/analytics.ts`; never
   send model data, filenames, results, or raw errors.
 - Keep UI copy brief and user-focused; link to technical detail and extended
