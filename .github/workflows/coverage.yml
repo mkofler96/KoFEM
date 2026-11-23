@@ -1,0 +1,89 @@
+name: Coverage
+
+# Coverage of the browser suite, from an Istanbul-instrumented build run for
+# that purpose, reported to DeepSource. Every night on develop, and on demand.
+#
+# It used to run on every pull request and push, beside CI. The instrumented
+# build is slow and the job never gated anything, so it now measures develop
+# once a day instead of every commit. Pull requests carry no coverage report.
+#
+# It is not a gate: the tests are judged by CI, on the build users get. A red
+# run here means the report is missing for that night, nothing more.
+
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+# Each run stands alone: starting one must not cancel another.
+concurrency:
+  group: coverage-${{ github.run_id }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    # The whole suite in one job, on the slower instrumented build.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # rustup reads the version, components and targets from
+      # rust-toolchain.toml; the Rust module is built from source here.
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install || rustup show active-toolchain
+          rustc --version
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: fem-wasm
+
+      - name: Set up the web app (Bun, dependencies, just, wasm-bindgen)
+        uses: ./.github/actions/setup-web
+        with:
+          wasm-artifacts: "false"
+
+      # The published engine for these engine sources, and the Rust module
+      # built from this checkout. CI publishes the engine from develop once
+      # the C++ jobs pass there; a run with no engine would report nothing.
+      - name: Prepare both WebAssembly modules
+        run: |
+          bash scripts/fetch-wasm-engine.sh --optional
+          if [ ! -s web/src/wasm/pkg/kofem_wasm_emcc.wasm ]; then
+            echo "::error title=No published engine::No engine release exists for these engine sources, so no test ran. CI publishes one from develop and main once the C++ jobs pass there."
+            exit 1
+          fi
+          (cd web && bun run wasm:prepare)
+
+      - name: Set up Playwright Chromium
+        uses: ./.github/actions/setup-playwright
+        timeout-minutes: 5
+
+      # Whether the tests pass is not this job's question; the recipe reports
+      # what they covered either way.
+      - name: Browser tests on the instrumented build, and their coverage
+        run: just coverage
+
+      # A pinned release binary, checked against its published SHA-256. HEAD
+      # is the develop commit itself, which is the one the report names.
+      - name: Report coverage to DeepSource
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+          DEEPSOURCE_CLI_VERSION: 0.10.2
+          DEEPSOURCE_CLI_SHA256: 031efbf3326b26af63bbb962a093f4d532fa1a096aa9fd4b08095f2aa85042a8
+        run: |
+          archive="deepsource_${DEEPSOURCE_CLI_VERSION}_linux_x86_64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 2 --max-time 120 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/DeepSourceCorp/cli/releases/download/v${DEEPSOURCE_CLI_VERSION}/$archive"
+          echo "${DEEPSOURCE_CLI_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/deepsource"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/deepsource" deepsource
+          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
+          "$RUNNER_TEMP/deepsource/deepsource" report --analyzer test-coverage --key javascript \
+            --value-file web/coverage/lcov.deepsource.info
