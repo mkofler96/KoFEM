@@ -38,7 +38,7 @@ export default {
         <p>There is no closed-form solution. The reference is the converged
         vertical displacement of the top corner C, 8.075 mm, reported by
         Casquero and Golestanian (2024) for exactly these values.</p>
-        <p>With ${tex("λ \\gg μ")} the solution is almost free of volume
+        <p>With ${tex("λ")} so much larger than ${tex("μ")}, the solution is almost free of volume
         change: ${tex("\\nabla \\cdot \\mathbf{u} \\approx 0")} everywhere. A
         linear tetrahedron has one constant strain, so each element must keep
         its own volume. A mesh has roughly as many elements as unknowns, so

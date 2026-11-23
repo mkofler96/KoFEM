@@ -21,6 +21,8 @@ cd web && bun run validate:report
 | Plate with a hole (shells) | stress-concentration factor Kt | 3.1766 | Howland's Kt for 2a/W = 0.2 | +1.17% | 8% | ✅ |
 | Hollow shaft under torsion | angle of twist θ | 1.4774e-3 rad | θ = T·L / (G·J) | +1.97% | 5% | ✅ |
 | Cook's membrane | loaded-edge deflection | 23.936 mm | converged plane-stress value | -0.10% | 1% | ✅ |
+| Cook's membrane, nearly incompressible | top-corner deflection | 8.0474 mm | converged plane-strain value | -0.34% | 1% | ✅ |
+| Cook's membrane, nearly incompressible, P1 (expected failure) | top-corner deflection | 4.5789 mm | converged plane-strain value | -43.30% | -43.30 ± 2% | ⚠️ as recorded |
 | Tie patch test | largest von Mises stress | 100.00 MPa | σ (uniform) | +0.00% | 0.01% | ✅ |
 | Tied thick-walled cylinder | bore radial displacement u(a) | 0.045620 mm | u(a), Lamé rings tied at r = c | -0.65% | 1% | ✅ |
 | Tied cantilever beam | tip deflection δ | -1.9045 mm | −P/(3·E·I)·((L+g)³ − (L/2+g)³ + (L/2)³) | -0.46% | 1% | ✅ |
