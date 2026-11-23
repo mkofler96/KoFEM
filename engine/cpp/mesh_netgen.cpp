@@ -120,6 +120,22 @@ using OccGeometryPtr = std::unique_ptr<nglib::Ng_OCC_Geometry, OccGeometryDelete
 using NetgenMeshPtr  = std::unique_ptr<nglib::Ng_Mesh, NetgenMeshDeleter>;
 #endif
 
+// Releases Netgen's node pools on every way out of generate_fem_mesh (KOF-431).
+// Its destructor runs after generate_fem_mesh_owned has freed the geometry and
+// the mesh, which is what makes the release safe.
+class NetgenPoolRelease {
+public:
+    NetgenPoolRelease() = default;
+    ~NetgenPoolRelease() {
+        kofem_release_netgen_pools();
+        log_mem("generate_fem_mesh: Netgen pools released");
+    }
+    NetgenPoolRelease(const NetgenPoolRelease&) = delete;
+    NetgenPoolRelease& operator=(const NetgenPoolRelease&) = delete;
+    NetgenPoolRelease(NetgenPoolRelease&&) = delete;
+    NetgenPoolRelease& operator=(NetgenPoolRelease&&) = delete;
+};
+
 // Records whether operator new failed while it is alive. Netgen's volume fill
 // catches the std::bad_alloc itself and returns no tetrahedra, or skips a
 // domain, so its result alone cannot tell running out of memory from a
@@ -166,6 +182,7 @@ val generate_fem_mesh_owned(const std::string& opts_json);
 // message can be built.
 val generate_fem_mesh(const std::string& opts_json)
 {
+    const NetgenPoolRelease release_pools;
     try {
         return generate_fem_mesh_owned(opts_json);
     } catch (const std::bad_alloc&) {
