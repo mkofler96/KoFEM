@@ -6,6 +6,7 @@ at commit `c3464c11c60b1352d5e8f5f0428a3a6943837568` (MIT, see `LICENSE`).
 This copy is **modified** for KoFEM:
 
 - `references/comment-sicko.md` is the upstream `agents/comment-sicko.md` prompt, spawned as a general subagent; there is no separate agent definition.
+- The persona's fixed opening line ("Yes... Ha ha ha... Yes!") is dropped: nothing reads it, and it only added noise to reports.
 - The base branch is `develop`, not `main`.
 - References to `poteto-mode`, `why`, `arena` and `principle-redesign-from-first-principles` (not vendored) are replaced with `git log -S`, `git blame`, the Linear issue, and the vendored `architect` and `principle-fix-root-causes` skills.
 - Keep-list made concrete for KoFEM: SPDX headers, OCCT/Netgen/wasm-bindgen behaviour, `///` docs on public crate items.
