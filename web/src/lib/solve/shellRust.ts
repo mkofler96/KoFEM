@@ -27,6 +27,7 @@ import {
   type ReactionSummary,
   type SupportOwners,
 } from "./reactions.js";
+import { release } from "./rustFailure.js";
 
 // The C++ shell solve's stopping rule: ‖f − K·u‖ / ‖f‖ below 1e-10.
 const RELATIVE_TOLERANCE = 1e-10;
@@ -129,14 +130,14 @@ export async function solveShellInRust(
               : readReactions(model, solution, forces, supports),
         };
       } finally {
-        solution.free();
+        release(solution);
       }
     } finally {
       // finish() consumes the run; free it only when it was not reached.
-      if (!finished) run.free();
+      if (!finished) release(run);
     }
   } finally {
-    model.free();
+    release(model);
   }
 }
 

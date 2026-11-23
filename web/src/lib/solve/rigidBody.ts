@@ -50,6 +50,7 @@ import {
   type CouplingDefinition,
 } from "../coupling.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
+import { release } from "./rustFailure.js";
 
 type Vec3 = [number, number, number];
 
@@ -436,7 +437,7 @@ export function looseComponents(
       ),
     }));
   } finally {
-    motions.free();
+    release(motions);
   }
 }
 

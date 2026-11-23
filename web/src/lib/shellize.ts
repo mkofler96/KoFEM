@@ -26,6 +26,7 @@ import {
   ShellizeInput,
 } from "../wasm/fem/kofem_wasm.js";
 import { SpatialGrid } from "./spatialGrid.js";
+import { release, type Freeable } from "./solve/rustFailure.js";
 
 export type Vec3 = [number, number, number];
 
@@ -148,16 +149,12 @@ export interface CouplingOptions {
 
 // ── Conversion to and from the Rust module ────────────────────────────────────
 
-interface Freeable {
-  free(): void;
-}
-
 // Run `use` on a WASM-side object and release its memory afterwards.
 function using<T extends Freeable, R>(value: T, use: (value: T) => R): R {
   try {
     return use(value);
   } finally {
-    value.free();
+    release(value);
   }
 }
 

@@ -11,6 +11,7 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 mod convergence;
+mod failure;
 mod field;
 mod mixed;
 mod outline;
@@ -26,6 +27,7 @@ pub use convergence::{
     clamped_free_wedge_exponent, extrapolate_to_zero_size, fit_convergence_rate,
     relative_element_sizes, ConvergenceRate, ZeroSizeExtrapolation,
 };
+pub use failure::{record_panics, take_panic_message};
 pub use field::{check_field_expression, evaluate_field_expression};
 pub use mixed::MixedModel;
 pub use outline::{outer_faces, unique_edges, MeshOuterFaces};

@@ -17,6 +17,7 @@ import type {
   MortarWeights,
   TieWeighting,
 } from "../tieConstraints.js";
+import { release } from "./rustFailure.js";
 
 // The parts of the Rust module the mortar weights need, passed in so the
 // worker and the node-side tests can each load the module their own way.
@@ -92,11 +93,11 @@ export function rustMortarWeights(fem: TieMortarModule): MortarWeights {
         });
         return rows;
       } finally {
-        ties.free();
+        release(ties);
       }
     } finally {
-      slaveSurface.free();
-      masterSurface.free();
+      release(slaveSurface);
+      release(masterSurface);
     }
   };
 }

@@ -16,6 +16,7 @@ import {
   SolveOptions,
   Ties,
   evaluateFieldExpression,
+  takePanicMessage,
   tieMortarWeights,
   TopologyRun,
   TopologySettings,
@@ -45,7 +46,13 @@ import {
   type ThinWallCheckInput,
 } from "../lib/solve/thinWall.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
-import { inStage, inStageAsync, splitStage } from "../lib/workerError.js";
+import {
+  inStage,
+  inStageAsync,
+  splitStage,
+  type FailureStage,
+} from "../lib/workerError.js";
+import { explainRustFailure } from "../lib/solve/rustFailure.js";
 import {
   buildMeshTimeShellModel,
   prepareAutoShellSolve,
@@ -1173,13 +1180,26 @@ function isWasmTrap(err: unknown): boolean {
   ].some((message) => err.message.includes(message));
 }
 
+// The steps that call the Rust module only, never the C++ engine, so a
+// WebAssembly trap in them is the Rust module's (KOF-454).
+const RUST_STAGES: readonly FailureStage[] = ["shell_idealisation", "solving"];
+
 function reportTaskError(id: number, type: string, failure: unknown): void {
-  const { stage, error: err } = splitStage(failure);
+  const { stage, error: raw } = splitStage(failure);
+  const err =
+    stage !== null && RUST_STAGES.includes(stage)
+      ? explainRustFailure(raw, takePanicMessage)
+      : raw;
   const trap = isWasmTrap(err);
+  // An explained Rust failure is written for the user; its trap and stack go
+  // to the console only.
+  const explained = err !== raw && err instanceof Error;
   const detail =
     err instanceof EngineLoadError
       ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
-      : describeError(err);
+      : explained
+        ? err.message
+        : describeError(err);
   const errorMessage = trap
     ? `WASM trap (code bug, not OOM): ${detail}`
     : detail;
@@ -1187,7 +1207,7 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
     trap
       ? `[solver.worker] WASM trap in ${type}:`
       : `[solver.worker] ${type} failed:`,
-    detail,
+    explained ? `${detail}\n${describeError(raw)}` : detail,
   );
   self.postMessage({
     id,
