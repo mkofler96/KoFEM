@@ -73,7 +73,6 @@ export function maxFacetStressPerNode(
       triangles[3 * t + 1],
       triangles[3 * t + 2],
     ])
-      // eslint-disable-next-line kofem/no-silent-fallback -- running max over adjacent facets; 0 is the identity for a node seen for the first time
       vmByNode.set(node, Math.max(vmByNode.get(node) ?? 0, vm));
   }
   return vmByNode;

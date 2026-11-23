@@ -86,7 +86,6 @@ function meshSurface(
     const local = el.type === "CTETRA" ? TET_FACE_INDICES : HEX_FACE_INDICES;
     for (const lf of local) {
       const key = faceKey(lf.map((i) => el.nodeIds[i]));
-      // eslint-disable-next-line kofem/no-silent-fallback -- counting face owners; 0 is the identity for a face seen for the first time
       solidCount.set(key, (solidCount.get(key) ?? 0) + 1);
     }
   }
@@ -119,9 +118,13 @@ function groupNodalForces(
   const kind = loadKind(g);
   if (kind === "moment") return forces;
   const add = (id: number, f: Vec3) => {
-    // eslint-disable-next-line kofem/no-silent-fallback -- accumulating forces; the zero vector is the identity for a node seen for the first time
-    const acc = forces.get(id) ?? [0, 0, 0];
-    forces.set(id, [acc[0] + f[0], acc[1] + f[1], acc[2] + f[2]]);
+    const acc = forces.get(id);
+    forces.set(
+      id,
+      acc === undefined
+        ? [...f]
+        : [acc[0] + f[0], acc[1] + f[1], acc[2] + f[2]],
+    );
   };
 
   for (const l of rebuildLoads(

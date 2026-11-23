@@ -167,6 +167,38 @@ function presenceSplit(node) {
   return null;
 }
 
+// `m.set(k, (m.get(k) ?? 0) + x)` and `m.set(k, Math.max(m.get(k) ?? 0, x))`:
+// a running sum, count or maximum read back into its own map entry. The
+// default is the identity of the reduction for a key seen first, not a value
+// standing in for missing data.
+function isOwnEntryUpdate(node, source) {
+  const read = unwrap(node.left);
+  if (
+    read.type !== "CallExpression" ||
+    read.callee.type !== "MemberExpression" ||
+    read.callee.property.name !== "get" ||
+    read.arguments.length !== 1
+  )
+    return false;
+  let inner = node;
+  for (let outer = node.parent; outer; inner = outer, outer = outer.parent) {
+    if (
+      outer.type === "CallExpression" &&
+      outer.callee.type === "MemberExpression" &&
+      outer.callee.property.name === "set" &&
+      outer.arguments.length === 2 &&
+      outer.arguments[1] === inner
+    )
+      return (
+        sameValue(outer.callee.object, read.callee.object, source) &&
+        sameValue(outer.arguments[0], read.arguments[0], source)
+      );
+    if (outer.type.endsWith("Statement") || outer.type.includes("Function"))
+      return false;
+  }
+  return false;
+}
+
 export default {
   meta: {
     type: "problem",
@@ -233,7 +265,11 @@ export default {
           return;
         }
 
-        if (checkValueDefaults && isValueDefault(node.right))
+        if (
+          checkValueDefaults &&
+          isValueDefault(node.right) &&
+          !isOwnEntryUpdate(node, source)
+        )
           reportValueDefault(node, node.right);
       },
     };

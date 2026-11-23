@@ -10,6 +10,7 @@ import type {
   Load,
 } from "../workers/solverTypes.js";
 import type { SolveMesh } from "./solve/contracts.js";
+import { prescribedValueOf } from "./solve/messageDefaults.js";
 
 // The engine indexes vertices 0-based in the order they are added (mesh
 // vertices are emitted in node-array order). Stored node .id values are NOT
@@ -143,8 +144,7 @@ export function groupDirichlet(constraints: Constraint[], vid: VertexIndexer) {
   const dofsByNode = new Map<number, Set<number>>();
   const prescribed_dofs: { vertex: number; dof: number; value: number }[] = [];
   for (const c of constraints) {
-    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-    const value = c.prescribedValue ?? 0;
+    const value = prescribedValueOf(c);
     if (c.dof > 2) {
       if (value !== 0)
         throw new Error(

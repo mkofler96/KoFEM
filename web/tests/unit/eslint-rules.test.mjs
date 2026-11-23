@@ -121,6 +121,20 @@ const valueDefaults = [{ checkValueDefaults: true }];
 
 ruleTester.run("no-silent-fallback", noSilentFallback, {
   valid: [
+    // A running sum, count or maximum read back into its own map entry: the
+    // default is the identity of the reduction, not a stand-in for data.
+    {
+      code: "owners.set(key, (owners.get(key) ?? 0) + 1);",
+      options: valueDefaults,
+    },
+    {
+      code: "vmByNode.set(node, Math.max(vmByNode.get(node) ?? 0, vm));",
+      options: valueDefaults,
+    },
+    {
+      code: "area.set(face, (area.get(face) ?? 0) + triangleArea(t));",
+      options: valueDefaults,
+    },
     // Absence markers stay allowed: they flow into explicit emptiness checks.
     { code: "const ids = payload.ids ?? [];", options: valueDefaults },
     { code: "const name = prop.name ?? null;", options: valueDefaults },
@@ -184,6 +198,22 @@ ruleTester.run("no-silent-fallback", noSilentFallback, {
     {
       code: "const e = parseFloat(text) || 0;",
       errors: [{ messageId: "nanMasking" }],
+    },
+    // The identity exemption needs the same map and key on both sides.
+    {
+      code: "totals.set(key, (counts.get(key) ?? 0) + 1);",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "counts.set(other, (counts.get(key) ?? 0) + 1);",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
+    },
+    {
+      code: "const count = counts.get(key) ?? 0;",
+      options: valueDefaults,
+      errors: [{ messageId: "valueDefault" }],
     },
     // An empty object of another kind is a value: a zero vector.
     {

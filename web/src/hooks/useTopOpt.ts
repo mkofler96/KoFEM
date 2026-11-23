@@ -34,6 +34,7 @@ import {
 } from "../store/geometrySlice";
 import { passiveElements, roleOf } from "../lib/regions";
 import { topOptTieRefusal } from "../lib/solve/refusals";
+import { prescribedValueOf } from "../lib/solve/messageDefaults";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 
@@ -247,8 +248,7 @@ export function useTopOpt() {
   // The engine's compliance sensitivity assumes homogeneous supports, so it
   // rejects any non-zero prescribed displacement (topology_simp.cpp). Catch it
   // in pre-flight and explain, rather than enable a run that predictably fails.
-  // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-  const hasPrescribed = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
+  const hasPrescribed = constraints.some((c) => prescribedValueOf(c) !== 0);
 
   // The stress constraint is implemented for the all-solid SIMP path only.
   // Shells, and any coupling (which routes even an all-solid model to the

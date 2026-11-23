@@ -81,7 +81,6 @@ export function curvedWallPressures(
     const face = surface.faceIds[index];
     faceOfTriangle.set(faceKey(triangle), face);
     if (wallOfFace.has(face))
-      // eslint-disable-next-line kofem/no-silent-fallback -- running area sum; 0 is the identity for a face seen first
       faceArea.set(face, (faceArea.get(face) ?? 0) + triangleArea(triangle));
   });
 
@@ -146,11 +145,13 @@ export function curvedWallPressures(
         ((entry.kept ? -1 : 1) * pressure * (loaded / facetArea)) / 3;
       for (const { nodes, normal } of facets)
         for (const node of nodes) {
-          // eslint-disable-next-line kofem/no-silent-fallback -- running force sum; zero is the identity for a node seen first
-          const force = shellForces.get(node) ?? [0, 0, 0];
+          let force = shellForces.get(node);
+          if (force === undefined) {
+            force = [0, 0, 0];
+            shellForces.set(node, force);
+          }
           for (let axis = 0; axis < 3; axis++)
             force[axis] += factor * normal[axis];
-          shellForces.set(node, force);
         }
     }
     if (rest.length === surfaceLoad.faces.length) remaining.push(surfaceLoad);
