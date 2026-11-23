@@ -310,7 +310,7 @@ export default {
     <h2 id="incompressible">Nearly incompressible materials</h2>
     <p>Rubber and other elastomers have ${tex("ν")} close to ½: changing their
       volume takes far more stress than changing their shape. The solution
-      then has almost no volume change, ${tex("\nabla \cdot \mathbf{u} \approx 0")}.
+      then has almost no volume change, ${tex("\\nabla \\cdot \\mathbf{u} \\approx 0")}.
       A linear tetrahedron has one constant strain, so this asks every
       element to keep its own volume. A tetrahedral mesh has about as many
       elements as unknowns, so few displacement fields satisfy all those

@@ -107,5 +107,8 @@ test("the Theory Guide note links back to the example", () => {
     "utf8",
   );
   expect(html).toContain('id="incompressible"');
+  // The divergence-free condition renders as math, not as escaped text.
+  const note = html.slice(html.indexOf('id="incompressible"'));
+  expect(note.slice(0, note.indexOf("<h2", 10))).toContain("∇");
   expect(html).toContain(`href="/examples/${ID}/"`);
 });
