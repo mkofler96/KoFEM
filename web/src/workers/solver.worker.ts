@@ -65,11 +65,11 @@ import {
   type MixedPreconditionerName,
 } from "../lib/solve/coupledRust.js";
 import {
-  amgFallbackPreconditioner,
   amgUnavailableReason,
-  FALLBACK_PRECONDITIONER_LABEL,
   isSolverMethod,
+  preconditionerNotice,
   solveCoupledSolidInRust,
+  solvePreconditioner,
   solveSolidInRust,
   type SolverMethod,
 } from "../lib/solve/amg.js";
@@ -920,13 +920,13 @@ async function handleSolve(id: number, payload: SolvePayload) {
   // shells are joined to the solids (handleMixedSolve, handleAutoShellSolve).
   if (route.path === "solid" || route.path === "shell")
     refuseUnheldBodies(modelRigidBodyInput(payload), payload);
-  if (requestedSolver(payload) === "amg" && reason !== null) {
-    const fallback = amgFallbackPreconditioner(route);
-    self.postMessage({
-      id,
-      log: `AMG is not available for this model (${reason}) — solving with ${FALLBACK_PRECONDITIONER_LABEL[fallback]}.`,
-    });
-  }
+  const requested = requestedSolver(payload);
+  const notice = preconditionerNotice(
+    requested,
+    solvePreconditioner(requested, route, reason, payload.elements),
+    reason,
+  );
+  if (notice !== null) self.postMessage({ id, log: notice });
   switch (route.path) {
     case "shell":
       await handleShellSolve(id, payload);

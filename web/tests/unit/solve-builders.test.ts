@@ -46,10 +46,7 @@ import {
 } from "../../src/lib/solve/route";
 import { topOptTieRefusal } from "../../src/lib/solve/refusals";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking";
-import {
-  amgFallbackPreconditioner,
-  amgUnavailableReason,
-} from "../../src/lib/solve/amg";
+import { amgUnavailableReason } from "../../src/lib/solve/amg";
 
 const steel: Material = {
   id: 1,
@@ -880,16 +877,4 @@ test("routing refuses an all-solid model the Rust solver does not take", () => {
   ).toThrow(
     "The solver cannot solve this model: it supports surface-to-point couplings on tetrahedral meshes only.",
   );
-});
-
-test("the fallback preconditioner follows the solve route", () => {
-  // Only the all-solid path solves with Gauss–Seidel; the shell, coupled and
-  // auto-shell paths use incomplete Cholesky.
-  expect(amgFallbackPreconditioner({ path: "solid" })).toBe("gauss-seidel");
-  for (const route of [
-    { path: "shell" as const },
-    { path: "coupled" as const },
-    { path: "auto-shell" as const, shellBodyIds: new Set([1]) },
-  ])
-    expect(amgFallbackPreconditioner(route)).toBe("incomplete-cholesky");
 });

@@ -31,7 +31,7 @@ export function SolvePanel({
     elementOrder,
     solverMethod,
     setSolverMethod,
-    amgUnavailable,
+    solverNote,
     logs,
   } = useSolver();
   const engine = useEngineGate();
@@ -75,10 +75,9 @@ export function SolvePanel({
             ))}
           </select>
         </div>
-        {solverMethod === "amg" && amgUnavailable !== null && (
+        {solverNote !== null && (
           <div className={styles.formNote} data-testid="solver-method-note">
-            AMG is not available for this model ({amgUnavailable.reason}). It
-            will solve with {amgUnavailable.fallback}.
+            {solverNote}
           </div>
         )}
         <div className={styles.statRow}>

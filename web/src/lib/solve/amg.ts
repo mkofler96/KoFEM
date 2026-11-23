@@ -131,27 +131,49 @@ export function amgUnavailableReason(model: {
   return null;
 }
 
-// The preconditioner a solve uses when AMG is not chosen or cannot take the
-// model, decided by the route the model takes (routeSolve), so the two cannot
-// drift apart. The shell, coupled and auto-shell paths use incomplete
-// Cholesky IC(0) (SSOR only if the factorisation breaks down); the all-solid
-// path solves with Gauss–Seidel CG.
-export type FallbackPreconditioner = "incomplete-cholesky" | "gauss-seidel";
+export type Preconditioner = SolverMethod | "incomplete-cholesky";
 
-export function amgFallbackPreconditioner(
+// The preconditioner a solve uses for the chosen method, decided by the route
+// the model takes (routeSolve), so the Solve panel and the worker agree. A
+// path with shell facets solves with incomplete Cholesky IC(0) unless AMG was
+// chosen and takes the model; the shell solves have no Gauss–Seidel. An
+// all-solid path solves with the chosen method, or routeSolve refuses it.
+export function solvePreconditioner(
+  requested: SolverMethod,
   route: SolveRoute,
-): FallbackPreconditioner {
-  return route.path === "solid" ? "gauss-seidel" : "incomplete-cholesky";
+  amgReason: string | null,
+  elements: readonly Element[],
+): Preconditioner {
+  if (requested === "amg" && amgReason === null) return "amg";
+  const hasShells =
+    route.path === "shell" ||
+    route.path === "auto-shell" ||
+    elements.some((element) => element.type === "CTRIA3");
+  return hasShells ? "incomplete-cholesky" : requested;
 }
 
-// The fallback preconditioner in words for the user.
-export const FALLBACK_PRECONDITIONER_LABEL: Record<
-  FallbackPreconditioner,
-  string
-> = {
-  "incomplete-cholesky": "an incomplete Cholesky preconditioner",
+const PRECONDITIONER_LABEL: Record<Preconditioner, string> = {
+  amg: "AMG",
   "gauss-seidel": "Gauss–Seidel",
+  "incomplete-cholesky": "an incomplete Cholesky preconditioner",
 };
+
+// Why the chosen method is not the one the solve uses, and which it uses, for
+// the Solve panel and the solve log; null when the chosen method is used.
+export function preconditionerNotice(
+  requested: SolverMethod,
+  used: Preconditioner,
+  amgReason: string | null,
+): string | null {
+  if (used === requested) return null;
+  const reason =
+    requested === "gauss-seidel" ? "it does not support shells" : amgReason;
+  if (reason === null)
+    throw new Error(
+      `preconditionerNotice: AMG gave way to ${used} with no reason`,
+    );
+  return `${METHOD_LABEL[requested]} is not available for this model (${reason}). It will solve with ${PRECONDITIONER_LABEL[used]}.`;
+}
 
 // The classes of the Rust module the solve needs, passed in so the worker and
 // the node-side tests can each load the module their own way.

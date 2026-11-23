@@ -269,13 +269,15 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       s.result = null;
     }),
 
-  // A name is not physics: the loads and the result stand.
+  // A name is not physics, so the result stands. The loads are rebuilt only
+  // because each surface load carries its group's name into solve refusals.
   renameLoadGroup: (id: number, name: string) => {
     const valid = validGroupName(name);
     set((s) => {
       const group = s.loadGroups.find((g) => g.id === id);
       if (!group) return;
       group.name = valid;
+      rebuildAllLoads(s);
     });
   },
 
