@@ -311,7 +311,7 @@ function resultsTable(entries) {
               e.expectedFailure
                 ? `
             <tr>
-              <th scope="row"><a href="${pageUrl(e.id)}">${esc(e.name)}</a>, ${ORDER_NAMES[e.expectedFailure.order].toLowerCase()} (a known limitation)</th>
+              <th scope="row">${esc(e.name)}, ${ORDER_NAMES[e.expectedFailure.order].toLowerCase()} (a known limitation)</th>
               <td class="wide">${esc(e.quantity)}</td>
               <td class="num" data-label="Reference">${withUnit(num(e.reference), e.unit)}</td>
               <td class="num" data-label="KoFEM">${withUnit(num(e.expectedFailure.fe), e.unit)}</td>
