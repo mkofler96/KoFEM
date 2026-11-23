@@ -7,6 +7,11 @@ import * as THREE from "three";
 import { useModelStore } from "../../store/modelStore";
 import { fitViewBox } from "../../lib/fitView";
 import { WORLD_UP } from "../../lib/orbitPivot";
+import {
+  fitDistance,
+  placeCamera,
+  type ProjectionCamera,
+} from "../../lib/projection";
 
 // [1,1,1] normalized — standard isometric direction
 const ISO_DIR = new THREE.Vector3(1, 1, 1).normalize();
@@ -20,7 +25,7 @@ export interface DrawnResult {
 // Fit view frames what the scene draws (KOF-385), so MeshScene mounts it and
 // passes the deformed result as drawn: null when no result is shown deformed.
 export function FitCamera({ result }: { result: DrawnResult | null }) {
-  const { camera, controls, invalidate } = useThree();
+  const { controls, invalidate, get } = useThree();
   const fitViewTrigger = useModelStore((s) => s.fitViewTrigger);
   // Read at fit time: a new result or scale does not refit by itself.
   const resultRef = useRef(result);
@@ -28,10 +33,14 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
     resultRef.current = result;
   }, [result]);
 
+  // The trigger last fitted. Switching the projection (ProjectionSwitch)
+  // mounts new controls; that keeps the view and must not fit it again.
+  const fitted = useRef<number | null>(null);
+
   useEffect(() => {
     // Controls may not be registered yet on the initial mount — skip and wait
     // for the effect to re-fire once OrbitControls registers via makeDefault.
-    if (!controls) return;
+    if (!controls || fitted.current === fitViewTrigger) return;
 
     const { nodes, stepSurface, showUndeformedOverlay } =
       useModelStore.getState();
@@ -55,18 +64,17 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
     );
     const radius = Math.max(diagonal / 2, 1e-6);
 
-    // Fit the narrower of the two angles of view: the horizontal one on a
-    // phone held upright.
-    const cam = camera as THREE.PerspectiveCamera;
-    const halfTan = Math.tan((cam.fov * Math.PI) / 360);
-    const distance = radius / (halfTan * Math.min(1, cam.aspect));
-
+    const { camera, size } = get();
     // Upright, also after a drag turned the view upside down.
     camera.up.copy(WORLD_UP);
-    camera.position.copy(center).addScaledVector(ISO_DIR, distance);
-    cam.near = Math.max(distance * 0.001, 1e-4);
-    cam.far = distance * 100;
-    cam.updateProjectionMatrix();
+    placeCamera(
+      camera as ProjectionCamera,
+      center,
+      ISO_DIR,
+      fitDistance(radius, size),
+      size,
+    );
+    fitted.current = fitViewTrigger;
 
     const oc = controls as unknown as { target: THREE.Vector3; update(): void };
     oc.target.copy(center);
@@ -74,7 +82,7 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
     // The canvas renders on demand: a fit that only changes near/far fires no
     // controls change event, so ask for the frame explicitly.
     invalidate();
-  }, [fitViewTrigger, controls, invalidate]); // deps intentionally omit scene state — refit only on trigger
+  }, [fitViewTrigger, controls, invalidate, get]); // deps intentionally omit scene state — refit only on trigger
 
   return null;
 }

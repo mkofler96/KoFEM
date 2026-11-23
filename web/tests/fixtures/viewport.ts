@@ -15,7 +15,10 @@
 // kofem/viewport-through-fixture), so no test can skip the wait.
 
 import type { Page } from "@playwright/test";
-import type { ViewportHooks } from "../../src/components/viewport/ViewportTestHooks";
+import type {
+  ViewCamera,
+  ViewportHooks,
+} from "../../src/components/viewport/ViewportTestHooks";
 
 /** A point in model space, in mm. */
 export type Point = [number, number, number];
@@ -108,6 +111,17 @@ export async function lookFrom(page: Page, direction: Point): Promise<void> {
     direction,
   );
   await settleViewport(page);
+}
+
+/**
+ * The viewport camera once the viewport has settled: its kind (perspective or
+ * orthographic), the direction it looks along and its orbit target.
+ */
+export async function viewCamera(page: Page): Promise<ViewCamera> {
+  await settleViewport(page);
+  return page.evaluate(() =>
+    (window as unknown as ViewportWindow).__kofemViewport.camera(),
+  );
 }
 
 /**

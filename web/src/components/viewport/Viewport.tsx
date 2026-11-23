@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { CSSProperties } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { OrbitPivot } from "./OrbitPivot";
 import { ViewportTestHooks } from "./ViewportTestHooks";
+import { ProjectionSwitch } from "./ProjectionSwitch";
 import { pickingEvents } from "./pickingEvents";
 import { ColorBar } from "./ColorBar";
 import { DensityColorBar } from "./DensityColorBar";
@@ -15,6 +17,19 @@ import { TopOptChart } from "./TopOptChart";
 import { SampleGuide } from "./SampleGuide";
 import { useModelStore } from "../../store/modelStore";
 import { useFemModule } from "../../hooks/useFemModule";
+import { VIEW_FOV } from "../../lib/projection";
+
+const HUD_BUTTON: CSSProperties = {
+  padding: "4px 10px",
+  background: "rgba(255,255,255,0.85)",
+  border: "1px solid #d1d5db",
+  borderRadius: 5,
+  fontSize: 12,
+  color: "#374151",
+  cursor: "pointer",
+  backdropFilter: "blur(4px)",
+  fontFamily: "inherit",
+};
 
 // The mesh is drawn from what the Rust module finds of it; if the module
 // cannot load, say so instead of showing an empty viewport.
@@ -47,26 +62,41 @@ export function Viewport() {
   const pickMode = useModelStore((s) => s.pickMode);
   const splitPicking = useModelStore((s) => s.splitPicking);
   const triggerFitView = useModelStore((s) => s.triggerFitView);
+  const projection = useModelStore((s) => s.projection);
+  const setProjection = useModelStore((s) => s.setProjection);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Top-right HUD */}
-      <div style={{ position: "absolute", top: 10, right: 10, zIndex: 10 }}>
-        <button
-          style={{
-            padding: "4px 10px",
-            background: "rgba(255,255,255,0.85)",
-            border: "1px solid #d1d5db",
-            borderRadius: 5,
-            fontSize: 12,
-            color: "#374151",
-            cursor: "pointer",
-            backdropFilter: "blur(4px)",
-            fontFamily: "inherit",
-          }}
-          onClick={triggerFitView}
-        >
+      {/* Top-right HUD: stacked, so it clears the sample guide on a phone */}
+      <div
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          zIndex: 10,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "stretch",
+          gap: 6,
+        }}
+      >
+        <button style={HUD_BUTTON} onClick={triggerFitView}>
           Fit View
+        </button>
+        <button
+          style={HUD_BUTTON}
+          title={
+            projection === "perspective"
+              ? "Switch to orthographic"
+              : "Switch to perspective"
+          }
+          onClick={() =>
+            setProjection(
+              projection === "perspective" ? "orthographic" : "perspective",
+            )
+          }
+        >
+          {projection === "perspective" ? "Perspective" : "Orthographic"}
         </button>
       </div>
 
@@ -95,7 +125,7 @@ export function Viewport() {
       <Canvas
         frameloop="demand"
         events={pickingEvents}
-        camera={{ position: [5, 5, 5], fov: 45 }}
+        camera={{ position: [5, 5, 5], fov: VIEW_FOV }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         // Materials clip at the result section plane (KOF-390).
         onCreated={({ gl }) => {
@@ -113,6 +143,7 @@ export function Viewport() {
         {/* Rotation is OrbitPivot's: about the point under the cursor. */}
         <OrbitControls makeDefault enableRotate={false} zoomToCursor />
         <OrbitPivot />
+        <ProjectionSwitch />
         <ViewportTestHooks />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
           <GizmoViewport labelColor="#374151" axisHeadScale={1} />
