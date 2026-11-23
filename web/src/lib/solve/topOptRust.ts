@@ -159,14 +159,18 @@ function levelSetArguments(settings: TopOptSettings): {
       settings.maxIterations,
       "maxIterations",
     ),
-    streamEvery: requirePositiveInteger(
-      // eslint-disable-next-line kofem/no-silent-fallback -- streamEvery is optional in TopOptSettings; the documented default streams every iteration
-      settings.streamEvery ?? DEFAULT_STREAM_EVERY,
-      "streamEvery",
-    ),
+    streamEvery: streamEveryOf(settings),
     passiveSolid: Uint32Array.from(passive?.solid ?? []),
     passiveVoid: Uint32Array.from(passive?.void ?? []),
   };
+}
+
+function streamEveryOf(settings: TopOptSettings): number {
+  return requirePositiveInteger(
+    // eslint-disable-next-line kofem/no-silent-fallback -- streamEvery is optional in TopOptSettings; the documented default streams every iteration
+    settings.streamEvery ?? DEFAULT_STREAM_EVERY,
+    "streamEvery",
+  );
 }
 
 // The second header line of a level-set run, as the engine prints it.
@@ -216,11 +220,7 @@ function buildSettings(
     settings.maxIterations,
     "maxIterations",
   );
-  const streamEvery = requirePositiveInteger(
-    // eslint-disable-next-line kofem/no-silent-fallback -- streamEvery is optional in TopOptSettings; the documented default streams every iteration
-    settings.streamEvery ?? DEFAULT_STREAM_EVERY,
-    "streamEvery",
-  );
+  const streamEvery = streamEveryOf(settings);
   const rust = new fem.TopologySettings(
     objective,
     minVolume ? undefined : bound,

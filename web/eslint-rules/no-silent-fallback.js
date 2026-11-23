@@ -167,6 +167,80 @@ function presenceSplit(node) {
   return null;
 }
 
+// `m.set(k, (m.get(k) ?? 0) + x)`, `m.set(k, Math.max(m.get(k) ?? 0, x))` and
+// `m.set(k, (m.get(k) ?? new Vector3()).add(x))`: a running sum, count or
+// maximum read back into its own map entry, starting from the identity of the
+// reduction (0 for a sum, 0 for a maximum of non-negative values, an empty
+// vector for a vector sum). Any other default, or a direct write of the
+// fallback, is still a fabricated value.
+function isZero(node) {
+  return node.type === "Literal" && node.value === 0;
+}
+
+function isEmptyNew(node) {
+  return node.type === "NewExpression" && node.arguments.length === 0;
+}
+
+function isMathMinMax(callee) {
+  return (
+    callee.type === "MemberExpression" &&
+    callee.object.type === "Identifier" &&
+    callee.object.name === "Math" &&
+    (callee.property.name === "max" || callee.property.name === "min")
+  );
+}
+
+// The reduction expression the fallback starts, or null.
+function reductionOf(node) {
+  const parent = node.parent;
+  if (
+    parent.type === "BinaryExpression" &&
+    parent.operator === "+" &&
+    isZero(node.right)
+  )
+    return parent;
+  if (
+    parent.type === "CallExpression" &&
+    isMathMinMax(parent.callee) &&
+    parent.arguments.includes(node) &&
+    isZero(node.right)
+  )
+    return parent;
+  if (
+    parent.type === "MemberExpression" &&
+    parent.object === node &&
+    parent.property.name === "add" &&
+    parent.parent.type === "CallExpression" &&
+    parent.parent.callee === parent &&
+    isEmptyNew(node.right)
+  )
+    return parent.parent;
+  return null;
+}
+
+function isOwnEntryUpdate(node, source) {
+  const read = unwrap(node.left);
+  if (
+    read.type !== "CallExpression" ||
+    read.callee.type !== "MemberExpression" ||
+    read.callee.property.name !== "get" ||
+    read.arguments.length !== 1
+  )
+    return false;
+  const reduction = reductionOf(node);
+  if (reduction === null) return false;
+  const write = reduction.parent;
+  return (
+    write.type === "CallExpression" &&
+    write.callee.type === "MemberExpression" &&
+    write.callee.property.name === "set" &&
+    write.arguments.length === 2 &&
+    write.arguments[1] === reduction &&
+    sameValue(write.callee.object, read.callee.object, source) &&
+    sameValue(write.arguments[0], read.arguments[0], source)
+  );
+}
+
 export default {
   meta: {
     type: "problem",
@@ -233,7 +307,11 @@ export default {
           return;
         }
 
-        if (checkValueDefaults && isValueDefault(node.right))
+        if (
+          checkValueDefaults &&
+          isValueDefault(node.right) &&
+          !isOwnEntryUpdate(node, source)
+        )
           reportValueDefault(node, node.right);
       },
     };

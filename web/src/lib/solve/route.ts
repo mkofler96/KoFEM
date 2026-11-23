@@ -17,6 +17,7 @@ import {
   temperatureRefusal,
   topOptTieRefusal,
 } from "./refusals.js";
+import { elementOrderOf } from "./messageDefaults.js";
 
 export type SolveRoute =
   // All CTRIA3 → the Kirchhoff shell solve (shellRust.ts).
@@ -52,10 +53,8 @@ function routeModel(payload: SolveModel): SolveRoute {
   // explicit here, unlike the auto-shell path, which idealises thin SOLID
   // bodies itself).
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
-  // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
-  const nCouplings = payload.couplings?.length ?? 0;
-  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-  const elementOrder = payload.elementOrder ?? 1;
+  const nCouplings = (payload.couplings ?? []).length;
+  const elementOrder = elementOrderOf(payload);
   // Shell facets and the tets coupled to them are linear: a shell or mixed
   // model refuses order 2 rather than solve linear behind the user's back.
   const orderRefusal = shellOrderRefusal(elementOrder);

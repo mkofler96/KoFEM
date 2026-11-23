@@ -28,6 +28,7 @@ import {
   unconfirmedMaterialBodies,
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
+import { prescribedValueOf } from "../lib/solve/messageDefaults";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
 // protocol and result storage (displacements + von Mises), the solver log
@@ -87,8 +88,7 @@ export function useSolver() {
   // A non-zero prescribed displacement drives the deformation on its own, so the
   // model is solvable without an applied load. Without either, the solve returns
   // the trivial zero field, so at least one driving action is still required.
-  // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-  const prescribedOk = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
+  const prescribedOk = constraints.some((c) => prescribedValueOf(c) !== 0);
   // A temperature change drives the model on its own too (KOF-449).
   const temperatureOk = temperature !== null;
   const drivingOk = loadOk || prescribedOk || temperatureOk;

@@ -53,16 +53,27 @@ messages over silent fall-throughs.** Concretely:
   string, object/array literal, or a `default`/`fallback`-named identifier)
   is an error.
 
+A running sum, count or maximum read back into its own map entry,
+`m.set(k, (m.get(k) ?? 0) + x)`, is allowed: the default is the identity of
+the reduction, not missing data.
+
 If a field is _genuinely_ optional — a display-only default, a documented
-protocol default, error-path message text — allow-list it explicitly and say
-why:
+protocol default, error-path message text — decide its meaning in **one**
+place and read it through that place everywhere else. Only that place carries
+the exemption, with the reason:
 
 ```ts
-// eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-const order = elementOrder ?? 1;
+// web/src/lib/solve/messageDefaults.ts
+export function elementOrderOf(
+  model: Pick<SolveModel, "elementOrder">,
+): number {
+  // eslint-disable-next-line kofem/no-silent-fallback -- a solve message without elementOrder asks for linear elements
+  return model.elementOrder ?? 1;
+}
 ```
 
 A disable comment without a `-- justification` is treated as a bug in review.
+The same exemption written twice means the default belongs in one place.
 
 ### Variable names
 

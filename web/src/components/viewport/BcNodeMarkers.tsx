@@ -66,11 +66,8 @@ export function BcNodeMarkers({ topology, showResult }: BcNodeMarkersProps) {
       fc.divideScalar(corners.length);
       if (normal.dot(new Vector3().copy(centroid).sub(fc)) > 0) normal.negate();
 
-      for (const id of faceIds) {
-        // eslint-disable-next-line kofem/no-silent-fallback -- accumulating face normals; the zero vector is the identity for a node seen for the first time
-        const acc = outward.get(id) ?? new Vector3();
-        outward.set(id, acc.add(normal));
-      }
+      for (const id of faceIds)
+        outward.set(id, (outward.get(id) ?? new Vector3()).add(normal));
     };
     for (const tri of boundaryTriFaceIds) addFace(tri);
     for (const quad of boundaryQuadFaceIds) addFace(quad);

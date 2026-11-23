@@ -16,6 +16,7 @@ import type {
 } from "../../workers/solverTypes.js";
 import type { VertexIndexer } from "../solveMeshPacking.js";
 import { coupledLoads as packCoupledLoads } from "../solveLoads.js";
+import { prescribedValueOf } from "./messageDefaults.js";
 
 // solve_shell's essential BCs. `fixed_*` always mean u = 0; a driven DOF is a
 // `prescribed_dofs` entry (inhomogeneous essential BC, KOF-210).
@@ -80,8 +81,7 @@ export function shellDirichlet(
         `shell solve: constraint on node ${c.nodeId} names DOF ${c.dof} — valid shell DOFs are 0..5`,
       );
     const vertex = vid(c.nodeId, "constraint");
-    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-    const value = c.prescribedValue ?? 0;
+    const value = prescribedValueOf(c);
     if (value !== 0) {
       prescribed_dofs.push({ vertex, dof: c.dof, value });
       continue;
@@ -131,8 +131,7 @@ export function coupledFixedDofs(
   const prescribed = new Map<number, number>();
   for (const c of constraints) {
     const pi = poolOf(c.nodeId);
-    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-    const value = c.prescribedValue ?? 0;
+    const value = prescribedValueOf(c);
     if (c.dof > 2 && !isRefPoint(pi)) {
       // A rotational CLAMP is dropped here by design (see above), but a driven
       // rotation has no such substitute — dropping it is the silent pin-to-zero

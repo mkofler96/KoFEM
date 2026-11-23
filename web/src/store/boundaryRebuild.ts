@@ -138,7 +138,6 @@ function computeLoadableFaceKeys(elements: FaceElements): Set<string> {
     if (!local) continue;
     for (const lf of local) {
       const key = faceKey(lf.map((i) => el.nodeIds[i]));
-      // eslint-disable-next-line kofem/no-silent-fallback -- counting face owners; 0 is the identity for a face seen for the first time
       solidOwners.set(key, (solidOwners.get(key) ?? 0) + 1);
     }
   }

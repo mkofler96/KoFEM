@@ -104,6 +104,7 @@ import {
   optimizeSolidInRust,
   type TopOptRunResult,
 } from "../lib/solve/topOptRust.js";
+import { elementOrderOf } from "../lib/solve/messageDefaults.js";
 
 let Module: KofemModule | null = null;
 let activeTask: number | null = null;
@@ -737,8 +738,7 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
     id,
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets${inp.shellMaterialNames.length > 0 ? ` (${inp.shellMaterialNames.join(", ")})` : ""} → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
-  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-  const order = payload.elementOrder ?? 1;
+  const order = elementOrderOf(payload);
   const hasShells = inp.shellElements.length > 0;
   const reason = amgReason(payload);
   if (!hasShells && reason !== null) throw new Error(solidModelRefusal(reason));
@@ -829,10 +829,8 @@ function amgReason(payload: SolvePayload): string | null {
   return amgUnavailableReason({
     elements: payload.elements,
     properties: payload.properties,
-    // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-    elementOrder: payload.elementOrder ?? 1,
-    // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
-    couplingCount: payload.couplings?.length ?? 0,
+    elementOrder: elementOrderOf(payload),
+    couplingCount: (payload.couplings ?? []).length,
   });
 }
 
@@ -848,8 +846,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   // (issue #215), at the cost of a slower solve. The solver extends the
   // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
   // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
-  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-  const order = payload.elementOrder ?? 1;
+  const order = elementOrderOf(payload);
   const reason = amgReason(payload);
   if (reason !== null) throw new Error(solidModelRefusal(reason));
   const constraintTies = constraintTieCount(payload.tieGroups);
