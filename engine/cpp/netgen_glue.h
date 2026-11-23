@@ -67,3 +67,11 @@ std::vector<int> kofem_unmeshed_faces(void* geom);
 // on the exact WASM binary layout — a rebuild can flip it from passing to a
 // trap mid-pipeline. Running only the destructor frees each string once.
 void kofem_delete_mesh(void* mesh);
+
+// Return the blocks of Netgen's static node pools to malloc (KOF-431). Netgen
+// allocates the local mesh-size tree (GradingBox) and the nodes of its point
+// and box search trees (ADTreeNode3, ADTreeNode6) from pools that keep every block they ever got,
+// so after a fine mesh they hold memory in proportion to its fineness for the
+// life of the engine. Call only when no Netgen mesh exists: every node still
+// in use would be freed with its block.
+void kofem_release_netgen_pools();
