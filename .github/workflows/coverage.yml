@@ -1,11 +1,8 @@
 name: Coverage
 
 # Coverage of the browser suite, from an Istanbul-instrumented build run for
-# that purpose, reported to DeepSource. Every night on develop, and on demand.
-#
-# It used to run on every pull request and push, beside CI. The instrumented
-# build is slow and the job never gated anything, so it now measures develop
-# once a day instead of every commit. Pull requests carry no coverage report.
+# that purpose, reported to DeepSource. Every night on develop, and on demand;
+# pull requests carry no coverage report.
 #
 # It is not a gate: the tests are judged by CI, on the build users get. A red
 # run here means the report is missing for that night, nothing more.
