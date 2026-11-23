@@ -3,12 +3,16 @@
 
 // KOF-353: a solve path that cannot apply a tie or element order 2 refuses the
 // model, and the panel says why before the run starts, instead of solving a
-// different model than the one the user set up.
+// different model than the one the user set up. The row reads exactly as the
+// refusal, and there is none before a mesh exists (KOF-460).
 
 import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
 import { bootstrapCantilever } from "./fixtures/cantilever";
+import { gotoApp } from "./fixtures/app";
+import { fakeImport } from "./fixtures/mesh";
 import { openTree } from "./fixtures/tree";
+import { shellOrderRefusal } from "../src/lib/solve/refusals";
 
 interface StoreWindow {
   __kofemStore: {
@@ -75,19 +79,35 @@ test("Solve panel refuses element order 2 on a body solved as a shell", async ({
   );
   const model = store(page);
   const runButton = page.getByRole("button", { name: /Run static solve/ });
-  const refusal = page.getByText(
-    /linear elements only, but element order 2 is selected/,
-  );
+  const refusal = page
+    .getByTestId("check-fail")
+    .filter({ hasText: /element order 2/ });
 
   await model.setOrder(2);
   await expect(runButton).toBeEnabled();
   await model.setDiscretization("shell");
-  await expect(refusal).toBeVisible();
+  await expect(refusal).toHaveText(shellOrderRefusal(2));
   await expect(runButton).toBeDisabled();
 
   await model.setOrder(1);
   await expect(refusal).toHaveCount(0);
   await expect(runButton).toBeEnabled();
+});
+
+test("Solve panel shows no route refusal before the part is meshed", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  await fakeImport(page);
+  await openTree(page, "static");
+
+  // With no mesh there is no model to route: the mesh row fails, and the
+  // supports and loads not set yet, but no row says the solve is refused.
+  await expect(page.getByTestId("check-fail")).toHaveText([
+    /mesh/i,
+    "No boundary conditions",
+    "No loads, prescribed displacement or temperature change",
+  ]);
 });
 
 test("Optimize panel refuses a tied model and names the tie", async ({
