@@ -83,8 +83,7 @@ export interface ResultsSlice {
   elementOrder: number;
   // CG preconditioner for static solves (Solve panel). AMG is the default; it
   // covers all-solid tet and hex models of order 1 or 2, as Gauss–Seidel in
-  // Rust does. Others fall back to amgFallbackPreconditioner (incomplete
-  // Cholesky or Gauss–Seidel).
+  // Rust does. A model with shells may solve with another (solvePreconditioner).
   solverMethod: SolverMethod;
   // Colorbar limits for the displayed field, or null for the field's own
   // min/max. A single stress concentration otherwise takes the whole colour

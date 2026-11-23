@@ -22,8 +22,8 @@ import { buildVertexIndexer } from "../../src/lib/solveMeshPacking.ts";
 import { buildSolidEngineInputs } from "../../src/lib/solve/solid.ts";
 import { routeSolve } from "../../src/lib/solve/route.ts";
 import {
-  amgFallbackPreconditioner,
   amgUnavailableReason,
+  solvePreconditioner,
   solveSolidInRust,
 } from "../../src/lib/solve/amg.ts";
 import { boxHexMesh } from "../../../examples/validation/lib/mesh.mjs";
@@ -344,24 +344,37 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       ).not.toBeNull();
     });
 
-    // Without AMG, a solid model solves with Gauss–Seidel; shells, bodies solved
-    // as shells and couplings take the shell/coupled solvers' incomplete
-    // Cholesky. The fallback follows routeSolve, so the two cannot drift.
-    const fallbackFor = (over) =>
-      amgFallbackPreconditioner(routeSolve({ ...model, ...over }));
+    // With Gauss–Seidel chosen, a solid model solves with it, couplings
+    // included; shells and bodies solved as shells take the shell and coupled
+    // solvers' incomplete Cholesky (KOF-461). The choice follows routeSolve, so
+    // the two cannot drift.
+    const fallbackFor = (over) => {
+      const routed = { ...model, ...over };
+      return solvePreconditioner(
+        "gauss-seidel",
+        routeSolve(routed),
+        amgUnavailableReason({
+          elements: routed.elements,
+          properties: routed.properties,
+          elementOrder: 1,
+          couplingCount: routed.couplings?.length ?? 0,
+        }),
+        routed.elements,
+      );
+    };
 
-    test("a solid model falls back to Gauss–Seidel", () => {
+    test("a solid model solves with Gauss–Seidel", () => {
       expect(fallbackFor({})).toBe("gauss-seidel");
     });
 
-    test("a model with a coupling falls back to incomplete Cholesky", () => {
+    test("a solid model with a coupling solves with Gauss–Seidel", () => {
       expect(
         fallbackFor({
           couplings: [
             { name: "c", kind: "kinematic", referencePoint: 1, nodes: [2] },
           ],
         }),
-      ).toBe("incomplete-cholesky");
+      ).toBe("gauss-seidel");
     });
 
     test("a body solved as a shell falls back to incomplete Cholesky", () => {

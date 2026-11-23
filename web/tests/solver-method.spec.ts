@@ -90,6 +90,12 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
   await expect(page.getByTestId("solver-method-note")).toContainText(
     "incomplete Cholesky preconditioner",
   );
+  // Gauss–Seidel does not solve shells either, and says so too (KOF-461).
+  await select.selectOption("gauss-seidel");
+  await expect(page.getByTestId("solver-method-note")).toHaveText(
+    "Gauss–Seidel is not available for this model (it does not support shells). It will solve with an incomplete Cholesky preconditioner.",
+  );
+  await select.selectOption("amg");
   await setDiscretization("solid");
   await setOrder(2);
 

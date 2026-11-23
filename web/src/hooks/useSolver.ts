@@ -8,9 +8,9 @@ import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
 import {
-  amgFallbackPreconditioner,
   amgUnavailableReason,
-  FALLBACK_PRECONDITIONER_LABEL,
+  preconditionerNotice,
+  solvePreconditioner,
 } from "../lib/solve/amg";
 import type { ReactionSummary } from "../lib/solve/reactions";
 import { routeSolve, type SolveRoute } from "../lib/solve/route";
@@ -305,7 +305,7 @@ export function useSolver() {
       : [[false, routeRefusal] satisfies [boolean, string]]),
   ];
 
-  // Why the chosen AMG solver will not take this model and what the solve uses
+  // Why the chosen solver will not take this model and what the solve uses
   // instead (shown under the solver choice), or null. Only computed with a
   // mesh: before one there is no model.
   const amgModel = {
@@ -315,14 +315,14 @@ export function useSolver() {
     couplingCount: couplingGroups.length,
   };
   const amgReason = route !== null ? amgUnavailableReason(amgModel) : null;
-  const amgUnavailable =
-    amgReason === null || route === null
+  const solverNote =
+    route === null
       ? null
-      : {
-          reason: amgReason,
-          fallback:
-            FALLBACK_PRECONDITIONER_LABEL[amgFallbackPreconditioner(route)],
-        };
+      : preconditionerNotice(
+          solverMethod,
+          solvePreconditioner(solverMethod, route, amgReason, elements),
+          amgReason,
+        );
 
   return {
     solve,
@@ -334,7 +334,7 @@ export function useSolver() {
     elementOrder,
     solverMethod,
     setSolverMethod,
-    amgUnavailable,
+    solverNote,
     logs,
   };
 }

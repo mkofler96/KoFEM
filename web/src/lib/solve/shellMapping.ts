@@ -80,8 +80,9 @@ export function maxFacetStressPerNode(
 }
 
 // The recovered stress of an original element: the worst adjacent-facet stress
-// at the shell node nearest its centroid. `context` names the path in the error
-// for an element that references a node the model does not have.
+// at the shell node nearest its centroid. Throws for an element that
+// references a node the model does not have, or whose nearest shell node
+// touches no facet; `context` names the path in the error.
 export function shellStressAtCentroid(
   element: Element,
   nodeById: Map<number, Node>,
@@ -104,8 +105,12 @@ export function shellStressAtCentroid(
   }
   const k = element.nodeIds.length;
   const pi = nearestShell([cx / k, cy / k, cz / k]);
-  // eslint-disable-next-line kofem/no-silent-fallback -- a mid-surface node not touched by any facet (isolated weld artefact) carries no recovered stress
-  return vmByShellNode.get(pi) ?? 0;
+  const vm = vmByShellNode.get(pi);
+  if (vm === undefined)
+    throw new Error(
+      `${context}: element ${element.id} lies nearest mid-surface node ${pi}, which no shell facet uses`,
+    );
+  return vm;
 }
 
 // Per shell node, the mean stress tensor (six components) of the facets
