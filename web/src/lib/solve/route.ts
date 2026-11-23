@@ -40,6 +40,21 @@ export function routeSolve(payload: SolveModel): SolveRoute {
   return route;
 }
 
+// routeSolve on the Solve panel's model: the route it takes, or the reason it
+// is refused, in the worker's words. Null model (no mesh yet): neither.
+export function routeOrRefusal(model: SolveModel | null): {
+  route: SolveRoute | null;
+  routeRefusal: string | null;
+} {
+  if (model === null) return { route: null, routeRefusal: null };
+  try {
+    return { route: routeSolve(model), routeRefusal: null };
+  } catch (err) {
+    if (!(err instanceof Error)) throw err;
+    return { route: null, routeRefusal: err.message };
+  }
+}
+
 function routeModel(payload: SolveModel): SolveRoute {
   // A load no path can apply in full is refused on every path (KOF-411).
   const loadRefusal = surfaceLoadRefusal(

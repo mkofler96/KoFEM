@@ -13,7 +13,7 @@ import {
   solvePreconditioner,
 } from "../lib/solve/amg";
 import type { ReactionSummary } from "../lib/solve/reactions";
-import { routeSolve, type SolveRoute } from "../lib/solve/route";
+import { routeOrRefusal } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
@@ -96,7 +96,7 @@ export function useSolver() {
   // element order the path cannot apply, KOF-353) — the worker refuses it with
   // the same words, so say so before the solve. Only with a mesh: before one
   // there is no model.
-  const { route, routeRefusal } = solveRoute(
+  const { route, routeRefusal } = routeOrRefusal(
     nodes.length > 0
       ? {
           nodes,
@@ -337,19 +337,4 @@ export function useSolver() {
     solverNote,
     logs,
   };
-}
-
-// routeSolve on the panel's model: the route it takes, or the reason it is
-// refused. Null model (no mesh yet): neither.
-function solveRoute(model: Parameters<typeof routeSolve>[0] | null): {
-  route: SolveRoute | null;
-  routeRefusal: string | null;
-} {
-  if (model === null) return { route: null, routeRefusal: null };
-  try {
-    return { route: routeSolve(model), routeRefusal: null };
-  } catch (err) {
-    if (!(err instanceof Error)) throw err;
-    return { route: null, routeRefusal: err.message };
-  }
 }
