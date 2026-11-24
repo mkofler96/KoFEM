@@ -52,9 +52,10 @@ export default {
       explains how to read and export it.</p>
 
     <h2 id="interpolation">Penalized stiffness and its floor</h2>
-    <p>The analysis needs a stiffness for every density. With full-material
-      <a href="/theory/notation/#young-modulus">Young’s modulus</a> ${tex("E_0")},
-      KoFEM uses the modified SIMP interpolation:</p>
+    <p>The analysis needs a stiffness for every density. With
+      ${tex("E_0")} the full-material
+      <a href="/theory/notation/#young-modulus">Young’s modulus</a> of the
+      element’s own body, KoFEM uses the modified SIMP interpolation:</p>
     ${equation("E(ρ_e)=E_{\\mathrm{min}}+ρ_e^{p}(E_0-E_{\\mathrm{min}}),\\quad s(ρ_e)=\\frac{E(ρ_e)}{E_0}=\\frac{E_{\\mathrm{min}}}{E_0}+ρ_e^{p}\\left(1-\\frac{E_{\\mathrm{min}}}{E_0}\\right).", "Young's modulus is a stiffness floor plus density to the power p times the remaining modulus; s is its ratio to the full-material modulus")}
     <p>The <a href="/theory/notation/#simp-penalty">penalty</a> ${tex("p")}
       (default 3) makes intermediate density poor value: at ${tex("ρ_e=0.5")}
@@ -199,15 +200,15 @@ export default {
       [
         [
           "All solid",
-          "One density per tetrahedron or hexahedron, order 1. The app requires one design material, a single E and ν. Optional maximum-stress constraint. A separate level-set method is also available for minimum compliance; it is not described here.",
+          "One density per tetrahedron or hexahedron, order 1. Each element keeps its own body’s material, and the density scales that element’s stiffness. Optional maximum-stress constraint. A separate level-set method is also available for minimum compliance; it is not described here.",
         ],
         [
           "All shell",
-          "One density per triangular shell facet. Element volume is facet area × thickness, so per-facet thickness is respected. One shell material. No stress constraint.",
+          "One density per triangular shell facet. Element volume is facet area × thickness, so per-facet thickness is respected. Each facet keeps its own body’s material. No stress constraint.",
         ],
         [
           "Mixed shell and solid, or any coupling",
-          "One density field over the tetrahedra followed by the facets. Couplings are geometric constraints, not design variables, and remain intact. One solid and one shell material, so their relative stiffness is kept. No stress constraint.",
+          "One density field over the tetrahedra followed by the facets. Couplings are geometric constraints, not design variables, and remain intact. Every body keeps its own material, so the relative stiffness of the bodies is kept. No stress constraint.",
         ],
       ],
     )}

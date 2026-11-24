@@ -138,8 +138,8 @@ export default {
         ],
         [
           "Materials",
-          "One material per solid domain and one per shell domain.",
-          "Per-body design materials.",
+          "Each body keeps its own material; the density scales that material’s stiffness.",
+          "Choosing between materials as part of the design.",
         ],
         [
           "Result and export",

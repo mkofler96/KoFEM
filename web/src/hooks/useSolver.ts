@@ -4,7 +4,11 @@
 import type { ElementStress } from "../lib/stressFields";
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import { fmt, loadsSummary, meshCheckLabel } from "../lib/modelDisplay";
+import {
+  loadsSummary,
+  materialCheckLabel,
+  meshCheckLabel,
+} from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
 import {
@@ -272,9 +276,7 @@ export function useSolver() {
           ? "A body references a deleted material — reassign body materials"
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
-            : properties.length > 1
-              ? `Materials assigned · ${properties.length} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`
-              : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+            : materialCheckLabel(materials, properties.length),
     ],
     [
       bcOk,
