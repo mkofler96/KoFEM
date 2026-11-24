@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-22",
-  "engine": "engine-44314641a642",
-  "fem": "fem-9e0ba78fc956",
+  "generated": "2026-11-24",
+  "engine": "engine-eb6356518f17",
+  "fem": "fem-e22298e777ec",
   "cases": [
     {
       "id": "axial-bar",
@@ -331,8 +331,8 @@
       "reference": 3.14,
       "referenceLabel": "Howland's Kt for 2a/W = 0.2",
       "tolPct": 8,
-      "fe": 3.1766020602643383,
-      "errPct": 1.165670709055357,
+      "fe": 3.1088945004727004,
+      "errPct": -0.99062100405413,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -384,8 +384,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 26.78183477128445,
-        "max": 317.66020602643385,
+        "min": 26.265379181411507,
+        "max": 310.88945004727003,
         "deform": 0,
         "width": 1200,
         "height": 720
@@ -792,8 +792,8 @@
       "reference": 60,
       "referenceLabel": "NAFEMS LE2 target, 6·m / t²",
       "tolPct": 3,
-      "fe": 61.04166295242878,
-      "errPct": 1.736104920714633,
+      "fe": 61.10747294579169,
+      "errPct": 1.8457882429861527,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -840,8 +840,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 25.9375250889887,
-        "max": 71.04820813100201,
+        "min": 25.75531148459294,
+        "max": 67.64206942857561,
         "deform": 5,
         "width": 1200,
         "height": 900
@@ -854,9 +854,9 @@
       "unit": "mm",
       "reference": 185,
       "referenceLabel": "NAFEMS LE3 target",
-      "tolPct": 5,
-      "fe": 183.17708233534842,
-      "errPct": -0.9853608998116669,
+      "tolPct": 2,
+      "fe": 186.71826271227377,
+      "errPct": 0.9287906552831189,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -898,8 +898,8 @@
       "figure": {
         "field": "displacement",
         "unit": "mm",
-        "min": 1.8370725145779359,
-        "max": 207.02770376859348,
+        "min": 1.8535915950158757,
+        "max": 211.0305940770381,
         "deform": 5,
         "width": 1200,
         "height": 900
@@ -913,8 +913,8 @@
       "reference": -50,
       "referenceLabel": "NAFEMS LE4 target",
       "tolPct": 3,
-      "fe": -49.856776019156456,
-      "errPct": -0.2864479616870881,
+      "fe": -50.29488394122548,
+      "errPct": 0.5897678824509569,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -961,8 +961,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 87.85893772470047,
-        "max": 173.12538969671732,
+        "min": 88.69285317342411,
+        "max": 178.70779958421176,
         "deform": 100,
         "width": 1200,
         "height": 900
@@ -1044,8 +1044,8 @@
       "reference": 0.802,
       "referenceLabel": "NAFEMS LE6 target",
       "tolPct": 2,
-      "fe": 0.8054311354817854,
-      "errPct": 0.427822379274976,
+      "fe": 0.805431135478991,
+      "errPct": 0.42782237892655706,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -1092,8 +1092,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 0.000010311933733248007,
-        "max": 4.217141492721961,
+        "min": 0.00001031193373503975,
+        "max": 4.217141492711235,
         "deform": 10000,
         "width": 1200,
         "height": 470
@@ -1107,8 +1107,8 @@
       "reference": 25.9,
       "referenceLabel": "NAFEMS LE7 target",
       "tolPct": 3,
-      "fe": 25.920182742248237,
-      "errPct": 0.07792564574609316,
+      "fe": 26.02919960069124,
+      "errPct": 0.498840157109037,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -1155,11 +1155,11 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 19.802337118704504,
-        "max": 35.990383808283504,
+        "min": 19.79570911911828,
+        "max": 36.01360082496831,
         "deform": 1000,
         "width": 1200,
-        "height": 761
+        "height": 762
       }
     },
     {
@@ -1170,8 +1170,8 @@
       "reference": 94.5,
       "referenceLabel": "NAFEMS LE8 target",
       "tolPct": 10,
-      "fe": 87.22199462571074,
-      "errPct": -7.7015929886658885,
+      "fe": 85.75718941898556,
+      "errPct": -9.251651408480887,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -1223,8 +1223,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 17.480513259197792,
-        "max": 144.11626706862856,
+        "min": 17.567894305662435,
+        "max": 143.35664889809595,
         "deform": 100,
         "width": 1200,
         "height": 785
@@ -2438,8 +2438,8 @@
               "dofs": 3960,
               "maxElementSize": 4,
               "minElementSize": 0.4,
-              "fe": 3.2159156194513834,
-              "errPct": 2.4176948869867276,
+              "fe": 3.1230428899514027,
+              "errPct": -0.540035351866161,
               "ci": false
             },
             {
@@ -2452,8 +2452,8 @@
               "dofs": 8958,
               "maxElementSize": 2.5,
               "minElementSize": 0.25,
-              "fe": 3.363820638559156,
-              "errPct": 7.128045813985849,
+              "fe": 3.2271066448677406,
+              "errPct": 2.774096970310205,
               "ci": false
             },
             {
@@ -2466,8 +2466,8 @@
               "dofs": 13614,
               "maxElementSize": 2,
               "minElementSize": 0.2,
-              "fe": 3.3374232151495717,
-              "errPct": 6.287363539795273,
+              "fe": 3.2244384851295025,
+              "errPct": 2.6891237302389284,
               "ci": false
             },
             {
@@ -2480,8 +2480,8 @@
               "dofs": 23766,
               "maxElementSize": 1.5,
               "minElementSize": 0.15,
-              "fe": 3.215884810513318,
-              "errPct": 2.4167137106152254,
+              "fe": 3.128614286172734,
+              "errPct": -0.36260235118681344,
               "ci": false
             },
             {
@@ -2494,8 +2494,8 @@
               "dofs": 53058,
               "maxElementSize": 1,
               "minElementSize": 0.1,
-              "fe": 3.1766020602643383,
-              "errPct": 1.165670709055357,
+              "fe": 3.1088945004727004,
+              "errPct": -0.99062100405413,
               "ci": true
             },
             {
@@ -2508,8 +2508,8 @@
               "dofs": 92664,
               "maxElementSize": 0.75,
               "minElementSize": 0.075,
-              "fe": 2.9657211811423765,
-              "errPct": -5.5502808553383325,
+              "fe": 2.9537660539272514,
+              "errPct": -5.931017390851869,
               "ci": false
             },
             {
@@ -2522,8 +2522,8 @@
               "dofs": 206406,
               "maxElementSize": 0.5,
               "minElementSize": 0.05,
-              "fe": 3.017861312707982,
-              "errPct": -3.889767111210766,
+              "fe": 3.0065190130923467,
+              "errPct": -4.250986844192784,
               "ci": false
             }
           ]
@@ -2616,8 +2616,8 @@
               "dofs": 1170,
               "maxElementSize": 50,
               "minElementSize": 5,
-              "fe": 61.08500762888902,
-              "errPct": 1.8083460481483609,
+              "fe": 61.06316338524043,
+              "errPct": 1.7719389754007153,
               "ci": false
             },
             {
@@ -2630,8 +2630,8 @@
               "dofs": 3324,
               "maxElementSize": 25,
               "minElementSize": 2.5,
-              "fe": 61.04166295242878,
-              "errPct": 1.736104920714633,
+              "fe": 61.10747294579169,
+              "errPct": 1.8457882429861527,
               "ci": true
             },
             {
@@ -2644,8 +2644,8 @@
               "dofs": 12492,
               "maxElementSize": 12.5,
               "minElementSize": 1.25,
-              "fe": 60.93033630746163,
-              "errPct": 1.55056051243605,
+              "fe": 60.93043023264544,
+              "errPct": 1.5507170544090698,
               "ci": false
             }
           ]
@@ -2738,8 +2738,8 @@
               "dofs": 6336,
               "maxElementSize": 25,
               "minElementSize": 2.5,
-              "fe": 0.8040516848737728,
-              "errPct": 0.2558210565801395,
+              "fe": 0.8040516848738138,
+              "errPct": 0.2558210565852615,
               "ci": false
             },
             {
@@ -2752,8 +2752,8 @@
               "dofs": 23532,
               "maxElementSize": 12.5,
               "minElementSize": 1.25,
-              "fe": 0.8054311354817854,
-              "errPct": 0.427822379274976,
+              "fe": 0.805431135478991,
+              "errPct": 0.42782237892655706,
               "ci": true
             },
             {
@@ -2766,8 +2766,8 @@
               "dofs": 55902,
               "maxElementSize": 8,
               "minElementSize": 0.8,
-              "fe": 0.8061076110258028,
-              "errPct": 0.5121709508482175,
+              "fe": 0.806107611017435,
+              "errPct": 0.512170949804857,
               "ci": false
             }
           ]
@@ -2935,8 +2935,8 @@
               "dofs": 4554,
               "maxElementSize": 500,
               "minElementSize": 50,
-              "fe": 185.40487048057742,
-              "errPct": 0.21884890842022434,
+              "fe": 183.57846704370704,
+              "errPct": -0.7683961925907913,
               "ci": false
             },
             {
@@ -2949,8 +2949,8 @@
               "dofs": 17160,
               "maxElementSize": 250,
               "minElementSize": 25,
-              "fe": 183.17708233534842,
-              "errPct": -0.9853608998116669,
+              "fe": 186.71826271227377,
+              "errPct": 0.9287906552831189,
               "ci": true
             },
             {
@@ -2963,8 +2963,8 @@
               "dofs": 65706,
               "maxElementSize": 125,
               "minElementSize": 12.5,
-              "fe": 180.1721210032075,
-              "errPct": -2.6096643225905365,
+              "fe": 186.9826400755722,
+              "errPct": 1.0716973381471309,
               "ci": false
             },
             {
@@ -2977,8 +2977,8 @@
               "dofs": 250932,
               "maxElementSize": 62.5,
               "minElementSize": 6.25,
-              "fe": 178.4205370866495,
-              "errPct": -3.5564664396489247,
+              "fe": 187.02137193257997,
+              "errPct": 1.0926334770702526,
               "ci": false
             }
           ]
@@ -2987,7 +2987,7 @@
       "rates": {
         "reference": null,
         "series": [],
-        "noRate": "The read-out is a displacement on a shell of flat facets, which levels off below the target instead of converging to it (KOF-453); the rate check covers solid meshes only."
+        "noRate": "The read-out is a displacement on a shell of flat facets, which approximate the doubly curved surface; the rate check covers solid meshes only."
       }
     },
     {
@@ -3010,8 +3010,8 @@
               "dofs": 6516,
               "maxElementSize": 50,
               "minElementSize": 5,
-              "fe": -49.856776019156456,
-              "errPct": -0.2864479616870881,
+              "fe": -50.29488394122548,
+              "errPct": 0.5897678824509569,
               "ci": true
             },
             {
@@ -3024,8 +3024,8 @@
               "dofs": 23904,
               "maxElementSize": 25,
               "minElementSize": 2.5,
-              "fe": -50.0990427904005,
-              "errPct": 0.19808558080100627,
+              "fe": -50.06647102567353,
+              "errPct": 0.13294205134705805,
               "ci": false
             },
             {
@@ -3038,8 +3038,8 @@
               "dofs": 87510,
               "maxElementSize": 12.5,
               "minElementSize": 1.25,
-              "fe": -49.99682043373112,
-              "errPct": -0.006359132537752998,
+              "fe": -50.03332474639655,
+              "errPct": 0.06664949279310406,
               "ci": false
             }
           ]
@@ -3071,8 +3071,8 @@
               "dofs": 11334,
               "maxElementSize": 50,
               "minElementSize": 5,
-              "fe": 25.44664170428897,
-              "errPct": -1.7504181301584054,
+              "fe": 25.991691574614027,
+              "errPct": 0.354021523606287,
               "ci": false
             },
             {
@@ -3085,8 +3085,8 @@
               "dofs": 23136,
               "maxElementSize": 35,
               "minElementSize": 3.5,
-              "fe": 25.798451199782832,
-              "errPct": -0.3920803097187896,
+              "fe": 25.933486191097256,
+              "errPct": 0.12929031311682254,
               "ci": false
             },
             {
@@ -3099,8 +3099,8 @@
               "dofs": 45384,
               "maxElementSize": 25,
               "minElementSize": 2.5,
-              "fe": 25.920182742248237,
-              "errPct": 0.07792564574609316,
+              "fe": 26.02919960069124,
+              "errPct": 0.498840157109037,
               "ci": true
             },
             {
@@ -3113,8 +3113,8 @@
               "dofs": 91668,
               "maxElementSize": 17.5,
               "minElementSize": 1.75,
-              "fe": 25.900795879583914,
-              "errPct": 0.003072894146390494,
+              "fe": 25.951013574694585,
+              "errPct": 0.19696360885940672,
               "ci": false
             }
           ]
@@ -3146,8 +3146,8 @@
               "dofs": 19278,
               "maxElementSize": 10,
               "minElementSize": 1,
-              "fe": 86.10833710066227,
-              "errPct": -8.880066560145748,
+              "fe": 82.80998835836232,
+              "errPct": -12.370382689563684,
               "ci": false
             },
             {
@@ -3160,8 +3160,8 @@
               "dofs": 33666,
               "maxElementSize": 7.5,
               "minElementSize": 0.75,
-              "fe": 87.22199462571074,
-              "errPct": -7.7015929886658885,
+              "fe": 85.75718941898556,
+              "errPct": -9.251651408480887,
               "ci": true
             },
             {
@@ -3174,8 +3174,8 @@
               "dofs": 51984,
               "maxElementSize": 6,
               "minElementSize": 0.6,
-              "fe": 86.78427347173327,
-              "errPct": -8.164789977001828,
+              "fe": 85.38880657369867,
+              "errPct": -9.641474525186588,
               "ci": false
             },
             {
@@ -3188,8 +3188,8 @@
               "dofs": 75624,
               "maxElementSize": 5,
               "minElementSize": 0.5,
-              "fe": 86.85149994450335,
-              "errPct": -8.093650852377413,
+              "fe": 85.72211455456502,
+              "errPct": -9.288767667126958,
               "ci": false
             }
           ]

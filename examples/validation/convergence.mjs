@@ -228,7 +228,7 @@ export default [
     id: "plate-with-hole-shell",
     caseId: "plate-with-hole-shell",
     title: "Plate with a hole, shell triangles",
-    note: "Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the constant stress of the one or two triangles that meet there. On the finest meshes the peak node is shared by more triangles and reads low.",
+    note: "Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the one stress each of the one or two triangles that meet there reports. On the finest meshes the peak node is shared by more triangles and reads low.",
     expect: null,
     noRate:
       "The peak stress is read from the one or two triangles at the cut edge, whose size does not shrink with the maximum element size, so it has no rate to observe.",
@@ -261,7 +261,7 @@ export default [
     id: "nafems-le2",
     caseId: "nafems-le2",
     title: "NAFEMS LE2, curved shell triangles",
-    note: "The difference stays near 1.6 % as the mesh is refined: it comes from flat facets standing in for the curved panel, not from the mesh size.",
+    note: "The difference stays near 1.7 % as the mesh is refined: it comes from flat facets standing in for the curved panel, not from the mesh size.",
     expect: null,
     noRate: NAFEMS_STRESS_SHELL,
     series: [
@@ -358,7 +358,7 @@ export default [
     id: "nafems-le4",
     caseId: "nafems-le4",
     title: "NAFEMS LE4, curved shell triangles",
-    note: "The meridional stress at the waist is within half a percent on every mesh.",
+    note: "The meridional stress at the waist is within 0.6 % on every mesh.",
     expect: null,
     noRate: NAFEMS_STRESS_SHELL,
     series: [
@@ -374,7 +374,7 @@ export default [
     id: "nafems-le7",
     caseId: "nafems-le7",
     title: "NAFEMS LE7, curved shell triangles",
-    note: "The bending stress near the junction settles once the mesh resolves its decay length.",
+    note: "The bending stress near the junction is within half a percent of the target on every mesh.",
     expect: null,
     noRate: NAFEMS_STRESS_SHELL,
     series: [
@@ -390,7 +390,7 @@ export default [
     id: "nafems-le8",
     caseId: "nafems-le8",
     title: "NAFEMS LE8, curved shell triangles",
-    note: "Settled within a percent from 7.5 mm down, close to an axisymmetric thin-shell solution of the same geometry and below the NAFEMS target.",
+    note: "Rising slowly towards an axisymmetric thin-shell solution of the same geometry (2.6 % below it at 7.5 mm, 1.7 % at 3 mm), which itself lies below the NAFEMS target.",
     expect: null,
     noRate: NAFEMS_STRESS_SHELL,
     series: [

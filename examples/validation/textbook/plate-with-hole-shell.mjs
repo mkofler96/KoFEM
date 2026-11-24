@@ -73,8 +73,9 @@ export default {
         ${pct(rowOf("plate-with-hole").errPct)}.</p>
         <p>The difference is in the elements. A quadratic tetrahedron's stress
         varies inside it, so it follows the steep drop away from the hole, and
-        the solid model reads the peak slightly low on every mesh. A linear
-        triangle has one stress. At A only one or two triangles meet, so the
+        the solid model reads the peak slightly low on every mesh. A shell
+        triangle reports one stress, at its centroid. At A only one or two
+        triangles meet, so the
         nodal value is their stress, and it lands above or below 3.14
         depending on how the mesher cuts that corner; on the finest meshes the
         peak moves to the next node along the hole. Over the mesh study above

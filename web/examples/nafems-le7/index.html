@@ -46,7 +46,7 @@
               "https://kofem.org/examples/nafems-le7/nafems-le7-pressure-vessel-diagram.png",
               "https://kofem.org/examples/nafems-le7/nafems-le7-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-22",
+            "dateModified": "2026-11-24",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -899,9 +899,9 @@
         <math><msub><mi>σ</mi><mrow><mi>z</mi><mi>z</mi></mrow></msub><mo>=</mo><mn>25.9</mn><mtext> MPa</mtext></math> at D.</p>
       </div>
       
-      <figure class="result result-viewer" data-viewer="/examples/nafems-le7.result.json" data-aspect="1200 / 761">
+      <figure class="result result-viewer" data-viewer="/examples/nafems-le7.result.json" data-aspect="1200 / 762">
         <div class="viewer-stage">
-          <img src="/examples/nafems-le7.png" width="1200" height="761" alt="NAFEMS LE7: cylinder with hemispherical cap: von mises stress on the deformed shape, displacements drawn 1,000 times enlarged" />
+          <img src="/examples/nafems-le7.png" width="1200" height="762" alt="NAFEMS LE7: cylinder with hemispherical cap: von mises stress on the deformed shape, displacements drawn 1,000 times enlarged" />
           <p class="viewer-hint" hidden></p>
         </div>
         <div class="colorbar"><span data-legend="min">19.8&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">36.0&nbsp;MPa</span></div>
@@ -921,8 +921,8 @@
           <tbody>
             <tr>
               <td class="num">25.900&nbsp;MPa</td>
-              <td class="num"><strong data-testid="fe-value">25.920&nbsp;MPa</strong></td>
-              <td class="num">+0.08&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">26.029&nbsp;MPa</strong></td>
+              <td class="num">+0.50&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -967,10 +967,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 14,812 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 14,812 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
           <tr><th scope="row">Unknowns</th><td>7,564 nodes, 45,384 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-e22298e777ec); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-eb6356518f17</td></tr>
         </table>
       </div>
         <p>A quarter of the vessel, its cut meridians held by symmetry,
@@ -987,8 +987,8 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>axial stress at D, outer surface</td></tr>
           <tr><th scope="row">Reference</th><td>NAFEMS LE7 target = 25.900&nbsp;MPa <span class="meta">(NAFEMS TNSB Rev. 3 (1990), test LE7)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>25.920&nbsp;MPa</td></tr>
-          <tr><th scope="row">Difference</th><td>+0.08&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>26.029&nbsp;MPa</td></tr>
+          <tr><th scope="row">Difference</th><td>+0.50&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="nafems-le7">
@@ -998,7 +998,7 @@
           <picture class="figure-image theme-light conv"><source srcset="/examples/nafems-le7/nafems-le7-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/nafems-le7/nafems-le7-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE7, curved shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/nafems-le7/nafems-le7-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/nafems-le7/nafems-le7-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE7, curved shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>The bending stress near the junction settles once the mesh resolves its decay length.</p>
+        <p>The bending stress near the junction is within half a percent of the target on every mesh.</p>
         <p>The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.</p>
         <details>
           <summary>Data</summary>
@@ -1018,29 +1018,29 @@
                   <td>Shell (linear)</td>
                   <td>50 mm</td>
                   <td class="num">11,334</td>
-                  <td class="num">25.447&nbsp;MPa</td>
-                  <td class="num">−1.75&nbsp;%</td>
+                  <td class="num">25.992&nbsp;MPa</td>
+                  <td class="num">+0.35&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>35 mm</td>
                   <td class="num">23,136</td>
-                  <td class="num">25.798&nbsp;MPa</td>
-                  <td class="num">−0.39&nbsp;%</td>
+                  <td class="num">25.933&nbsp;MPa</td>
+                  <td class="num">+0.13&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>25 mm (this example)</td>
                   <td class="num">45,384</td>
-                  <td class="num">25.920&nbsp;MPa</td>
-                  <td class="num">+0.08&nbsp;%</td>
+                  <td class="num">26.029&nbsp;MPa</td>
+                  <td class="num">+0.50&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>17.5 mm</td>
                   <td class="num">91,668</td>
-                  <td class="num">25.901&nbsp;MPa</td>
-                  <td class="num">+0.00&nbsp;%</td>
+                  <td class="num">25.951&nbsp;MPa</td>
+                  <td class="num">+0.20&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1049,7 +1049,7 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM reads +0.08&nbsp;% from the NAFEMS target. The
+        <p>KoFEM reads +0.50&nbsp;% from the NAFEMS target. The
         convergence study shows the bending at the junction resolved once a
         few elements span its decay length.</p>
 

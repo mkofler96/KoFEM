@@ -40,9 +40,9 @@
 // meridional stress.
 //
 // Tolerance: 3 %. The bending layer at the junction decays over √(R·t) ≈
-// 160 mm, so the mesh must resolve it: σzz reads 25.45, 25.80, 25.92 and
-// 25.90 MPa on meshes of 50, 35, 25 and 17.5 mm (3 600 to 30 000 triangles),
-// within 0.4 % of the target from 35 mm on. The example meshes at 25 mm.
+// 160 mm, so the mesh must resolve it: σzz reads 25.99, 25.93, 26.03 and
+// 25.95 MPa on meshes of 50, 35, 25 and 17.5 mm (3 600 to 30 000 triangles),
+// within 0.5 % of the target on every mesh. The example meshes at 25 mm.
 
 import { cappedCylinderStep } from "../../gallery/step-revolve.mjs";
 import { APP_STEEL } from "../lib/recipe.mjs";

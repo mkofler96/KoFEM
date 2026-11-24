@@ -53,9 +53,13 @@
 // this geometry (conical frustum elements, converged to 0.1 MPa) gives
 // 88.0 MPa at D, 6.9 % below 94.5; Abaqus' axisymmetric SAX2 shells give
 // 90.4 MPa (−4.4 %). The same check of NAFEMS LE9 reproduces its target to
-// 0.5 %. Mesh study (maximum element size → σyy at D): 10 mm → 86.1 MPa,
-// 7.5 mm → 87.2, 6 mm → 86.8, 5 mm → 86.9 (25k facets): converged to within
-// 1.5 % of the thin-shell value, 7.7 % below the target at 7.5 mm. Coarser
+// 0.5 %. Mesh study (maximum element size → σyy at D): 10 mm → 82.8 MPa,
+// 7.5 mm → 85.8, 6 mm → 85.4, 5 mm → 85.7 (25k facets), and beyond the
+// study 4 mm → 86.2 and 3 mm → 86.5 (70k facets): rising towards the
+// thin-shell value, 2.6 % below it at 7.5 mm and 1.7 % at 3 mm, and 9.3 %
+// below the target at 7.5 mm. The knuckle's radius is only 6 t, so its facets
+// turn some 7° each at 7.5 mm; with the drilling axis on the smooth surface's
+// normal (KOF-453) they approach the curved shell from the stiff side. Coarser
 // meshes measure the knuckle's thickness more than 5e-4 of t off, which the
 // GUI cannot correct.
 
