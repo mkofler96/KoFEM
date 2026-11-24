@@ -6,12 +6,13 @@
 use crate::error::FemError;
 use crate::mesh::dot;
 use crate::shell::assembly::SHELL_NODE_DOFS;
-use crate::shell::element::{constitutive, dkt_curvature_b, membrane_b, FacetFrame};
+use crate::shell::element::{constitutive, dkt_curvature_b, FacetFrame};
+use crate::shell::membrane::{OptMembrane, MEMBRANE_DOFS};
 use crate::shell::mesh::ShellMesh;
 
 /// One value per facet: plane-stress von Mises at the worse of the two
-/// surfaces z = ±t/2, from the CST membrane strain and the DKT curvature at
-/// the facet centroid, σ(z) = D·(`ε_m` + z·κ), with each facet's own (E, ν).
+/// surfaces z = ±t/2, from the membrane strain and the DKT curvature at the
+/// facet centroid, σ(z) = D·(`ε_m` + z·κ), with each facet's own (E, ν).
 /// Taking the worse surface makes the result independent of the curvature's
 /// sign convention.
 ///
@@ -63,8 +64,8 @@ pub fn shell_stress_tensors(
 }
 
 /// Three values per facet, at its corners in its node order: the plane-stress
-/// tensor on `surface` from the facet's own field (its constant membrane
-/// strain and its DKT curvature at the corner), in global axes as for
+/// tensor on `surface` from the facet's own field (its membrane strain and
+/// its DKT curvature at the corner), in global axes as for
 /// [`shell_stress_tensors`].
 ///
 /// # Errors
@@ -95,8 +96,8 @@ fn check_length(mesh: &ShellMesh, dofs: &[f64]) -> Result<(), FemError> {
     }
 }
 
-/// A facet's CST membrane strain and DKT curvature at its centroid, in its
-/// own frame, with its plane-stress law and half thickness.
+/// A facet's membrane strain and DKT curvature at a point, in its own frame,
+/// with its plane-stress law and half thickness.
 struct FacetStrain {
     axes: [[f64; 3]; 3],
     membrane: [f64; 3],
@@ -110,22 +111,23 @@ impl FacetStrain {
         Self::at(mesh, dofs, triangle, [1.0 / 3.0, 1.0 / 3.0])
     }
 
-    /// The strains at the facet's parametric point (ξ, η): the membrane strain
-    /// is constant, the DKT curvature varies over the facet.
+    /// The strains at the facet's parametric point (ξ, η): both the OPT
+    /// membrane strain and the DKT curvature vary over the facet.
     fn at(mesh: &ShellMesh, dofs: &[f64], triangle: usize, [xi, eta]: [f64; 2]) -> Self {
         let nodes = mesh.triangles()[triangle];
         let frame = FacetFrame::new(&mesh.corners(triangle));
         let [e1, e2, e3] = frame.axes;
-        // Nodal DOFs in the facet frame: (u, v) for the membrane, (w, θx,
-        // θy) for bending.
-        let mut membrane_dofs = [0.0; 6];
+        // Nodal DOFs in the facet frame: (u, v, θz) for the membrane, (w,
+        // θx, θy) for bending.
+        let mut membrane_dofs = [0.0; MEMBRANE_DOFS];
         let mut bending_dofs = [0.0; 9];
         for (local, &node) in nodes.iter().enumerate() {
             let base = SHELL_NODE_DOFS * node as usize;
             let translation = [dofs[base], dofs[base + 1], dofs[base + 2]];
             let rotation = [dofs[base + 3], dofs[base + 4], dofs[base + 5]];
-            membrane_dofs[2 * local] = dot(e1, translation);
-            membrane_dofs[2 * local + 1] = dot(e2, translation);
+            membrane_dofs[3 * local] = dot(e1, translation);
+            membrane_dofs[3 * local + 1] = dot(e2, translation);
+            membrane_dofs[3 * local + 2] = dot(e3, rotation);
             bending_dofs[3 * local] = dot(e3, translation);
             bending_dofs[3 * local + 1] = dot(e1, rotation);
             bending_dofs[3 * local + 2] = dot(e2, rotation);
@@ -134,7 +136,7 @@ impl FacetStrain {
         let poisson = material.poisson();
         Self {
             axes: frame.axes,
-            membrane: apply(&membrane_b(&frame), &membrane_dofs),
+            membrane: OptMembrane::new(&frame).strain(&membrane_dofs, [1.0 - xi - eta, xi, eta]),
             curvature: apply(&dkt_curvature_b(&frame, xi, eta), &bending_dofs),
             law: constitutive(material.young() / (1.0 - poisson * poisson), poisson),
             half: 0.5 * mesh.thickness(triangle),

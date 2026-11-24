@@ -2,19 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! NAFEMS LE3, the pinched hemisphere with an 18° hole, on structured meshes
-//! whose nodes lie on the exact mid-surface sphere (KOF-453). The app's case
-//! (`examples/validation/cases/nafems-le3.mjs`) reads Ux at A = 185.4, 183.2,
-//! 180.2 and 178.4 mm as its mesh is refined, against 185 mm. These meshes
+//! whose nodes lie on the exact mid-surface sphere (KOF-453). These meshes
 //! leave out the shellized geometry, the CAD load patches and the mesher, so
 //! what they show belongs to the element.
 //!
-//! The facet's fictitious drilling spring (`DRILLING_RATIO` in
-//! `shell/element.rs`) acts on the rotation about each facet's own normal.
-//! Where neighbouring facets meet at an angle, that rotation is also a
-//! bending rotation of the neighbours, so the spring stiffens bending. The
-//! angle shrinks with the mesh, but the bending stiffness it meets shrinks
-//! faster (as the angle squared), so the spring locks more as the mesh is
-//! refined: the drift away from 185 mm.
+//! On a curved surface the rotation about one facet's normal is partly a
+//! bending rotation of its neighbours. A drilling DOF held by a fictitious
+//! spring therefore stiffens bending more the finer the mesh, and LE3 drifted
+//! to 4 % below 185 mm. With the drilling DOF the true in-plane rotation of an
+//! Allman-type membrane, LE3 converges from below and settles at 187 mm.
+//! Coarser facets than these (16 cells, 5.6° each) are still membrane-stiff:
+//! 167 mm.
 
 #![allow(
     clippy::expect_used,
@@ -24,7 +22,6 @@
               and a fixture that fails to build should abort the test"
 )]
 
-use kofem_fem::shell::facet_stiffness;
 use kofem_fem::{
     assemble_shell_stiffness, solve_shell_static, CgSettings, CsrMatrix, Isotropic, ShellMesh,
     StoppingRule,
@@ -118,75 +115,23 @@ impl Quarter {
                 .expect("the hemisphere solves");
         solution.dofs[6 * self.node(0, 0)]
     }
-
-    /// The assembled stiffness with each facet's drilling spring taken out
-    /// again. The spring is the only stiffness a facet puts on the rotation
-    /// about its own normal, so the facet matrix's rotation block projected
-    /// on that normal is the spring itself, whatever its ratio.
-    fn stiffness_without_drilling(&self) -> CsrMatrix {
-        let mut matrix = assemble_shell_stiffness(&self.mesh);
-        for (facet, nodes) in self.mesh.triangles().iter().enumerate() {
-            let corners = self.mesh.corners(facet);
-            let normal = unit_normal(&corners);
-            let element = facet_stiffness(
-                &corners,
-                self.mesh.thickness(facet),
-                self.mesh.material(facet),
-            );
-            for (local, &node) in nodes.iter().enumerate() {
-                let block: [[f64; 3]; 3] = std::array::from_fn(|row| {
-                    std::array::from_fn(|col| element[6 * local + 3 + row][6 * local + 3 + col])
-                });
-                let spring = dot(normal, block.map(|row| dot(row, normal)));
-                for (row, normal_row) in normal.iter().enumerate() {
-                    for (col, normal_col) in normal.iter().enumerate() {
-                        let first = 6 * node as usize + 3;
-                        let position = matrix
-                            .find(first + row, first + col)
-                            .expect("a node's own block is stored");
-                        matrix.values_mut()[position] -= spring * normal_row * normal_col;
-                    }
-                }
-            }
-        }
-        matrix
-    }
 }
 
-fn unit_normal(corners: &[[f64; 3]; 3]) -> [f64; 3] {
-    let first = sub(corners[1], corners[0]);
-    let second = sub(corners[2], corners[0]);
-    let normal = [
-        first[1] * second[2] - first[2] * second[1],
-        first[2] * second[0] - first[0] * second[2],
-        first[0] * second[1] - first[1] * second[0],
-    ];
-    let length = dot(normal, normal).sqrt();
-    normal.map(|component| component / length)
-}
-
-fn sub(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
-    std::array::from_fn(|axis| lhs[axis] - rhs[axis])
-}
-
-fn dot(lhs: [f64; 3], rhs: [f64; 3]) -> f64 {
-    lhs.iter().zip(&rhs).map(|(left, right)| left * right).sum()
-}
-
-/// Meshes of about 1000, 500 and 250 mm along the equator.
-const LEVELS: [[usize; 2]; 3] = [[16, 12], [32, 25], [64, 51]];
+/// Meshes of about 500, 250 and 125 mm along the equator, the range of the
+/// app's case; the drift showed below 2 % only on the finest.
+const LEVELS: [[usize; 2]; 3] = [[32, 25], [64, 51], [128, 102]];
 
 fn percent_off(ux: f64) -> f64 {
     100.0 * (ux - REFERENCE_UX) / REFERENCE_UX
 }
 
 #[test]
-fn without_the_drilling_spring_le3_converges_within_two_percent() {
+fn le3_converges_within_two_percent() {
     let readings: Vec<f64> = LEVELS
         .iter()
         .map(|&cells| {
             let quarter = Quarter::new(cells);
-            quarter.ux_at_a(&quarter.stiffness_without_drilling())
+            quarter.ux_at_a(&assemble_shell_stiffness(&quarter.mesh))
         })
         .collect();
     for (cells, ux) in LEVELS.iter().zip(&readings) {
@@ -202,41 +147,4 @@ fn without_the_drilling_spring_le3_converges_within_two_percent() {
         spread < 0.01 * REFERENCE_UX,
         "readings {readings:.2?} should settle, not drift"
     );
-}
-
-#[test]
-fn the_drilling_spring_alone_pulls_le3_down_as_the_mesh_is_refined() {
-    let gaps: Vec<f64> = LEVELS
-        .iter()
-        .map(|&cells| {
-            let quarter = Quarter::new(cells);
-            let with = quarter.ux_at_a(&assemble_shell_stiffness(&quarter.mesh));
-            let without = quarter.ux_at_a(&quarter.stiffness_without_drilling());
-            100.0 * (without - with) / without
-        })
-        .collect();
-    assert!(
-        gaps.windows(2).all(|pair| pair[1] > pair[0]),
-        "the spring's share {gaps:.2?} % should grow with refinement"
-    );
-    assert!(
-        gaps[2] > 2.0,
-        "on a 250 mm mesh the spring should cost over 2 %, got {gaps:.2?} %"
-    );
-}
-
-#[test]
-#[ignore = "KOF-453: fails until the drilling spring stops locking curved shells; \
-            the fix moves the stored C++ shell references, which awaits the maintainer"]
-fn le3_converges_within_two_percent() {
-    // The 125 mm mesh is where the app's own case falls out of the band.
-    for cells in [[64, 51], [128, 102]] {
-        let quarter = Quarter::new(cells);
-        let ux = quarter.ux_at_a(&assemble_shell_stiffness(&quarter.mesh));
-        assert!(
-            percent_off(ux).abs() < 2.0,
-            "{cells:?}: Ux at A = {ux:.2} mm, {:+.2} % off 185 mm",
-            percent_off(ux)
-        );
-    }
 }

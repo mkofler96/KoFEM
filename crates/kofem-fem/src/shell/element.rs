@@ -1,27 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Flat-facet Kirchhoff shell element: constant-strain-triangle (CST)
-//! membrane plus Discrete Kirchhoff Triangle (DKT) bending, 6 DOF per node
-//! (u, v, w, θx, θy, θz). A port of the C++ engine's `shell_element.cpp`; the
-//! two must give the same matrices.
+//! Flat-facet Kirchhoff shell element: the OPT membrane with drilling
+//! rotations (`shell::membrane`) plus Discrete Kirchhoff Triangle (DKT)
+//! bending, 6 DOF per node (u, v, w, θx, θy, θz).
 //!
 //! References: Batoz, Bathe & Ho (1980), "A study of three-node triangular
-//! plate bending elements", IJNME 15, 1771–1812 (the DKT bending stiffness).
-//! The membrane is the standard CST plane-stress triangle.
+//! plate bending elements", IJNME 15, 1771–1812 (the DKT bending stiffness);
+//! Felippa (2003), CMAME 192, 2125–2168 (the membrane).
 
 use crate::material::Isotropic;
 use crate::mesh::{cross, dot, sub};
+use crate::shell::membrane::{OptMembrane, MEMBRANE_DOFS as MEMBRANE_DOF_COUNT};
 
 /// Element DOFs: 6 per node × 3 nodes.
 pub const FACET_DOFS: usize = 18;
 
 pub type FacetMatrix = [[f64; FACET_DOFS]; FACET_DOFS];
-
-/// Fictitious drilling (θz) stiffness relative to the mean bending diagonal.
-/// It removes the coplanar in-plane rotation singularity; no load excites it
-/// on a flat facet.
-const DRILLING_RATIO: f64 = 1e-4;
 
 /// Local orthonormal frame of a facet: e1 along P0→P1, e3 the unit normal,
 /// e2 = e3 × e1; the corners in that frame (corner 0 at the origin, corner 1
@@ -66,23 +61,6 @@ pub(crate) fn constitutive(factor: f64, poisson: f64) -> [[f64; 3]; 3] {
     ]
 }
 
-/// CST strain–displacement matrix (3×6, local DOF order u0,v0,u1,v1,u2,v2).
-pub(crate) fn membrane_b(frame: &FacetFrame) -> [[f64; 6]; 3] {
-    let (lx, ly) = (&frame.local_x, &frame.local_y);
-    // b_i = y_j − y_k, c_i = x_k − x_j (cyclic).
-    let b_coef = [ly[1] - ly[2], ly[2] - ly[0], ly[0] - ly[1]];
-    let c_coef = [lx[2] - lx[1], lx[0] - lx[2], lx[1] - lx[0]];
-    let inv_twice_area = 1.0 / (2.0 * frame.area);
-    let mut matrix = [[0.0; 6]; 3];
-    for i in 0..3 {
-        matrix[0][2 * i] = b_coef[i] * inv_twice_area;
-        matrix[1][2 * i + 1] = c_coef[i] * inv_twice_area;
-        matrix[2][2 * i] = c_coef[i] * inv_twice_area;
-        matrix[2][2 * i + 1] = b_coef[i] * inv_twice_area;
-    }
-    matrix
-}
-
 /// Bᵀ·D·B scaled by `weight`, added into `out`.
 fn add_btdb<const N: usize>(
     out: &mut [[f64; N]; N],
@@ -107,20 +85,6 @@ fn add_btdb<const N: usize>(
             *entry += weight * sum;
         }
     }
-}
-
-/// CST membrane stiffness (6×6): t·A·Bᵀ·D·B.
-fn membrane_stiffness(frame: &FacetFrame, thickness: f64, material: &Isotropic) -> [[f64; 6]; 6] {
-    let (young, poisson) = (material.young(), material.poisson());
-    let law = constitutive(young / (1.0 - poisson * poisson), poisson);
-    let mut matrix = [[0.0; 6]; 6];
-    add_btdb(
-        &mut matrix,
-        &membrane_b(frame),
-        &law,
-        thickness * frame.area,
-    );
-    matrix
 }
 
 /// Batoz side coefficients a, b, c, d, e (in that order), each indexed by
@@ -236,14 +200,14 @@ fn bending_stiffness(frame: &FacetFrame, thickness: f64, material: &Isotropic) -
     matrix
 }
 
-/// Positions of the membrane DOFs (u, v of each node) in the 18-DOF vector.
-const MEMBRANE_DOFS: [usize; 6] = [0, 1, 6, 7, 12, 13];
+/// Positions of the membrane DOFs (u, v, θz of each node) in the 18-DOF
+/// vector.
+const MEMBRANE_DOFS: [usize; MEMBRANE_DOF_COUNT] = [0, 1, 5, 6, 7, 11, 12, 13, 17];
 /// Positions of the bending DOFs (w, θx, θy of each node).
 const BENDING_DOFS: [usize; 9] = [2, 3, 4, 8, 9, 10, 14, 15, 16];
 
 /// One facet's 18×18 stiffness in global coordinates (DOF order u, v, w, θx,
-/// θy, θz per node), including the drilling stabilisation — the matrix the
-/// shell assembly scatters.
+/// θy, θz per node) — the matrix the shell assembly scatters.
 #[must_use]
 pub fn facet_stiffness(
     corners: &[[f64; 3]; 3],
@@ -251,7 +215,12 @@ pub fn facet_stiffness(
     material: &Isotropic,
 ) -> FacetMatrix {
     let frame = FacetFrame::new(corners);
-    let membrane = membrane_stiffness(&frame, thickness, material);
+    let poisson = material.poisson();
+    let membrane = OptMembrane::new(&frame).stiffness(
+        thickness,
+        &constitutive(material.young() / (1.0 - poisson * poisson), poisson),
+        poisson,
+    );
     let bending = bending_stiffness(&frame, thickness, material);
 
     let mut local = [[0.0; FACET_DOFS]; FACET_DOFS];
@@ -264,11 +233,6 @@ pub fn facet_stiffness(
         for (j, &col) in BENDING_DOFS.iter().enumerate() {
             local[row][col] += bending[i][j];
         }
-    }
-    let bending_trace: f64 = (0..9).map(|i| bending[i][i]).sum();
-    let drilling = DRILLING_RATIO * bending_trace / 9.0;
-    for node in 0..3 {
-        local[6 * node + 5][6 * node + 5] += drilling;
     }
 
     // Global = Tᵀ·local·T with T block-diagonal in the 3×3 rotation Q (rows
