@@ -180,11 +180,18 @@ impl MixedSimpModel {
         let neighbours = shell_node_neighbours(mesh);
         let pattern = CsrMatrix::from_node_blocks(&neighbours, SHELL_NODE_DOFS);
         let mut positions = Vec::new();
+        let drilling_axes = mesh.drilling_normals();
         for (facet, nodes) in mesh.triangles().iter().enumerate() {
             let corners = mesh.corners(facet);
             let thickness = mesh.thickness(facet);
             self.stiffness.extend_from_slice(
-                facet_stiffness(&corners, thickness, mesh.material(facet)).as_flattened(),
+                facet_stiffness(
+                    &corners,
+                    &drilling_axes[facet],
+                    thickness,
+                    mesh.material(facet),
+                )
+                .as_flattened(),
             );
             self.dofs.extend(nodes.iter().flat_map(|&node| {
                 (0..SHELL_NODE_DOFS)

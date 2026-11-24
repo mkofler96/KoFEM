@@ -6,7 +6,9 @@
 use crate::error::FemError;
 use crate::mesh::dot;
 use crate::shell::assembly::SHELL_NODE_DOFS;
-use crate::shell::element::{constitutive, dkt_curvature_b, FacetFrame};
+use crate::shell::element::{
+    constitutive, corner_transforms, dkt_curvature_b, FacetFrame, RigidProjector, FACET_DOFS,
+};
 use crate::shell::membrane::{OptMembrane, MEMBRANE_DOFS};
 use crate::shell::mesh::ShellMesh;
 
@@ -20,9 +22,10 @@ use crate::shell::mesh::ShellMesh;
 /// [`FemError::DisplacementLength`] when `dofs` is not 6 per vertex.
 pub fn shell_von_mises(mesh: &ShellMesh, dofs: &[f64]) -> Result<Vec<f64>, FemError> {
     check_length(mesh, dofs)?;
+    let axes = mesh.drilling_normals();
     let stresses = (0..mesh.triangles().len())
         .map(|triangle| {
-            let facet = FacetStrain::new(mesh, dofs, triangle);
+            let facet = FacetStrain::new(mesh, &axes, dofs, triangle);
             [facet.half, -facet.half]
                 .into_iter()
                 .map(|depth| {
@@ -58,8 +61,9 @@ pub fn shell_stress_tensors(
     surface: ShellSurface,
 ) -> Result<Vec<[f64; 6]>, FemError> {
     check_length(mesh, dofs)?;
+    let axes = mesh.drilling_normals();
     Ok((0..mesh.triangles().len())
-        .map(|triangle| FacetStrain::new(mesh, dofs, triangle).global_tensor(surface))
+        .map(|triangle| FacetStrain::new(mesh, &axes, dofs, triangle).global_tensor(surface))
         .collect())
 }
 
@@ -76,10 +80,12 @@ pub fn shell_corner_stress_tensors(
     surface: ShellSurface,
 ) -> Result<Vec<[f64; 6]>, FemError> {
     check_length(mesh, dofs)?;
+    let axes = mesh.drilling_normals();
     Ok((0..mesh.triangles().len())
         .flat_map(|triangle| {
-            [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-                .map(|point| FacetStrain::at(mesh, dofs, triangle, point).global_tensor(surface))
+            [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]].map(|point| {
+                FacetStrain::at(mesh, &axes, dofs, triangle, point).global_tensor(surface)
+            })
         })
         .collect())
 }
@@ -107,27 +113,46 @@ struct FacetStrain {
 }
 
 impl FacetStrain {
-    fn new(mesh: &ShellMesh, dofs: &[f64], triangle: usize) -> Self {
-        Self::at(mesh, dofs, triangle, [1.0 / 3.0, 1.0 / 3.0])
+    fn new(mesh: &ShellMesh, axes: &[[[f64; 3]; 3]], dofs: &[f64], triangle: usize) -> Self {
+        Self::at(mesh, axes, dofs, triangle, [1.0 / 3.0, 1.0 / 3.0])
     }
 
     /// The strains at the facet's parametric point (ξ, η): both the OPT
     /// membrane strain and the DKT curvature vary over the facet.
-    fn at(mesh: &ShellMesh, dofs: &[f64], triangle: usize, [xi, eta]: [f64; 2]) -> Self {
+    fn at(
+        mesh: &ShellMesh,
+        axes: &[[[f64; 3]; 3]],
+        dofs: &[f64],
+        triangle: usize,
+        [xi, eta]: [f64; 2],
+    ) -> Self {
+        let drilling_axes = &axes[triangle];
         let nodes = mesh.triangles()[triangle];
-        let frame = FacetFrame::new(&mesh.corners(triangle));
-        let [e1, e2, e3] = frame.axes;
-        // Nodal DOFs in the facet frame: (u, v, θz) for the membrane, (w,
-        // θx, θy) for bending.
-        let mut membrane_dofs = [0.0; MEMBRANE_DOFS];
-        let mut bending_dofs = [0.0; 9];
+        let corners = mesh.corners(triangle);
+        let frame = FacetFrame::new(&corners);
+        // The facet's DOFs less their rigid motion, as the stiffness sees
+        // them (`RigidProjector`).
+        let mut element = [0.0; FACET_DOFS];
         for (local, &node) in nodes.iter().enumerate() {
             let base = SHELL_NODE_DOFS * node as usize;
-            let translation = [dofs[base], dofs[base + 1], dofs[base + 2]];
-            let rotation = [dofs[base + 3], dofs[base + 4], dofs[base + 5]];
+            element[SHELL_NODE_DOFS * local..SHELL_NODE_DOFS * (local + 1)]
+                .copy_from_slice(&dofs[base..base + SHELL_NODE_DOFS]);
+        }
+        let element = RigidProjector::new(&corners).deformation(&element);
+        // Nodal DOFs in the facet frame: (u, v, θz) for the membrane, (w,
+        // θx, θy) for bending.
+        let transforms = corner_transforms(&frame, drilling_axes);
+        let mut membrane_dofs = [0.0; MEMBRANE_DOFS];
+        let mut bending_dofs = [0.0; 9];
+        for local in 0..3 {
+            let base = SHELL_NODE_DOFS * local;
+            let translation = [element[base], element[base + 1], element[base + 2]];
+            let rotation = [element[base + 3], element[base + 4], element[base + 5]];
+            let [e1, e2, e3] = transforms[2 * local];
+            let [_, _, drilling] = transforms[2 * local + 1];
             membrane_dofs[3 * local] = dot(e1, translation);
             membrane_dofs[3 * local + 1] = dot(e2, translation);
-            membrane_dofs[3 * local + 2] = dot(e3, rotation);
+            membrane_dofs[3 * local + 2] = dot(drilling, rotation);
             bending_dofs[3 * local] = dot(e3, translation);
             bending_dofs[3 * local + 1] = dot(e1, rotation);
             bending_dofs[3 * local + 2] = dot(e2, rotation);

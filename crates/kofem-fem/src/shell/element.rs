@@ -206,11 +206,32 @@ const MEMBRANE_DOFS: [usize; MEMBRANE_DOF_COUNT] = [0, 1, 5, 6, 7, 11, 12, 13, 1
 /// Positions of the bending DOFs (w, θx, θy of each node).
 const BENDING_DOFS: [usize; 9] = [2, 3, 4, 8, 9, 10, 14, 15, 16];
 
+/// The 3×3 maps from a corner's global DOFs to the facet's local ones: the
+/// translations onto (e1, e2, e3), the rotation onto (e1, e2) for bending and
+/// onto the corner's drilling axis for the membrane.
+pub(crate) fn corner_transforms(
+    frame: &FacetFrame,
+    drilling_axes: &[[f64; 3]; 3],
+) -> [[[f64; 3]; 3]; 6] {
+    let [e1, e2, _] = frame.axes;
+    std::array::from_fn(|block| {
+        if block % 2 == 0 {
+            frame.axes
+        } else {
+            [e1, e2, drilling_axes[block / 2]]
+        }
+    })
+}
+
 /// One facet's 18×18 stiffness in global coordinates (DOF order u, v, w, θx,
 /// θy, θz per node) — the matrix the shell assembly scatters.
+/// `drilling_axes` holds each corner's drilling axis
+/// ([`ShellMesh::drilling_normals`](crate::shell::ShellMesh::drilling_normals)):
+/// the facet's own normal on a flat region or at a fold.
 #[must_use]
 pub fn facet_stiffness(
     corners: &[[f64; 3]; 3],
+    drilling_axes: &[[f64; 3]; 3],
     thickness: f64,
     material: &Isotropic,
 ) -> FacetMatrix {
@@ -235,30 +256,156 @@ pub fn facet_stiffness(
         }
     }
 
-    // Global = Tᵀ·local·T with T block-diagonal in the 3×3 rotation Q (rows
-    // e1, e2, e3): each 3×3 block (a, b) becomes Qᵀ·local_ab·Q.
-    let rotation = &frame.axes;
+    // Global = Tᵀ·local·T with T block-diagonal in the corner transforms:
+    // each 3×3 block (a, b) becomes T_aᵀ·local_ab·T_b.
+    let transforms = corner_transforms(&frame, drilling_axes);
     let mut global = [[0.0; FACET_DOFS]; FACET_DOFS];
-    for block_row in 0..6 {
-        for block_col in 0..6 {
+    for (block_row, left) in transforms.iter().enumerate() {
+        for (block_col, right) in transforms.iter().enumerate() {
             let (row0, col0) = (3 * block_row, 3 * block_col);
-            let mut rotated = [[0.0; 3]; 3];
-            for (i, entries) in rotated.iter_mut().enumerate() {
-                for (j, entry) in entries.iter_mut().enumerate() {
-                    *entry = (0..3)
-                        .map(|k| local[row0 + i][col0 + k] * rotation[k][j])
-                        .sum();
-                }
-            }
             for i in 0..3 {
                 for j in 0..3 {
-                    global[row0 + i][col0 + j] =
-                        (0..3).map(|k| rotation[k][i] * rotated[k][j]).sum();
+                    let mut sum = 0.0;
+                    for (from, left_row) in left.iter().enumerate() {
+                        for (to, right_row) in right.iter().enumerate() {
+                            sum += left_row[i] * local[row0 + from][col0 + to] * right_row[j];
+                        }
+                    }
+                    global[row0 + i][col0 + j] = sum;
                 }
             }
         }
     }
-    global
+    RigidProjector::new(corners).project_stiffness(&global)
+}
+
+/// The element-independent rigid-body projector P = I − Γ·Ψ (Rankin and
+/// Nour-Omid 1988; Felippa and Haugen, CMAME 194 (2005) 2285–2335). Ψ fits a
+/// rigid motion to the corners' translations: their mean and the
+/// least-squares rotation about the centroid. Γ spreads a rigid motion over
+/// the 18 DOFs, u = t + Ω × r, θ = Ω. With the drilling DOF on a smooth
+/// surface's axis rather than the facet's own normal, a rigid turn of the
+/// facet about an in-plane axis would strain its membrane; projecting the
+/// stiffness and the recovered displacements removes the rigid part, so a
+/// rigid motion strains nothing. A facet that is already rigid-invariant (its
+/// own normal as every drilling axis) is left unchanged.
+pub(crate) struct RigidProjector {
+    /// Γ, 18×6.
+    spread: [[f64; 6]; FACET_DOFS],
+    /// Ψ, 6×18.
+    fit: [[f64; FACET_DOFS]; 6],
+}
+
+impl RigidProjector {
+    pub(crate) fn new(corners: &[[f64; 3]; 3]) -> Self {
+        let centroid: [f64; 3] = std::array::from_fn(|axis| {
+            (corners[0][axis] + corners[1][axis] + corners[2][axis]) / 3.0
+        });
+        let arms: [[f64; 3]; 3] = corners.map(|corner| sub(corner, centroid));
+        // H = Σ (|r|²·I − r·rᵀ), the inertia of the corners about the centroid.
+        let mut inertia = [[0.0; 3]; 3];
+        for arm in &arms {
+            let squared = dot(*arm, *arm);
+            for (row, entries) in inertia.iter_mut().enumerate() {
+                for (col, entry) in entries.iter_mut().enumerate() {
+                    let identity = if row == col { squared } else { 0.0 };
+                    *entry += identity - arm[row] * arm[col];
+                }
+            }
+        }
+        let inverse = invert3(&inertia);
+        let mut spread = [[0.0; 6]; FACET_DOFS];
+        let mut fit = [[0.0; FACET_DOFS]; 6];
+        for (node, arm) in arms.iter().enumerate() {
+            let lever = skew(*arm);
+            for axis in 0..3 {
+                // t = mean translation.
+                fit[axis][6 * node + axis] = 1.0 / 3.0;
+                // Ω = H⁻¹·Σ r × u.
+                for component in 0..3 {
+                    fit[3 + axis][6 * node + component] =
+                        (0..3).map(|k| inverse[axis][k] * lever[k][component]).sum();
+                }
+                // u = t − [r]×·Ω, θ = Ω.
+                spread[6 * node + axis][axis] = 1.0;
+                for (spin, entry) in lever[axis].iter().enumerate() {
+                    spread[6 * node + axis][3 + spin] = -entry;
+                }
+                spread[6 * node + 3 + axis][3 + axis] = 1.0;
+            }
+        }
+        Self { spread, fit }
+    }
+
+    /// Pᵀ·K·P.
+    fn project_stiffness(&self, stiffness: &FacetMatrix) -> FacetMatrix {
+        let projector = self.matrix();
+        let mut half = [[0.0; FACET_DOFS]; FACET_DOFS];
+        for (row, entries) in half.iter_mut().enumerate() {
+            for (col, entry) in entries.iter_mut().enumerate() {
+                *entry = (0..FACET_DOFS)
+                    .map(|k| stiffness[row][k] * projector[k][col])
+                    .sum();
+            }
+        }
+        std::array::from_fn(|row| {
+            std::array::from_fn(|col| {
+                (0..FACET_DOFS)
+                    .map(|k| projector[k][row] * half[k][col])
+                    .sum()
+            })
+        })
+    }
+
+    /// P·u: the facet's DOFs less their rigid motion.
+    pub(crate) fn deformation(&self, dofs: &[f64; FACET_DOFS]) -> [f64; FACET_DOFS] {
+        let rigid: [f64; 6] = std::array::from_fn(|mode| {
+            self.fit[mode]
+                .iter()
+                .zip(dofs)
+                .map(|(entry, value)| entry * value)
+                .sum()
+        });
+        std::array::from_fn(|dof| {
+            dofs[dof]
+                - (0..6)
+                    .map(|mode| self.spread[dof][mode] * rigid[mode])
+                    .sum::<f64>()
+        })
+    }
+
+    fn matrix(&self) -> FacetMatrix {
+        std::array::from_fn(|row| {
+            std::array::from_fn(|col| {
+                let identity = if row == col { 1.0 } else { 0.0 };
+                identity
+                    - (0..6)
+                        .map(|mode| self.spread[row][mode] * self.fit[mode][col])
+                        .sum::<f64>()
+            })
+        })
+    }
+}
+
+/// [r]×, the matrix of r × ·.
+fn skew(arm: [f64; 3]) -> [[f64; 3]; 3] {
+    [
+        [0.0, -arm[2], arm[1]],
+        [arm[2], 0.0, -arm[0]],
+        [-arm[1], arm[0], 0.0],
+    ]
+}
+
+/// The inverse of the corners' inertia, which is positive definite for a
+/// facet `ShellMesh` has checked for area.
+fn invert3(matrix: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let cofactor = |row: usize, col: usize| {
+        let (r1, r2) = ((row + 1) % 3, (row + 2) % 3);
+        let (c1, c2) = ((col + 1) % 3, (col + 2) % 3);
+        matrix[r1][c1] * matrix[r2][c2] - matrix[r1][c2] * matrix[r2][c1]
+    };
+    let determinant: f64 = (0..3).map(|col| matrix[0][col] * cofactor(0, col)).sum();
+    std::array::from_fn(|row| std::array::from_fn(|col| cofactor(col, row) / determinant))
 }
 
 fn scale(vector: [f64; 3], factor: f64) -> [f64; 3] {

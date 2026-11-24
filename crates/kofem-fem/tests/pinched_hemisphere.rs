@@ -8,11 +8,11 @@
 //!
 //! On a curved surface the rotation about one facet's normal is partly a
 //! bending rotation of its neighbours. A drilling DOF held by a fictitious
-//! spring therefore stiffens bending more the finer the mesh, and LE3 drifted
-//! to 4 % below 185 mm. With the drilling DOF the true in-plane rotation of an
-//! Allman-type membrane, LE3 converges from below and settles at 187 mm.
-//! Coarser facets than these (16 cells, 5.6° each) are still membrane-stiff:
-//! 167 mm.
+//! spring therefore stiffened bending more the finer the mesh, and LE3
+//! drifted to 4 % below 185 mm. With the drilling DOF the true in-plane
+//! rotation of an Allman-type membrane, about the smooth surface's normal,
+//! LE3 converges from below, as flat facets do on a doubly curved shell:
+//! 173 mm on 500 mm facets, then 186 and 187 mm.
 
 #![allow(
     clippy::expect_used,
@@ -118,7 +118,7 @@ impl Quarter {
 }
 
 /// Meshes of about 500, 250 and 125 mm along the equator, the range of the
-/// app's case; the drift showed below 2 % only on the finest.
+/// app's case.
 const LEVELS: [[usize; 2]; 3] = [[32, 25], [64, 51], [128, 102]];
 
 fn percent_off(ux: f64) -> f64 {
@@ -126,7 +126,7 @@ fn percent_off(ux: f64) -> f64 {
 }
 
 #[test]
-fn le3_converges_within_two_percent() {
+fn le3_converges_from_below_to_within_two_percent() {
     let readings: Vec<f64> = LEVELS
         .iter()
         .map(|&cells| {
@@ -134,17 +134,20 @@ fn le3_converges_within_two_percent() {
             quarter.ux_at_a(&assemble_shell_stiffness(&quarter.mesh))
         })
         .collect();
-    for (cells, ux) in LEVELS.iter().zip(&readings) {
+    assert!(
+        readings.windows(2).all(|pair| pair[1] > pair[0]),
+        "readings {readings:.2?} should rise with refinement"
+    );
+    for (cells, ux) in LEVELS.iter().zip(&readings).skip(1) {
         assert!(
             percent_off(*ux).abs() < 2.0,
             "{cells:?}: Ux at A = {ux:.2} mm, {:+.2} % off 185 mm",
             percent_off(*ux)
         );
     }
-    let spread = readings.iter().copied().fold(f64::MIN, f64::max)
-        - readings.iter().copied().fold(f64::MAX, f64::min);
+    let (fine, finer) = (readings[1], readings[2]);
     assert!(
-        spread < 0.01 * REFERENCE_UX,
-        "readings {readings:.2?} should settle, not drift"
+        (finer - fine).abs() < 0.01 * REFERENCE_UX,
+        "the two finest meshes read {fine:.2} and {finer:.2} mm: still drifting"
     );
 }

@@ -137,6 +137,14 @@ fn assert_within(name: &str, got: f64, reference: f64, percent: f64) {
     );
 }
 
+/// The facet's own normal at every corner: the drilling axes of a facet on
+/// its own.
+fn own_axes(corners: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let normal = cross(sub(corners[1], corners[0]), sub(corners[2], corners[0]));
+    let length = norm(normal);
+    [normal.map(|value| value / length); 3]
+}
+
 fn triangle_area(corners: [[f64; 3]; 3]) -> f64 {
     let first = sub(corners[1], corners[0]);
     let second = sub(corners[2], corners[0]);
@@ -448,7 +456,12 @@ fn rank<const N: usize>(matrix: &[[f64; N]; N], tolerance: f64) -> usize {
 #[test]
 fn a_facet_has_exactly_the_six_rigid_modes_and_no_spurious_ones() {
     let corners = [[0.1, 0.2, 0.3], [1.3, 0.1, 0.5], [0.4, 1.1, 0.9]];
-    let stiffness = facet_stiffness(&corners, 0.02, &material(200_000.0, 0.3));
+    let stiffness = facet_stiffness(
+        &corners,
+        &own_axes(&corners),
+        0.02,
+        &material(200_000.0, 0.3),
+    );
     assert_eq!(rank(&stiffness, 1e-12), 18 - 6);
 }
 
@@ -627,7 +640,12 @@ fn bending_patch_test_reproduces_constant_curvature() {
 #[test]
 fn facet_stiffness_is_symmetric_with_six_rigid_modes() {
     let corners = [[0.1, 0.2, 0.3], [1.3, 0.1, 0.5], [0.4, 1.1, 0.9]];
-    let stiffness = facet_stiffness(&corners, 0.02, &material(200_000.0, 0.3));
+    let stiffness = facet_stiffness(
+        &corners,
+        &own_axes(&corners),
+        0.02,
+        &material(200_000.0, 0.3),
+    );
     let largest = stiffness
         .iter()
         .flatten()
@@ -1014,4 +1032,100 @@ fn bimaterial_strip_in_series_bends_by_both_halves() {
     let reference = moment * 0.5 * length * (1.0 / (steel * inertia) + 1.0 / (aluminium * inertia));
     assert_within("series bending rotation", rotation.abs(), reference, 0.5);
     assert_eq!(model.triangle_count(), 32);
+}
+
+// ── Drilling axes (KOF-453) ──────────────────────────────────────────────────
+
+fn unit(vector: [f64; 3]) -> [f64; 3] {
+    let length = norm(vector);
+    vector.map(|value| value / length)
+}
+
+fn assert_axis(name: &str, got: [f64; 3], expected: [f64; 3]) {
+    let error = norm(sub(got, expected));
+    assert!(
+        error < 1e-12,
+        "{name}: drilling axis {got:?}, expected {expected:?}"
+    );
+}
+
+#[test]
+fn drilling_axes_follow_the_smooth_surface_and_stop_at_folds() {
+    // Facets 0 and 1 meet at 10° about the x axis along edge 0–1, a smooth
+    // surface; facet 2 folds down 90° from facet 0 along edge 0–2.
+    let tilt = 10.0_f64.to_radians();
+    let vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.5, -tilt.cos(), tilt.sin()],
+        [0.0, 0.5, -1.0],
+    ];
+    let flat: Vec<f64> = vertices.iter().flatten().copied().collect();
+    let triangles = [0, 1, 2, 1, 0, 3, 2, 4, 0];
+    let mesh = ShellMesh::new(
+        &flat,
+        &triangles,
+        &[0.01; 3],
+        &[0; 3],
+        vec![material(1000.0, 0.3)],
+    )
+    .expect("valid mesh");
+    let normal = |facet: usize| {
+        let corners = mesh.corners(facet);
+        unit(cross(
+            sub(corners[1], corners[0]),
+            sub(corners[2], corners[0]),
+        ))
+    };
+    let area = |facet: usize| triangle_area(mesh.corners(facet));
+    let axes = mesh.drilling_normals();
+    // Node 0 and node 1 joins facets 0 and 1 smoothly: their area-weighted
+    // mean normal. Facet 2 keeps its own normal everywhere.
+    let smooth = unit(std::array::from_fn(|k| {
+        area(0) * normal(0)[k] + area(1) * normal(1)[k]
+    }));
+    assert_axis("facet 0, node 0", axes[0][0], smooth);
+    assert_axis("facet 0, node 1", axes[0][1], smooth);
+    assert_axis("facet 1, node 1", axes[1][0], smooth);
+    assert_axis("facet 1, node 0", axes[1][1], smooth);
+    assert_axis("facet 0, node 2 (across the fold)", axes[0][2], normal(0));
+    for &axis in &axes[2] {
+        assert_axis("folded facet 2", axis, normal(2));
+    }
+    // Facet 1's own normal at its free corner, node 3.
+    assert_axis("facet 1, node 3", axes[1][2], normal(1));
+}
+
+#[test]
+fn drilling_axes_ignore_how_each_facet_is_wound() {
+    // The same smooth pair with facet 1 wound the other way: the shared axis
+    // is the same line, turned to each facet's own side.
+    let tilt = 10.0_f64.to_radians();
+    let vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.5, -tilt.cos(), tilt.sin()],
+    ];
+    let flat: Vec<f64> = vertices.iter().flatten().copied().collect();
+    let mesh = ShellMesh::new(
+        &flat,
+        &[0, 1, 2, 0, 1, 3],
+        &[0.01; 2],
+        &[0; 2],
+        vec![material(1000.0, 0.3)],
+    )
+    .expect("valid mesh");
+    let axes = mesh.drilling_normals();
+    assert_axis(
+        "node 0, opposite windings",
+        axes[1][0],
+        axes[0][0].map(|value| -value),
+    );
+    assert_axis(
+        "node 1, opposite windings",
+        axes[1][1],
+        axes[0][1].map(|value| -value),
+    );
 }

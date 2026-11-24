@@ -14,6 +14,7 @@ pub mod assembly;
 pub mod element;
 pub mod membrane;
 pub mod mesh;
+pub mod normals;
 pub mod solve;
 pub mod stress;
 
