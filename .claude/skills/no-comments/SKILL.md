@@ -6,8 +6,6 @@ disable-model-invocation: true
 
 # No comments
 
-Spawn Comment Sicko. Act on accepted findings.
-
 Defer to Comment Sicko's fresh perspective.
 
 ## Scope
