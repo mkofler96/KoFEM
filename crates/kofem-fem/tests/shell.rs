@@ -1036,7 +1036,7 @@ fn bimaterial_strip_in_series_bends_by_both_halves() {
 
 // ── Drilling axes (KOF-453) ──────────────────────────────────────────────────
 
-fn unit(vector: [f64; 3]) -> [f64; 3] {
+fn normalized(vector: [f64; 3]) -> [f64; 3] {
     let length = norm(vector);
     vector.map(|value| value / length)
 }
@@ -1073,7 +1073,7 @@ fn drilling_axes_follow_the_smooth_surface_and_stop_at_folds() {
     .expect("valid mesh");
     let normal = |facet: usize| {
         let corners = mesh.corners(facet);
-        unit(cross(
+        normalized(cross(
             sub(corners[1], corners[0]),
             sub(corners[2], corners[0]),
         ))
@@ -1082,7 +1082,7 @@ fn drilling_axes_follow_the_smooth_surface_and_stop_at_folds() {
     let axes = mesh.drilling_normals();
     // Node 0 and node 1 joins facets 0 and 1 smoothly: their area-weighted
     // mean normal. Facet 2 keeps its own normal everywhere.
-    let smooth = unit(std::array::from_fn(|k| {
+    let smooth = normalized(std::array::from_fn(|k| {
         area(0) * normal(0)[k] + area(1) * normal(1)[k]
     }));
     assert_axis("facet 0, node 0", axes[0][0], smooth);
