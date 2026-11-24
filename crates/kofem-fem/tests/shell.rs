@@ -1082,9 +1082,9 @@ fn drilling_axes_follow_the_smooth_surface_and_stop_at_folds() {
     let axes = mesh.drilling_normals();
     // Node 0 and node 1 joins facets 0 and 1 smoothly: their area-weighted
     // mean normal. Facet 2 keeps its own normal everywhere.
-    let smooth = normalized(std::array::from_fn(|k| {
-        area(0) * normal(0)[k] + area(1) * normal(1)[k]
-    }));
+    let weighted: [f64; 3] =
+        std::array::from_fn(|axis| area(0) * normal(0)[axis] + area(1) * normal(1)[axis]);
+    let smooth = normalized(weighted);
     assert_axis("facet 0, node 0", axes[0][0], smooth);
     assert_axis("facet 0, node 1", axes[0][1], smooth);
     assert_axis("facet 1, node 1", axes[1][0], smooth);
