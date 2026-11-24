@@ -54,8 +54,8 @@ export default {
         edge at A and C, and a short piece of the hole edge is held in
         <i>z</i> against rigid motion. The result does not depend on the
         length of those pieces.</p>
-        <p>${row.mesh.elements.toLocaleString("en-US")} flat triangles, each a
-        CST membrane with a DKT plate-bending element.</p>`,
+        <p>${row.mesh.elements.toLocaleString("en-US")} flat triangles, each an
+        OPT drilling membrane with a DKT plate-bending element.</p>`,
   discussion: ({ row, pct }) => `
         <p>KoFEM reads ${pct(row.errPct)} from the NAFEMS target on this
         mesh. The convergence study shows the displacement falling as the
@@ -63,5 +63,5 @@ export default {
         a doubly curved shell carry a little membrane stiffness into bending.
         The band is wide enough for every mesh of the study; it is the widest
         of the NAFEMS pages, and the reason is this trend, not scatter.</p>`,
-  references: [REF.nafems, REF.batoz],
+  references: [REF.nafems, REF.batoz, REF.felippa2003],
 };

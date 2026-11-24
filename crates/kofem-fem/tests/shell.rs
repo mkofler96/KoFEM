@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! The Kirchhoff shell (CST + DKT) against closed-form references: the same
+//! The Kirchhoff shell (OPT + DKT) against closed-form references: the same
 //! cases and tolerances as the C++ engine's `engine/tests/shell_validation.cpp`,
 //! plus membrane and bending patch tests and rigid-body motion on distorted,
 //! tilted meshes.

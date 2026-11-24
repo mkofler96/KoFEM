@@ -16,7 +16,7 @@ use crate::{
     flatten_reactions, parse_materials, shell_surface, to_js, ElasticSolution, RunOutput, SolveRun,
 };
 
-/// A validated Kirchhoff shell model (CST membrane + DKT bending facets).
+/// A validated Kirchhoff shell model (OPT drilling membrane + DKT bending facets).
 #[wasm_bindgen]
 pub struct ShellModel {
     pub(crate) mesh: ShellMesh,

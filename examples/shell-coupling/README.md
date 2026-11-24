@@ -40,7 +40,7 @@ The reusable geometry steps live in `lib.mjs`; meshing runs in the C++ engine.
 
 ## Underlying pieces (all unit-tested)
 
-- `crates/kofem-fem/src/shell` — the DKT+CST Kirchhoff shell; validated
+- `crates/kofem-fem/src/shell` — the DKT + OPT-membrane Kirchhoff shell; validated
   against plate/membrane theory by `crates/kofem-fem/tests/shell.rs`.
 - `crates/kofem-fem/src/coupling.rs` and `coupled_static.rs` — the RBE2/RBE3
   couplings and the coupled shell/solid solve (`crates/kofem-fem/tests/mixed.rs`,
