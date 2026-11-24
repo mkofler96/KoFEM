@@ -14,6 +14,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { solveCoupledInRust } from "../../../web/src/lib/solve/coupledRust.ts";
+import { distributeSurfaceLoad } from "../../../web/src/lib/solveLoads.ts";
 import { rustFem } from "../../validation/lib/solver.mjs";
 import {
   loadEngine,
@@ -115,32 +116,60 @@ for (const s of fixedLocal) {
   fixedShellNodes.push(model.shellPool[s]);
   for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
 }
+// The pin's load as the app applies it when the .vtu is re-solved
+// (rebuildSurfaceLoads, coupledLoads): the group's total force as one uniform
+// traction over the loaded facets, shared work-equivalently by area.
 const loadNodes = new Map(
   Object.keys(LOAD_FACES).map((f) => [Number(f), new Set()]),
 );
+const loadedFacets = [];
 for (let t = 0; t < mesh.surfFace.length; t++) {
-  const F = LOAD_FACES[mesh.surfFace[t]];
-  if (!F) continue;
+  if (!LOAD_FACES[mesh.surfFace[t]]) continue;
+  const facet = [];
   for (const oi of [
     mesh.surfTri[3 * t],
     mesh.surfTri[3 * t + 1],
     mesh.surfTri[3 * t + 2],
   ]) {
     const pi = model.solidPool.get(oi);
-    if (pi !== undefined) loadNodes.get(mesh.surfFace[t]).add(pi);
+    if (pi === undefined)
+      throw new Error(`load face ${mesh.surfFace[t]}: node ${oi} is not in the pool`);
+    loadNodes.get(mesh.surfFace[t]).add(pi);
+    facet.push(pi);
   }
+  loadedFacets.push(facet);
 }
+// A load group's `components` is the group's TOTAL force, shared over every
+// face in it (rebuildSurfaceLoads) — here 2 × 1 kN = 2 kN in −Y.
+const groupTotal = Object.values(LOAD_FACES).reduce(
+  (acc, F) => acc.map((v, d) => v + F[d]),
+  [0, 0, 0],
+);
+const nodalLoads = new Map();
+distributeSurfaceLoad(
+  { type: "force", force: groupTotal, faces: loadedFacets, name: "Load1" },
+  (pi) => [
+    model.pool[3 * pi],
+    model.pool[3 * pi + 1],
+    model.pool[3 * pi + 2],
+  ],
+  (pi) => {
+    let entry = nodalLoads.get(pi);
+    if (!entry) {
+      entry = { force: [0, 0, 0], moment: [0, 0, 0] };
+      nodalLoads.set(pi, entry);
+    }
+    return entry;
+  },
+);
 const load_dofs = [],
   load_vals = [];
-for (const [fid, F] of Object.entries(LOAD_FACES)) {
-  const ns = [...loadNodes.get(Number(fid))];
-  for (const pi of ns)
-    for (let c = 0; c < 3; c++)
-      if (F[c] !== 0) {
-        load_dofs.push(6 * pi + c);
-        load_vals.push(F[c] / ns.length);
-      }
-}
+for (const [pi, { force }] of nodalLoads)
+  for (let c = 0; c < 3; c++)
+    if (force[c] !== 0) {
+      load_dofs.push(6 * pi + c);
+      load_vals.push(force[c]);
+    }
 
 // The clamped holder rim (face 7) sits next to the retained base solid; drop any
 // distributing coupling on those fixed nodes (a fixed RBE3 dependent is refused, #377).
@@ -322,17 +351,6 @@ function buildCraneVtu() {
       nodeIds: ns,
     });
   }
-  // A load group's `components` is the group's TOTAL force, shared over every
-  // face in it (rebuildSurfaceLoads) — so the group must name the sum of the
-  // per-face vectors the solve above was run with, here 2 × 1 kN = 2 kN in −Y.
-  // It used to store the per-face vector instead, because the store re-applied
-  // a group's full vector once per face entry; that bug (KOF-216) is fixed, and
-  // storing the per-face vector now would reload the example at half its load.
-  const groupTotal = Object.values(LOAD_FACES).reduce(
-    (acc, F) => acc.map((v, d) => v + F[d]),
-    [0, 0, 0],
-  );
-
   const meta = {
     format: "kofem-analysis",
     version: 1,
