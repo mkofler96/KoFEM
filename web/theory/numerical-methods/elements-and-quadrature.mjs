@@ -323,10 +323,10 @@ export default {
       the same element size are within 1%. CI checks both numbers on every
       change.</p>
     <p>KoFEM solves standard displacement elements only. It has no mixed,
-      B-bar or reduced-integration elements, which are the usual cures, and
-      the app does not warn about this case. For a material with ${tex("ν")}
-      above about 0.45, mesh with quadratic elements and compare two element
-      sizes.</p>
+      B-bar or reduced-integration elements, which are the usual cures. The
+      Solve panel's pre-flight check warns when a solid body whose material
+      has ${tex("ν")} above 0.45 is meshed with linear elements. For such a material, mesh with quadratic elements and compare two
+      element sizes.</p>
 
     <h2 id="implementation">KoFEM implementation</h2>
     <p>KoFEM’s solid solve runs in its own Rust finite-element module. It

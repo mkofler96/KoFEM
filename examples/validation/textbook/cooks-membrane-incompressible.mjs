@@ -82,7 +82,8 @@ export default {
         <p>What to do in KoFEM: for rubber and other materials with ν above
         about 0.45, mesh with quadratic elements and compare two element
         sizes. KoFEM has no mixed or B-bar elements, which remove locking at
-        the root, and the app does not yet warn about this case.</p>`;
+        the root. The Solve panel warns when a solid body with ν above 0.45
+        is meshed with linear elements.</p>`;
   },
   references: [REF.casquero2024, REF.cook1974, REF.hughes2000],
 };
