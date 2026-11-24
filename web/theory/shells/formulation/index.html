@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Shell formulation | KoFEM Theory Guide</title>
-    <meta name="description" content="Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, CST membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits." />
+    <meta name="description" content="Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, a drilling membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits." />
     <link rel="canonical" href="https://kofem.org/theory/shells/formulation/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Shell formulation | KoFEM Theory Guide" />
-    <meta property="og:description" content="Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, CST membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits." />
+    <meta property="og:description" content="Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, a drilling membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits." />
     <meta property="og:url" content="https://kofem.org/theory/shells/formulation/" />
     <meta property="og:image" content="https://kofem.org/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Shell formulation | KoFEM Theory Guide" />
-    <meta name="twitter:description" content="Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, CST membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits." />
+    <meta name="twitter:description" content="Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, a drilling membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits." />
     <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -37,7 +37,7 @@
         "@context": "https://schema.org",
         "@type": "TechArticle",
         "headline": "Shell formulation",
-        "description": "Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, CST membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits.",
+        "description": "Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, a drilling membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits.",
         "url": "https://kofem.org/theory/shells/formulation/",
         "isPartOf": {
           "@type": "CollectionPage",
@@ -819,8 +819,9 @@
     <p class="lede">How does a flat triangular shell represent membrane and bending response?</p>
     <p>A shell replaces a thin wall’s volume with a mid-surface and a thickness.
       Its assumptions describe how material moves through that thickness.
-      KoFEM combines a constant-strain triangle (CST) for in-plane stretching
-      with a discrete Kirchhoff triangle (DKT) for bending.</p>
+      KoFEM combines Felippa’s optimal membrane triangle (OPT), whose corner
+      rotations are true in-plane rotations, for stretching with a discrete
+      Kirchhoff triangle (DKT) for bending.</p>
 
     <h2 id="shell-or-solid">Choose the physical idealisation</h2>
     <p>Use a shell when thickness is small relative to the lengths over which
@@ -871,11 +872,15 @@
       rather than a classical smooth plate approximation with continuous first
       derivatives. Rotations are independent algebraic unknowns, so they are
       not obtained by simply differentiating a linear triangle’s displacement.</p>
-    <p>The rotation <math><msub><mi>θ</mi><mi>z</mi></msub></math> about the facet normal is the <em>drilling</em>
-      rotation. The physical CST/DKT blocks do not supply its stiffness.
-      KoFEM adds a small diagonal stabilization, <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>4</mn></mrow></msup></math> times the
-      mean bending diagonal per facet. This removes a numerical singularity;
-      it is not a physical torsional constitutive law.</p>
+    <p>The rotation <math><msub><mi>θ</mi><mi>z</mi></msub></math> about the surface normal is the <em>drilling</em>
+      rotation: the in-plane rotation <math><mo>½</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>v</mi><mn>0</mn></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>x</mi><mo>−</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>y</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> of the
+      membrane, which carries real membrane stiffness. On a curved surface the
+      rotation about one facet’s own normal also holds part of its neighbours’
+      bending rotation, so facets that form one smooth surface around a node
+      share its mean normal as their drilling axis; across a fold sharper than
+      20° each side keeps its own normal, where one wall’s in-plane rotation
+      is the other wall’s bending rotation. A rigid-body projector keeps every
+      rigid motion strain-free with those axes.</p>
 
     <h2 id="stiffness">Membrane and bending stiffness</h2>
     <p>Use the shared <a href="/theory/notation/#engineering-shear">engineering-shear convention</a>.
@@ -883,17 +888,23 @@
       the in-plane engineering shear. The curvature vector <math><mi>κ</mi></math> has units
       of inverse length and includes the doubled twisting curvature:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Membrane strain comes from in-plane displacement derivatives; bending curvature comes from derivatives of the two tangential rotations; scroll horizontally if needed"><math display="block"><msub><mi>ε</mi><mi>m</mi></msub><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>x</mi><mo>,</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>v</mi><mn>0</mn></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>y</mi><mo>,</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>u</mi><mn>0</mn></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>y</mi><mo>+</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>v</mi><mn>0</mn></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>x</mi><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup><mo>,</mo><mspace width="1em"/><mi>κ</mi><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>θ</mi><mi>y</mi></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>x</mi><mo>,</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>θ</mi><mi>x</mi></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>y</mi><mo>,</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>θ</mi><mi>y</mi></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>y</mi><mo>−</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>θ</mi><mi>x</mi></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><mi>x</mi><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>The CST membrane strain is constant on a facet. DKT curvature varies
+    <p>The OPT membrane strain is a constant part plus a linear part driven
+      by the corner rotations that averages to zero over the facet, so it
+      passes the patch test and bends in plane with the exact energy on
+      rectangular mesh units of any aspect ratio. DKT curvature varies
       across it. With <a href="/theory/notation/#young-modulus">Young’s modulus</a>
       <math><mi>E</mi></math> and <a href="/theory/notation/#poisson-ratio">Poisson ratio</a>
       <span class="math-nowrap"><math><mi>ν</mi></math>,</span> the plane-stress matrix is:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Isotropic plane-stress material matrix for two normal strains and engineering shear; scroll horizontally if needed"><math display="block"><msub><mi mathvariant="bold" class="math-bold">C</mi><mi>p</mi></msub><mo>=</mo><mfrac><mrow><mi>E</mi></mrow><mrow><mn>1</mn><mo>−</mo><msup><mi>ν</mi><mn>2</mn></msup></mrow></mfrac><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mi>ν</mi></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mi>ν</mi></mtd><mtd><mn>1</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mi>ν</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mn>2</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
     <p>Write <math><msub><mi>ε</mi><mi>m</mi></msub><mo>=</mo></math>​<math><msub><mi mathvariant="bold" class="math-bold">B</mi><mi>m</mi></msub><msub><mi mathvariant="bold" class="math-bold">d</mi><mi>m</mi></msub></math> and
       <math><mi>κ</mi><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mi mathvariant="bold" class="math-bold">B</mi><mi>b</mi></msub><msub><mi mathvariant="bold" class="math-bold">d</mi><mi>b</mi></msub></math>,</span> where the local coefficient
-      vectors contain respectively the six in-plane and nine bending unknowns.
-      On facet area <span class="math-nowrap"><math><msub><mi>A</mi><mi>e</mi></msub></math>,</span> the two stiffness contributions are:</p>
+      vectors contain respectively the nine in-plane (two translations and
+      the drilling rotation per corner) and nine bending unknowns. On facet
+      area <span class="math-nowrap"><math><msub><mi>A</mi><mi>e</mi></msub></math>,</span> the two stiffness contributions are:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Membrane stiffness integrates thickness times the plane-stress law; bending stiffness integrates thickness cubed over twelve times that law; scroll horizontally if needed"><math display="block"><msub><mi mathvariant="bold" class="math-bold">K</mi><mi>m</mi></msub><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><msub><mi>A</mi><mi>e</mi></msub></mrow></msub><msubsup><mi mathvariant="bold" class="math-bold">B</mi><mi>m</mi><mi>T</mi></msubsup><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>t</mi><msub><mi mathvariant="bold" class="math-bold">C</mi><mi>p</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><msub><mi mathvariant="bold" class="math-bold">B</mi><mi>m</mi></msub><mspace width="0.17em"/><mi>d</mi><mi>A</mi><mo>,</mo><mspace width="1em"/><msub><mi mathvariant="bold" class="math-bold">K</mi><mi>b</mi></msub><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><msub><mi>A</mi><mi>e</mi></msub></mrow></msub><msubsup><mi mathvariant="bold" class="math-bold">B</mi><mi>b</mi><mi>T</mi></msubsup><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mfrac><mrow><msup><mi>t</mi><mn>3</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><msub><mi mathvariant="bold" class="math-bold">C</mi><mi>p</mi></msub><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><msub><mi mathvariant="bold" class="math-bold">B</mi><mi>b</mi></msub><mspace width="0.17em"/><mi>d</mi><mi>A</mi><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>The membrane integral is constant times area. Bending uses three
+    <p>The membrane stiffness is Felippa’s closed form: a basic part from the
+      constant strain and a higher-order part integrated at the mid-sides.
+      Bending uses three
       mid-edge points of equal weight <span class="math-nowrap"><math><msub><mi>A</mi><mi>e</mi></msub><mo lspace="0" rspace="0">/</mo><mn>3</mn></math>.</span> The flat, centred,
       homogeneous section has no membrane–bending material coupling term.
       Facets in different orientations still interact through shared global
@@ -964,7 +975,7 @@
       <math><msub><mi>w</mi><mi>c</mi></msub></math> is centre deflection; <math><msub><mi>M</mi><mi>c</mi></msub></math>
       is either centre bending moment resultant for the simply supported square:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Square-plate references: simply supported and clamped centre deflections, and the simply supported centre moment at Poisson ratio 0.3; scroll horizontally if needed"><math display="block"><msubsup><mi>w</mi><mi>c</mi><mrow><mi mathvariant="normal">SS</mi></mrow></msubsup><mo>=</mo><mn>0.00406</mn><mfrac><mrow><mi>q</mi><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><mi>D</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><msubsup><mi>w</mi><mi>c</mi><mrow><mi mathvariant="normal">clamped</mi></mrow></msubsup><mo>=</mo><mn>0.00126</mn><mfrac><mrow><mi>q</mi><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><mi>D</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><msubsup><mi>M</mi><mi>c</mi><mrow><mi mathvariant="normal">SS</mi></mrow></msubsup><mo>=</mo><mn>0.0479</mn><mi>q</mi><msup><mi>a</mi><mn>2</mn></msup><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>The mesh has 32 × 32 cells, two DKT/CST triangles per cell, and
+    <p>The mesh has 32 × 32 cells, two OPT/DKT triangles per cell, and
       <math><mn>6</mn><mo>×</mo><msup><mn>33</mn><mn>2</mn></msup><mo>=</mo></math>​<math><mn>6534</mn></math> coefficients before constraints. Clamped edges
       fix all six components. Simply supported edges fix normal translation
       and leave tangential bending rotations free; the test fixes in-plane
@@ -994,18 +1005,22 @@
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Batoz, Bathe and Ho (1980), <cite>A study of three-node triangular plate bending elements</cite>, International Journal for Numerical Methods in Engineering 15, 1771–1812. This is the DKT reference, not a validation of KoFEM’s complete shell workflow.</li>
+      <li>Felippa (2003), <cite>A study of optimal membrane triangles with drilling freedoms</cite>, Computer Methods in Applied Mechanics and Engineering 192, 2125–2168: the OPT membrane. The Rust tests reproduce its Cook’s membrane and end-moment cantilever tables.</li>
+      <li>Felippa and Haugen (2005), <cite>A unified formulation of small-strain corotational finite elements: I. Theory</cite>, Computer Methods in Applied Mechanics and Engineering 194, 2285–2335: the rigid-body projector.</li>
       <li>Timoshenko and Woinowsky-Krieger, <cite>Theory of Plates and Shells</cite>, 2nd ed. (1959), uniformly loaded square plates.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/element.rs#L113">CST membrane</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/element.rs#L223">DKT interpolation and stiffness</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/element.rs#L24">local basis and drilling stabilization</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/stress.rs#L20">surface stress recovery</a> and
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/membrane.rs#L43">OPT membrane</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/element.rs#L145">DKT interpolation and stiffness</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/element.rs#L24">local basis</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/normals.rs#L33">drilling axes</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/element.rs#L292">rigid-body projector</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/stress.rs#L23">surface stress recovery</a> and
         <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/shellRust.ts#L50">the app’s shell solve</a>.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solve/autoShell.ts#L72">one-Shell-body guard</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solve/shell.ts#L25">shell material and thickness resolution</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/walls.rs#L98">wall pairing</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/mid_surface.rs#L58">mid-surface construction</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solveLoads.ts#L20">load distribution</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/tests/shell.rs#L172">the plate cases</a>.</li>
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/tests/shell.rs#L180">the plate cases</a>.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/verification/strategy/"><small>Previous</small>← Verification strategy</a>
       <a class="next" rel="next" href="/theory/shells/solid-coupling/"><small>Next</small>Solid–shell coupling →</a></nav>

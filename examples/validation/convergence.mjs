@@ -341,10 +341,10 @@ export default [
     id: "nafems-le3",
     caseId: "nafems-le3",
     title: "NAFEMS LE3, curved shell triangles",
-    note: "The displacement falls as the mesh is refined and levels off a few percent below the target: flat facets on a doubly curved shell carry some membrane stiffness into bending.",
+    note: "The displacement converges to about 1 % above the target: on 250 mm facets and finer the mesh no longer changes it.",
     expect: null,
     noRate:
-      "The read-out is a displacement on a shell of flat facets, which levels off below the target instead of converging to it (KOF-453); the rate check covers solid meshes only.",
+      "The read-out is a displacement on a shell of flat facets, which approximate the doubly curved surface; the rate check covers solid meshes only.",
     series: [
       {
         label: "Shell (linear)",

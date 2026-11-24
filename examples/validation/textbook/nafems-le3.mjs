@@ -58,10 +58,11 @@ export default {
         OPT drilling membrane with a DKT plate-bending element.</p>`,
   discussion: ({ row, pct }) => `
         <p>KoFEM reads ${pct(row.errPct)} from the NAFEMS target on this
-        mesh. The convergence study shows the displacement falling as the
-        mesh is refined, to a few percent below the target: flat facets on
-        a doubly curved shell carry a little membrane stiffness into bending.
-        The band is wide enough for every mesh of the study; it is the widest
-        of the NAFEMS pages, and the reason is this trend, not scatter.</p>`,
+        mesh, and the convergence study shows the displacement settling about
+        1 % above it as the mesh is refined. The drilling rotation of each
+        facet's membrane is the in-plane rotation about the smooth surface's
+        normal; held by a fictitious spring instead, it stiffened the bending
+        of neighbouring facets more the finer the mesh, and the result drifted
+        below the target.</p>`,
   references: [REF.nafems, REF.batoz, REF.felippa2003],
 };

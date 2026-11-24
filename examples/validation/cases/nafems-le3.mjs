@@ -35,11 +35,13 @@
 //
 // Read-out: Ux at A = (10 000, 0, 0) on the mid-surface, read with a probe.
 //
-// Tolerance: 5 %. The flat CST + DKT triangles converge from above to a value
-// some 4 % under the target: Ux reads 185.4, 183.2, 180.2 and 178.4 mm on
-// meshes of 500, 250, 125 and 62.5 mm (1 400 to 83 000 triangles). NAFEMS'
-// own linear-triangle results lie further off (Abaqus S3: −13 % on its fine
-// mesh). The example meshes at 250 mm.
+// Tolerance: 2 %. The flat facets' membrane is Felippa's OPT triangle, whose
+// drilling DOF is the in-plane rotation about the smooth surface's normal
+// (KOF-453). Ux reads 183.6, 186.7, 187.0 and 187.0 mm on meshes of 500, 250,
+// 125 and 62.5 mm (1 400 to 83 000 triangles): it converges to 1.1 % above
+// the target. With a fictitious drilling spring instead it drifted from
+// 185.4 down to 178.4 mm. NAFEMS' own linear-triangle results lie further
+// off (Abaqus S3: −13 % on its fine mesh). The example meshes at 250 mm.
 
 import { sphericalShellStep } from "../../gallery/step-revolve.mjs";
 import { APP_STEEL } from "../lib/recipe.mjs";
@@ -76,7 +78,7 @@ export default {
   name: "NAFEMS LE3: hemisphere with point loads",
   quantity: "radial displacement at A",
   unit: "mm",
-  tolPct: 5,
+  tolPct: 2,
   figure: { field: "displacement", view: [-1, -0.6, -0.5], deform: true },
   page: {
     summary:
