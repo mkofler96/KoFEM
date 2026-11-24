@@ -31,6 +31,7 @@ import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
 import { parseHandCheck, type HandCheck } from "./handCheck";
 import { tieMethod, type TieMethod } from "./tie";
 import { restoreInterfaces, type BodyInterface } from "./interfaces";
+import type { ViewRepr } from "../store/viewSlice";
 
 // ── KoFEM analysis file format (.vtu) ─────────────────────────────────────────
 //
@@ -81,7 +82,7 @@ export const ANALYSIS_FILE_VERSION = 1;
 export interface AnalysisState {
   modelName: string;
   mode: AppMode;
-  viewRepr: "geometry" | "surface" | "volume" | "wireframe";
+  viewRepr: ViewRepr;
   nodes: Node[];
   elements: Element[];
   materials: Material[];
@@ -130,7 +131,8 @@ interface KofemFieldDataV1 {
   version: 1;
   modelName: string;
   mode: AppMode;
-  viewRepr: "geometry" | "surface" | "volume" | "wireframe";
+  // "volume": a view files written before KOF-429 may hold (savedViewRepr).
+  viewRepr: ViewRepr | "volume";
   resultType: ResultType;
   elementTypes: ElementType[];
   materials: Material[];
@@ -441,6 +443,13 @@ const TOPOPT_STRESS_FIELDS = [
 ] as const;
 const STRESS_AGGREGATIONS: StressAggregation[] = ["pnorm", "ks"];
 const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
+
+// The Volume view drew every element edge under an opaque surface, so it
+// looked the same as the Surface view; it was retired (KOF-429) and a file
+// saved in it opens in the Surface view.
+function savedViewRepr(saved: KofemFieldDataV1["viewRepr"]): ViewRepr {
+  return saved === "volume" ? "surface" : saved;
+}
 const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA", "CTRIA3"];
 
 function dataArrayContent(xml: string, name: string): string {
@@ -766,7 +775,7 @@ export function parseAnalysisFile(text: string): AnalysisState {
   return {
     modelName: meta.modelName,
     mode: meta.mode,
-    viewRepr: meta.viewRepr,
+    viewRepr: savedViewRepr(meta.viewRepr),
     nodes,
     elements,
     materials: meta.materials,

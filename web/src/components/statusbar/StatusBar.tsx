@@ -7,10 +7,10 @@ import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import { consentBanner } from "../../lib/analytics";
 import { loadCounts } from "../../lib/modelDisplay";
+import type { ViewRepr } from "../../store/viewSlice";
+import type { Projection } from "../../lib/projection";
 import { EngineStatus } from "./EngineStatus";
 import styles from "./StatusBar.module.css";
-
-type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
 
 // What the face being picked is for, shown next to the pick indicator.
 const PICK_PURPOSE: Record<PickMode, string> = {
@@ -73,28 +73,6 @@ const REPR_BUTTONS: {
     ),
   },
   {
-    id: "volume",
-    label: "Volume",
-    tooltip: "Volume mesh — all tetrahedral edges",
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
-        <path
-          d="M8 2L13 5v6L8 14L3 11V5z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M3 5l5 3.5M13 5l-5 3.5M8 8.5L8 14M3 5l5 9M13 5l-5 9M3 11l5-2.5M13 11l-5-2.5"
-          stroke="currentColor"
-          strokeWidth="0.8"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
     id: "wireframe",
     label: "Wireframe",
     tooltip: "Wireframe — edges only, no fill",
@@ -119,6 +97,36 @@ const REPR_BUTTONS: {
   },
 ];
 
+// The projection toggle (KOF-429): what each projection looks like, a box
+// whose far face shrinks or keeps its size.
+const PROJECTION_ICON: Record<Projection, React.ReactNode> = {
+  perspective: (
+    <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
+      <path
+        d="M2 5h9v9H2zM8 2h6v6H8zM2 5l6-3M11 5l3-3M11 14l3-6M2 14l6-6"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  orthographic: (
+    <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
+      <path
+        d="M2 5h9v9H2zM5 2h9v9H5zM2 5l3-3M11 5l3-3M11 14l3-3M2 14l3-3"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+};
+
+const PROJECTION_LABEL: Record<Projection, string> = {
+  perspective: "Perspective",
+  orthographic: "Orthographic",
+};
+
 export function StatusBar() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -132,6 +140,8 @@ export function StatusBar() {
   const pickGeometry = useModelStore((s) => s.pickGeometry);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
+  const projection = useModelStore((s) => s.projection);
+  const setProjection = useModelStore((s) => s.setProjection);
   const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
   const setShowUndeformedOverlay = useModelStore(
     (s) => s.setShowUndeformedOverlay,
@@ -143,18 +153,13 @@ export function StatusBar() {
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
   const hasSurface = nodes.length > 0;
-  // A volume mesh exists whenever the model has 3D solid elements — their edges
-  // are what the "all tetrahedral" representation draws.
-  const hasVolume = elements.some(
-    (e) => e.type === "CTETRA" || e.type === "CHEXA",
-  );
 
   function isDisabled(id: ViewRepr) {
     if (id === "geometry" || id === "wireframe") return !hasGeometry;
-    if (id === "surface") return !hasSurface;
-    if (id === "volume") return !hasVolume;
-    return false;
+    return !hasSurface;
   }
+  const otherProjection =
+    projection === "perspective" ? "orthographic" : "perspective";
 
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
@@ -226,7 +231,11 @@ export function StatusBar() {
       </div>
 
       {/* Center — repr toolbar + undeformed overlay toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div
+        role="toolbar"
+        aria-label="View"
+        style={{ display: "flex", alignItems: "center", gap: 6 }}
+      >
         <div className={styles.reprGroup}>
           {REPR_BUTTONS.map(({ id, label, tooltip, icon }, i) => (
             <button
@@ -241,6 +250,15 @@ export function StatusBar() {
               {icon}
             </button>
           ))}
+          <button
+            onClick={() => setProjection(otherProjection)}
+            className={styles.reprBtn}
+            aria-label={PROJECTION_LABEL[projection]}
+            data-tooltip={`${PROJECTION_LABEL[projection]} — click for ${otherProjection}`}
+            style={{ borderLeft: "1px solid #e2e5ea" }}
+          >
+            {PROJECTION_ICON[projection]}
+          </button>
         </div>
         {result && (
           <button

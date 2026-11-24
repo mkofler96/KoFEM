@@ -21,7 +21,7 @@ import {
 // — which is what actually reaches the solver as a surface traction (issue #196).
 export type LoadDisplay = "resultant" | "nodal";
 
-export type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
+export type ViewRepr = "geometry" | "surface" | "wireframe";
 export type MeshRepr = Exclude<ViewRepr, "geometry">;
 
 // Default density cutoff for the topology-optimization result view (KOF-233).

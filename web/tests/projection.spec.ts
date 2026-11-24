@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Perspective or orthographic projection (KOF-429): one button beside Fit View
-// switches the viewport camera. The switch keeps the view direction, the
+// Perspective or orthographic projection (KOF-429): one button among the view
+// buttons of the status bar switches the viewport camera. The switch keeps the view direction, the
 // target and the model's size on screen; picking, Fit View and the standard
 // views work in orthographic projection, and the choice outlasts a reload.
 
@@ -206,6 +206,35 @@ test("results show and are probed in orthographic projection @pipeline", async (
     delta / 2,
     2,
   );
+});
+
+// The button took the place of the Volume view, which looked the same as the
+// Surface view.
+test("the projection button sits with the view buttons, on a phone too @pipeline", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app/?example=axial-bar");
+  await page.waitForFunction(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { nodes: unknown[] } };
+        }
+      ).__kofemStore.getState().nodes.length > 0,
+  );
+  const views = page.getByRole("toolbar", { name: "View" });
+  for (const name of ["Geometry", "Surface", "Wireframe", "Perspective"])
+    await expect(
+      views.getByRole("button", { name, exact: true }),
+    ).toBeVisible();
+  await expect(views.getByRole("button", { name: "Volume" })).toHaveCount(0);
+
+  await views.getByRole("button", { name: "Perspective", exact: true }).click();
+  await expect(
+    views.getByRole("button", { name: "Orthographic", exact: true }),
+  ).toBeVisible();
+  expect((await viewCamera(page)).type).toBe("OrthographicCamera");
 });
 
 test("the projection is remembered after a reload @pipeline", async ({
