@@ -70,7 +70,7 @@ interface SurfaceTriangle {
 }
 
 interface Face {
-  ids: number[]; // node ids, as listed by the element's local face table
+  pts: Node[]; // corners, as listed by the element's local face table
   color: THREE.Color;
   // Centroid of the owning element: the face is flipped if its normal points
   // towards it, so the surface is outward-oriented whatever the element's
@@ -88,6 +88,20 @@ function triangleNormal(a: Node, b: Node, c: Node): THREE.Vector3 {
   const ab = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
   const ac = new THREE.Vector3(c.x - a.x, c.y - a.y, c.z - a.z);
   return ab.cross(ac).normalize();
+}
+
+// Node positions of an element, in its node order. Throws on a node id the
+// model does not have — the mesh is inconsistent and nothing sensible can be
+// drawn from it.
+function elementPoints(el: Element, nodeMap: Map<number, Node>): Node[] {
+  return el.nodeIds.map((id) => {
+    const n = nodeMap.get(id);
+    if (!n)
+      throw new Error(
+        `density surface: element ${el.id} references unknown node ${id}`,
+      );
+    return n;
+  });
 }
 
 // Boundary triangles of the retained element set — the single definition of
@@ -108,23 +122,18 @@ function collectSurfaceTriangles(
   if (density.length !== ordered.length || ordered.length === 0) return null;
 
   const nodeMap = new Map<number, Node>(nodes.map((n) => [n.id, n]));
-  const lookup = (ids: number[]): Node[] | null => {
-    const pts = ids.map((id) => nodeMap.get(id));
-    return pts.some((p) => p === undefined) ? null : (pts as Node[]);
-  };
 
   // Collect every face of every kept element, keyed by its sorted node ids, and
   // count how many kept elements share it. Interior faces appear twice.
   const faceMap = new Map<string, { face: Face; count: number }>();
-  const addFace = (
-    ids: number[],
-    color: THREE.Color,
-    inside: THREE.Vector3,
-  ) => {
-    const key = [...ids].sort((a, b) => a - b).join(",");
+  const addFace = (pts: Node[], color: THREE.Color, inside: THREE.Vector3) => {
+    const key = pts
+      .map((p) => p.id)
+      .sort((a, b) => a - b)
+      .join(",");
     const entry = faceMap.get(key);
     if (entry) entry.count++;
-    else faceMap.set(key, { face: { ids, color, inside }, count: 1 });
+    else faceMap.set(key, { face: { pts, color, inside }, count: 1 });
   };
 
   // Shell facets are themselves surfaces (not the boundary of a volume), so they
@@ -136,28 +145,24 @@ function collectSurfaceTriangles(
     if (density[i] < threshold) continue;
     const el = ordered[i];
     const color = densityColor(density[i]);
+    const pts = elementPoints(el, nodeMap);
     if (el.type === "CTETRA" || el.type === "CHEXA") {
-      const pts = lookup(el.nodeIds);
-      if (!pts) continue;
       const inside = centroid(pts);
       const table = el.type === "CTETRA" ? TET_FACES : HEX_FACES;
       for (const local of table)
         addFace(
-          local.map((k) => el.nodeIds[k]),
+          local.map((k) => pts[k]),
           color,
           inside,
         );
     } else if (el.type === "CTRIA3") {
-      const pts = lookup(el.nodeIds.slice(0, 3));
-      if (!pts) continue;
       triangles.push({ a: pts[0], b: pts[1], c: pts[2], color });
     }
   }
 
   for (const { face, count } of faceMap.values()) {
     if (count !== 1) continue; // interior face — not part of the surface
-    const pts = lookup(face.ids);
-    if (!pts) continue;
+    const pts = face.pts;
     const outward = new THREE.Vector3()
       .copy(centroid(pts))
       .sub(face.inside)
@@ -343,20 +348,6 @@ function triArea(a: P3, b: P3, c: P3): number {
   return 0.5 * Math.sqrt(cx * cx + cy * cy + cz * cz);
 }
 
-// Node positions of an element, in its node order. Throws on a node id the
-// model does not have — the mesh is inconsistent and nothing sensible can be
-// drawn from it.
-function elementPoints(el: Element, nodeMap: Map<number, Node>): Node[] {
-  return el.nodeIds.map((id) => {
-    const n = nodeMap.get(id);
-    if (!n)
-      throw new Error(
-        `density surface: element ${el.id} references unknown node ${id}`,
-      );
-    return n;
-  });
-}
-
 // Per-node average of the element densities, weighted by element measure
 // (tet/hex volume, shell facet area), aligned with `nodes`. Returns null when
 // the density is stale (length no longer matches the design elements).
@@ -413,6 +404,7 @@ export function buildSmoothDensitySurface(
   const nodeMap = new Map<number, Node>(nodes.map((n) => [n.id, n]));
   const nodeIndex = new Map<number, number>(nodes.map((n, i) => [n.id, i]));
   const valueAt = (id: number) => field[nodeIndex.get(id) as number];
+  // Every id read below comes from an element elementPoints resolved.
   const pos = (id: number): P3 => nodeMap.get(id) as Node;
   const inside = (id: number) => valueAt(id) >= level;
 
@@ -566,9 +558,9 @@ export function buildSmoothDensitySurface(
 
   for (const el of orderedDesignElements(elements)) {
     const ids = el.nodeIds;
+    const owner = centroid(elementPoints(el, nodeMap));
     if (el.type === "CTETRA") {
       marchTet([ids[0], ids[1], ids[2], ids[3]]);
-      const owner = centroid(ids.map((id) => nodeMap.get(id) as Node));
       for (const [a, b, c] of TET_FACES)
         addFace([ids[a], ids[b], ids[c]], owner);
     } else if (el.type === "CHEXA") {
@@ -576,7 +568,6 @@ export function buildSmoothDensitySurface(
       // face along different diagonals, which can leave hairline seams there.
       for (const [a, b, c, d] of HEX_KUHN_TETS)
         marchTet([ids[a], ids[b], ids[c], ids[d]]);
-      const owner = centroid(ids.map((id) => nodeMap.get(id) as Node));
       for (const [a, b, c, d] of HEX_FACES)
         addFace([ids[a], ids[b], ids[c], ids[d]], owner);
     } else if (el.type === "CTRIA3") {
