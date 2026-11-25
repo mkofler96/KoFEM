@@ -10,9 +10,7 @@ import type { FaceSize } from "../store/geometrySlice";
 import { tr } from "../i18n/useLocale";
 import { meshMessages } from "../i18n/messages/mesh";
 
-// The entries after giving `faceIds` the size `size`: a face already sized
-// leaves its old entry, so every face has one size, and an entry left without
-// faces goes.
+// A face has one size: picking it again moves it to the new one.
 export function assignFaceSize(
   entries: FaceSize[],
   faceIds: number[],
@@ -26,14 +24,12 @@ export function assignFaceSize(
   return [...kept, { faceIds: [...picked].sort((a, b) => a - b), size }];
 }
 
-// "Face 5" or "Faces 3, 7".
 export function faceListLabel(faceIds: number[]): string {
   return tr(meshMessages).faceList(faceIds.length, faceIds.join(", "));
 }
 
-// The face sizes as a mesh request takes them, by face id. Throws with the
-// message the user sees for the first size that is not a positive number, or
-// that is below the global min element size, which Netgen applies everywhere.
+// Netgen applies the min element size everywhere, so a face size below it
+// could not hold.
 export function parseFaceSizes(
   entries: FaceSize[],
   min: number,
@@ -57,8 +53,8 @@ export function parseFaceSizes(
   return faces;
 }
 
-// Whether the typed face sizes are the ones a mesh was made with. Text that is
-// not a number never matches: meshing rejects it with its own message.
+// Text that is not a number never matches: meshing rejects it with its own
+// message.
 export function faceSizesMatch(
   entries: FaceSize[],
   meshed: Record<number, number>,
