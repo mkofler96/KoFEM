@@ -3,6 +3,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useCgContinuation, type CgPrompt } from "../workers/cgContinuation";
+import { useIntlTag, useT } from "../i18n/useLocale";
+import { dialogMessages } from "../i18n/messages/dialogs";
 import styles from "./CgContinuationDialog.module.css";
 
 export function CgContinuationDialog() {
@@ -14,6 +16,8 @@ export function CgContinuationDialog() {
 
 function ContinuationPrompt({ prompt }: { prompt: CgPrompt }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const text = useT(dialogMessages);
+  const intl = useIntlTag();
   const [extra, setExtra] = useState(
     String(prompt.progress.suggestedIterations),
   );
@@ -45,20 +49,21 @@ function ContinuationPrompt({ prompt }: { prompt: CgPrompt }) {
           if (valid) respond(iterations);
         }}
       >
-        <h2 id="cg-limit-title">Keep solving?</h2>
-        <p id="cg-limit-description">
-          The iteration limit was reached, but the residual is still falling.
-          Continue from the current solution or stop and discard it.
-        </p>
+        <h2 id="cg-limit-title">{text.keepSolving}</h2>
+        <p id="cg-limit-description">{text.limitReached}</p>
         <p className={styles.stats}>
-          {progress.iterations.toLocaleString()} iterations ·{" "}
-          {(progress.elapsedSeconds / 60).toFixed(1)} min solving
+          {text.iterationsSolving(
+            progress.iterations.toLocaleString(intl),
+            (progress.elapsedSeconds / 60).toFixed(1),
+          )}
           <br />
-          Relative residual {progress.relativeResidual.toExponential(2)} ·
-          target {progress.target.toExponential(1)}
+          {text.residual(
+            progress.relativeResidual.toExponential(2),
+            progress.target.toExponential(1),
+          )}
         </p>
         <label className={styles.input}>
-          Extra iterations
+          {text.extraIterations}
           <input
             type="number"
             min="1"
@@ -71,10 +76,10 @@ function ContinuationPrompt({ prompt }: { prompt: CgPrompt }) {
         </label>
         <div className={styles.actions}>
           <button type="button" onClick={() => respond(0)}>
-            Stop
+            {text.stop}
           </button>
           <button type="submit" disabled={!valid} className={styles.continue}>
-            Continue
+            {text.continue}
           </button>
         </div>
       </form>

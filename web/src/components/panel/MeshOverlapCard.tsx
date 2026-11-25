@@ -13,6 +13,8 @@ import {
   unmeshedFaces,
 } from "../../lib/meshOverlaps";
 import type { RepairHingesOptions } from "../../wasm/pkg/kofem_wasm";
+import { useT } from "../../i18n/useLocale";
+import { meshMessages } from "../../i18n/messages/mesh";
 import styles from "./Panel.module.css";
 
 // What the last mesh attempt found wrong with the geometry, highlighted in the
@@ -38,6 +40,7 @@ export function MeshOverlapCard({
   } = useGeometryEdit();
   // Null until typed: the default follows the element size.
   const [typedWidth, setTypedWidth] = useState<string | null>(null);
+  const text = useT(meshMessages);
 
   if (overlaps.length === 0) return null;
 
@@ -68,15 +71,10 @@ export function MeshOverlapCard({
       {hinges.length > 0 && (
         <>
           <div className={styles.errorBanner} data-testid="hinge-warning">
-            <span>
-              Geometric singularity detected (hinge): the part pinches to zero
-              thickness along{" "}
-              {hinges.length === 1 ? "a line" : `${hinges.length} lines`}, so it
-              can&apos;t be meshed. Highlighted in the view.
-            </span>
+            <span>{text.hingeWarning(hinges.length)}</span>
           </div>
           <div className={styles.formRow}>
-            <span className={styles.formLabel}>Repair width</span>
+            <span className={styles.formLabel}>{text.repairWidth}</span>
             <input
               className={styles.formInput}
               data-testid="hinge-repair-width"
@@ -85,7 +83,7 @@ export function MeshOverlapCard({
               value={width}
               disabled={busy}
               onChange={(e) => setTypedWidth(e.target.value)}
-              title="Width of the repair across the line, in mm."
+              title={text.repairWidthTip}
             />
             <span className={styles.toleranceUnit}>mm</span>
           </div>
@@ -94,19 +92,19 @@ export function MeshOverlapCard({
               className={styles.outlineBtn}
               data-testid="hinge-separate"
               disabled={busy}
-              title="Cut a small gap along the line. Removes a little material."
+              title={text.separateTip}
               onClick={() => repair("separate")}
             >
-              Separate
+              {text.separate}
             </button>
             <button
               className={styles.outlineBtn}
               data-testid="hinge-connect"
               disabled={busy}
-              title="Weld the two sides along the line. Adds a little material."
+              title={text.connectTip}
               onClick={() => repair("connect")}
             >
-              Connect
+              {text.connect}
             </button>
           </div>
         </>
@@ -114,12 +112,7 @@ export function MeshOverlapCard({
       {cones > 0 && (
         <>
           <div className={styles.errorBanner} data-testid="cone-warning">
-            <span>
-              The mesher can&apos;t handle {cones === 1 ? "a" : cones} sharp
-              cone {cones === 1 ? "tip" : "tips"} here, highlighted in the view.
-              Splitting the {cones === 1 ? "face" : "faces"} fixes this without
-              changing the shape.
-            </span>
+            <span>{text.coneWarning(cones)}</span>
           </div>
           <div className={styles.formBtns}>
             <button
@@ -128,7 +121,7 @@ export function MeshOverlapCard({
               disabled={busy}
               onClick={() => splitConeTips(coneFaces)}
             >
-              Split {cones === 1 ? "face" : "faces"}
+              {text.splitFaces(cones)}
             </button>
           </div>
         </>
@@ -137,14 +130,13 @@ export function MeshOverlapCard({
         <>
           <div className={styles.errorBanner} data-testid="unmeshed-warning">
             <span>
-              The mesher couldn&apos;t mesh {unmeshed}{" "}
-              {unmeshed === 1 ? "face" : "faces"}, highlighted in the view
+              {text.unmeshedFaces(unmeshed)}
               {narrowest !== null &&
-                ` (${unmeshed === 1 ? "" : "narrowest "}${formatWidth(narrowest)} mm wide)`}
+                text.unmeshedWidth(unmeshed, formatWidth(narrowest))}
               .{" "}
               {removable.length === unmeshed
-                ? `${unmeshed === 1 ? "It is" : "They are"} narrower than the minimum element size.`
-                : "Try a smaller element size."}
+                ? text.narrowerThanMin(unmeshed)
+                : text.trySmallerSize}
             </span>
           </div>
           {removable.length > 0 && (
@@ -154,18 +146,14 @@ export function MeshOverlapCard({
                   className={styles.outlineBtn}
                   data-testid="unmeshed-remove"
                   disabled={busy}
-                  title="Extend the surrounding faces to close the gap."
+                  title={text.removeNarrowFacesTip}
                   onClick={() => removeFaces(removable)}
                 >
-                  Remove{" "}
-                  {removable.length === 1
-                    ? "narrow face"
-                    : `${removable.length} narrow faces`}
+                  {text.removeNarrowFaces(removable.length)}
                 </button>
               </div>
               <div className={styles.hint} data-testid="unmeshed-remove-note">
-                Changes the shape by about the face width, which can affect
-                results right next to it. If that detail matters, fix it in CAD.
+                {text.removeNarrowFacesNote}
               </div>
             </>
           )}
@@ -176,11 +164,7 @@ export function MeshOverlapCard({
           className={styles.errorBanner}
           data-testid="surface-overlap-warning"
         >
-          <span>
-            The surface mesh overlaps itself in {others}{" "}
-            {others === 1 ? "place" : "places"}, highlighted in the view.
-            Simplify the geometry there in CAD and re-import.
-          </span>
+          <span>{text.surfaceOverlap(others)}</span>
         </div>
       )}
     </div>

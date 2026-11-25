@@ -23,6 +23,8 @@ import {
   itemSelection,
   REACTIONS_ITEM_ID,
 } from "./viewSlice";
+import { tr } from "../i18n/useLocale";
+import { studiesMessages } from "../i18n/messages/studies";
 
 export type StudyKind = "static" | "topopt" | "refinement";
 
@@ -92,8 +94,8 @@ export const STUDY_KIND_LABEL: Record<StudyKind, string> = {
 };
 
 export function plotLabel(plot: ResultPlot): string {
-  if (plot.source === "density") return "Density";
-  if (plot.source === "refinement") return "Mesh refinement";
+  if (plot.source === "density") return tr(studiesMessages).density;
+  if (plot.source === "refinement") return tr(studiesMessages).refinementKind;
   if (plot.field === null)
     throw new Error(`Result plot ${plot.id} of the static solve has no field`);
   return plot.field;

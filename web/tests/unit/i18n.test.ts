@@ -8,7 +8,11 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { LOCALES, pickLocale, type Locale } from "../../src/i18n/locale";
-import type { Catalog, Message } from "../../src/i18n/messages";
+import {
+  writtenMessages,
+  type AnyCatalog,
+  type Message,
+} from "../../src/i18n/messages";
 
 describe("pickLocale", () => {
   test("a language chosen in the app wins over the browser's", () => {
@@ -35,7 +39,7 @@ describe("pickLocale", () => {
 
 const MESSAGES_DIR = new URL("../../src/i18n/messages/", import.meta.url);
 
-function isCatalog(value: unknown): value is Catalog<Record<string, Message>> {
+function isCatalog(value: unknown): value is AnyCatalog {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -58,7 +62,7 @@ describe("message catalogs", () => {
   });
 
   for (const file of files) {
-    test(`${file}: every language has every message, none empty`, async () => {
+    test(`${file}: every message in every language, none empty`, async () => {
       const module = (await import(new URL(file, MESSAGES_DIR).href)) as Record<
         string,
         unknown
@@ -67,31 +71,24 @@ describe("message catalogs", () => {
       expect(catalogs.length).toBeGreaterThan(0);
       for (const [name, catalog] of catalogs) {
         if (!isCatalog(catalog)) continue;
-        const keys = Object.keys(catalog.en).sort();
-        for (const locale of LOCALES as readonly Locale[]) {
-          const messages = catalog[locale];
-          expect({ name, locale, keys: Object.keys(messages).sort() }).toEqual({
-            name,
-            locale,
-            keys,
-          });
-          for (const key of keys) {
-            const message = messages[key];
-            const english = catalog.en[key];
-            expect({ name, locale, key, kind: typeof message }).toEqual({
-              name,
-              locale,
-              key,
+        for (const [key, translations] of Object.entries(
+          writtenMessages(catalog),
+        )) {
+          const english = translations.en;
+          for (const locale of LOCALES as readonly Locale[]) {
+            const message = translations[locale];
+            const where = { name, key, locale };
+            expect({ ...where, kind: typeof message }).toEqual({
+              ...where,
               kind: typeof english,
             });
             if (typeof message === "function" && typeof english === "function")
-              expect({ name, locale, key, arity: message.length }).toEqual({
-                name,
-                locale,
-                key,
+              expect({ ...where, arity: message.length }).toEqual({
+                ...where,
                 arity: english.length,
               });
             expect(render(message).trim().length).toBeGreaterThan(0);
+            expect(render(catalog[locale][key])).toBe(render(message));
           }
         }
       }

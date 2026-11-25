@@ -29,6 +29,8 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { tr, useT } from "../i18n/useLocale";
+import { solveMessages } from "../i18n/messages/solve";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
 // protocol and result storage (displacements + von Mises), the solver log
@@ -57,6 +59,7 @@ export function useSolver() {
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(solveMessages);
   const { logs, clearLogs } = useWorkerLogs("solve");
   const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
 
@@ -243,7 +246,7 @@ export function useSolver() {
       })
       .catch((err) => {
         console.error("[solve] solver failed:", err.message);
-        setError(`Solver error: ${err.message}`);
+        setError(tr(solveMessages).solverError(err.message));
         track("solve_failed", {
           ...workflow,
           analysis_type: "static",
@@ -267,32 +270,35 @@ export function useSolver() {
     [
       matOk,
       materials.length === 0
-        ? "No material assigned"
+        ? text.noMaterial
         : !materialsExist
-          ? "A body references a deleted material — reassign body materials"
+          ? text.deletedMaterial
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
             : properties.length > 1
-              ? `Materials assigned · ${properties.length} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`
-              : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+              ? text.materialsAssigned(properties.length, materials.length)
+              : text.materialAssigned(
+                  materials[0].name,
+                  fmt(materials[0].young, 3),
+                ),
     ],
     [
       bcOk,
       constraints.length === 0
-        ? "No boundary conditions"
+        ? text.noBoundaryConditions
         : unheld !== null
           ? unheld
-          : `BCs applied · ${new Set(constraints.map((c) => c.nodeId)).size} nodes fixed`,
+          : text.bcsApplied(new Set(constraints.map((c) => c.nodeId)).size),
     ],
     [
       drivingOk,
       loadOk
         ? loadsSummary(loads.length, surfaceLoads.length)
         : prescribedOk
-          ? "Prescribed displacement drives the model"
+          ? text.prescribedDrives
           : temperatureOk
-            ? "Temperature change drives the model"
-            : "No loads, prescribed displacement or temperature change",
+            ? text.temperatureDrives
+            : text.nothingDrives,
     ],
     ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
     ...(routeRefusal === null

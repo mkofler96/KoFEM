@@ -3,7 +3,7 @@
 
 import { create } from "zustand";
 import { INTL_TAGS, pickLocale, type Locale } from "./locale";
-import type { Catalog, Message } from "./messages";
+import type { AnyCatalog } from "./messages";
 
 const LOCALE_KEY = "kofem.locale";
 
@@ -53,15 +53,13 @@ export function useLocale(): Locale {
 }
 
 // The catalog's messages in the current language, re-rendering on a change.
-export function useT<M extends Record<string, Message>>(
-  catalog: Catalog<M>,
-): M {
+export function useT<C extends AnyCatalog>(catalog: C): C[Locale] {
   return catalog[useLocale()];
 }
 
 // The same outside React: text a store action or a library function builds
 // is in the language current when it is built.
-export function tr<M extends Record<string, Message>>(catalog: Catalog<M>): M {
+export function tr<C extends AnyCatalog>(catalog: C): C[Locale] {
   return catalog[useLocaleStore.getState().locale];
 }
 

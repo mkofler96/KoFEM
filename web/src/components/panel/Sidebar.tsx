@@ -10,17 +10,20 @@ import {
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { ModelTree } from "./ModelTree";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { useT } from "../../i18n/useLocale";
+import { shellMessages } from "../../i18n/messages/shell";
 import styles from "./Sidebar.module.css";
 
 // Slim bottom bar with the collapse button — arrow pointing right, bar on the
 // left, mirroring the expand button's icon.
 function SidebarFooter({ onCollapse }: { onCollapse: () => void }) {
+  const text = useT(shellMessages);
   return (
     <div className={styles.footer}>
       <button
         className={styles.collapseBtn}
-        title="Hide panel"
-        aria-label="Hide panel"
+        title={text.hidePanel}
+        aria-label={text.hidePanel}
         onClick={onCollapse}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -57,6 +60,7 @@ export function Sidebar() {
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const small = useMediaQuery(SMALL_SCREEN_QUERY);
+  const text = useT(shellMessages);
 
   // Follow breakpoint crossings: collapse when the screen becomes small,
   // reopen when it grows back to desktop size.
@@ -85,8 +89,8 @@ export function Sidebar() {
     return (
       <button
         className={styles.expandBtn}
-        title="Show panel"
-        aria-label="Show panel"
+        title={text.showPanel}
+        aria-label={text.showPanel}
         onClick={() => setOpen(true)}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -122,8 +126,8 @@ export function Sidebar() {
           className={`${styles.resizeHandle} ${dragging ? styles.resizeHandleActive : ""}`}
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize sidebar"
-          title="Drag to resize — double-click to reset"
+          aria-label={text.resizeSidebar}
+          title={text.resizeHint}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}

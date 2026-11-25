@@ -21,6 +21,8 @@ import {
   type ErrorCategory,
   type ModelType,
 } from "../lib/analytics";
+import { tr } from "../i18n/useLocale";
+import { meshMessages } from "../i18n/messages/mesh";
 
 // Volume meshing: the meshing-in-flight and log state, and the worker's
 // volume_mesh protocol (including the mandatory worker reset after Netgen
@@ -92,15 +94,11 @@ export function useMesh() {
 
   async function meshVolume() {
     if (!stepSurface) {
-      rejectInput(
-        "Cannot mesh: this model has no geometry to mesh on. Import a STEP file to mesh it.",
-      );
+      rejectInput(tr(meshMessages).noGeometryToMesh);
       return;
     }
     if (!stepBytes) {
-      rejectInput(
-        "Cannot mesh: the original STEP file is no longer available (e.g. after loading a saved analysis). Re-import the STEP file to mesh.",
-      );
+      rejectInput(tr(meshMessages).noStepFile);
       return;
     }
 
@@ -139,7 +137,7 @@ export function useMesh() {
     } catch (err) {
       console.error("[meshing] volume mesh failed:", err);
       const detail = err instanceof Error ? err.message : String(err);
-      setMeshError(`Volume meshing failed: ${detail}`);
+      setMeshError(tr(meshMessages).volumeMeshFailed(detail));
       trackMeshFailed(categorizeError(err), elapsed());
     } finally {
       setMeshing(false);

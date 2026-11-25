@@ -9,6 +9,8 @@
 import { useModelStore } from "../../store/modelStore";
 import type { ResultSection, ResultType } from "../../store/modelStore";
 import { resultFieldSymbol, resultUnit } from "../../lib/resultField";
+import { useT } from "../../i18n/useLocale";
+import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 
 const AXES = ["x", "y", "z"] as const;
@@ -29,6 +31,7 @@ export function SectionControls({
   const error = useModelStore((s) => s.sectionError);
   const symbol = resultFieldSymbol(field);
   const unit = resultUnit(field);
+  const text = useT(resultsMessages);
 
   const update = (change: Partial<ResultSection>) =>
     setPlotSection(plotId, { ...section, ...change });
@@ -36,11 +39,11 @@ export function SectionControls({
   return (
     <>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Along</span>
+        <span className={styles.formLabel}>{text.along}</span>
         <select
           className={styles.formSelect}
           data-testid="section-axis"
-          aria-label="Section axis"
+          aria-label={text.sectionAxis}
           value={AXES[section.axis]}
           onChange={(e) =>
             update({
@@ -66,7 +69,7 @@ export function SectionControls({
           value={section.position}
           onChange={(e) => update({ position: Number(e.target.value) })}
           style={{ flex: 1, minWidth: 0 }}
-          aria-label="Section position"
+          aria-label={text.sectionPosition}
         />
         <button
           className={styles.outlineBtn}
@@ -75,12 +78,12 @@ export function SectionControls({
           onClick={() => update({ flipped: !section.flipped })}
           style={{ width: "auto", marginTop: 0 }}
         >
-          Flip
+          {text.flip}
         </button>
       </div>
       {error && (
         <div className={styles.fieldError} data-testid="section-error">
-          The section cannot be drawn: {error}
+          {text.sectionCannotDraw(error)}
         </div>
       )}
       <label className={styles.statRow} style={{ justifyContent: "start" }}>
@@ -91,7 +94,7 @@ export function SectionControls({
           onChange={(e) => setShowRange(e.target.checked)}
         />
         <span className={styles.statKey} style={{ marginLeft: 6 }}>
-          Show min and max on the cut
+          {text.showRangeOnCut}
         </span>
       </label>
       {showRange &&
@@ -99,7 +102,7 @@ export function SectionControls({
           (["min", "max"] as const).map((end) => (
             <div className={styles.statRow} key={end}>
               <span className={styles.statKey}>
-                {end === "min" ? "Min" : "Max"} {symbol} on the cut
+                {end === "min" ? text.minOnCut(symbol) : text.maxOnCut(symbol)}
               </span>
               <span
                 className={styles.statVal}
@@ -111,16 +114,14 @@ export function SectionControls({
             </div>
           ))
         ) : (
-          <div className={styles.formNote}>
-            The plane does not cut the model.
-          </div>
+          <div className={styles.formNote}>{text.planeMissesModel}</div>
         ))}
       <button
         className={styles.dangerLink}
         data-testid="delete-section"
         onClick={() => setPlotSection(plotId, null)}
       >
-        Delete section cut
+        {text.deleteSectionCut}
       </button>
     </>
   );

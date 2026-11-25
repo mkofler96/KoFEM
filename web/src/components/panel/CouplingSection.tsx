@@ -27,19 +27,25 @@ import {
   type SectionFocus,
 } from "./sectionFocus";
 import { fmt } from "../../lib/modelDisplay";
+import { tr, useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 // One-line summary of a coupling: how it ties, and — for a kinematic one — the
 // DOFs it ties. A distributing coupling always ties all six, so listing them
 // would say nothing.
 export function couplingGroupMeta(group: CouplingGroup): string {
+  const text = tr(boundaryMessages);
   const nNodes = new Set(group.faces.flatMap((face) => face.nodeIds)).size;
-  const kind = group.kind === "kinematic" ? "kinematic" : "distributing";
+  const kind =
+    group.kind === "kinematic"
+      ? text.couplingMetaKinematic
+      : text.couplingMetaDistributing;
   const dofs =
     group.kind === "kinematic"
       ? ` · ${group.dofs.map((dof) => DOF_LABELS[dof]).join(", ")}`
       : "";
-  return `${kind}${dofs} · ${nNodes} node${nNodes === 1 ? "" : "s"} → (${group.point
+  return `${kind}${dofs} · ${text.couplingMetaNodes(nNodes)} → (${group.point
     .map((c) => fmt(c))
     .join(", ")})`;
 }
@@ -53,7 +59,7 @@ function parsePoint(
 ): [number, number, number] | null {
   const parsed = coords.map((c) => parseFloat(c));
   if (parsed.some((c) => !isFinite(c))) {
-    onError("Each reference point coordinate must be a finite number");
+    onError(tr(boundaryMessages).refPointInvalid);
     return null;
   }
   return [parsed[0], parsed[1], parsed[2]];
@@ -96,6 +102,7 @@ export function CouplingSection({
     endPick,
     startPickForGroup,
   } = usePickedFaces(onError);
+  const text = useT(boundaryMessages);
 
   const [editingId, setEditingId] = useState<number | null>(focusedId(focus));
   const [kind, setKind] = useState<CouplingKind>("kinematic");
@@ -200,7 +207,7 @@ export function CouplingSection({
 
   function applyCoupling() {
     if (allPickedFaces.length === 0) {
-      onError("A coupling needs at least one picked face");
+      onError(text.couplingNeedsFace);
       return;
     }
     if (targetGroup) {
@@ -219,7 +226,7 @@ export function CouplingSection({
       .map((checked, i) => (checked ? i : -1))
       .filter((i) => i >= 0);
     if (kind === "kinematic" && dofs.length === 0) {
-      onError("A kinematic coupling must tie at least one DOF");
+      onError(text.kinematicNeedsDof);
       return;
     }
     createCouplingGroup(
@@ -239,7 +246,7 @@ export function CouplingSection({
           data-testid="add-coupling"
           onClick={() => startCouplingPick(null)}
         >
-          + Add Coupling
+          {text.addCoupling}
         </button>
       )}
 
@@ -247,9 +254,15 @@ export function CouplingSection({
         <div className={styles.pickPanel}>
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
-              {targetGroup ? `Add face to ${targetGroup.name}` : "New Coupling"}
+              {targetGroup
+                ? text.addFaceTo(targetGroup.name)
+                : text.newCoupling}
             </span>
-            <button className={styles.iconBtn} onClick={endPick} title="Cancel">
+            <button
+              className={styles.iconBtn}
+              onClick={endPick}
+              title={text.cancel}
+            >
               ✕
             </button>
           </div>
@@ -310,7 +323,7 @@ export function CouplingSection({
             data-testid="apply-coupling"
             onClick={applyCoupling}
           >
-            {targetGroup ? "Add Face" : "Apply Coupling"}
+            {targetGroup ? text.addFaces(1) : text.applyCoupling}
           </button>
         </div>
       )}
@@ -323,8 +336,8 @@ export function CouplingSection({
             name={group.name}
             meta={couplingGroupMeta(group)}
             dotClassName={styles.couplingDot}
-            editTitle="Edit coupling"
-            deleteTitle="Delete coupling"
+            editTitle={text.editCoupling}
+            deleteTitle={text.deleteCoupling}
             faces={group.faces}
             editForm={
               editingId === group.id && (

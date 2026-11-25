@@ -10,6 +10,8 @@ import type {
 import { fmt } from "../../lib/modelDisplay";
 import { SELECTION_NOUN } from "../../lib/facePick";
 import type { PickGeometry } from "../../lib/facePick";
+import { tr } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 
 export const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 export const FORCE_LABELS = ["Fx", "Fy", "Fz"];
@@ -63,7 +65,7 @@ export function parsePressure(
 ): number | null {
   const pressure = parseFloat(raw);
   if (!isFinite(pressure) || pressure === 0) {
-    onError("Pressure must be a non-zero finite number");
+    onError(tr(boundaryMessages).pressureInvalid);
     return null;
   }
   return pressure;
@@ -76,14 +78,15 @@ export function parseLoadVector(
   kind: LoadKind,
   onError: (msg: string) => void,
 ): [number, number, number] | null {
-  const noun = kind === "moment" ? "moment" : "force";
+  const text = tr(boundaryMessages);
+  const moment = kind === "moment";
   const parsed = vec.map((comp) => parseFloat(comp));
   if (parsed.some((comp) => !isFinite(comp))) {
-    onError(`Each ${noun} component must be a finite number`);
+    onError(moment ? text.momentComponentInvalid : text.forceComponentInvalid);
     return null;
   }
   if (parsed.every((comp) => comp === 0)) {
-    onError(`Specify a non-zero ${noun} component`);
+    onError(moment ? text.momentZero : text.forceZero);
     return null;
   }
   return [parsed[0], parsed[1], parsed[2]];
@@ -98,7 +101,7 @@ export function parseTieDistance(
 ): number | null {
   const distance = parseFloat(raw);
   if (!isFinite(distance) || distance <= 0) {
-    onError("The search distance must be a positive number");
+    onError(tr(boundaryMessages).searchDistanceInvalid);
     return null;
   }
   return distance;

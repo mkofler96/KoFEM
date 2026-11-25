@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { BooleanOp } from "../hooks/useGeometryEdit";
+import { tr } from "../i18n/useLocale";
+import { geometryMessages } from "../i18n/messages/geometry";
 
 // Which body each body of a Boolean's result came from: entry j is the old id
 // of new Body j+1. boolean_geometry rebuilds the shape in the input's solid
@@ -21,10 +23,15 @@ export function booleanBodySources(
   const consumed = new Set(op === "subtract" && keepTools ? [] : tools);
   const others = bodyIds.filter((id) => id !== target && !consumed.has(id));
   const pieces = resultBodyCount - others.length;
-  if (pieces < 1)
-    throw new Error(
-      `The ${op} returned ${resultBodyCount} bodies, but ${others.length} untouched bodies alone need that many — cannot tell which result is Body ${target}. The geometry was not changed.`,
-    );
+  if (pieces < 1) {
+    const text = tr(geometryMessages);
+    const ambiguous: Record<BooleanOp, typeof text.booleanAmbiguousUnion> = {
+      union: text.booleanAmbiguousUnion,
+      subtract: text.booleanAmbiguousSubtract,
+      intersect: text.booleanAmbiguousIntersect,
+    };
+    throw new Error(ambiguous[op](resultBodyCount, others.length, target));
+  }
   const sources: number[] = [];
   for (const id of bodyIds) {
     if (id === target) for (let k = 0; k < pieces; k++) sources.push(target);

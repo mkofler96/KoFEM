@@ -10,6 +10,8 @@ import { useModelStore } from "../../store/modelStore";
 import { topOptChartVisible } from "../../store/topOptSlice";
 import { densityColor } from "../../lib/densityField";
 import { useDisplayedDensity } from "./useDisplayedDensity";
+import { useT } from "../../i18n/useLocale";
+import { viewportMessages } from "../../i18n/messages/viewport";
 
 const GRADIENT_STOPS = 12;
 const BAR_HEIGHT = 160;
@@ -28,6 +30,7 @@ export function DensityColorBar() {
   const threshold = useModelStore((s) => s.densityThreshold);
   // The convergence chart covers the 3D view; its legend goes with it.
   const chart = useModelStore(topOptChartVisible);
+  const text = useT(viewportMessages);
 
   if (density === null || chart) return null;
 
@@ -54,7 +57,7 @@ export function DensityColorBar() {
       }}
     >
       <div style={{ marginBottom: 6, fontWeight: 600, whiteSpace: "nowrap" }}>
-        Density ρ
+        {text.density}
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <div style={{ position: "relative", width: 16, height: BAR_HEIGHT }}>
@@ -97,7 +100,7 @@ export function DensityColorBar() {
         </div>
       </div>
       <div style={{ marginTop: 6, color: "#b91c1c", whiteSpace: "nowrap" }}>
-        cutoff {threshold.toFixed(2)}
+        {text.cutoff(threshold.toFixed(2))}
       </div>
     </div>
   );

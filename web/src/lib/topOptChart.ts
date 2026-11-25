@@ -9,6 +9,8 @@
 import type { ConvergencePoint } from "./topOptProgress";
 import type { TopOptConvergence } from "./topOptConvergence";
 import type { TopOptSettingsState } from "../store/topOptSlice";
+import { tr } from "../i18n/useLocale";
+import { optimizeMessages } from "../i18n/messages/optimize";
 
 export type TopOptChartField = "compliance" | "volume" | "stress";
 
@@ -136,9 +138,9 @@ export function chartBound(
   if (!Number.isFinite(value)) return null;
   const name =
     field === "volume"
-      ? "Target"
+      ? tr(optimizeMessages).target
       : field === "compliance"
-        ? "Limit"
+        ? tr(optimizeMessages).limit
         : "σ_allow";
   return { name, value };
 }
@@ -150,18 +152,20 @@ export function chartStatus(
   maxIterations: string,
   result: TopOptConvergence | null,
 ): string | null {
+  const text = tr(optimizeMessages);
   if (running)
     return lastIteration === null
-      ? "Optimizing · starting"
-      : `Optimizing · iteration ${lastIteration} of ${maxIterations}`;
+      ? text.starting
+      : text.iterationOf(lastIteration, maxIterations);
   if (result === null) return null;
   return result.converged
-    ? `Converged after ${result.iterations} iterations`
-    : `Not converged: stopped at the ${result.iterations}-iteration limit`;
+    ? text.convergedAfter(result.iterations)
+    : text.stoppedAtLimit(result.iterations);
 }
 
 export function chartAxis(field: TopOptChartField, stressUnit: string): string {
-  if (field === "compliance") return "Compliance";
-  if (field === "volume") return "Volume fraction";
-  return `Von Mises stress (${stressUnit})`;
+  const text = tr(optimizeMessages);
+  if (field === "compliance") return text.compliance;
+  if (field === "volume") return text.volumeFractionAxis;
+  return text.stressAxis(stressUnit);
 }

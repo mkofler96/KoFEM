@@ -10,6 +10,9 @@
 // `release` frees an object without letting that happen, and
 // `explainRustFailure` turns the trap into a message the user can act on.
 
+import { tr } from "../../i18n/useLocale.js";
+import { solveMessages } from "../../i18n/messages/solve.js";
+
 /** A wasm-bindgen object that owns memory in the Rust module. */
 export interface Freeable {
   free(): void;
@@ -35,9 +38,6 @@ export function release(owned: Freeable): void {
   }
 }
 
-export const OUT_OF_MEMORY_MESSAGE =
-  "The solver ran out of memory. Use a coarser mesh, or linear elements instead of quadratic ones, and solve again.";
-
 // The `unreachable` trap as Chrome, Firefox and Safari word it.
 const UNREACHABLE = /unreachable/i;
 // The browser refusing memory on the JavaScript side, e.g. for a result array
@@ -57,7 +57,7 @@ export function explainRustFailure(
   takePanicMessage: () => string | undefined,
 ): unknown {
   if (err instanceof RangeError && JS_OUT_OF_MEMORY.test(err.message))
-    return new Error(OUT_OF_MEMORY_MESSAGE, { cause: err });
+    return new Error(tr(solveMessages).outOfMemory, { cause: err });
   if (
     !(err instanceof WebAssembly.RuntimeError) ||
     !UNREACHABLE.test(err.message)
@@ -66,8 +66,8 @@ export function explainRustFailure(
   const panic = takePanicMessage();
   return new Error(
     panic === undefined
-      ? OUT_OF_MEMORY_MESSAGE
-      : `The Rust solver stopped on an internal error (a bug, please report it): ${panic}`,
+      ? tr(solveMessages).outOfMemory
+      : tr(solveMessages).rustPanic(panic),
     { cause: err },
   );
 }

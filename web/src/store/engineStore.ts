@@ -7,6 +7,8 @@
 // the engine outlives "New analysis", and a model reset must not touch it.
 
 import { create } from "zustand";
+import { tr } from "../i18n/useLocale";
+import { solveMessages } from "../i18n/messages/solve";
 
 export type EnginePhase =
   "idle" | "downloading" | "compiling" | "starting" | "ready" | "failed";
@@ -48,20 +50,21 @@ export function failureHint(
   detail: string,
   online: boolean,
 ): string {
+  const text = tr(solveMessages);
   if (stage === "download") {
-    if (!online) return "you are offline";
+    if (!online) return text.hintOffline;
     const status = /HTTP (\d{3})/.exec(detail);
     if (status && (status[1] === "404" || status[1] === "410"))
-      return "engine file missing, reload the page";
-    if (status) return `server answered HTTP ${status[1]}`;
-    return "download blocked or interrupted";
+      return text.hintEngineMissing;
+    if (status) return text.hintHttp(status[1]);
+    return text.hintDownloadBlocked;
   }
-  if (stage === "compile") return "download corrupted, reload the page";
+  if (stage === "compile") return text.hintCorrupted;
   if (stage === "instantiate")
     return /memory|allocat/i.test(detail)
-      ? "not enough memory, close other tabs"
-      : "engine did not start";
-  return "worker did not start, reload the page";
+      ? text.hintMemory
+      : text.hintEngineDidNotStart;
+  return text.hintWorkerDidNotStart;
 }
 
 /**
@@ -78,14 +81,14 @@ export function engineGate(phase: EnginePhase): {
     return {
       blocked: true,
       waiting: false,
-      reason: "Solver engine failed to load. Retry in the status bar.",
+      reason: tr(solveMessages).engineFailed,
     };
   if (phase === "ready")
     return { blocked: false, waiting: false, reason: undefined };
   return {
     blocked: false,
     waiting: true,
-    reason: "Waits for the solver engine to finish loading.",
+    reason: tr(solveMessages).engineLoading,
   };
 }
 

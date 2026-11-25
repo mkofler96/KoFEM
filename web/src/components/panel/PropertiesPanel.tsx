@@ -6,44 +6,51 @@ import type { TreeItemKind, TreeSelection } from "../../store/viewSlice";
 import { GeometryPanel } from "./GeometryPanel";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { MeshPanel } from "./MeshPanel";
-import {
-  BOUNDARY_KINDS,
-  BoundaryConditionsPanel,
-} from "./BoundaryConditionsPanel";
+import { BoundaryConditionsPanel } from "./BoundaryConditionsPanel";
 import { StudiesPanel } from "./StudiesPanel";
 import { ResultsPanel } from "./ResultsPanel";
-import { TREE_GROUPS } from "./ModelTree";
+import { treeGroupLabel } from "./ModelTree";
+import { useT } from "../../i18n/useLocale";
+import { shellMessages } from "../../i18n/messages/shell";
 import { useTreeItems } from "./modelTreeItems";
 import styles from "./Panel.module.css";
 
-const KIND_LABEL: Record<TreeItemKind, string> = {
-  body: "Body",
-  region: "Region",
-  interface: "Interface",
-  material: "Material",
-  mesh: "Mesh",
-  bc: "Support",
-  load: "Load",
-  tie: "Tie",
-  coupling: "Coupling",
-  temperature: "Temperature change",
-  study: "Study",
-  plot: "Result plot",
-  section: "Section cut",
-  reactions: "Reactions",
-};
+type ShellText = (typeof shellMessages)["en"];
 
-function addTitle({ group, target }: TreeSelection): string {
-  if (group === "geometry") return "Add geometry";
-  if (group === "materials") return "New material";
-  if (group === "mesh") return "New mesh";
-  if (group === "studies") return "New study";
-  if (group === "results") return "New result plot";
-  if (target.type === "add" && target.kind !== null) {
-    const kind = BOUNDARY_KINDS.find((k) => k.kind === target.kind);
-    if (kind) return `New ${kind.label.toLowerCase()}`;
-  }
-  return "Add boundary condition";
+function kindLabel(text: ShellText, kind: TreeItemKind): string {
+  return {
+    body: text.kindBody,
+    region: text.kindRegion,
+    interface: text.kindInterface,
+    material: text.kindMaterial,
+    mesh: text.kindMesh,
+    bc: text.kindSupport,
+    load: text.kindLoad,
+    tie: text.kindTie,
+    coupling: text.kindCoupling,
+    temperature: text.kindTemperature,
+    study: text.kindStudy,
+    plot: text.kindPlot,
+    section: text.kindSection,
+    reactions: text.kindReactions,
+  }[kind];
+}
+
+function addTitle(text: ShellText, { group, target }: TreeSelection): string {
+  if (group === "geometry") return text.addGeometry;
+  if (group === "materials") return text.newMaterial;
+  if (group === "mesh") return text.newMesh;
+  if (group === "studies") return text.newStudy;
+  if (group === "results") return text.newResultPlot;
+  if (target.type === "add" && target.kind !== null)
+    return {
+      bc: text.newSupport,
+      load: text.newLoad,
+      tie: text.newTie,
+      coupling: text.newCoupling,
+      temperature: text.newTemperature,
+    }[target.kind];
+  return text.addBoundary;
 }
 
 // Thin orchestrator: the per-step panels own their state and worker calls
@@ -52,18 +59,19 @@ function addTitle({ group, target }: TreeSelection): string {
 export function PropertiesPanel() {
   const selection = useModelStore((s) => s.treeSelection);
   const items = useTreeItems();
+  const text = useT(shellMessages);
   const { group, target } = selection;
-  const groupLabel = TREE_GROUPS.find((g) => g.id === group)?.label;
+  const groupLabel = treeGroupLabel(text, group);
 
   let crumb = groupLabel;
   let title: string | undefined;
   if (target.type === "item") {
-    crumb = `${groupLabel} / ${KIND_LABEL[target.kind]}`;
+    crumb = `${groupLabel} / ${kindLabel(text, target.kind)}`;
     title = items[group].find(
       (i) => i.kind === target.kind && i.id === target.id,
     )?.label;
   } else {
-    title = addTitle(selection);
+    title = addTitle(text, selection);
   }
 
   // Keyed by the selection so each object opens with fresh form state.

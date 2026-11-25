@@ -62,19 +62,15 @@ import {
   type SupportOwners,
 } from "./reactions.js";
 import { release } from "./rustFailure.js";
+import { tr } from "../../i18n/useLocale.js";
+import { solveMessages } from "../../i18n/messages/solve.js";
 
 export type { ContinuationPrompt } from "./cgRun.js";
 
 export type SolverMethod = "amg" | "gauss-seidel";
 
 // The options the Solve panel offers, AMG first as the recommended default.
-export const SOLVER_METHODS: readonly {
-  value: SolverMethod;
-  label: string;
-}[] = [
-  { value: "amg", label: "AMG multigrid (recommended)" },
-  { value: "gauss-seidel", label: "Gauss–Seidel" },
-];
+export const SOLVER_METHODS: readonly SolverMethod[] = ["amg", "gauss-seidel"];
 
 export const DEFAULT_SOLVER_METHOD: SolverMethod = "amg";
 
@@ -98,12 +94,12 @@ export function amgUnavailableReason(model: {
   couplingCount: number;
 }): string | null {
   if (model.elementOrder !== 1 && model.elementOrder !== 2)
-    return "it supports linear and quadratic elements only";
+    return tr(solveMessages).amgOrder;
   const shellCount = model.elements.filter(
     (element) => element.type === "CTRIA3",
   ).length;
   if (shellCount > 0 && shellCount === model.elements.length)
-    return "it does not support shell-only models";
+    return tr(solveMessages).amgShellOnly;
   if (
     model.elements.some(
       (element) =>
@@ -112,13 +108,13 @@ export function amgUnavailableReason(model: {
         element.type !== "CTRIA3",
     )
   )
-    return "it supports tetrahedral and hexahedral meshes only";
+    return tr(solveMessages).amgElementTypes;
   // Shells mixed with tets take the Rust mixed solve (coupledRust.ts), which
   // is linear tets + DKT facets with every coupling (as the engine's
   // solve_coupled); routeSolve refuses element order 2 on these models.
   if (shellCount > 0)
     return model.elements.some((element) => element.type === "CHEXA")
-      ? "it supports shells mixed with tetrahedra only"
+      ? tr(solveMessages).amgShellsWithHexes
       : null;
   // The coupled model is built by the coupled solver's input builder, which
   // takes tetrahedra only.
@@ -126,9 +122,9 @@ export function amgUnavailableReason(model: {
     model.couplingCount > 0 &&
     model.elements.some((element) => element.type === "CHEXA")
   )
-    return "it supports surface-to-point couplings on tetrahedral meshes only";
+    return tr(solveMessages).amgCouplings;
   if (shellMarkedBodies(model.properties).length > 0)
-    return "it does not support bodies solved as shells";
+    return tr(solveMessages).amgShellBodies;
   return null;
 }
 
@@ -153,11 +149,11 @@ export function solvePreconditioner(
   return hasShells ? "incomplete-cholesky" : requested;
 }
 
-const PRECONDITIONER_LABEL: Record<Preconditioner, string> = {
-  amg: "AMG",
-  "gauss-seidel": "Gauss–Seidel",
-  "incomplete-cholesky": "an incomplete Cholesky preconditioner",
-};
+function preconditionerLabel(preconditioner: Preconditioner): string {
+  return preconditioner === "incomplete-cholesky"
+    ? tr(solveMessages).incompleteCholesky
+    : METHOD_LABEL[preconditioner];
+}
 
 // Why the chosen method is not the one the solve uses, and which it uses, for
 // the Solve panel and the solve log; null when the chosen method is used.
@@ -168,12 +164,18 @@ export function preconditionerNotice(
 ): string | null {
   if (used === requested) return null;
   const reason =
-    requested === "gauss-seidel" ? "it does not support shells" : amgReason;
+    requested === "gauss-seidel"
+      ? tr(solveMessages).gaussSeidelShells
+      : amgReason;
   if (reason === null)
     throw new Error(
       `preconditionerNotice: AMG gave way to ${used} with no reason`,
     );
-  return `${METHOD_LABEL[requested]} is not available for this model (${reason}). It will solve with ${PRECONDITIONER_LABEL[used]}.`;
+  return tr(solveMessages).methodUnavailable(
+    METHOD_LABEL[requested],
+    reason,
+    preconditionerLabel(used),
+  );
 }
 
 // The classes of the Rust module the solve needs, passed in so the worker and

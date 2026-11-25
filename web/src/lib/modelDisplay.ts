@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { tr } from "../i18n/useLocale";
+import { modelSummaryMessages } from "../i18n/messages/viewport";
+
 // eslint-disable-next-line kofem/no-silent-fallback -- display precision of a formatter, not model data
 export function fmt(v: number, digits = 3) {
   if (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-2 && v !== 0))
@@ -13,18 +16,17 @@ export function fmt(v: number, digits = 3) {
 // moments and point loads as nodal DOFs — counting only the DOFs told a
 // face-loaded model it had "0 load DOFs" (KOF-250).
 export function loadCounts(nodalLoadDofs: number, faceLoads: number): string[] {
+  const text = tr(modelSummaryMessages);
   const parts: string[] = [];
-  if (faceLoads > 0)
-    parts.push(`${faceLoads} face load${faceLoads > 1 ? "s" : ""}`);
-  if (nodalLoadDofs > 0)
-    parts.push(
-      `${nodalLoadDofs} nodal load DOF${nodalLoadDofs > 1 ? "s" : ""}`,
-    );
+  if (faceLoads > 0) parts.push(text.faceLoads(faceLoads));
+  if (nodalLoadDofs > 0) parts.push(text.nodalLoadDofs(nodalLoadDofs));
   return parts;
 }
 
 export function loadsSummary(nodalLoadDofs: number, faceLoads: number): string {
-  return `Loads applied · ${loadCounts(nodalLoadDofs, faceLoads).join(" · ")}`;
+  return tr(modelSummaryMessages).loadsApplied(
+    loadCounts(nodalLoadDofs, faceLoads).join(" · "),
+  );
 }
 
 // The mesh row of the Solve and Optimize pre-flight checks. A mesh made before
@@ -35,6 +37,7 @@ export function meshCheckLabel(
   stale: string | null,
 ): string {
   if (stale !== null) return stale;
-  if (nodeCount === 0) return "No mesh";
-  return `Mesh ready · ${nodeCount} nodes · ${elementCount} elements`;
+  const text = tr(modelSummaryMessages);
+  if (nodeCount === 0) return text.noMesh;
+  return text.meshReady(nodeCount, elementCount);
 }

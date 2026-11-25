@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import {
   assessConvergence,
   REFINEMENT_RATIOS,
+  ratioLabel,
   sizeLabel,
   studyFingerprint,
   verdictLine,
@@ -18,6 +19,8 @@ import { useEngineGate } from "../../store/engineStore";
 import { useSolver } from "../../hooks/useSolver";
 import { useRefinementStudy } from "../../hooks/useRefinementStudy";
 import { LogSection } from "./LogSection";
+import { tr, useIntlTag, useT } from "../../i18n/useLocale";
+import { studiesMessages } from "../../i18n/messages/studies";
 import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
 
@@ -30,7 +33,10 @@ function listSizes(sizes: number[]): string {
   const labels = sizes.map(sizeLabel);
   return labels.length < 2
     ? labels.join("")
-    : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+    : tr(studiesMessages).listTwo(
+        labels.slice(0, -1).join(", "),
+        labels[labels.length - 1],
+      );
 }
 
 function percent(fraction: number): string {
@@ -92,13 +98,14 @@ export function RefinementStudyPanel({
   const ratio = useModelStore((s) => s.refinementInput.ratio);
   const setSetting = useModelStore((s) => s.setRefinementSetting);
   const engine = useEngineGate();
+  const text = useT(studiesMessages);
   const running = run?.status === "running";
   const notReady = checks.find(([ok]) => !ok);
   const blocked =
     staticCase === null
-      ? "Pick the static study to refine."
+      ? text.pickStaticToRefine
       : !allOk && notReady !== undefined
-        ? `${staticCase.name} is not ready to solve: ${notReady[1]}.`
+        ? text.notReady(staticCase.name, notReady[1])
         : refusal;
   const settingsOk = Object.keys(settingsErrors).length === 0;
 
@@ -108,12 +115,16 @@ export function RefinementStudyPanel({
         {header}
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Study settings
+          {text.studySettings}
         </div>
-        <SettingField field="levels" label="Levels" errors={settingsErrors} />
+        <SettingField
+          field="levels"
+          label={text.levels}
+          errors={settingsErrors}
+        />
         <div className={styles.formRow}>
           <label className={styles.formLabel} htmlFor="refinement-ratio">
-            Refine by
+            {text.refineBy}
           </label>
           <select
             id="refinement-ratio"
@@ -123,8 +134,8 @@ export function RefinementStudyPanel({
             onChange={(e) => setSetting("ratio", e.target.value)}
           >
             {REFINEMENT_RATIOS.map((r) => (
-              <option key={r.value} value={String(r.value)}>
-                {r.label}
+              <option key={r} value={String(r)}>
+                {ratioLabel(r)}
               </option>
             ))}
           </select>
@@ -134,15 +145,13 @@ export function RefinementStudyPanel({
         )}
         <SettingField
           field="tolerance"
-          label="Target error (%)"
+          label={text.targetError}
           errors={settingsErrors}
         />
         <div className={styles.statRow}>
-          <span className={styles.statKey}>Element order</span>
+          <span className={styles.statKey}>{text.elementOrder}</span>
           <span className={styles.statVal}>
-            {elementOrder === 2
-              ? "Quadratic (2nd order)"
-              : "Linear (1st order)"}
+            {elementOrder === 2 ? text.quadratic : text.linear}
           </span>
         </div>
 
@@ -159,7 +168,7 @@ export function RefinementStudyPanel({
           title={engine.reason}
           onClick={start}
         >
-          {running ? "Running study…" : "▶  Run mesh refinement study"}
+          {running ? text.runningStudy : text.runStudy}
         </button>
         {blocked !== null ? (
           <div className={own.note} data-testid="refinement-study-refusal">
@@ -169,8 +178,7 @@ export function RefinementStudyPanel({
           plannedSizes !== null &&
           !running && (
             <div className={own.hint} data-testid="refinement-study-plan">
-              Solves at {listSizes(plannedSizes)} mm and checks that the result
-              settles.
+              {text.plan(listSizes(plannedSizes))}
             </div>
           )
         )}
@@ -199,16 +207,18 @@ function LevelRow({
   locked: boolean;
   onOpen: () => void;
 }) {
+  const text = useT(studiesMessages);
+  const intl = useIntlTag();
   const size = `${sizeLabel(run.plannedSizes[index])} mm`;
   const level = run.levels[index];
   if (level === undefined) {
     const working = run.status === "running" && index === run.levels.length;
     const status = working
       ? run.phase === "meshing"
-        ? "Meshing…"
-        : "Solving…"
+        ? text.meshing
+        : text.solving
       : run.status === "running"
-        ? "Waiting"
+        ? text.waiting
         : "—";
     return (
       <div className={`${own.row} ${own.rowPending}`}>
@@ -233,14 +243,14 @@ function LevelRow({
       data-max-displacement={level.maxDisplacement}
       aria-current={shown}
       disabled={locked}
-      title={locked ? undefined : "Open this level in 3D"}
+      title={locked ? undefined : text.openLevel}
       onClick={onOpen}
     >
       <span className={own.rowMain}>
         {size}
         <span className={own.rowSub}>
-          {level.elements.toLocaleString("en-US")} elements
-          {current && !shown && " · current mesh"}
+          {text.elements(level.elements.toLocaleString(intl))}
+          {current && !shown && text.currentMesh}
         </span>
       </span>
       <span className={own.rowValue}>
@@ -261,6 +271,7 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
   const nodes = useModelStore((s) => s.nodes);
   const resultType = useModelStore((s) => s.resultType);
   const setResultType = useModelStore((s) => s.setResultType);
+  const text = useT(studiesMessages);
   // The levels are of the model the study solved; an edit since makes them
   // another model's.
   const stale = useModelStore(
@@ -290,8 +301,7 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
       )}
       {assessment?.stressRising && (
         <div className={own.note} data-testid="refinement-study-stress-note">
-          The peak stress keeps rising as the mesh refines: a sharp corner,
-          support or point load. Judge the stress away from it.
+          {text.stressRising}
         </div>
       )}
       {run.stopNote && <div className={own.note}>{run.stopNote}</div>}
@@ -303,7 +313,7 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
           aria-current={shown === null}
           onClick={() => showLevel(null)}
         >
-          <span className={own.rowMain}>Convergence chart</span>
+          <span className={own.rowMain}>{text.convergenceChart}</span>
         </button>
         {run.plannedSizes.map((size, i) => (
           <LevelRow
@@ -320,14 +330,11 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
 
       {stale ? (
         <div className={own.note} data-testid="refinement-study-stale">
-          The model changed since this study, so its levels no longer match it.
-          Run the study again to open them.
+          {text.stale}
         </div>
       ) : (
         run.status === "done" && (
-          <div className={own.hint}>
-            Opening a level makes it the model&apos;s mesh.
-          </div>
+          <div className={own.hint}>{text.openingLevel}</div>
         )
       )}
 

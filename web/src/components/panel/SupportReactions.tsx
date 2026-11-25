@@ -11,6 +11,8 @@ import {
   type ReactionSummary,
   type Vec3,
 } from "../../lib/solve/reactions";
+import { useT } from "../../i18n/useLocale";
+import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 
 // A component as the panel shows it: four significant digits, and 0 for what
@@ -25,6 +27,7 @@ const magnitude = (v: Vec3) => Math.hypot(v[0], v[1], v[2]);
 
 export function SupportReactions({ summary }: { summary: ReactionSummary }) {
   const bcGroups = useModelStore((s) => s.bcGroups);
+  const text = useT(resultsMessages);
   const balance = reactionBalance(summary);
   const scale = Math.max(
     magnitude(summary.applied),
@@ -38,12 +41,12 @@ export function SupportReactions({ summary }: { summary: ReactionSummary }) {
     bcGroups.at(support.support)?.dofs.some((dof) => dof >= 3),
   );
   const nameOf = (support: number) =>
-    bcGroups.at(support)?.name ?? `Support ${support + 1}`;
+    bcGroups.at(support)?.name ?? text.support(support + 1);
   return (
     <div data-testid="support-reactions">
       <VectorTable
-        label="Reaction forces"
-        caption="Forces (N)"
+        label={text.reactionForces}
+        caption={text.forcesCaption}
         symbol="F"
         scale={scale}
         rows={summary.supports.map((support) => ({
@@ -54,14 +57,18 @@ export function SupportReactions({ summary }: { summary: ReactionSummary }) {
           force: support.force,
         }))}
         footer={[
-          { key: "sum", name: "Σ reactions", vector: balance.reaction },
-          { key: "applied", name: "Applied", vector: balance.applied },
+          {
+            key: "sum",
+            name: text.sumOfReactions,
+            vector: balance.reaction,
+          },
+          { key: "applied", name: text.applied, vector: balance.applied },
         ]}
       />
       {anyRotation && (
         <VectorTable
-          label="Reaction moments"
-          caption="Moments about each support’s centre (N·mm)"
+          label={text.reactionMoments}
+          caption={text.momentsCaption}
           symbol="M"
           scale={momentScale}
           rows={summary.supports
@@ -82,14 +89,13 @@ export function SupportReactions({ summary }: { summary: ReactionSummary }) {
         data-testid="reaction-balance"
         data-balanced={String(balance.balanced)}
       >
-        {balance.balanced
-          ? "Balanced"
-          : `Off by ${component(offBy, scale)} N. The solve may have stopped short of its tolerance, or a coupling or tie carries load to a node no support lists.`}
+        {balance.balanced ? text.balanced : text.offBy(component(offBy, scale))}
       </p>
       {balance.loadOnSupports && (
         <p className={styles.formNote}>
-          {component(magnitude(summary.appliedOnSupports), scale)} N of the load
-          acts on supported nodes and goes straight into the support.
+          {text.loadOnSupports(
+            component(magnitude(summary.appliedOnSupports), scale),
+          )}
         </p>
       )}
     </div>
@@ -153,12 +159,13 @@ function VectorTable({
 }
 
 function VectorRow({ data, scale }: { data: VectorRowData; scale: number }) {
+  const text = useT(resultsMessages);
   return (
     <tr data-testid={data.testId} data-force={data.force?.join(",")}>
       <td>{data.name}</td>
       {data.vector === null ? (
         <td colSpan={4} className={styles.reactionMissing}>
-          not in the mesh
+          {text.notInMesh}
         </td>
       ) : (
         <VectorCells v={data.vector} scale={scale} />

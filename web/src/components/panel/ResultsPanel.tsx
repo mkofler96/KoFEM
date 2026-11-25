@@ -9,7 +9,6 @@ import type {
   SolverResult,
 } from "../../store/modelStore";
 import type { TreeTarget } from "../../store/viewSlice";
-import { plotLabel } from "../../store/studySlice";
 import {
   computeResultRange,
   resultFieldSymbol,
@@ -28,6 +27,11 @@ import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
 import { TopOptResult } from "./TopOptResult";
 import { SupportReactions } from "./SupportReactions";
+import { useT } from "../../i18n/useLocale";
+import {
+  resultFieldMessages,
+  resultsMessages,
+} from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 
 // "Von Mises stress" → "von-mises-stress", "Normal stress σxx" →
@@ -39,6 +43,22 @@ function fieldSlug(field: ResultType): string {
     .replace(/τ/g, "tau")
     .replace(/[^a-z]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+// A plot by name, as the model tree names it (studySlice.plotLabel), in the
+// current language.
+function usePlotTitle(): (plot: ResultPlot) => string {
+  const text = useT(resultsMessages);
+  const fields = useT(resultFieldMessages);
+  return (plot) => {
+    if (plot.source === "density") return text.density;
+    if (plot.source === "refinement") return text.meshRefinement;
+    if (plot.field === null)
+      throw new Error(
+        `Result plot ${plot.id} of the static solve has no field`,
+      );
+    return fields[plot.field];
+  };
 }
 
 // Results → + Add: pick the result to plot — a field of the static solve, or
@@ -58,6 +78,9 @@ function AddResultPlot() {
   const shownPlot = useModelStore((s) =>
     s.resultPlots.find((p) => p.id === s.shownPlotId && p.source === "static"),
   );
+  const text = useT(resultsMessages);
+  const fields = useT(resultFieldMessages);
+  const plotTitle = usePlotTitle();
   return (
     <div className={styles.addChooser}>
       {RESULT_TYPES.map((field) => (
@@ -68,11 +91,11 @@ function AddResultPlot() {
           disabled={!hasStatic}
           onClick={() => addResultPlot("static", field)}
         >
-          <span className={styles.addChoiceLabel}>{field}</span>
+          <span className={styles.addChoiceLabel}>{fields[field]}</span>
           <span className={styles.addChoiceHint}>
             {hasStatic
-              ? `Static solve · ${resultUnit(field)}`
-              : "Run a static study first"}
+              ? text.staticSolveHint(resultUnit(field))
+              : text.runStaticFirst}
           </span>
         </button>
       ))}
@@ -82,13 +105,13 @@ function AddResultPlot() {
         disabled={!shownPlot || shownPlot.section !== null}
         onClick={() => shownPlot && addPlotSection(shownPlot.id)}
       >
-        <span className={styles.addChoiceLabel}>Section cut</span>
+        <span className={styles.addChoiceLabel}>{text.sectionCut}</span>
         <span className={styles.addChoiceHint}>
           {!shownPlot
-            ? "Show a field of the static solve first"
+            ? text.showStaticFieldFirst
             : shownPlot.section !== null
-              ? `${plotLabel(shownPlot)} already has a cut`
-              : `Cut through ${plotLabel(shownPlot)}`}
+              ? text.alreadyHasCut(plotTitle(shownPlot))
+              : text.cutThrough(plotTitle(shownPlot))}
         </span>
       </button>
       <button
@@ -97,13 +120,13 @@ function AddResultPlot() {
         disabled={!hasStatic || showReactions}
         onClick={addReactions}
       >
-        <span className={styles.addChoiceLabel}>Reactions</span>
+        <span className={styles.addChoiceLabel}>{text.reactions}</span>
         <span className={styles.addChoiceHint}>
           {!hasStatic
-            ? "Run a static study first"
+            ? text.runStaticFirst
             : showReactions
-              ? "Already listed"
-              : "Support forces · balance check"}
+              ? text.alreadyListed
+              : text.reactionsHint}
         </span>
       </button>
       <button
@@ -112,11 +135,9 @@ function AddResultPlot() {
         disabled={!hasDensity}
         onClick={() => addResultPlot("density", null)}
       >
-        <span className={styles.addChoiceLabel}>Density</span>
+        <span className={styles.addChoiceLabel}>{text.density}</span>
         <span className={styles.addChoiceHint}>
-          {hasDensity
-            ? "Topology optimization · material layout"
-            : "Run a topology optimization first"}
+          {hasDensity ? text.densityHint : text.runTopOptFirst}
         </span>
       </button>
       <button
@@ -125,11 +146,9 @@ function AddResultPlot() {
         disabled={!hasRefinement}
         onClick={() => addResultPlot("refinement", null)}
       >
-        <span className={styles.addChoiceLabel}>Mesh refinement</span>
+        <span className={styles.addChoiceLabel}>{text.meshRefinement}</span>
         <span className={styles.addChoiceHint}>
-          {hasRefinement
-            ? "Mesh refinement study · convergence"
-            : "Run a mesh refinement study first"}
+          {hasRefinement ? text.refinementHint : text.runRefinementFirst}
         </span>
       </button>
     </div>
@@ -152,6 +171,7 @@ function HandCheckNote({
   const bcGroups = useModelStore((s) => s.bcGroups);
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
+  const text = useT(resultsMessages);
   // A probe that cannot be read on this mesh is shown as such, with the reason,
   // rather than taking the whole panel down.
   const outcome = useMemo(() => {
@@ -189,16 +209,16 @@ function HandCheckNote({
   return (
     <p className={styles.handCheck} data-testid="hand-check">
       {outcome.kind === "changed" ? (
-        "The loads, supports or material changed, so the hand calculation no longer applies."
+        text.handCheckChanged
       ) : outcome.kind === "unreadable" ? (
-        `The hand calculation cannot be compared on this mesh. ${outcome.reason}`
+        text.handCheckUnreadable(outcome.reason)
       ) : (
         <>
           {check.quantity}{" "}
           <span data-testid="hand-check-fe" data-value={String(outcome.fe)}>
             {shown(outcome.fe)}
           </span>
-          ; hand calculation {check.formula} ={" "}
+          ; {text.handCalculation} {check.formula} ={" "}
           <span
             data-testid="hand-check-reference"
             data-value={String(check.reference)}
@@ -237,6 +257,7 @@ function ProbeRow({
     | null;
   onRemove?: () => void;
 }) {
+  const text = useT(resultsMessages);
   return (
     <div
       className={styles.probeRow}
@@ -261,8 +282,8 @@ function ProbeRow({
             <button
               className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
               data-testid={`probe-remove-${testId}`}
-              aria-label={`Remove ${label}`}
-              title={`Remove ${label}`}
+              aria-label={text.remove(label)}
+              title={text.remove(label)}
               onClick={onRemove}
             >
               ✕
@@ -271,17 +292,17 @@ function ProbeRow({
         </span>
       </div>
       {reading === null ? (
-        <div className={styles.formNote}>Solve to read this probe.</div>
+        <div className={styles.formNote}>{text.solveToRead}</div>
       ) : reading.kind === "unreadable" ? (
         <div className={styles.formNote}>
-          Cannot be read on this mesh. {reading.reason}
+          {text.cannotReadOnMesh(reading.reason)}
         </div>
       ) : (
         <div
           className={`${styles.formNote} ${styles.probeDetails}`}
           data-testid={`probe-vector-${testId}`}
         >
-          at {formatVector(reading.at)}
+          {text.probeAt(formatVector(reading.at))}
           <br />U = {formatVector(reading.displacement)}
         </div>
       )}
@@ -298,10 +319,11 @@ function MinMaxSection({ field }: { field: ResultType }) {
   const { extremes } = useProbeReadings();
   const unit = resultUnit(field);
   const symbol = resultFieldSymbol(field);
+  const text = useT(resultsMessages);
   return (
     <>
       <div className={styles.sectionHead}>
-        <span className={styles.sectionLabel}>Min and max</span>
+        <span className={styles.sectionLabel}>{text.minAndMax}</span>
         <label className={styles.sectionHeadAction}>
           <input
             type="checkbox"
@@ -309,12 +331,12 @@ function MinMaxSection({ field }: { field: ResultType }) {
             checked={showExtremes}
             onChange={(e) => setShowExtremes(e.target.checked)}
           />
-          Label in view
+          {text.labelInView}
         </label>
       </div>
       {extremes?.kind === "unreadable" && (
         <div className={styles.formNote}>
-          Min and max cannot be read. {extremes.reason}
+          {text.minMaxUnreadable(extremes.reason)}
         </div>
       )}
       {extremes?.kind === "value" &&
@@ -322,8 +344,8 @@ function MinMaxSection({ field }: { field: ResultType }) {
           <ProbeRow
             key={end}
             testId={end}
-            label={end === "min" ? "Min" : "Max"}
-            name={`${end === "min" ? "Min" : "Max"} ${symbol}`}
+            label={text[end]}
+            name={`${text[end]} ${symbol}`}
             formatValue={(v) => `${v.toExponential(3)} ${unit}`}
             reading={{ kind: "value", ...extremes[end] }}
           />
@@ -341,9 +363,10 @@ function ProbeSection({ field }: { field: ResultType }) {
   const { placed } = useProbeReadings();
   const unit = resultUnit(field);
   const symbol = resultFieldSymbol(field);
+  const text = useT(resultsMessages);
   return (
     <>
-      <div className={styles.sectionLabel}>Probes</div>
+      <div className={styles.sectionLabel}>{text.probes}</div>
       {placed.map(({ probe, reading }) => (
         <ProbeRow
           key={probe.id}
@@ -361,11 +384,11 @@ function ProbeSection({ field }: { field: ResultType }) {
         aria-pressed={probing}
         onClick={() => setProbing(!probing)}
       >
-        {probing ? "Stop placing probes" : "Place probes"}
+        {probing ? text.stopPlacingProbes : text.placeProbes}
       </button>
       {probing && (
         <div className={styles.formNote} style={{ marginTop: 6 }}>
-          Click the model to read {symbol} there.
+          {text.clickToRead(symbol)}
         </div>
       )}
       <ProbeAtPoint symbol={symbol} />
@@ -379,10 +402,11 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
   const addProbeAt = useModelStore((s) => s.addProbeAt);
   const [coords, setCoords] = useState(["", "", ""]);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(resultsMessages);
   const add = () => {
     const point = coords.map((c) => (c.trim() === "" ? Number.NaN : Number(c)));
     if (!point.every(Number.isFinite)) {
-      setError("Enter x, y and z as numbers.");
+      setError(text.enterXyz);
       return;
     }
     try {
@@ -395,7 +419,7 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
   return (
     <div style={{ marginTop: 8 }}>
       <div className={`${styles.formNote} ${styles.formNoteFull}`}>
-        Or read {symbol} at a point (mm):
+        {text.readAtPoint(symbol)}
       </div>
       <div className={styles.coordRow}>
         {(["x", "y", "z"] as const).map((axis, i) => (
@@ -403,7 +427,7 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
             key={axis}
             className={styles.formInput}
             data-testid={`probe-at-${axis}`}
-            aria-label={`Probe ${axis} (mm)`}
+            aria-label={text.probeAxis(axis)}
             placeholder={axis}
             inputMode="decimal"
             value={coords[i]}
@@ -418,7 +442,7 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
           data-testid="probe-at-add"
           onClick={add}
         >
-          Add
+          {text.add}
         </button>
       </div>
       {error && (
@@ -433,11 +457,11 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
   );
 }
 
-function Empty({ text, footer }: { text: string; footer: ReactNode }) {
+function Empty({ message, footer }: { message: string; footer: ReactNode }) {
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
-        <div className={styles.empty}>{text}</div>
+        <div className={styles.empty}>{message}</div>
         {footer}
       </div>
     </div>
@@ -460,6 +484,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const setShellSurface = useModelStore((s) => s.setShellSurface);
   const handCheck = useModelStore((s) => s.handCheck);
   const refinementStudy = useModelStore((s) => s.refinementStudy);
+  const text = useT(resultsMessages);
+  const fields = useT(resultFieldMessages);
 
   const footer = (
     <button
@@ -467,7 +493,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
       data-testid="delete-plot"
       onClick={() => deleteResultPlot(plot.id)}
     >
-      Delete plot
+      {text.deletePlot}
     </button>
   );
 
@@ -480,10 +506,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         </div>
       </div>
     ) : (
-      <Empty
-        text="No refinement study — run the mesh refinement study"
-        footer={footer}
-      />
+      <Empty message={text.noRefinement} footer={footer} />
     );
 
   // A run shows here from its start (it hands off to Results), while a "Run
@@ -496,14 +519,11 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
       topOptError !== null ? (
       <TopOptResult footer={footer} />
     ) : (
-      <Empty
-        text="No density — run the topology optimization"
-        footer={footer}
-      />
+      <Empty message={text.noDensity} footer={footer} />
     );
 
   if (!result || plot.field === null)
-    return <Empty text="No results — run the static study" footer={footer} />;
+    return <Empty message={text.noResults} footer={footer} />;
 
   const resultType = plot.field;
   // The range of the plotted field over all nodes — the same field and node
@@ -523,23 +543,23 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         {handCheck && <HandCheckNote check={handCheck} result={result} />}
-        <div className={styles.sectionLabel}>Field</div>
+        <div className={styles.sectionLabel}>{text.field}</div>
         <select
           className={styles.formSelect}
           data-testid="plot-field"
           value={resultType}
           onChange={(e) => setPlotField(plot.id, e.target.value as ResultType)}
         >
-          {RESULT_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          {RESULT_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {fields[type]}
             </option>
           ))}
         </select>
 
         {surfaceChoice && (
           <>
-            <div className={styles.sectionLabel}>Shell surface</div>
+            <div className={styles.sectionLabel}>{text.shellSurface}</div>
             <select
               className={styles.formSelect}
               style={{ marginBottom: 12 }}
@@ -547,9 +567,9 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
               value={shellSurface}
               onChange={(e) => setShellSurface(e.target.value as ShellSurface)}
             >
-              <option value="top">Top (+normal)</option>
-              <option value="middle">Middle</option>
-              <option value="bottom">Bottom (−normal)</option>
+              <option value="top">{text.surfaceTop}</option>
+              <option value="middle">{text.surfaceMiddle}</option>
+              <option value="bottom">{text.surfaceBottom}</option>
             </select>
           </>
         )}
@@ -557,8 +577,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         {!stats && (
           <div className={styles.empty}>
             {resultType === "Von Mises stress" || isStressField(resultType)
-              ? "Stress data not available — re-run the solver"
-              : "No nodal data"}
+              ? text.noStressData
+              : text.noNodalData}
           </div>
         )}
 
@@ -581,13 +601,14 @@ function ReactionsPanel() {
   const deleteReactions = useModelStore((s) => s.deleteReactions);
   const display = useModelStore((s) => s.reactionsDisplay);
   const setDisplay = useModelStore((s) => s.setReactionsDisplay);
+  const text = useT(resultsMessages);
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         <div className={styles.sectionHead}>
-          <span className={styles.sectionLabel}>Arrows in view</span>
+          <span className={styles.sectionLabel}>{text.arrowsInView}</span>
         </div>
-        <div className={styles.segToggle} role="group" aria-label="Arrows">
+        <div className={styles.segToggle} role="group" aria-label={text.arrows}>
           {(["resultant", "nodal"] as const).map((option) => (
             <button
               key={option}
@@ -596,23 +617,21 @@ function ReactionsPanel() {
               aria-pressed={display === option}
               onClick={() => setDisplay(option)}
             >
-              {option === "resultant" ? "Resultant" : "Nodal"}
+              {option === "resultant" ? text.resultant : text.nodal}
             </button>
           ))}
         </div>
         {reactions ? (
           <SupportReactions summary={reactions} />
         ) : (
-          <div className={styles.empty}>
-            Run the static solve to compute the reactions.
-          </div>
+          <div className={styles.empty}>{text.runToComputeReactions}</div>
         )}
         <button
           className={styles.dangerLink}
           data-testid="delete-reactions"
           onClick={deleteReactions}
         >
-          Delete reactions
+          {text.deleteReactions}
         </button>
       </div>
     </div>

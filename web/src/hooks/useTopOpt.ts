@@ -35,6 +35,9 @@ import {
 import { passiveElements, roleOf } from "../lib/regions";
 import { topOptTieRefusal } from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { tr, useT } from "../i18n/useLocale";
+import { optimizeMessages } from "../i18n/messages/optimize";
+import { solveMessages } from "../i18n/messages/solve";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 
@@ -51,6 +54,7 @@ function parseSettings(state: TopOptSettingsState): {
   errors: FieldErrors;
 } {
   const errors: FieldErrors = {};
+  const text = tr(optimizeMessages);
 
   // Validate one numeric field: parse it, apply the predicate, and record a
   // clear message on failure. Returns the parsed value regardless so callers
@@ -63,7 +67,7 @@ function parseSettings(state: TopOptSettingsState): {
   ): number => {
     const parsed = Number(raw.trim());
     if (raw.trim() === "" || !Number.isFinite(parsed) || !ok(parsed))
-      errors[field] = `${requirement} — got "${raw}"`;
+      errors[field] = text.requirementGot(requirement, raw);
     return parsed;
   };
 
@@ -74,33 +78,38 @@ function parseSettings(state: TopOptSettingsState): {
   // level-set panel, so neither validated nor sent there.
   const stressOn = simp && state.stressConstraint;
   const penalty = simp
-    ? num("penalty", state.penalty, (value) => value >= 1, "penalty p ≥ 1")
+    ? num(
+        "penalty",
+        state.penalty,
+        (value) => value >= 1,
+        text.penaltyRequirement,
+      )
     : undefined;
   const filterRadius = num(
     "filterRadius",
     state.filterRadius,
     (value) => value > 0,
-    simp ? "filter radius r_min > 0" : "length scale ℓ > 0",
+    simp ? text.filterRequirement : text.lengthRequirement,
   );
   const moveLimit = simp
     ? num(
         "moveLimit",
         state.moveLimit,
         (value) => value > 0 && value <= 1,
-        "move limit in (0, 1]",
+        text.moveLimitRequirement,
       )
     : undefined;
   const maxIterations = num(
     "maxIterations",
     state.maxIterations,
     (value) => Number.isInteger(value) && value > 0,
-    "max iterations must be a whole number > 0",
+    text.maxIterationsRequirement,
   );
   const tolerance = num(
     "tolerance",
     state.tolerance,
     (value) => value > 0,
-    "tolerance > 0",
+    text.toleranceRequirement,
   );
 
   const constraints: TopOptSettings["constraints"] = {};
@@ -109,7 +118,7 @@ function parseSettings(state: TopOptSettingsState): {
       "volumeFraction",
       state.volumeFraction,
       (value) => value > 0 && value < 1,
-      "volume fraction in (0, 1)",
+      text.volumeFractionRequirement,
     );
     constraints.volumeFraction = volfrac;
   } else if (stressOn && state.complianceLimit.trim() === "") {
@@ -120,9 +129,7 @@ function parseSettings(state: TopOptSettingsState): {
       "complianceLimit",
       state.complianceLimit,
       (value) => value > 0,
-      stressOn
-        ? "compliance limit > 0, or blank for none"
-        : "compliance limit > 0",
+      stressOn ? text.complianceOrBlankRequirement : text.complianceRequirement,
     );
     constraints.complianceLimit = limit;
   }
@@ -133,13 +140,13 @@ function parseSettings(state: TopOptSettingsState): {
       "maxStress",
       state.maxStress,
       (value) => value > 0,
-      "max stress σ_allow > 0",
+      text.maxStressRequirement,
     );
     const aggregationP = num(
       "stressP",
       state.stressP,
       (value) => value >= 1,
-      "aggregation P ≥ 1",
+      text.aggregationRequirement,
     );
     stress = { aggregation: state.stressAggregation, p: aggregationP };
   }
@@ -185,6 +192,8 @@ export function useTopOpt() {
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const temperature = useModelStore((s) => s.temperature);
   const topOpt = useModelStore((s) => s.topOpt);
+  const text = useT(optimizeMessages);
+  const solveText = useT(solveMessages);
   // Couplings join solid bodies and idealised shells in the coupled TO path
   // (KOF-237), exactly as the static solve consumes them. No optimizer applies
   // a tie yet, so a tied model is refused (KOF-353).
@@ -299,7 +308,7 @@ export function useTopOpt() {
     // re-check the settings here rather than trust the caller.
     if (!settings) {
       setError(
-        `Optimization settings are invalid: ${Object.values(errors).join("; ")}`,
+        tr(optimizeMessages).settingsInvalid(Object.values(errors).join("; ")),
       );
       return;
     }
@@ -347,7 +356,7 @@ export function useTopOpt() {
         // A cancel terminated the worker; the resulting rejection is expected.
         if (cancelled) return;
         console.error("[topopt] optimization failed:", err.message);
-        setError(`Optimization error: ${err.message}`);
+        setError(tr(optimizeMessages).optimizationError(err.message));
         track("solve_failed", {
           ...workflow,
           analysis_type: "topology",
@@ -392,72 +401,76 @@ export function useTopOpt() {
     state.clearTopOptRunRequest();
     if (state.isOptimizing) return;
     if (allOk) optimize();
-    else
-      setError(
-        "Could not run the optimization again: resolve the failed pre-flight checks on the Optimize panel first.",
-      );
+    else setError(tr(optimizeMessages).rerunBlocked);
   });
 
   const stressSummary = topOpt.stressConstraint
-    ? ` · σ_vm ≤ ${topOpt.maxStress} ${resultUnit("Von Mises stress")}`
+    ? text.stressSummary(topOpt.maxStress, resultUnit("Von Mises stress"))
     : "";
   const complianceSummary =
     topOpt.complianceLimit.trim() === ""
       ? ""
-      : ` · compliance ≤ ${topOpt.complianceLimit}`;
+      : text.complianceSummary(topOpt.complianceLimit);
   const settingsSummary = levelSet
-    ? `Level set · minimize compliance · volfrac ${topOpt.volumeFraction} · ℓ=${topOpt.filterRadius}`
+    ? text.levelSetSummary(topOpt.volumeFraction, topOpt.filterRadius)
     : topOpt.objective === "min_compliance"
-      ? `Minimize compliance · volfrac ${topOpt.volumeFraction}${stressSummary} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`
-      : `Minimize volume${complianceSummary}${stressSummary} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`;
+      ? text.minComplianceSummary(
+          topOpt.volumeFraction,
+          stressSummary,
+          topOpt.penalty,
+          topOpt.filterRadius,
+        )
+      : text.minVolumeSummary(
+          complianceSummary,
+          stressSummary,
+          topOpt.penalty,
+          topOpt.filterRadius,
+        );
 
   // What the optimizer treats as design variables (KOF-237): every solid tet and
   // shell facet carries a density; the RBE3/coupling DOFs of a coupled model do
   // not. The panel shows this so the design domain is never a surprise.
   const nSolid = solidElements.length;
   const nShell = shellElements.length;
-  const plural = (n: number, word: string) =>
-    `${n} ${word}${n === 1 ? "" : "s"}`;
   const couplingNote =
-    couplingGroups.length > 0
-      ? ` (${plural(couplingGroups.length, "coupling")} held fixed)`
-      : "";
+    couplingGroups.length > 0 ? text.couplingsHeld(couplingGroups.length) : "";
   const designDomain =
     nShell === 0
-      ? plural(nSolid, "solid element")
+      ? text.solidElements(nSolid)
       : nSolid === 0
-        ? plural(nShell, "shell facet")
-        : `${plural(nSolid, "solid element")} + ${plural(nShell, "shell facet")}${couplingNote}`;
+        ? text.shellFacets(nShell)
+        : `${text.solidElements(nSolid)} + ${text.shellFacets(nShell)}${couplingNote}`;
 
   const checks: [boolean, string][] = [
     [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
     [
       matOk,
       materials.length === 0
-        ? "No material assigned"
+        ? solveText.noMaterial
         : !materialsExist
-          ? "A body references a deleted material — reassign body materials"
+          ? solveText.deletedMaterial
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
-            : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+            : solveText.materialAssigned(
+                materials[0].name,
+                fmt(materials[0].young, 3),
+              ),
     ],
     [
       bcOk,
       bcOk
-        ? `BCs applied · ${new Set(constraints.map((c) => c.nodeId)).size} nodes fixed`
-        : "No boundary conditions",
+        ? solveText.bcsApplied(new Set(constraints.map((c) => c.nodeId)).size)
+        : solveText.noBoundaryConditions,
     ],
     [
       loadOk,
-      loadOk
-        ? loadsSummary(loads.length, surfaceLoads.length)
-        : "No loads — topology optimization needs an applied load",
+      loadOk ? loadsSummary(loads.length, surfaceLoads.length) : text.noLoads,
     ],
     [
       settingsOk,
       settingsOk
         ? settingsSummary
-        : `Fix the optimization settings: ${Object.values(errors).join("; ")}`,
+        : text.fixSettings(Object.values(errors).join("; ")),
     ],
   ];
 
@@ -468,47 +481,20 @@ export function useTopOpt() {
     // Pure-solid model: keep the original single-material wording. A shell or
     // coupled model reports which sub-domain is over-assigned instead.
     if (shellElements.length === 0)
-      checks.push([
-        false,
-        `Topology optimization uses one design material, but the model spans ${solidMaterialIds.size} — assign a single material to all bodies`,
-      ]);
+      checks.push([false, text.oneMaterial(solidMaterialIds.size)]);
     else
       checks.push([
         false,
-        `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
+        text.oneMaterialPerDomain(solidMaterialIds.size, shellMaterialIds.size),
       ]);
   }
   if (tieRefusal !== null) checks.push([false, tieRefusal]);
-  if (noDesignRegion)
-    checks.push([
-      false,
-      "Every region is set to Keep solid or Keep empty — set at least one to Design so the optimizer has material to shape",
-    ]);
-  if (levelSetShellBlock)
-    checks.push([
-      false,
-      "The level-set method supports solid models only — use SIMP for shell and coupled models",
-    ]);
-  if (levelSetCouplingBlock)
-    checks.push([
-      false,
-      "The level-set method does not support couplings yet — remove them, or use SIMP",
-    ]);
-  if (levelSetObjectiveBlock)
-    checks.push([
-      false,
-      "The level-set method minimizes compliance only — switch the objective, or use SIMP",
-    ]);
-  if (hasPrescribed)
-    checks.push([
-      false,
-      "Remove non-zero prescribed displacements — topology optimization supports fixed (zero) supports only",
-    ]);
-  if (stressOnShell)
-    checks.push([
-      false,
-      "The max-stress constraint supports all-solid models without couplings only — turn it off to optimize this shell/coupled model",
-    ]);
+  if (noDesignRegion) checks.push([false, text.noDesignRegion]);
+  if (levelSetShellBlock) checks.push([false, text.levelSetShells]);
+  if (levelSetCouplingBlock) checks.push([false, text.levelSetCouplings]);
+  if (levelSetObjectiveBlock) checks.push([false, text.levelSetObjective]);
+  if (hasPrescribed) checks.push([false, text.prescribedDisplacements]);
+  if (stressOnShell) checks.push([false, text.stressOnShells]);
 
   return {
     optimize,

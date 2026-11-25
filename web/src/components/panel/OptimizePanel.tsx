@@ -9,6 +9,8 @@ import { resultUnit } from "../../lib/resultField";
 import { LogSection } from "./LogSection";
 import { NotConvergedNotice } from "./NotConvergedNotice";
 import { PreflightChecks } from "./PreflightChecks";
+import { useT } from "../../i18n/useLocale";
+import { optimizeMessages } from "../../i18n/messages/optimize";
 import styles from "./Panel.module.css";
 
 // One labelled numeric setting bound to the store, with its inline validation
@@ -76,6 +78,7 @@ export function OptimizePanel({
   // The max-stress constraint is SIMP-only (KOF-236): its controls are hidden in
   // level-set mode, and useTopOpt neither validates nor sends it there.
   const stressOn = !levelSet && stressConstraint;
+  const text = useT(optimizeMessages);
   const {
     optimize,
     cancel,
@@ -92,9 +95,7 @@ export function OptimizePanel({
   const checks: [boolean, string][] = [
     [
       staticCase !== null,
-      staticCase
-        ? `Static case · ${staticCase.name}`
-        : "No static case — pick the static study to optimize for",
+      staticCase ? text.staticCase(staticCase.name) : text.noStaticCase,
     ],
     ...modelChecks,
   ];
@@ -124,12 +125,12 @@ export function OptimizePanel({
         <PreflightChecks checks={checks} />
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Design domain
+          {text.designDomain}
         </div>
         <div className={styles.formNote}>{designDomain}</div>
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Method
+          {text.method}
         </div>
         <div className={styles.segToggle}>
           <button
@@ -142,50 +143,44 @@ export function OptimizePanel({
             className={`${styles.segBtn} ${levelSet ? styles.segBtnActive : ""}`}
             onClick={() => setTopOptMethod("level_set")}
           >
-            Level set
+            {text.levelSet}
           </button>
         </div>
         <div className={styles.formNote}>
-          {levelSet
-            ? "Nodal level set (reaction–diffusion): a crisp, smooth boundary. Solid models, minimum compliance."
-            : "Density per element (SIMP + MMA). Supports every objective and shell models."}
+          {levelSet ? text.levelSetNote : text.simpNote}
         </div>
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Objective
+          {text.objective}
         </div>
         <div className={styles.segToggle}>
           <button
             className={`${styles.segBtn} ${objective === "min_compliance" ? styles.segBtnActive : ""}`}
             onClick={() => setTopOptObjective("min_compliance")}
           >
-            Min compliance
+            {text.minCompliance}
           </button>
           <button
             className={`${styles.segBtn} ${objective === "min_volume" ? styles.segBtnActive : ""}`}
             onClick={() => setTopOptObjective("min_volume")}
           >
-            Min volume
+            {text.minVolume}
           </button>
         </div>
 
-        <div className={styles.sectionLabel}>Constraint</div>
+        <div className={styles.sectionLabel}>{text.constraint}</div>
         {objective === "min_compliance" ? (
           <SettingField
             field="volumeFraction"
-            label="Volume frac."
-            hint="Target fraction of material to keep, 0–1 (e.g. 0.5)"
+            label={text.volumeFraction}
+            hint={text.volumeFractionHint}
             errors={errors}
           />
         ) : (
           <SettingField
             field="complianceLimit"
-            label="Compliance ≤"
-            hint={
-              stressOn
-                ? "Upper bound on compliance, in the model's work units — leave blank to bound the volume by stress alone"
-                : "Upper bound on compliance, in the model's work units"
-            }
+            label={text.complianceLimit}
+            hint={stressOn ? text.complianceStressHint : text.complianceHint}
             errors={errors}
           />
         )}
@@ -198,41 +193,41 @@ export function OptimizePanel({
               checked={stressConstraint}
               onChange={(e) => setStressConstraint(e.target.checked)}
             />
-            <span className={styles.bodyLabel}>Max von Mises stress</span>
+            <span className={styles.bodyLabel}>{text.maxStressConstraint}</span>
           </label>
         )}
         {stressOn && (
           <SettingField
             field="maxStress"
             label="σ_vm ≤"
-            hint={`Stress limit σ_allow in ${resultUnit("Von Mises stress")}, on the relaxed element von Mises stress (all-solid models)`}
+            hint={text.maxStressHint(resultUnit("Von Mises stress"))}
             errors={errors}
           />
         )}
 
         {levelSet ? (
           <>
-            <div className={styles.sectionLabel}>Level-set parameters</div>
+            <div className={styles.sectionLabel}>{text.levelSetParameters}</div>
             <SettingField
               field="filterRadius"
-              label="Length ℓ"
-              hint="Smallest member/curvature scale, in model length units — about one element size keeps thin members"
+              label={text.lengthScale}
+              hint={text.lengthScaleHint}
               errors={errors}
             />
           </>
         ) : (
           <>
-            <div className={styles.sectionLabel}>SIMP parameters</div>
+            <div className={styles.sectionLabel}>{text.simpParameters}</div>
             <SettingField
               field="penalty"
-              label="Penalty p"
-              hint="SIMP penalization exponent, ≥ 1 (typically 3)"
+              label={text.penalty}
+              hint={text.penaltyHint}
               errors={errors}
             />
             <SettingField
               field="filterRadius"
-              label="Filter r_min"
-              hint="Density filter radius, in model length units"
+              label={text.filterRadius}
+              hint={text.filterRadiusHint}
               errors={errors}
             />
           </>
@@ -248,34 +243,34 @@ export function OptimizePanel({
           >
             ▶
           </span>
-          Advanced
+          {text.advanced}
         </button>
         {advancedOpen && (
           <>
             {!levelSet && (
               <SettingField
                 field="moveLimit"
-                label="Move limit"
-                hint="MMA step cap per iteration, (0, 1] (default 0.2)"
+                label={text.moveLimit}
+                hint={text.moveLimitHint}
                 errors={errors}
               />
             )}
             <SettingField
               field="maxIterations"
-              label="Max iters"
-              hint="Iteration cap (whole number > 0)"
+              label={text.maxIterations}
+              hint={text.maxIterationsHint}
               errors={errors}
             />
             <SettingField
               field="tolerance"
-              label="Tolerance"
-              hint="Stop when max |Δρ| falls below this (> 0)"
+              label={text.tolerance}
+              hint={text.toleranceHint}
               errors={errors}
             />
             {stressOn && (
               <>
                 <div className={styles.formRow}>
-                  <label className={styles.formLabel}>Aggregation</label>
+                  <label className={styles.formLabel}>{text.aggregation}</label>
                   <div className={styles.segToggle}>
                     <button
                       className={`${styles.segBtn} ${stressAggregation === "pnorm" ? styles.segBtnActive : ""}`}
@@ -293,11 +288,9 @@ export function OptimizePanel({
                 </div>
                 <SettingField
                   field="stressP"
-                  label="Aggregation P"
+                  label={text.aggregationP}
                   hint={
-                    stressAggregation === "pnorm"
-                      ? "P-norm exponent, ≥ 1 (default 8) — larger tracks the peak more tightly but converges less smoothly"
-                      : "KS parameter, ≥ 1 (default 40) — larger tracks the peak more tightly but converges less smoothly"
+                    stressAggregation === "pnorm" ? text.pNormHint : text.ksHint
                   }
                   errors={errors}
                 />
@@ -318,7 +311,7 @@ export function OptimizePanel({
           disabled={!allOk || isOptimizing}
           onClick={optimize}
         >
-          {isOptimizing ? "Optimizing…" : "▶  Run optimization"}
+          {isOptimizing ? text.optimizing : text.runOptimization}
         </button>
         {isOptimizing && (
           <button
@@ -326,7 +319,7 @@ export function OptimizePanel({
             style={{ width: "100%", marginTop: 8 }}
             onClick={cancel}
           >
-            Cancel
+            {text.cancel}
           </button>
         )}
 

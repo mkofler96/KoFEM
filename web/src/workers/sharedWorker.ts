@@ -14,6 +14,7 @@ import {
   useEngineStatus,
   type EngineFailureStage,
 } from "../store/engineStore";
+import { useLocaleStore } from "../i18n/useLocale";
 
 let _worker: Worker | null = null;
 let _msgId = 0;
@@ -240,7 +241,10 @@ export function sendToWorker<T = unknown>(
   return new Promise<T>((resolve, reject) => {
     const id = ++_msgId;
     _pending.set(id, { resolve: (v) => resolve(v as T), reject });
-    getWorker().postMessage({ id, type, payload });
+    // The worker has no storage to read the language chosen in Settings from;
+    // the refusals and errors it builds are in the language sent along.
+    const { locale } = useLocaleStore.getState();
+    getWorker().postMessage({ id, type, payload, locale });
   });
 }
 

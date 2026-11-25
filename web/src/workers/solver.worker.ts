@@ -105,6 +105,8 @@ import {
   type TopOptRunResult,
 } from "../lib/solve/topOptRust.js";
 import { elementOrderOf } from "../lib/solve/messageDefaults.js";
+import { useLocaleStore } from "../i18n/useLocale";
+import type { Locale } from "../i18n/locale";
 
 let Module: KofemModule | null = null;
 let activeTask: number | null = null;
@@ -1089,6 +1091,8 @@ interface WorkerRequest {
   id: number;
   type: string;
   payload: unknown;
+  // The app's language; absent from the engine's start-up "init".
+  locale?: Locale;
 }
 
 interface CgContinuationReply {
@@ -1215,7 +1219,8 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
-  const { id, type, payload } = event.data;
+  const { id, type, payload, locale } = event.data;
+  if (locale !== undefined) useLocaleStore.setState({ locale });
   // Asyncify has suspended WASM. Only its matching decision may resume it;
   // no other request may enter the engine while its C++ stack is retained.
   if (type === "cg_continue") {
