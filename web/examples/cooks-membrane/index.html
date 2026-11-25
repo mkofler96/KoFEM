@@ -47,7 +47,7 @@
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png",
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-convergence-rate.png"
             ],
-            "dateModified": "2026-11-22",
+            "dateModified": "2026-11-23",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -824,6 +824,7 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/" aria-current="page">Cook's membrane</a></li>
+            <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
@@ -864,6 +865,7 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/" aria-current="page">Cook's membrane</a></li>
+            <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
@@ -888,7 +890,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 8 of 21</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 8 of 22</p>
       <h1>Cook's membrane</h1>
       <div class="lede">
         <p>Cook's membrane (1974) is a tapered panel, clamped on one edge and
@@ -980,7 +982,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 2 mm maximum element size: 2,697 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,711 nodes, 17,133 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-fe1376d90a4d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>KoFEM is a 3-D solver, so the panel is a slab of thickness
@@ -1174,7 +1176,7 @@
 
       <nav class="pager" aria-label="Other examples">
         <a class="prev" href="/examples/plate-with-hole-shell/"><small>Previous</small>Plate with a hole (shells)</a>
-        <a class="next" href="/examples/tie-patch-test/"><small>Next</small>Tie patch test</a>
+        <a class="next" href="/examples/cooks-membrane-incompressible/"><small>Next</small>Cook's membrane, nearly incompressible</a>
       </nav>
       </main>
       <nav class="docs-toc" aria-label="On this page">

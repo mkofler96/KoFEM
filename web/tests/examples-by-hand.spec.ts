@@ -10,7 +10,10 @@
 //     names, and every support and load carries the example's name;
 //   - the mesh has no hexahedra, and is the very mesh the node-side build makes;
 //   - the read-out, computed from the solved model by the recipe's probe, is the
-//     number the example publishes.
+//     number the example publishes;
+//   - for a case that publishes an expected failure (a known limitation), the
+//     model re-meshed at the other element order and solved again gives the
+//     published number of that failure.
 //
 // A model built by clicks carries no hand check (that comes only with an
 // example file), so the read-out is computed here from the solved state. If the
@@ -36,6 +39,7 @@ import {
   readFinalCompliance,
   readStressAtPoint,
   recipeFaceIds,
+  remeshAndSolve,
   snapshot,
   type BuildReport,
   type Recipe,
@@ -72,6 +76,18 @@ function publishedFe(id: string): number {
       `the published FE value of "${id}" is ${JSON.stringify(fe)}`,
     );
   return fe;
+}
+
+// A case's published expected failure: the element order and its FE value.
+function publishedExpectedFailure(
+  id: string,
+): { order: 1 | 2; fe: number } | null {
+  const rows = (
+    JSON.parse(readFileSync(RESULTS, "utf8")) as {
+      cases: { id: string; expectedFailure?: { order: 1 | 2; fe: number } }[];
+    }
+  ).cases;
+  return rows.find((r) => r.id === id)?.expectedFailure ?? null;
 }
 
 // An example's recipe: exported by its case module or, for a showcase, by
@@ -234,6 +250,21 @@ for (const id of ORDER as string[]) {
       Math.abs(value - published),
       `${id}: by hand ${value}, published ${published}`,
     ).toBeLessThanOrEqual(1e-3 * Math.abs(published));
+
+    const failure = publishedExpectedFailure(id);
+    if (failure === null || recipe.optimize !== undefined) return;
+    const mesh = { ...recipe.mesh, order: failure.order };
+    await remeshAndSolve(page, mesh);
+    const snap = await snapshot(page);
+    expect(snap.elementOrder).toBe(failure.order);
+    const locked = probeValue(snap, recipe.readout.probe);
+    console.log(
+      `[examples-by-hand] ${id}, order ${failure.order}: ${locked}, published ${failure.fe}`,
+    );
+    expect(
+      Math.abs(locked - failure.fe),
+      `${id}, order ${failure.order}: by hand ${locked}, published ${failure.fe}`,
+    ).toBeLessThanOrEqual(1e-3 * Math.abs(failure.fe));
   });
 }
 

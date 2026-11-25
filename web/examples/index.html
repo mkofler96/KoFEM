@@ -41,7 +41,7 @@
             "name": "KoFEM examples",
             "description": "Free finite element examples that open and solve in your browser. Each validation case is compared with a known result from theory or the literature.",
             "url": "https://kofem.org/examples/",
-            "dateModified": "2026-11-22",
+            "dateModified": "2026-11-23",
             "hasPart": [
               {
                 "@type": "TechArticle",
@@ -82,6 +82,11 @@
                 "@type": "TechArticle",
                 "headline": "Cook's membrane",
                 "url": "https://kofem.org/examples/cooks-membrane/"
+              },
+              {
+                "@type": "TechArticle",
+                "headline": "Cook's membrane, nearly incompressible",
+                "url": "https://kofem.org/examples/cooks-membrane-incompressible/"
               },
               {
                 "@type": "TechArticle",
@@ -912,6 +917,7 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
@@ -952,6 +958,7 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
@@ -986,8 +993,8 @@
       <p>Problems with a known answer, from theory or the literature. Each page
       derives the answer and compares KoFEM's result with it.</p>
       <p class="meta">
-        21 of 21 benchmarks within their tolerance ·
-        engine engine-44314641a642 · 2026-11-22 ·
+        22 of 22 benchmarks within their tolerance ·
+        engine engine-44314641a642 · 2026-11-23 ·
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
       </p>
@@ -1039,6 +1046,12 @@
           <h3><a href="/examples/cooks-membrane/">Cook's membrane</a></h3>
           <p>Tapered, skewed cantilever in shear. A standard distortion benchmark.</p>
           <p class="meta">Loaded-edge deflection: 23.936&nbsp;mm, −0.10&nbsp;% from the reference</p>
+        </li>
+        <li data-entry="cooks-membrane-incompressible">
+          <a href="/examples/cooks-membrane-incompressible/" tabindex="-1" aria-hidden="true"><img src="/examples/cooks-membrane-incompressible.png" width="1200" height="900" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></h3>
+          <p>Rubber-like material in plane strain: linear tetrahedra lock, quadratic tetrahedra get the answer.</p>
+          <p class="meta">Top-corner deflection: 8.0474&nbsp;mm, −0.34&nbsp;% from the reference; linear tetrahedra −43.30&nbsp;%, a known limitation</p>
         </li>
         <li data-entry="tie-patch-test">
           <a href="/examples/tie-patch-test/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-patch-test.png" width="1200" height="733" alt="" loading="lazy" /></a>
@@ -1201,6 +1214,20 @@
               <td class="num" data-label="Reference">23.960&nbsp;mm</td>
               <td class="num" data-label="KoFEM">23.936&nbsp;mm</td>
               <td class="num" data-label="Difference">−0.10&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></th>
+              <td class="wide">top-corner deflection</td>
+              <td class="num" data-label="Reference">8.0750&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">8.0474&nbsp;mm</td>
+              <td class="num" data-label="Difference">−0.34&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row">Cook's membrane, nearly incompressible, linear tetrahedra (a known limitation)</th>
+              <td class="wide">top-corner deflection</td>
+              <td class="num" data-label="Reference">8.0750&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">4.5789&nbsp;mm</td>
+              <td class="num" data-label="Difference">−43.30&nbsp;%</td>
             </tr>
             <tr>
               <th scope="row"><a href="/examples/tie-patch-test/">Tie patch test</a></th>

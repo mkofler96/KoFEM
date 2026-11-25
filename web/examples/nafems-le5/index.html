@@ -46,7 +46,7 @@
               "https://kofem.org/examples/nafems-le5/nafems-le5-z-section-diagram.png",
               "https://kofem.org/examples/nafems-le5/nafems-le5-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-22",
+            "dateModified": "2026-11-23",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -823,6 +823,7 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
@@ -863,6 +864,7 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
@@ -887,7 +889,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 16 of 21</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 17 of 22</p>
       <h1>NAFEMS LE5: Z-section cantilever</h1>
       <div class="lede">
         <p>A 10&nbsp;m cantilever with a Z cross-section, twisted at its free
@@ -971,7 +973,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 100 mm maximum element size: 26,977 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>54,792 nodes, 164,376 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-9e0ba78fc956); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-fe1376d90a4d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
         </table>
       </div>
         <p>The beam is imported as one solid, its end face cut into web and

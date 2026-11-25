@@ -226,7 +226,8 @@ export default {
         rolled sheet with strong texture and many 3D-printed parts have
         direction-dependent stiffness.</li>
       <li><strong>the material is nearly incompressible</strong>, such as rubber or
-        many elastomers, with ${tex("ν")} close to ½.</li>
+        many elastomers, with ${tex("ν")} close to ½; linear tetrahedra then
+        <a href="/theory/numerical-methods/elements-and-quadrature/#incompressible">lock</a>.</li>
       <li><strong>other strains or stresses exist</strong>: temperature change,
         bolt preload, residual stress, creep, or time- and rate-dependent
         behaviour.</li>

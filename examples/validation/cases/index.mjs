@@ -17,6 +17,12 @@
 //             stat: "Min" | "Max" }), printed on the page;
 //   figure    optional { field: "displacement" | "vonMises", unit, view,
 //             deform, focus } for the page's result figure (lib/render.mjs);
+//   expectedFailure
+//             optional { order, errPct, bandPct }: a published limitation. The
+//             recipe solved again at mesh order `order` misses the reference
+//             by errPct percent (outside tolPct); run.mjs fails when that
+//             error moves more than bandPct points, so the limitation can
+//             neither grow nor disappear unnoticed (KOF-400);
 //   page      the text on /examples/ and /examples/<id>/ (../lib/page.mjs):
 //             { summary, model, inputs: [[symbol, value, unit]], supports,
 //             loads, measured, source, note? }. The mesh line is written from
@@ -31,6 +37,7 @@ import plateWithHole from "./plate-with-hole.mjs";
 import plateWithHoleShell from "./plate-with-hole-shell.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
 import cooksMembrane from "./cooks-membrane.mjs";
+import cooksMembraneIncompressible from "./cooks-membrane-incompressible.mjs";
 import surfacePressure from "./surface-pressure.mjs";
 import tiePatchTest from "./tie-patch-test.mjs";
 import tieLameCylinder from "./tie-lame-cylinder.mjs";
@@ -55,6 +62,7 @@ const CASE_KEYS = new Set([
   "tolPct",
   "readout",
   "figure",
+  "expectedFailure",
   "page",
   "recipe",
 ]);
@@ -62,7 +70,7 @@ const CASE_KEYS = new Set([
 // A case, checked and completed with what its recipe implies. Every example
 // is built from its STEP file in the GUI's steps, so a case without a recipe
 // is an error.
-function register(c) {
+export function register(c) {
   const at = `case "${c.id}"`;
   if (c.recipe === undefined)
     throw new Error(
@@ -83,6 +91,23 @@ function register(c) {
     throw new Error(
       `${at}: unit "${c.unit}" differs from the recipe probe's unit "${ro.probe.unit}"`,
     );
+  const xf = c.expectedFailure;
+  if (xf !== undefined) {
+    if (xf.order !== 1 && xf.order !== 2)
+      throw new Error(`${at}: expectedFailure.order must be 1 or 2`);
+    if (xf.order === c.recipe.mesh.order)
+      throw new Error(
+        `${at}: expectedFailure.order must differ from the recipe's own order, which has to pass`,
+      );
+    if (!Number.isFinite(xf.errPct) || Math.abs(xf.errPct) <= c.tolPct)
+      throw new Error(
+        `${at}: expectedFailure.errPct must be a number outside the ±${c.tolPct} % tolerance`,
+      );
+    if (!(xf.bandPct > 0) || xf.bandPct >= Math.abs(xf.errPct) - c.tolPct)
+      throw new Error(
+        `${at}: expectedFailure.bandPct must be positive and keep the band outside the tolerance`,
+      );
+  }
   if (c.page.grid !== undefined || c.page.mesh !== undefined)
     throw new Error(
       `${at}: page.grid / page.mesh are not page fields; the mesh line comes from the case's Netgen mesh`,
@@ -99,6 +124,7 @@ export default [
   plateWithHoleShell,
   shaftTorsion,
   cooksMembrane,
+  cooksMembraneIncompressible,
   tiePatchTest,
   tieLameCylinder,
   tieCantilever,

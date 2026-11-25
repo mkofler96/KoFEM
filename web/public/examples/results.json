@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-22",
+  "generated": "2026-11-23",
   "engine": "engine-44314641a642",
-  "fem": "fem-9e0ba78fc956",
+  "fem": "fem-fe1376d90a4d",
   "cases": [
     {
       "id": "axial-bar",
@@ -513,6 +513,82 @@
         "min": 0,
         "max": 31.41772069207448,
         "deform": 0.2,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "cooks-membrane-incompressible",
+      "name": "Cook's membrane, nearly incompressible",
+      "quantity": "top-corner deflection",
+      "unit": "mm",
+      "reference": 8.075,
+      "referenceLabel": "converged plane-strain value",
+      "tolPct": 1,
+      "fe": 8.047403070792265,
+      "errPct": -0.3417576372474777,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 2609,
+        "vertices": 974,
+        "nodes": 5528,
+        "dofs": 16584,
+        "maxElementSize": 2,
+        "minElementSize": 0.2
+      },
+      "inputs": [
+        {
+          "symbol": "t",
+          "value": 1,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 240.565,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.4999,
+          "unit": ""
+        },
+        {
+          "symbol": "F",
+          "value": 100,
+          "unit": "N"
+        }
+      ],
+      "readout": {
+        "field": "Uy",
+        "stat": "Max",
+        "value": "8.048e+0 mm"
+      },
+      "expectedFailure": {
+        "order": 1,
+        "fe": 4.578895564292625,
+        "errPct": -43.29541096851238,
+        "recordedErrPct": -43.3,
+        "bandPct": 2,
+        "holds": true,
+        "mesh": {
+          "order": 1,
+          "elementType": "CTETRA",
+          "elements": 2609,
+          "vertices": 974,
+          "nodes": 974,
+          "dofs": 2922,
+          "maxElementSize": 2,
+          "minElementSize": 0.2
+        }
+      },
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0,
+        "max": 9.92591388119257,
+        "deform": 0.5,
         "width": 1200,
         "height": 900
       }
@@ -2416,6 +2492,144 @@
             "pass": true
           }
         ]
+      }
+    },
+    {
+      "id": "cooks-membrane-incompressible",
+      "caseId": "cooks-membrane-incompressible",
+      "title": "Nearly incompressible Cook's membrane, P1 vs. P2",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "cooks-membrane-incompressible",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "8 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 431,
+              "vertices": 191,
+              "nodes": 191,
+              "dofs": 573,
+              "maxElementSize": 8,
+              "minElementSize": 0.8,
+              "fe": 3.5037985873462545,
+              "errPct": -56.60930541986061,
+              "ci": false
+            },
+            {
+              "mesh": "4 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 915,
+              "vertices": 377,
+              "nodes": 377,
+              "dofs": 1131,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 4.149528550439144,
+              "errPct": -48.61264953016539,
+              "ci": false
+            },
+            {
+              "mesh": "2 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 2609,
+              "vertices": 974,
+              "nodes": 974,
+              "dofs": 2922,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 4.578895564292625,
+              "errPct": -43.29541096851238,
+              "ci": false
+            },
+            {
+              "mesh": "1 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 10068,
+              "vertices": 3539,
+              "nodes": 3539,
+              "dofs": 10617,
+              "maxElementSize": 1,
+              "minElementSize": 0.1,
+              "fe": 5.753371984344132,
+              "errPct": -28.750811339391547,
+              "ci": false
+            },
+            {
+              "mesh": "0.5 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 77106,
+              "vertices": 20076,
+              "nodes": 20076,
+              "dofs": 60228,
+              "maxElementSize": 0.5,
+              "minElementSize": 0.05,
+              "fe": 6.938633351969899,
+              "errPct": -14.07265198798886,
+              "ci": false
+            }
+          ]
+        },
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "cooks-membrane-incompressible",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "8 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 431,
+              "vertices": 191,
+              "nodes": 999,
+              "dofs": 2997,
+              "maxElementSize": 8,
+              "minElementSize": 0.8,
+              "fe": 7.980490851446464,
+              "errPct": -1.1703919325515197,
+              "ci": false
+            },
+            {
+              "mesh": "4 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 915,
+              "vertices": 377,
+              "nodes": 2042,
+              "dofs": 6126,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 8.042746743055288,
+              "errPct": -0.3994211386341993,
+              "ci": false
+            },
+            {
+              "mesh": "2 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 2609,
+              "vertices": 974,
+              "nodes": 5528,
+              "dofs": 16584,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 8.047403070792265,
+              "errPct": -0.3417576372474777,
+              "ci": true
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "Linear tetrahedra lock at ν = 0.4999, so their error is not in the asymptotic range on any mesh solved here; quadratic tetrahedra are converged to the scatter of the read-out from the coarsest level on."
       }
     },
     {

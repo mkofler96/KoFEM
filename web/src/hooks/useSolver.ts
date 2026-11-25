@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { ElementStress } from "../lib/stressFields";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import {
   loadsSummary,
@@ -19,6 +19,10 @@ import {
 import type { ReactionSummary } from "../lib/solve/reactions";
 import { routeOrRefusal } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
+import {
+  incompressibleFindings,
+  incompressibleMessage,
+} from "../lib/solve/incompressible";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
@@ -269,6 +273,13 @@ export function useSolver() {
     ).__kofemTriggerSolve = solve;
   });
 
+  // Linear elements lock on a nearly incompressible material (KOF-400).
+  const incompressible = useMemo(
+    () =>
+      incompressibleFindings({ elements, properties, materials, elementOrder }),
+    [elements, properties, materials, elementOrder],
+  );
+
   const checks: [boolean, string][] = [
     [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
     [
@@ -300,6 +311,10 @@ export function useSolver() {
             : text.nothingDrives,
     ],
     ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
+    ...incompressible.map((f): [boolean, string] => [
+      false,
+      incompressibleMessage(f),
+    ]),
     ...(routeRefusal === null
       ? []
       : [[false, routeRefusal] satisfies [boolean, string]]),

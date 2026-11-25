@@ -811,7 +811,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Numerical methods / Elements and quadrature</nav>
         <h1>Elements and quadrature</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#shape-functions">Approximate displacement with shape functions</a></li><li><a href="#supported-elements">Solid elements KoFEM solves</a></li><li><a href="#strain-displacement">From coefficients to strain</a></li><li><a href="#element-stiffness">Element stiffness</a></li><li><a href="#worked-element">Worked example: one linear tetrahedron</a></li><li><a href="#quadrature">Choose the quadrature rule</a></li><li><a href="#element-loads">Element load vectors</a></li><li><a href="#size-and-order">Mesh size versus element order</a></li><li><a href="#thin-walls">Thin walls and linear tetrahedra</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#shape-functions">Approximate displacement with shape functions</a></li><li><a href="#supported-elements">Solid elements KoFEM solves</a></li><li><a href="#strain-displacement">From coefficients to strain</a></li><li><a href="#element-stiffness">Element stiffness</a></li><li><a href="#worked-element">Worked example: one linear tetrahedron</a></li><li><a href="#quadrature">Choose the quadrature rule</a></li><li><a href="#element-loads">Element load vectors</a></li><li><a href="#size-and-order">Mesh size versus element order</a></li><li><a href="#thin-walls">Thin walls and linear tetrahedra</a></li><li><a href="#incompressible">Nearly incompressible materials</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></details>
 
     <p class="lede">How are the displacement field and element integrals approximated?</p>
     <p>The <a href="/theory/solid-mechanics/equilibrium-and-weak-form/">weak form</a>
@@ -1065,6 +1065,27 @@
       <li>consider a shell idealisation of the wall.</li>
     </ul>
 
+    <h2 id="incompressible">Nearly incompressible materials</h2>
+    <p>Rubber and other elastomers have <math><mi>ν</mi></math> close to ½: changing their
+      volume takes far more stress than changing their shape. The solution
+      then has almost no volume change, <math><mo lspace="0" rspace="0">∇</mo><mo>·</mo><mi mathvariant="bold" class="math-bold">u</mi><mo>≈</mo></math>​<span class="math-nowrap"><math><mn>0</mn></math>.</span>
+      A linear tetrahedron has one constant strain, so this asks every
+      element to keep its own volume. A tetrahedral mesh has about as many
+      elements as unknowns, so few displacement fields satisfy all those
+      constraints, and the mesh comes out far too stiff. This is volumetric
+      locking, and refining the mesh removes it only slowly.</p>
+    <p><strong>Measured in KoFEM.</strong> The
+      <a href="/examples/cooks-membrane-incompressible/">nearly incompressible
+      Cook's membrane</a> (<math><mi>ν</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0.4999</mn></math>,</span> plane strain) deflects less
+      than 60% of the reference with linear tetrahedra. Quadratic tetrahedra on
+      the same element size are within 1%. CI checks both numbers on every
+      change.</p>
+    <p>KoFEM solves standard displacement elements only. It has no mixed,
+      B-bar or reduced-integration elements, which are the usual cures. The
+      Solve panel's pre-flight check warns when a solid body whose material
+      has <math><mi>ν</mi></math> above 0.45 is meshed with linear elements. For such a material, mesh with quadratic elements and compare two
+      element sizes.</p>
+
     <h2 id="implementation">KoFEM implementation</h2>
     <p>KoFEM’s solid solve runs in its own Rust finite-element module. It
       implements the tetrahedra and hexahedra above with the shape functions
@@ -1113,7 +1134,7 @@
       <a class="prev" rel="prev" href="/theory/solid-mechanics/equilibrium-and-weak-form/"><small>Previous</small>← Equilibrium and weak form</a>
       <a class="next" rel="next" href="/theory/numerical-methods/assembly/"><small>Next</small>Assembly →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#shape-functions">Approximate displacement with shape functions</a></li><li><a href="#supported-elements">Solid elements KoFEM solves</a></li><li><a href="#strain-displacement">From coefficients to strain</a></li><li><a href="#element-stiffness">Element stiffness</a></li><li><a href="#worked-element">Worked example: one linear tetrahedron</a></li><li><a href="#quadrature">Choose the quadrature rule</a></li><li><a href="#element-loads">Element load vectors</a></li><li><a href="#size-and-order">Mesh size versus element order</a></li><li><a href="#thin-walls">Thin walls and linear tetrahedra</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#shape-functions">Approximate displacement with shape functions</a></li><li><a href="#supported-elements">Solid elements KoFEM solves</a></li><li><a href="#strain-displacement">From coefficients to strain</a></li><li><a href="#element-stiffness">Element stiffness</a></li><li><a href="#worked-element">Worked example: one linear tetrahedron</a></li><li><a href="#quadrature">Choose the quadrature rule</a></li><li><a href="#element-loads">Element load vectors</a></li><li><a href="#size-and-order">Mesh size versus element order</a></li><li><a href="#thin-walls">Thin walls and linear tetrahedra</a></li><li><a href="#incompressible">Nearly incompressible materials</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">
