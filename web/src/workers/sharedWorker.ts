@@ -260,7 +260,8 @@ export function sendToWorker<T = unknown>(
  */
 export function startEngine(): void {
   if (_worker || useEngineStatus.getState().failure) return;
-  getWorker().postMessage({ id: 0, type: "init" });
+  const { locale } = useLocaleStore.getState();
+  getWorker().postMessage({ id: 0, type: "init", locale });
 }
 
 /** The status bar's Retry: a fresh worker and a fresh engine load. */

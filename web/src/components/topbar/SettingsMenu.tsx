@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef, useState } from "react";
-import { LOCALES, LOCALE_NAMES, isLocale } from "../../i18n/locale";
+import {
+  LOCALES,
+  LOCALE_NAMES,
+  isLocale,
+  type Locale,
+} from "../../i18n/locale";
 import { useLocaleStore, useT } from "../../i18n/useLocale";
 import { topbarMessages } from "../../i18n/messages/topbar";
 import topBarStyles from "./TopBar.module.css";
@@ -12,6 +17,7 @@ import styles from "./SiteMenu.module.css";
 // (KOF-468), kept for the next visit.
 export function SettingsMenu() {
   const [open, setOpen] = useState(false);
+  const [notLoaded, setNotLoaded] = useState<Locale | null>(null);
   const locale = useLocaleStore((s) => s.locale);
   const setLocale = useLocaleStore((s) => s.setLocale);
   const text = useT(topbarMessages);
@@ -67,7 +73,13 @@ export function SettingsMenu() {
             <select
               value={locale}
               onChange={(e) => {
-                if (isLocale(e.target.value)) setLocale(e.target.value);
+                const next = e.target.value;
+                if (!isLocale(next)) return;
+                setNotLoaded(null);
+                setLocale(next).catch((err: unknown) => {
+                  console.error(err);
+                  setNotLoaded(next);
+                });
               }}
             >
               {LOCALES.map((l) => (
@@ -77,6 +89,11 @@ export function SettingsMenu() {
               ))}
             </select>
           </label>
+          {notLoaded !== null && (
+            <p className={styles.error} role="alert">
+              {text.languageNotLoaded(LOCALE_NAMES[notLoaded])}
+            </p>
+          )}
         </div>
       )}
     </div>
