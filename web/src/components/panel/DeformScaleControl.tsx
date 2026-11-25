@@ -17,7 +17,10 @@ import {
   formatDeformFactor,
   parseDeformFactor,
   sliderToFactor,
+  type DeformFactorError,
 } from "../../lib/deformScale";
+import { useT } from "../../i18n/useLocale";
+import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 
 export function DeformScaleControl() {
@@ -26,8 +29,9 @@ export function DeformScaleControl() {
   const isAuto = scale.mode === "auto";
   const isTrue = scale.mode === "manual" && scale.factor === 1;
 
-  const [text, setText] = useState(() => String(factor));
-  const [error, setError] = useState<string | null>(null);
+  const [entry, setEntry] = useState(() => String(factor));
+  const [error, setError] = useState<DeformFactorError | null>(null);
+  const text = useT(resultsMessages);
   // The factor this control last applied from the user's own text. Its echo
   // through the store must not rewrite the text under the cursor.
   const applied = useRef<number | null>(null);
@@ -35,7 +39,7 @@ export function DeformScaleControl() {
   useEffect(() => {
     if (applied.current === factor) return;
     applied.current = null;
-    setText(String(factor));
+    setEntry(String(factor));
     setError(null);
   }, [factor]);
 
@@ -45,7 +49,7 @@ export function DeformScaleControl() {
   };
 
   const edit = (next: string) => {
-    setText(next);
+    setEntry(next);
     setError(null);
     const parsed = parseDeformFactor(next);
     if ("factor" in parsed) {
@@ -57,29 +61,29 @@ export function DeformScaleControl() {
   // Enter and blur: an empty box hands the factor back to the automatic
   // one; anything else that is not a factor is reported.
   const apply = () => {
-    if (text.trim() === "") {
+    if (entry.trim() === "") {
       applied.current = null;
       setError(null);
-      setText(String(autoFactor));
+      setEntry(String(autoFactor));
       setDeformScale(AUTO_DEFORM_SCALE);
       return;
     }
-    const parsed = parseDeformFactor(text);
+    const parsed = parseDeformFactor(entry);
     if ("error" in parsed) setError(parsed.error);
   };
 
   const sliderMax = deformSliderMax(autoFactor);
   const note = isAuto
-    ? " (auto)"
+    ? text.noteAuto
     : factor === 0
-      ? " (undeformed)"
+      ? text.noteUndeformed
       : isTrue
-        ? " (true scale)"
+        ? text.noteTrueScale
         : "";
 
   return (
     <>
-      <div className={styles.sectionLabel}>Deformation scale</div>
+      <div className={styles.sectionLabel}>{text.deformationScale}</div>
       <div className={styles.sliderRow}>
         <input
           type="range"
@@ -89,7 +93,7 @@ export function DeformScaleControl() {
           value={factorToSlider(factor, sliderMax)}
           onChange={(e) => setManual(sliderToFactor(Number(e.target.value)))}
           style={{ flex: 1, minWidth: 0 }}
-          aria-label="Deformation scale"
+          aria-label={text.deformationScale}
           aria-valuetext={`×${formatDeformFactor(factor)}${note}`}
         />
         <span className={styles.sliderRowUnit}>×</span>
@@ -98,7 +102,7 @@ export function DeformScaleControl() {
           data-testid="deform-scale-input"
           type="number"
           min={0}
-          value={text}
+          value={entry}
           onChange={(e) => edit(e.target.value)}
           onBlur={apply}
           onKeyDown={(e) => {
@@ -107,14 +111,14 @@ export function DeformScaleControl() {
               apply();
             }
           }}
-          aria-label="Deformation factor"
-          title="Clear to use the automatic factor"
+          aria-label={text.deformationFactor}
+          title={text.clearForAuto}
           aria-invalid={error !== null}
         />
       </div>
       {error && (
         <div className={styles.fieldError} data-testid="deform-scale-error">
-          {error}
+          {text[error]}
         </div>
       )}
     </>

@@ -31,7 +31,8 @@
     "capture:tutorial": "playwright test -c playwright.capture.config.ts tutorial-capture.spec.ts",
     "capture:readme": "playwright test -c playwright.capture.config.ts example-load.spec.ts",
     "capture:og": "playwright test -c playwright.capture.config.ts og-image-capture.spec.ts",
-    "theory:generate": "bun theory/generate.mjs"
+    "theory:generate": "bun theory/generate.mjs",
+    "i18n:lock": "bun scripts/i18n-lock.ts"
   },
   "packageManager": "bun",
   "dependencies": {

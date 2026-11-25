@@ -11,6 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { ResultRange } from "../../lib/resultField";
+import { useT } from "../../i18n/useLocale";
+import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 
 interface LegendRangeControlsProps {
@@ -22,7 +24,8 @@ interface LegendRangeControlsProps {
   onClose: () => void;
 }
 
-type Parsed = { range: ResultRange } | { error: string };
+type LimitError = "limitsNotNumbers" | "limitsNotFinite" | "maxNotAboveMin";
+type Parsed = { range: ResultRange } | { error: LimitError };
 
 function parse(minText: string, maxText: string): Parsed {
   const min = Number(minText);
@@ -33,12 +36,12 @@ function parse(minText: string, maxText: string): Parsed {
     Number.isNaN(min) ||
     Number.isNaN(max)
   ) {
-    return { error: "Both limits must be numbers" };
+    return { error: "limitsNotNumbers" };
   }
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    return { error: "Limits must be finite" };
+    return { error: "limitsNotFinite" };
   }
-  if (max <= min) return { error: "Max must be greater than min" };
+  if (max <= min) return { error: "maxNotAboveMin" };
   return { range: { min, max } };
 }
 
@@ -58,7 +61,8 @@ export function LegendRangeControls({
 
   const [minText, setMinText] = useState(() => format(active.min));
   const [maxText, setMaxText] = useState(() => format(active.max));
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LimitError | null>(null);
+  const text = useT(resultsMessages);
 
   // The range this control last applied from the user's own text. Its echo
   // through the store must not rewrite the text under the cursor.
@@ -124,24 +128,24 @@ export function LegendRangeControls({
     <>
       <div className={styles.sectionHead}>
         <span className={styles.sectionLabel} id="legend-range-title">
-          Legend range
+          {text.legendRange}
         </span>
         <span style={{ display: "inline-flex", gap: 10 }}>
           {legendRange && (
             <button
               className={styles.sectionHeadAction}
               data-testid="legend-auto"
-              title="Use the field's own min and max"
+              title={text.useFieldRange}
               onClick={auto}
             >
-              Auto
+              {text.auto}
             </button>
           )}
           <button
             className={styles.iconBtn}
             data-testid="legend-close"
-            aria-label="Close"
-            title="Close"
+            aria-label={text.close}
+            title={text.close}
             onClick={onClose}
           >
             ✕
@@ -149,7 +153,7 @@ export function LegendRangeControls({
         </span>
       </div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Min</span>
+        <span className={styles.formLabel}>{text.min}</span>
         <input
           className={styles.formInput}
           data-testid="legend-min"
@@ -158,12 +162,12 @@ export function LegendRangeControls({
           onChange={(e) => edit(e.target.value, maxText)}
           onBlur={apply}
           onKeyDown={onKeyDown}
-          aria-label="Legend minimum"
+          aria-label={text.legendMinimum}
         />
         <span className={styles.toleranceUnit}>{unit}</span>
       </div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Max</span>
+        <span className={styles.formLabel}>{text.max}</span>
         <input
           className={styles.formInput}
           data-testid="legend-max"
@@ -172,19 +176,17 @@ export function LegendRangeControls({
           onChange={(e) => edit(minText, e.target.value)}
           onBlur={apply}
           onKeyDown={onKeyDown}
-          aria-label="Legend maximum"
+          aria-label={text.legendMaximum}
         />
         <span className={styles.toleranceUnit}>{unit}</span>
       </div>
       {error && (
         <div className={styles.formNote} data-testid="legend-error">
-          {error}
+          {text[error]}
         </div>
       )}
       {legendRange && (
-        <div className={styles.formNote}>
-          Values outside the range take the end colours.
-        </div>
+        <div className={styles.formNote}>{text.outsideRange}</div>
       )}
     </>
   );

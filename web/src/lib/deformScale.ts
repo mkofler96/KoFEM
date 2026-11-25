@@ -114,13 +114,16 @@ export function formatDeformFactor(factor: number): string {
   return frac === undefined ? grouped : `${grouped}.${frac}`;
 }
 
+// What is wrong with a typed factor, as the key of the message that says so
+// (i18n/messages/results).
+export type DeformFactorError = "enterNumber" | "enterFactor";
+
 export function parseDeformFactor(
   text: string,
-): { factor: number } | { error: string } {
+): { factor: number } | { error: DeformFactorError } {
   const factor = Number(text);
   if (text.trim() === "" || Number.isNaN(factor))
-    return { error: "Enter a number" };
-  if (!Number.isFinite(factor) || factor < 0)
-    return { error: "Enter a factor of 0 or more" };
+    return { error: "enterNumber" };
+  if (!Number.isFinite(factor) || factor < 0) return { error: "enterFactor" };
   return { factor };
 }

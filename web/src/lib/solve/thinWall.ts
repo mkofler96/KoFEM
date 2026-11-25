@@ -11,6 +11,8 @@ import { detectCurvedWalls, detectPlanarWalls } from "../shellize.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { buildShellizeMesh } from "./autoShell.js";
 import type { Element, Node, Property } from "../../workers/solverTypes.js";
+import { tr } from "../../i18n/useLocale.js";
+import { refusalMessages } from "../../i18n/messages/refusals.js";
 
 // Below this many linear elements through a wall the bending stiffness is
 // more than ~12 % too high (100×20×3 mm cantilever: 3 elements → 72 % of the
@@ -125,9 +127,9 @@ export function thinWallFindings(input: ThinWallCheckInput): ThinWallFinding[] {
 }
 
 export function thinWallMessage(finding: ThinWallFinding): string {
-  return (
-    `Thin wall on body ${finding.bodyId}: about ${finding.elementsThrough.toFixed(1)} ` +
-    `linear elements across ${finding.thickness.toFixed(1)} mm — results may be far too stiff. ` +
-    "Use quadratic elements (Mesh panel) or set the body to Shell."
+  return tr(refusalMessages).thinWall(
+    finding.bodyId,
+    finding.elementsThrough.toFixed(1),
+    finding.thickness.toFixed(1),
   );
 }

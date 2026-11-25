@@ -4,6 +4,8 @@
 import { useId, useState, type ReactNode } from "react";
 import type { BcFaceEntry } from "../../store/modelStore";
 import { requestDelete } from "../../store/confirmDelete";
+import { useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 // One entry in the BC / load group list: name + summary header with the
@@ -38,6 +40,7 @@ export function GroupCard({
   // Given a trimmed, non-blank name. Absent: the group has no Name field.
   onRename?(name: string): void;
 }) {
+  const text = useT(boundaryMessages);
   return (
     <div className={styles.bcGroup}>
       <div className={styles.bcGroupHeader}>
@@ -47,7 +50,7 @@ export function GroupCard({
         <div className={styles.treeItemActions}>
           <button
             className={styles.iconBtn}
-            title="Add face"
+            title={text.addFace}
             onClick={onStartPick}
           >
             +
@@ -76,7 +79,7 @@ export function GroupCard({
           <span className={styles.bcFaceName}>{face.label}</span>
           <button
             className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-            title="Remove face"
+            title={text.removeFace}
             onClick={() => onRemoveFace(face.id)}
           >
             ×
@@ -100,11 +103,12 @@ function GroupNameField({
   const [draft, setDraft] = useState(name);
   const inputId = useId();
   const blank = draft.trim() === "";
+  const text = useT(boundaryMessages);
   return (
     <div className={styles.groupNameRow}>
       <div className={styles.formRow}>
         <label className={styles.formLabel} htmlFor={inputId}>
-          Name
+          {text.name}
         </label>
         <input
           id={inputId}
@@ -120,7 +124,7 @@ function GroupNameField({
       </div>
       {blank && (
         <div className={styles.fieldError} data-testid="group-name-error">
-          A name can&apos;t be blank. It stays “{name}” until you type one.
+          {text.blankName(name)}
         </div>
       )}
     </div>

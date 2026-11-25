@@ -11,19 +11,34 @@ import {
 import { useTreeItems } from "./modelTreeItems";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
 import { requestDelete } from "../../store/confirmDelete";
+import { useT } from "../../i18n/useLocale";
+import { shellMessages } from "../../i18n/messages/shell";
 import styles from "./ModelTree.module.css";
 
 // The dividers in order; each lists its objects and ends in "+ Add". No label
 // the app generates for an object may contain a divider label (tests select
 // tree buttons by text).
-export const TREE_GROUPS: { id: TreeGroup; label: string }[] = [
-  { id: "geometry", label: "Geometry" },
-  { id: "materials", label: "Materials" },
-  { id: "mesh", label: "Mesh" },
-  { id: "boundary", label: "Boundary conditions" },
-  { id: "studies", label: "Studies" },
-  { id: "results", label: "Results" },
+export const TREE_GROUPS: TreeGroup[] = [
+  "geometry",
+  "materials",
+  "mesh",
+  "boundary",
+  "studies",
+  "results",
 ];
+
+type ShellText = (typeof shellMessages)["en"];
+
+export function treeGroupLabel(text: ShellText, group: TreeGroup): string {
+  return {
+    geometry: text.groupGeometry,
+    materials: text.groupMaterials,
+    mesh: text.groupMesh,
+    boundary: text.groupBoundary,
+    studies: text.groupStudies,
+    results: text.groupResults,
+  }[group];
+}
 
 const KIND_DOT: Partial<Record<TreeItemKind, string>> = {
   bc: styles.kindBc,
@@ -84,12 +99,13 @@ function DeleteButton({
   label: string;
   onClick: () => void;
 }) {
+  const text = useT(shellMessages);
   return (
     <button
       className={styles.rowDelete}
       data-testid={testId}
-      title="Delete"
-      aria-label={`Delete ${label}`}
+      title={text.delete}
+      aria-label={text.deleteItem(label)}
       onClick={onClick}
     >
       <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
@@ -126,6 +142,7 @@ export function ModelTree() {
   const deleteTieGroup = useModelStore((s) => s.deleteTieGroup);
   const deleteCouplingGroup = useModelStore((s) => s.deleteCouplingGroup);
   const items = useTreeItems();
+  const text = useT(shellMessages);
   const [collapsed, setCollapsed] = useState<TreeGroup[]>([]);
 
   function toggle(id: TreeGroup) {
@@ -212,9 +229,9 @@ export function ModelTree() {
   }
 
   return (
-    <nav className={styles.tree} aria-label="Model tree">
-      <div className={styles.header}>Model</div>
-      {TREE_GROUPS.map(({ id, label }) => {
+    <nav className={styles.tree} aria-label={text.modelTree}>
+      <div className={styles.header}>{text.model}</div>
+      {TREE_GROUPS.map((id) => {
         const open = !collapsed.includes(id);
         return (
           <section key={id} className={styles.group}>
@@ -225,7 +242,7 @@ export function ModelTree() {
               onClick={() => toggle(id)}
             >
               <Chevron open={open} />
-              <span className={styles.label}>{label}</span>
+              <span className={styles.label}>{treeGroupLabel(text, id)}</span>
             </button>
             {open && (
               <ul className={styles.list}>
@@ -284,7 +301,7 @@ export function ModelTree() {
                         : isInterface && !inactive
                           ? (on) => setHighlightInterfaceId(on ? item.id : null)
                           : undefined,
-                    detail: suppressed ? "suppressed" : item.detail,
+                    detail: suppressed ? text.suppressed : item.detail,
                     dimmed: hidden || suppressed || inactive,
                     nested: item.nested,
                     trailing: isDeletable(item.kind) ? (
@@ -305,8 +322,12 @@ export function ModelTree() {
                         <button
                           className={`${styles.eye} ${hidden ? styles.eyeOff : ""}`}
                           data-testid={`tree-eye-${item.kind}-${item.id}`}
-                          title={hidden ? "Show" : "Hide"}
-                          aria-label={`${hidden ? "Show" : "Hide"} ${item.label}`}
+                          title={hidden ? text.show : text.hide}
+                          aria-label={
+                            hidden
+                              ? text.showItem(item.label)
+                              : text.hideItem(item.label)
+                          }
                           aria-pressed={hidden}
                           onClick={() =>
                             solids.length === 1
@@ -327,7 +348,7 @@ export function ModelTree() {
                     testId: `tree-add-${id}`,
                     onClick: () => selectTreeNode(addSelection(id)),
                     marker: <span className={styles.addIcon}>+</span>,
-                    label: "Add",
+                    label: text.add,
                   })}
               </ul>
             )}

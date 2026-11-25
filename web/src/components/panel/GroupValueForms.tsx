@@ -33,6 +33,8 @@ import {
   ReferencePointInputs,
   TieExtentInputs,
 } from "./BcLoadFormControls";
+import { useLocale, useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 // Inline editor for a BC group's constrained DOFs and prescribed value —
@@ -52,6 +54,7 @@ export function BcValueForm({
   );
   const [value, setValue] = useState(String(group.value));
   const [error, setError] = useState<string | null>(null);
+  const text = useT(boundaryMessages);
   // Shell nodes carry rotational DOFs, so shell models expose Rx/Ry/Rz too.
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
@@ -62,14 +65,14 @@ export function BcValueForm({
     // only reject non-finite input — never silently coerce "abc" to 0.
     const parsedValue = parseFloat(value);
     if (!isFinite(parsedValue)) {
-      setError("Prescribed displacement must be a finite number");
+      setError(text.displacementInvalid);
       return;
     }
     const dofs = checkedDofs
       .map((checked, i) => (checked ? i : -1))
       .filter((i) => i >= 0);
     if (dofs.length === 0) {
-      setError("Constrain at least one DOF");
+      setError(text.constrainOneDof);
       return;
     }
     onSave(dofs, parsedValue);
@@ -93,7 +96,7 @@ export function BcValueForm({
         }
       />
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Value</span>
+        <span className={styles.formLabel}>{text.value}</span>
         <input
           className={styles.formInput}
           type="number"
@@ -104,10 +107,10 @@ export function BcValueForm({
       </div>
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
+          {text.cancel}
         </button>
         <button className={styles.primaryBtn} onClick={handleSave}>
-          Save
+          {text.save}
         </button>
       </div>
     </div>
@@ -130,6 +133,7 @@ export function TieValueForm({
   const [extent, setExtent] = useState<TieExtent>(group.extent);
   const [distance, setDistance] = useState(String(group.searchDistance));
   const [error, setError] = useState<string | null>(null);
+  const text = useT(boundaryMessages);
 
   function handleSave() {
     if (extent === "full") {
@@ -159,10 +163,10 @@ export function TieValueForm({
       />
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
+          {text.cancel}
         </button>
         <button className={styles.primaryBtn} onClick={handleSave}>
-          Save
+          {text.save}
         </button>
       </div>
     </div>
@@ -197,6 +201,7 @@ export function LoadValueForm({
     initialKind === "pressure" ? String(group.totalForce) : "10",
   );
   const [error, setError] = useState<string | null>(null);
+  const text = useT(boundaryMessages);
 
   function handleSave() {
     if (kindSel === "pressure") {
@@ -236,10 +241,10 @@ export function LoadValueForm({
       )}
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
+          {text.cancel}
         </button>
         <button className={styles.primaryBtn} onClick={handleSave}>
-          Save
+          {text.save}
         </button>
       </div>
     </div>
@@ -275,12 +280,14 @@ export function CouplingValueForm({
     String(group.point[2]),
   ]);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(boundaryMessages);
 
   // Re-derived from the coupling's own surface, so a point can be re-centred
   // after the surface was extended or trimmed.
+  const locale = useLocale();
   const options = useMemo(
     () => referencePointOptions(group.faces, nodes, elements),
-    [group.faces, nodes, elements],
+    [group.faces, nodes, elements, locale],
   );
 
   // Preview the edited position in the viewport, alongside the coupling's
@@ -308,14 +315,14 @@ export function CouplingValueForm({
   function handleSave() {
     const parsed = coords.map((c) => parseFloat(c));
     if (parsed.some((c) => !isFinite(c))) {
-      setError("Each reference point coordinate must be a finite number");
+      setError(text.refPointInvalid);
       return;
     }
     const dofs = checkedDofs
       .map((checked, i) => (checked ? i : -1))
       .filter((i) => i >= 0);
     if (kind === "kinematic" && dofs.length === 0) {
-      setError("A kinematic coupling must tie at least one DOF");
+      setError(text.kinematicNeedsDof);
       return;
     }
     onSave(kind, dofs, [parsed[0], parsed[1], parsed[2]]);
@@ -361,10 +368,10 @@ export function CouplingValueForm({
       />
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
+          {text.cancel}
         </button>
         <button className={styles.primaryBtn} onClick={handleSave}>
-          Save
+          {text.save}
         </button>
       </div>
     </div>

@@ -19,60 +19,28 @@ import { unconnectedBodies } from "../../lib/interfaces";
 import {
   bodyGroupOf,
   bodyGroups,
-  OPTIMIZATION_ROLE_LABELS,
+  OPTIMIZATION_ROLES,
   roleOf,
   type BodyGroup,
   type OptimizationRole,
 } from "../../lib/regions";
+import { useT } from "../../i18n/useLocale";
+import { geometryMessages } from "../../i18n/messages/geometry";
 import styles from "./Panel.module.css";
 
-const SUPPRESS_TIP =
-  "Take the body out of the model as if it were deleted — it is not drawn, " +
-  "meshed or analysed — while keeping its material and settings. Uncheck to " +
-  "bring it back.";
-
-// Body ↔ material assignment (#353) lives on each body's tree entry; hovering
-// the entry highlights the body in the viewport (others dim).
-const BODIES_NOTE =
-  "Touching bodies are bonded at their shared faces — a body that touches " +
-  "nothing floats, so constrain it or check the assembly.";
-
-const UNBONDED_NOTE =
-  "Not bonded to any other body — it floats unless a support or tie holds it.";
-
-const REGIONS_NOTE =
-  "A split cut this body into regions. They stay connected at the cuts and " +
-  "are meshed together. Open a region to give it its own material, element " +
-  "type, element size or optimization role.";
-
-const REGION_SIZE_TIP =
-  "Max element size for this region, in mm. Leave blank to use the size in " +
-  "the Mesh settings. It may be finer or coarser than that size.";
-
-const ROLE_TIP =
-  "What topology optimization may do here: Design lets it remove material, " +
-  "Keep solid fixes the region at full material (a mounting boss, a flange), " +
-  "Keep empty keeps it free of material.";
-
-const PROMOTE_TIP =
-  "Make this region a body of its own. The cut becomes an interface between " +
-  "the two bodies, listed under Boundary conditions. The mesh does not change.";
-
-const ELEMENT_TYPE_TIP =
-  "Solid uses tetrahedra. Shell uses wall mid-surfaces and retains solid material " +
-  "at planar joints. Split thick or curved regions into separate Solid bodies first.";
+type GeometryText = (typeof geometryMessages)["en"];
 
 // Tooltip for a body's name: what the last mesh made of its walls. Empty for a
 // body the mesh left solid, so only shelled bodies carry the hint.
-function sectionsTip(sections: Property[]): string | undefined {
+function sectionsTip(
+  sections: Property[],
+  text: GeometryText,
+): string | undefined {
   if (sections.length === 0) return undefined;
   const thicknesses = sections
     .map((s) => (s.thickness === undefined ? "?" : `${s.thickness} mm`))
     .join(", ");
-  return (
-    `Idealised as shells by the last mesh — ${sections.length} thickness ` +
-    `section(s): ${thicknesses}. Its walls carry this body's material.`
-  );
+  return text.shellSections(sections.length, thicknesses);
 }
 
 const STEP_CARD_ICON = (
@@ -112,7 +80,8 @@ function ImportSection() {
   // A file picked while the engine loads waits for it; a failed engine
   // blocks the import with the reason on hover.
   const engine = useEngineGate();
-  const importLabel = engine.waiting ? "Waiting for engine…" : "Importing…";
+  const text = useT(geometryMessages);
+  const importLabel = engine.waiting ? text.waitingForEngine : text.importing;
 
   const stepRef = useRef<HTMLInputElement | null>(null);
   const igesRef = useRef<HTMLInputElement | null>(null);
@@ -154,7 +123,7 @@ function ImportSection() {
         >
           {STEP_CARD_ICON}
           <span className={styles.cardTitle}>
-            {isImporting ? importLabel : "Import STEP"}
+            {isImporting ? importLabel : text.importStep}
           </span>
           <span className={styles.cardSub}>.step / .stp</span>
         </button>
@@ -167,13 +136,13 @@ function ImportSection() {
         >
           {IGES_CARD_ICON}
           <span className={styles.cardTitle}>
-            {isImporting ? importLabel : "Import IGES"}
+            {isImporting ? importLabel : text.importIges}
           </span>
           <span className={styles.cardSub}>.igs / .iges</span>
         </button>
       </div>
       {/* KOF-392: files are read and processed in this browser only. */}
-      <p className={styles.localNote}>Your CAD never leaves your device.</p>
+      <p className={styles.localNote}>{text.cadStaysLocal}</p>
 
       {stepImportError && (
         <div
@@ -211,7 +180,13 @@ function BodyDetail({ id }: { id: number }) {
   );
   const promoteRegion = useModelStore((s) => s.promoteRegion);
   const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const text = useT(geometryMessages);
   if (!prop) return null;
+  const roleLabels: Record<OptimizationRole, string> = {
+    design: text.roleDesign,
+    solid: text.roleSolid,
+    void: text.roleVoid,
+  };
   // A region of a body with several: it can be promoted to a body of its own.
   const group = bodyGroupOf(properties, prop.id);
   const isRegion = group.regions.length > 1;
@@ -232,7 +207,7 @@ function BodyDetail({ id }: { id: number }) {
   );
   const stillMeshed = mismatch.stillMeshed.includes(prop.id);
   const notMeshed = mismatch.missing.includes(prop.id);
-  const tip = sectionsTip(shellSectionsOf(properties, prop.id));
+  const tip = sectionsTip(shellSectionsOf(properties, prop.id), text);
   const unbonded = unconnectedBodies(interfaces, properties).includes(prop.id);
   // The material a body the mesh added was offered (KOF-413). A deleted one has
   // nothing to keep; the solve's pre-flight names that case.
@@ -240,11 +215,11 @@ function BodyDetail({ id }: { id: number }) {
   return (
     <>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Visible</span>
+        <span className={styles.formLabel}>{text.visible}</span>
         <button
           className={`${styles.visBtn}${hidden ? ` ${styles.visBtnOff}` : ""}`}
           data-testid={`body-visibility-${prop.id}`}
-          title={hidden ? "Show body" : "Hide body"}
+          title={hidden ? text.showBody : text.hideBody}
           aria-pressed={hidden}
           onClick={() => toggleBodyVisibility(prop.id)}
         >
@@ -253,13 +228,9 @@ function BodyDetail({ id }: { id: number }) {
       </div>
       <label
         className={styles.formRow}
-        title={
-          lastBody
-            ? "The last body in the model cannot be suppressed"
-            : SUPPRESS_TIP
-        }
+        title={lastBody ? text.lastBodyCannotBeSuppressed : text.suppressTip}
       >
-        <span className={styles.formLabel}>Suppressed</span>
+        <span className={styles.formLabel}>{text.suppressed}</span>
         <input
           type="checkbox"
           data-testid={`body-suppressed-${prop.id}`}
@@ -270,18 +241,16 @@ function BodyDetail({ id }: { id: number }) {
       </label>
       {stillMeshed && (
         <p className={styles.formNote} data-testid="suppressed-remesh-note">
-          Regenerate the mesh to take it out of the analysis — the current mesh
-          still contains it.
+          {text.suppressedStillMeshed}
         </p>
       )}
       {notMeshed && (
         <p className={styles.formNote} data-testid="restored-remesh-note">
-          Regenerate the mesh to bring it back into the analysis — the current
-          mesh was made without it.
+          {text.restoredNotMeshed}
         </p>
       )}
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Material</span>
+        <span className={styles.formLabel}>{text.material}</span>
         <select
           className={styles.formSelect}
           data-testid={`body-material-${prop.id}`}
@@ -301,7 +270,7 @@ function BodyDetail({ id }: { id: number }) {
             className={styles.fieldError}
             data-testid="body-material-unconfirmed"
           >
-            Meshing added this body. Choose its material before solving.
+            {text.materialUnconfirmed}
           </p>
           {offeredMaterial && (
             <div className={styles.formRow}>
@@ -311,14 +280,14 @@ function BodyDetail({ id }: { id: number }) {
                 data-testid={`body-material-confirm-${prop.id}`}
                 onClick={() => confirmBodyMaterial(prop.id)}
               >
-                Keep {offeredMaterial.name}
+                {text.keepMaterial(offeredMaterial.name)}
               </button>
             </div>
           )}
         </>
       )}
-      <div className={styles.formRow} title={ELEMENT_TYPE_TIP}>
-        <span className={styles.formLabel}>Element type</span>
+      <div className={styles.formRow} title={text.elementTypeTip}>
+        <span className={styles.formLabel}>{text.elementType}</span>
         <select
           className={styles.formSelect}
           data-testid={`body-type-${prop.id}`}
@@ -328,13 +297,13 @@ function BodyDetail({ id }: { id: number }) {
             setBodyDiscretization(prop.id, e.target.value as "shell" | "solid")
           }
         >
-          <option value="solid">Solid</option>
-          <option value="shell">Shell</option>
+          <option value="solid">{text.solid}</option>
+          <option value="shell">{text.shell}</option>
         </select>
       </div>
       {tip && <p className={styles.formNote}>{tip}</p>}
-      <div className={styles.formRow} title={REGION_SIZE_TIP}>
-        <span className={styles.formLabel}>Max element size</span>
+      <div className={styles.formRow} title={text.regionSizeTip}>
+        <span className={styles.formLabel}>{text.maxElementSize}</span>
         <input
           className={styles.formInput}
           data-testid={`region-max-size-${prop.id}`}
@@ -342,13 +311,13 @@ function BodyDetail({ id }: { id: number }) {
           step="any"
           // An empty field is how "use the global size" is shown.
           value={prop.maxElementSize ?? ""}
-          placeholder={`${globalMaxSize} (mesh setting)`}
+          placeholder={text.meshSettingPlaceholder(globalMaxSize)}
           onChange={(e) => setRegionMaxElementSize(prop.id, e.target.value)}
         />
         <span className={styles.toleranceUnit}>mm</span>
       </div>
-      <div className={styles.formRow} title={ROLE_TIP}>
-        <span className={styles.formLabel}>Optimization</span>
+      <div className={styles.formRow} title={text.roleTip}>
+        <span className={styles.formLabel}>{text.optimization}</span>
         <select
           className={styles.formSelect}
           data-testid={`region-role-${prop.id}`}
@@ -360,30 +329,25 @@ function BodyDetail({ id }: { id: number }) {
             )
           }
         >
-          {(
-            Object.entries(OPTIMIZATION_ROLE_LABELS) as [
-              OptimizationRole,
-              string,
-            ][]
-          ).map(([role, label]) => (
+          {OPTIMIZATION_ROLES.map((role) => (
             <option key={role} value={role}>
-              {label}
+              {roleLabels[role]}
             </option>
           ))}
         </select>
       </div>
       {unbonded ? (
         <p className={styles.fieldError} data-testid="body-unbonded-note">
-          {UNBONDED_NOTE}
+          {text.unbondedNote}
         </p>
       ) : (
-        assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>
+        assembly && <p className={styles.formNote}>{text.bodiesNote}</p>
       )}
       {isRegion && (
         <button
           className={styles.outlineBtn}
           data-testid={`region-promote-${prop.id}`}
-          title={PROMOTE_TIP}
+          title={text.promoteTip}
           onClick={() => {
             promoteRegion(prop.id);
             const promoted = useModelStore
@@ -393,7 +357,7 @@ function BodyDetail({ id }: { id: number }) {
               selectTreeNode(itemSelection("geometry", "body", promoted.body));
           }}
         >
-          Promote to body
+          {text.promoteToBody}
         </button>
       )}
       {!suppressed && <SplitSection bodyId={prop.id} />}
@@ -409,6 +373,7 @@ function RegionedBody({ group }: { group: BodyGroup }) {
   const setBodiesHidden = useModelStore((s) => s.setBodiesHidden);
   const setBodySuppressed = useModelStore((s) => s.setBodySuppressed);
   const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const text = useT(geometryMessages);
   const ids = group.regions.map((r) => r.id);
   const hidden = ids.every((id) => hiddenBodyIds.includes(id));
   const suppressed = group.regions.every((r) => r.suppressed === true);
@@ -421,11 +386,11 @@ function RegionedBody({ group }: { group: BodyGroup }) {
   return (
     <>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Visible</span>
+        <span className={styles.formLabel}>{text.visible}</span>
         <button
           className={`${styles.visBtn}${hidden ? ` ${styles.visBtnOff}` : ""}`}
           data-testid={`body-visibility-${group.body}`}
-          title={hidden ? "Show body" : "Hide body"}
+          title={hidden ? text.showBody : text.hideBody}
           aria-pressed={hidden}
           onClick={() => setBodiesHidden(ids, !hidden)}
         >
@@ -434,13 +399,9 @@ function RegionedBody({ group }: { group: BodyGroup }) {
       </div>
       <label
         className={styles.formRow}
-        title={
-          lastBody
-            ? "The last body in the model cannot be suppressed"
-            : SUPPRESS_TIP
-        }
+        title={lastBody ? text.lastBodyCannotBeSuppressed : text.suppressTip}
       >
-        <span className={styles.formLabel}>Suppressed</span>
+        <span className={styles.formLabel}>{text.suppressed}</span>
         <input
           type="checkbox"
           data-testid={`body-suppressed-${group.body}`}
@@ -451,8 +412,8 @@ function RegionedBody({ group }: { group: BodyGroup }) {
           }}
         />
       </label>
-      <p className={styles.formNote}>{REGIONS_NOTE}</p>
-      <div className={styles.sectionLabel}>Regions</div>
+      <p className={styles.formNote}>{text.regionsNote}</p>
+      <div className={styles.sectionLabel}>{text.regions}</div>
       {group.regions.map((r, k) => (
         <button
           key={r.id}
@@ -462,7 +423,7 @@ function RegionedBody({ group }: { group: BodyGroup }) {
             selectTreeNode(itemSelection("geometry", "region", r.id))
           }
         >
-          Region {k + 1}
+          {text.regionName(k + 1)}
         </button>
       ))}
     </>
@@ -484,17 +445,18 @@ function BodyEntry({ body }: { body: number }) {
 // body from a Boolean of the bodies already there.
 function AddGeometry() {
   const [source, setSource] = useState<"import" | "boolean">("import");
+  const text = useT(geometryMessages);
   return (
     <>
       <div
         className={`${styles.segToggle} ${styles.addSource}`}
         role="group"
-        aria-label="Add geometry"
+        aria-label={text.addGeometry}
       >
         {(
           [
-            ["import", "Import file"],
-            ["boolean", "From boolean"],
+            ["import", text.importFile],
+            ["boolean", text.fromBoolean],
           ] as const
         ).map(([id, label]) => (
           <button

@@ -38,6 +38,8 @@ import {
   type Vec3,
 } from "../shellize.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
+import { tr } from "../../i18n/useLocale.js";
+import { refusalMessages } from "../../i18n/messages/refusals.js";
 import { shellTieRefusal } from "./refusals.js";
 import { supportOwners, type SupportOwners } from "./reactions.js";
 import { curvedWallPressures } from "./wallPressure.js";
@@ -86,9 +88,7 @@ export function shellMarkedBodies(properties: Property[]): Property[] {
 export function requireOneShellBody(shellBodyIds: Set<number>): void {
   if (shellBodyIds.size > 1)
     throw new Error(
-      `Bodies ${[...shellBodyIds].join(", ")} are all marked "Shell", but one body per ` +
-        "model can be idealised as shells today. Keep one of them Shell and set the " +
-        "others to Solid.",
+      tr(refusalMessages).severalShellBodies([...shellBodyIds].join(", ")),
     );
 }
 
@@ -96,11 +96,7 @@ export function requireOneShellBody(shellBodyIds: Set<number>): void {
 // missing from the property table has none to give (KOF-413).
 function shellBodyMaterial(cadBodies: Property[], bodyId: number): number {
   const prop = cadBodies.find((p) => p.id === bodyId);
-  if (!prop)
-    throw new Error(
-      `Body ${bodyId} is marked "Shell" but has no material assignment: the property table ` +
-        "sent with the mesh request does not list it. Re-import the geometry or assign the body a material.",
-    );
+  if (!prop) throw new Error(tr(refusalMessages).shellBodyNoMaterial(bodyId));
   return prop.materialId;
 }
 
@@ -168,8 +164,7 @@ function extractShellsOrThrow(
   const shells = extractThinWallShells(mesh, { shellBodyIds });
   if (shells.shellBody < 0)
     throw new Error(
-      `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
-        "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
+      tr(refusalMessages).shellNoThinWalls([...shellBodyIds].join(", ")),
     );
   return shells;
 }
@@ -182,15 +177,19 @@ function requireMatchingSurface(
 ): void {
   if (surfaceFaceIds.length !== surfaceTriangles.length)
     throw new Error(
-      `The surface mesh is inconsistent: ${surfaceTriangles.length} surface triangles but ` +
-        `${surfaceFaceIds.length} face ids. Re-mesh the model.`,
+      tr(refusalMessages).surfaceInconsistent(
+        surfaceTriangles.length,
+        surfaceFaceIds.length,
+      ),
     );
 }
 
-// "Body 2 is" / "Bodies 2, 3 are" — the Shell bodies an error is about.
-function shellBodiesAre(shellBodyIds: Set<number>): string {
-  const ids = [...shellBodyIds].join(", ");
-  return shellBodyIds.size === 1 ? `Body ${ids} is` : `Bodies ${ids} are`;
+// 'Body 2 is marked "Shell"' — the Shell bodies an error is about.
+function shellBodiesMarked(shellBodyIds: Set<number>): string {
+  return tr(refusalMessages).shellBodiesMarked(
+    [...shellBodyIds].join(", "),
+    shellBodyIds.size,
+  );
 }
 
 // The all-tet model with the surface mesh the solve-time idealisation needs.
@@ -205,21 +204,14 @@ function tetShellizeInput(
   surfaceFaceIds: number[];
 } {
   const { elements, surfaceTriangles, surfaceFaceIds } = payload;
-  const marked = `${shellBodiesAre(shellBodyIds)} marked "Shell"`;
+  const marked = shellBodiesMarked(shellBodyIds);
   if (!surfaceTriangles || !surfaceFaceIds || surfaceTriangles.length === 0)
-    throw new Error(
-      `${marked}, but the model has no surface mesh to find thin walls in. ` +
-        "Re-mesh the model, or set the body to Solid.",
-    );
+    throw new Error(tr(refusalMessages).shellNoSurfaceMesh(marked));
   requireMatchingSurface(surfaceTriangles, surfaceFaceIds);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
   const others = elements.length - tetElements.length;
   if (others > 0)
-    throw new Error(
-      `${marked}, but the mesh has ${others} hexahedral element(s), and shell ` +
-        "idealisation works on tetrahedral meshes only. Mesh with tetrahedra, or set " +
-        "the body to Solid.",
-    );
+    throw new Error(tr(refusalMessages).shellHexMesh(marked, others));
   return { tetElements, surfaceTriangles, surfaceFaceIds };
 }
 
@@ -814,10 +806,10 @@ export function preparePureShellSolve(
   ];
   if (solidBodies.length > 0)
     throw new Error(
-      `${shellBodiesAre(shellBodyIds)} marked "Shell", but the shell touches no solid ` +
-        `body, so it cannot be coupled to body ${solidBodies.join(", ")}, and a pure ` +
-        "shell solve would leave the solid bodies out. Tie the Shell body to a solid " +
-        "body, or set it to Solid.",
+      tr(refusalMessages).shellTouchesNoSolid(
+        shellBodiesMarked(shellBodyIds),
+        solidBodies.join(", "),
+      ),
     );
   // The shell solver applies no tie; refuse it by name rather than drop it.
   const tieRefusal = shellTieRefusal(payload.tieGroups);

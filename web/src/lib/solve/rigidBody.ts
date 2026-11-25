@@ -51,6 +51,8 @@ import {
 } from "../coupling.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { release } from "./rustFailure.js";
+import { tr } from "../../i18n/useLocale.js";
+import { refusalMessages } from "../../i18n/messages/refusals.js";
 
 type Vec3 = [number, number, number];
 
@@ -474,22 +476,27 @@ function directionName(direction: Vec3): string {
 function listed(items: string[]): string {
   return items.length <= 1
     ? items.join("")
-    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+    : tr(refusalMessages).listTwo(
+        items.slice(0, -1).join(", "),
+        items[items.length - 1],
+      );
 }
 
 function motionPhrase(component: LooseComponent): string {
-  const clauses: string[] = [];
-  if (component.translations.length > 0)
-    clauses.push(
-      `move along ${listed(component.translations.map(directionName))}`,
-    );
-  if (component.rotationAxes.length > 0)
-    clauses.push(
-      `rotate about ${listed(component.rotationAxes.map(directionName))}`,
-    );
-  // A list in the first clause needs a comma before the second one.
-  const separator = component.translations.length > 1 ? ", and " : " and ";
-  return clauses.join(separator);
+  const text = tr(refusalMessages);
+  const move =
+    component.translations.length > 0
+      ? text.moveAlong(listed(component.translations.map(directionName)))
+      : null;
+  const rotate =
+    component.rotationAxes.length > 0
+      ? text.rotateAbout(listed(component.rotationAxes.map(directionName)))
+      : null;
+  if (move === null || rotate === null) return move ?? rotate ?? "";
+  // English puts a comma before the second clause after a list in the first.
+  return component.translations.length > 1
+    ? text.motionAndAfterList(move, rotate)
+    : text.motionAnd(move, rotate);
 }
 
 // The refusal for loose bodies, e.g. "Body 2 can still move along X and
@@ -510,20 +517,16 @@ export function freeMotionMessage(
     for (const label of component.labels)
       numbers.add(bodyNumber(properties, label));
   }
+  const text = tr(refusalMessages);
   const named = new Set<number>();
   const sentences = [...bodiesByMotion].map(([phrase, numberSet]) => {
     const numbers = [...numberSet].sort((a, b) => a - b);
     for (const number of numbers) named.add(number);
-    const who =
-      numbers.length === 1
-        ? `Body ${numbers[0]}`
-        : `Bodies ${listed(numbers.map(String))}`;
-    return `${who} can still ${phrase}.`;
+    return numbers.length === 1
+      ? text.bodyCanStill(numbers[0], phrase)
+      : text.bodiesCanStill(listed(numbers.map(String)), phrase);
   });
-  const advice =
-    named.size === 1
-      ? "Add a support or connect it to another body."
-      : "Add supports or connect them to other bodies.";
+  const advice = named.size === 1 ? text.holdOneBody : text.holdBodies;
   return `${sentences.join(" ")} ${advice}`;
 }
 

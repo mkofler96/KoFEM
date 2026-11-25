@@ -7,24 +7,11 @@ import type { SplitMode } from "../../store/modelStore";
 import { useGeometryEdit } from "../../hooks/useGeometryEdit";
 import type { SplitAxis } from "../../hooks/useGeometryEdit";
 import { tessellationBounds } from "../../lib/cadFaces";
+import { useT } from "../../i18n/useLocale";
+import { geometryMessages } from "../../i18n/messages/geometry";
 import styles from "./Panel.module.css";
 
 const AXES: SplitAxis[] = ["x", "y", "z"];
-
-const SPLIT_TIP =
-  "Cut the geometry with a plane. Split faces to apply a support or a load to " +
-  "part of a face — a bearing pad, a load patch: the cut becomes an edge and " +
-  "each piece is a face of its own, pickable in one click. Split into regions " +
-  "to mesh or optimize part of a body differently: the body stays one piece, " +
-  "connected at the cut, and each region gets its own settings.";
-
-const MODE_HINT: Record<SplitMode, string> = {
-  faces:
-    "Click the faces to split in the viewport, then Split. The part stays one body.",
-  bodies:
-    "Cuts this into two regions of the same body. They stay connected at the " +
-    "cut and start with these settings; change each region afterwards.",
-};
 
 // Plane position typed as text, like the mesh sizes: there is no range to clamp
 // it to, and it is validated when the split runs.
@@ -51,6 +38,11 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
   const setViewRepr = useModelStore((s) => s.setViewRepr);
   const { split, undo, isSplitting, splitError, setSplitError } =
     useGeometryEdit();
+  const text = useT(geometryMessages);
+  const modeHint: Record<SplitMode, string> = {
+    faces: text.splitFacesHint,
+    bodies: text.splitRegionsHint,
+  };
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<SplitMode>("faces");
@@ -147,8 +139,8 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
 
   return (
     <>
-      <div className={styles.sectionLabel} title={SPLIT_TIP}>
-        Edit
+      <div className={styles.sectionLabel} title={text.splitTip}>
+        {text.edit}
       </div>
       {/* Above the form, not in it: a split that fails after the tool was
           closed (or the step left) still has to be reported. */}
@@ -164,14 +156,10 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
             className={styles.outlineBtn}
             data-testid="split-open"
             disabled={!editable || busy}
-            title={
-              editable
-                ? SPLIT_TIP
-                : "Re-import the CAD file to edit its geometry — a saved analysis does not carry it."
-            }
+            title={editable ? text.splitTip : text.reimportToEdit}
             onClick={openTool}
           >
-            ✂ Split with a plane…
+            {text.splitWithPlane}
           </button>
           {geometryHistory.length > 0 && (
             <button
@@ -180,13 +168,17 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
               disabled={busy}
               onClick={undoSplit}
             >
-              ↶ Undo last split
+              {text.undoLastSplit}
             </button>
           )}
         </>
       ) : (
         <div className={styles.inlineForm} data-testid="split-form">
-          <div className={styles.segToggle} role="group" aria-label="Split">
+          <div
+            className={styles.segToggle}
+            role="group"
+            aria-label={text.split}
+          >
             {(["faces", "bodies"] as SplitMode[]).map((m) => (
               <button
                 key={m}
@@ -196,12 +188,12 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
                 aria-pressed={mode === m}
                 onClick={() => chooseMode(m)}
               >
-                {m === "faces" ? "Faces" : "Regions"}
+                {m === "faces" ? text.faces : text.regions}
               </button>
             ))}
           </div>
           <div className={styles.formRow}>
-            <span className={styles.formLabel}>Cut plane</span>
+            <span className={styles.formLabel}>{text.cutPlane}</span>
             <select
               className={`${styles.formSelect} ${styles.planeAxis}`}
               data-testid="split-axis"
@@ -221,11 +213,11 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
               step="any"
               value={position}
               onChange={(e) => setPosition(e.target.value)}
-              title="Position of the cutting plane along the chosen axis, in mm"
+              title={text.planePositionTip}
             />
             <span className={styles.toleranceUnit}>mm</span>
           </div>
-          <div className={styles.pickHint}>{MODE_HINT[mode]}</div>
+          <div className={styles.pickHint}>{modeHint[mode]}</div>
           {mode === "faces" &&
             splitFaceIds.map((id) => (
               <div
@@ -233,10 +225,10 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
                 className={styles.bcFaceRow}
                 data-testid={`split-face-${id}`}
               >
-                <span className={styles.bcFaceName}>Face {id}</span>
+                <span className={styles.bcFaceName}>{text.faceName(id)}</span>
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Remove face"
+                  title={text.removeFace}
                   onClick={() => toggleSplitFace(id)}
                 >
                   ×
@@ -249,18 +241,13 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
               data-testid="split-pick"
               onClick={() => setSplitPicking(true)}
             >
-              Pick faces
+              {text.pickFaces}
             </button>
           )}
-          {hasMesh && (
-            <div className={styles.hint}>
-              Splitting changes the geometry: the mesh and its supports, loads
-              and results are cleared.
-            </div>
-          )}
+          {hasMesh && <div className={styles.hint}>{text.splitClearsMesh}</div>}
           <div className={styles.formBtns}>
             <button className={styles.cancelBtn} onClick={closeTool}>
-              Close
+              {text.close}
             </button>
             {geometryHistory.length > 0 && (
               <button
@@ -269,7 +256,7 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
                 disabled={busy}
                 onClick={undoSplit}
               >
-                ↶ Undo
+                {text.undo}
               </button>
             )}
             <button
@@ -282,7 +269,7 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
               }
               onClick={applySplit}
             >
-              {isSplitting ? "Splitting…" : "Split"}
+              {isSplitting ? text.splitting : text.split}
             </button>
           </div>
         </div>

@@ -15,6 +15,8 @@ import {
 } from "../../lib/densityField";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { NotConvergedNotice } from "./NotConvergedNotice";
+import { useT } from "../../i18n/useLocale";
+import { optimizeMessages } from "../../i18n/messages/optimize";
 import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
 
@@ -34,6 +36,7 @@ export function TopOptResult({ footer }: { footer: ReactNode }) {
   const view = useModelStore((s) => s.topOptView);
   const setView = useModelStore((s) => s.setTopOptView);
   const rerun = useModelStore((s) => s.rerunTopOptWithMoreIterations);
+  const text = useT(optimizeMessages);
   const live = isOptimizing ? liveDensity : null;
   // The density the threshold filters: the finished run's, or the live one.
   const shown =
@@ -70,12 +73,12 @@ export function TopOptResult({ footer }: { footer: ReactNode }) {
           {isOptimizing ? (
             <div className={own.hint} data-testid="topopt-run-status">
               {live === null
-                ? "Optimizing · starting"
-                : `Optimizing · iteration ${live.it} of ${maxIterations}`}
+                ? text.starting
+                : text.iterationOf(live.it, maxIterations)}
             </div>
           ) : densityResult?.converged ? (
             <div className={own.converged} data-testid="topopt-converged">
-              Converged after {densityResult.iterations} iterations
+              {text.convergedAfter(densityResult.iterations)}
             </div>
           ) : (
             densityResult && (
@@ -87,10 +90,10 @@ export function TopOptResult({ footer }: { footer: ReactNode }) {
             <div className={own.list}>
               {row(
                 "density",
-                "Density in 3D",
-                isOptimizing ? "Live, as the run goes" : null,
+                text.densityIn3d,
+                isOptimizing ? text.liveRun : null,
               )}
-              {row("chart", "Convergence chart", null)}
+              {row("chart", text.convergenceChart, null)}
             </div>
           )}
 
@@ -100,7 +103,7 @@ export function TopOptResult({ footer }: { footer: ReactNode }) {
               style={{ width: "100%" }}
               onClick={cancel}
             >
-              Cancel
+              {text.cancel}
             </button>
           )}
         </div>
@@ -139,24 +142,25 @@ function TopOptSummary({ density, levelSet, history }: DensityResult) {
     if (d > max) max = d;
   }
   const last = history[history.length - 1];
+  const text = useT(optimizeMessages);
 
   return (
     <>
       <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-        Run summary
+        {text.runSummary}
       </div>
       <div className={styles.statRow}>
-        <span className={styles.statKey}>Iterations</span>
+        <span className={styles.statKey}>{text.iterations}</span>
         <span className={styles.statVal}>{history.length}</span>
       </div>
       {last && (
         <>
           <div className={styles.statRow}>
-            <span className={styles.statKey}>Final volume frac.</span>
+            <span className={styles.statKey}>{text.finalVolumeFraction}</span>
             <span className={styles.statVal}>{last.volume.toFixed(3)}</span>
           </div>
           <div className={styles.statRow}>
-            <span className={styles.statKey}>Final compliance</span>
+            <span className={styles.statKey}>{text.finalCompliance}</span>
             {/* data-value: the unrounded number, which the examples' GUI
                 test compares with the published one (KOF-322). */}
             <span
@@ -169,7 +173,7 @@ function TopOptSummary({ density, levelSet, history }: DensityResult) {
           </div>
           {last.max_stress !== undefined && (
             <div className={styles.statRow}>
-              <span className={styles.statKey}>Max von Mises</span>
+              <span className={styles.statKey}>{text.maxVonMises}</span>
               <span
                 className={styles.statVal}
                 data-testid="topopt-final-max-stress"
@@ -177,7 +181,7 @@ function TopOptSummary({ density, levelSet, history }: DensityResult) {
                 {last.max_stress.toExponential(3)}{" "}
                 {resultUnit("Von Mises stress")}
                 {Number.isFinite(stressLimit)
-                  ? ` (limit ${stressLimit.toExponential(3)})`
+                  ? text.stressLimit(stressLimit.toExponential(3))
                   : ""}
               </span>
             </div>
@@ -185,28 +189,28 @@ function TopOptSummary({ density, levelSet, history }: DensityResult) {
         </>
       )}
       <div className={styles.statRow}>
-        <span className={styles.statKey}>Density range</span>
+        <span className={styles.statKey}>{text.densityRange}</span>
         <span className={styles.statVal}>
           {min.toFixed(3)} – {max.toFixed(3)}
         </span>
       </div>
 
       <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-        Export
+        {text.export}
       </div>
       <button
         className={styles.outlineBtn}
         onClick={() => downloadDensityStl(density, levelSet, threshold, smooth)}
         disabled={!anyKept}
       >
-        Export shape as STL
+        {text.exportStl}
       </button>
       <div className={styles.formNote} style={{ marginTop: 6 }}>
         {!anyKept
-          ? "No material is kept at this threshold — lower it to export a shape."
+          ? text.nothingKept
           : smooth
-            ? "The smooth surface shown at the current threshold, in model units."
-            : "Faceted surface of the elements shown at the current threshold, in model units."}
+            ? text.smoothExport
+            : text.facetedExport}
       </div>
     </>
   );

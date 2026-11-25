@@ -15,6 +15,9 @@ import { setWorkflow } from "../../lib/analytics";
 import { clearWorkerLogs } from "../../hooks/useWorkerLogs";
 import { FeedbackMenu } from "./FeedbackMenu";
 import { SiteMenu, confirmLeave } from "./SiteMenu";
+import { SettingsMenu } from "./SettingsMenu";
+import { tr, useT } from "../../i18n/useLocale";
+import { topbarMessages } from "../../i18n/messages/topbar";
 import styles from "./TopBar.module.css";
 
 // A development deployment is marked at container start with
@@ -29,16 +32,11 @@ export function TopBar() {
   const modelName = useModelStore((s) => s.modelName);
   const loadAnalysis = useModelStore((s) => s.loadAnalysis);
   const loadInputRef = useRef<HTMLInputElement | null>(null);
+  const text = useT(topbarMessages);
 
   function handleNewAnalysis() {
     const store = useModelStore.getState();
-    if (
-      store.hasStarted &&
-      !window.confirm(
-        "Start a new analysis? Unsaved changes will be lost — save the current analysis first if you want to keep it.",
-      )
-    )
-      return;
+    if (store.hasStarted && !window.confirm(text.confirmNewAnalysis)) return;
     // Drop the worker too: it may still hold the imported OCCT shape, and any
     // in-flight mesh/solve belongs to the analysis being discarded.
     resetWorker();
@@ -83,7 +81,7 @@ export function TopBar() {
       }
       setWorkflow("saved_file");
     } catch (err) {
-      window.alert(`Could not load analysis: ${(err as Error).message}`);
+      window.alert(tr(topbarMessages).loadFailed((err as Error).message));
     }
   }
 
@@ -94,7 +92,7 @@ export function TopBar() {
         <a
           className={styles.home}
           href="/"
-          aria-label="KoFEM home"
+          aria-label={text.home}
           onClick={confirmLeave}
         >
           <img
@@ -110,16 +108,15 @@ export function TopBar() {
           <span
             className={styles.devBadge}
             data-testid="dev-badge"
-            title="Development build of the next KoFEM — results may change"
+            title={text.devBuild}
           >
             DEV
           </span>
         )}
         <span className={styles.crumb}>
-          <span className={styles.crumbMuted}>Workspace</span>
+          <span className={styles.crumbMuted}>{text.workspace}</span>
           <span className={styles.crumbSep}>/</span>
-          {/* eslint-disable-next-line kofem/no-silent-fallback -- breadcrumb label for an unnamed model; cosmetic, never fed back into the analysis */}
-          <span className={styles.crumbPage}>{modelName || "Untitled"}</span>
+          <span className={styles.crumbPage}>{modelName || text.untitled}</span>
         </span>
       </div>
 
@@ -136,8 +133,8 @@ export function TopBar() {
         <FeedbackMenu />
         <button
           className={styles.iconBtn}
-          title="New analysis"
-          aria-label="New analysis"
+          title={text.newAnalysis}
+          aria-label={text.newAnalysis}
           onClick={handleNewAnalysis}
         >
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -163,8 +160,8 @@ export function TopBar() {
         </button>
         <button
           className={styles.iconBtn}
-          title="Save analysis (.vtu)"
-          aria-label="Save analysis"
+          title={text.saveAnalysisTitle}
+          aria-label={text.saveAnalysis}
           onClick={handleSave}
         >
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -185,8 +182,8 @@ export function TopBar() {
         </button>
         <button
           className={styles.iconBtn}
-          title="Load analysis (.vtu) or problem report (.zip)"
-          aria-label="Load analysis"
+          title={text.loadAnalysisTitle}
+          aria-label={text.loadAnalysis}
           onClick={() => loadInputRef.current?.click()}
         >
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -205,28 +202,7 @@ export function TopBar() {
             />
           </svg>
         </button>
-        <button
-          className={styles.iconBtn}
-          title="Settings"
-          onClick={() => {}}
-          aria-label="Settings"
-        >
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-            <circle
-              cx="8"
-              cy="8"
-              r="2.5"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-            <path
-              d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        <SettingsMenu />
         <SiteMenu />
       </div>
     </header>
