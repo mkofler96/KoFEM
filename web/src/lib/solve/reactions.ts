@@ -199,6 +199,14 @@ export interface ReactionBalance {
   loadOnSupports: boolean;
 }
 
+// A component as Results → Reactions and the report show it: four
+// significant digits, and 0 for what four digits of the largest value in the
+// summary (`scale`) would not show (solver noise, typically).
+export function reactionComponent(value: number, scale: number): string {
+  if (Math.abs(value) < 5e-5 * scale) return "0";
+  return String(Number(value.toPrecision(4)));
+}
+
 export function reactionBalance(summary: ReactionSummary): ReactionBalance {
   const reaction: Vec3 = [0, 0, 0];
   let largest = norm(summary.applied);

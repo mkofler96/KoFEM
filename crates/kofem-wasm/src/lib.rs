@@ -15,6 +15,7 @@ mod failure;
 mod field;
 mod mixed;
 mod outline;
+mod report;
 mod rigid_body;
 mod section;
 mod shell;
@@ -31,6 +32,7 @@ pub use failure::{record_panics, take_panic_message};
 pub use field::{check_field_expression, evaluate_field_expression};
 pub use mixed::MixedModel;
 pub use outline::{outer_faces, unique_edges, MeshOuterFaces};
+pub use report::report_stats;
 pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;
 pub use shellize::{

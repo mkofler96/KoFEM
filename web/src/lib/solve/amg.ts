@@ -149,7 +149,7 @@ export function solvePreconditioner(
   return hasShells ? "incomplete-cholesky" : requested;
 }
 
-function preconditionerLabel(preconditioner: Preconditioner): string {
+export function preconditionerLabel(preconditioner: Preconditioner): string {
   return preconditioner === "incomplete-cholesky"
     ? tr(solveMessages).incompleteCholesky
     : METHOD_LABEL[preconditioner];

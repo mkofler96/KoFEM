@@ -4175,6 +4175,542 @@
     "es": "4d09c0dd95f6",
     "pt": "f27219211dfb"
   },
+  "report.ts:reportMessages.bodies": {
+    "en": "a590f657b608",
+    "de": "4d3f6bfa6204",
+    "fr": "4f507736d754",
+    "it": "805722ba0201",
+    "es": "c63db964fa79",
+    "pt": "9b5cdd5ce1b0"
+  },
+  "report.ts:reportMessages.body": {
+    "en": "814744a8f035",
+    "de": "27572dca76e6",
+    "fr": "2b262b0a8871",
+    "it": "14969bd222ea",
+    "es": "acc19211be62",
+    "pt": "14969bd222ea"
+  },
+  "report.ts:reportMessages.created": {
+    "en": "9c1c42630d6a",
+    "de": "93c7a801c057",
+    "fr": "36e5024dee8a",
+    "it": "d4f49a8f6538",
+    "es": "3ab612865ef0",
+    "pt": "cf44bd1bd089"
+  },
+  "report.ts:reportMessages.currentView": {
+    "en": "87d1290f0172",
+    "de": "d5dd6d69f568",
+    "fr": "0971a98a6180",
+    "it": "f20b3f9a267c",
+    "es": "c815dfff0824",
+    "pt": "e0cf2e17a568"
+  },
+  "report.ts:reportMessages.deformedBy": {
+    "en": "f9fc1c7613f3",
+    "de": "a33219ca823a",
+    "fr": "5b7cae4495fc",
+    "it": "b386d168280d",
+    "es": "71eb0675c714",
+    "pt": "116fdf619e6f"
+  },
+  "report.ts:reportMessages.density": {
+    "en": "5be57fcbacda",
+    "de": "8c109f7cc5b0",
+    "fr": "b368c82ea769",
+    "it": "59c51c6504e7",
+    "es": "64ccbdbcd88d",
+    "pt": "a46f8c9a5814"
+  },
+  "report.ts:reportMessages.densityShown": {
+    "en": "a133d086507c",
+    "de": "4d73c90e3b62",
+    "fr": "68379152dba2",
+    "it": "48cf0138ae3a",
+    "es": "2b04b1b6fdba",
+    "pt": "1d5d60489b43"
+  },
+  "report.ts:reportMessages.elementOrder": {
+    "en": "eaeeb21e5569",
+    "de": "b3fb1e7e0ddb",
+    "fr": "9451f4febbb9",
+    "it": "0b1b50f28ad6",
+    "es": "592c0ebd366b",
+    "pt": "23cf1fea84e7"
+  },
+  "report.ts:reportMessages.elementType": {
+    "en": "b1b0b1f7485f",
+    "de": "389383d1556a",
+    "fr": "f1d295b8f360",
+    "it": "f0b0a17dfcda",
+    "es": "6fa4c760deff",
+    "pt": "6fa4c760deff"
+  },
+  "report.ts:reportMessages.elements": {
+    "en": "5e822c8804d8",
+    "de": "a98c15b39b04",
+    "fr": "e078679f6911",
+    "it": "6b0d031730ca",
+    "es": "6eb52713d2c6",
+    "pt": "6eb52713d2c6"
+  },
+  "report.ts:reportMessages.faces": {
+    "en": "15e6e64a5cd6",
+    "de": "294639c6a63c",
+    "fr": "15e6e64a5cd6",
+    "it": "3735e7ea4f87",
+    "es": "23aaef192b84",
+    "pt": "15e6e64a5cd6"
+  },
+  "report.ts:reportMessages.figures": {
+    "en": "e06c9ffc8ae1",
+    "de": "ee1c6da8b393",
+    "fr": "e06c9ffc8ae1",
+    "it": "f8a7cb71add2",
+    "es": "3de285428b79",
+    "pt": "3de285428b79"
+  },
+  "report.ts:reportMessages.force": {
+    "en": "d076793cfe87",
+    "de": "9da8797ac85b",
+    "fr": "d076793cfe87",
+    "it": "97a85861259d",
+    "es": "7d872aa3e2e6",
+    "pt": "b9381aeb6d36"
+  },
+  "report.ts:reportMessages.heldDofs": {
+    "en": "d931bcca46af",
+    "de": "15536c4be4d4",
+    "fr": "1e318bcee86d",
+    "it": "d43ee01d3b3b",
+    "es": "381491a5783d",
+    "pt": "bfcb974dab3b"
+  },
+  "report.ts:reportMessages.isometricView": {
+    "en": "cc6c6d0c1a23",
+    "de": "f67056bbe79d",
+    "fr": "f46b8607fcd1",
+    "it": "61f151dc3dc8",
+    "es": "1ef345cdbe38",
+    "pt": "1ef345cdbe38"
+  },
+  "report.ts:reportMessages.kind": {
+    "en": "c218e485a37d",
+    "de": "ad90c9a17863",
+    "fr": "2e76c2e945b2",
+    "it": "ac6ee98d506c",
+    "es": "ac6ee98d506c",
+    "pt": "ac6ee98d506c"
+  },
+  "report.ts:reportMessages.linear": {
+    "en": "88783d5270dc",
+    "de": "88783d5270dc",
+    "fr": "fdbfc3e933a6",
+    "it": "89855d4ad498",
+    "es": "f89416f21175",
+    "pt": "88783d5270dc"
+  },
+  "report.ts:reportMessages.loads": {
+    "en": "8c65c8391b49",
+    "de": "78c78b59161b",
+    "fr": "d5dd84e3a65d",
+    "it": "40b4ee7750aa",
+    "es": "bdb993def864",
+    "pt": "bdb993def864"
+  },
+  "report.ts:reportMessages.material": {
+    "en": "86b1508182a8",
+    "de": "af9871bdd8a3",
+    "fr": "bdd703532c70",
+    "it": "a9fa309d8ce4",
+    "es": "86b1508182a8",
+    "pt": "86b1508182a8"
+  },
+  "report.ts:reportMessages.maxDisplacement": {
+    "en": "4a32f3bb221d",
+    "de": "a6c7b42f25a7",
+    "fr": "434b50d71a91",
+    "it": "97c5959b9dc5",
+    "es": "a3e91c63b41f",
+    "pt": "60a3c0a4ad66"
+  },
+  "report.ts:reportMessages.maxSize": {
+    "en": "f3aa7a9e1eec",
+    "de": "8923138fa1ed",
+    "fr": "7ae25a64532b",
+    "it": "09c3c3391d68",
+    "es": "9de039854477",
+    "pt": "1f9e2e1519ac"
+  },
+  "report.ts:reportMessages.maxVonMises": {
+    "en": "5a6721f55a1f",
+    "de": "562bc8b7d921",
+    "fr": "90f15ed1afaa",
+    "it": "4e967b1867c5",
+    "es": "23725dc5a35e",
+    "pt": "a2f0c00c1669"
+  },
+  "report.ts:reportMessages.mesh": {
+    "en": "7f5e86b5924e",
+    "de": "42b86120b421",
+    "fr": "ce9e75e6056e",
+    "it": "7f5e86b5924e",
+    "es": "6f27aca3feed",
+    "pt": "488dbcec3a13"
+  },
+  "report.ts:reportMessages.minSize": {
+    "en": "6f352aaa0500",
+    "de": "1c0ba7f6e3ce",
+    "fr": "ee8314f8a55d",
+    "it": "6cce6731da14",
+    "es": "5aa43c3c66bf",
+    "pt": "a7108f62f31e"
+  },
+  "report.ts:reportMessages.moment": {
+    "en": "f620f14d6f45",
+    "de": "f620f14d6f45",
+    "fr": "f620f14d6f45",
+    "it": "04b1713b168e",
+    "es": "04b1713b168e",
+    "pt": "04b1713b168e"
+  },
+  "report.ts:reportMessages.name": {
+    "en": "304eedc56d4e",
+    "de": "304eedc56d4e",
+    "fr": "163122bfd224",
+    "it": "26c0fd50a696",
+    "es": "c2dcd907b1a2",
+    "pt": "26c0fd50a696"
+  },
+  "report.ts:reportMessages.noResult": {
+    "en": "13c53c26a873",
+    "de": "bae445de31ad",
+    "fr": "4286e6843eb9",
+    "it": "997f0e9b09ff",
+    "es": "4faced5454d7",
+    "pt": "48aad7acab54"
+  },
+  "report.ts:reportMessages.noStress": {
+    "en": "747edafdaf0c",
+    "de": "1f027532f9e2",
+    "fr": "a5f9c4c45021",
+    "it": "e4b36d95a5d6",
+    "es": "aa0cfec8097f",
+    "pt": "c7177cf6d6be"
+  },
+  "report.ts:reportMessages.noViewport": {
+    "en": "a104bb6d5149",
+    "de": "b892a17b3665",
+    "fr": "84745cdbdff5",
+    "it": "ad290ebb7c59",
+    "es": "61f957e05e72",
+    "pt": "edcdfff52430"
+  },
+  "report.ts:reportMessages.noWarnings": {
+    "en": "ca04d85a97b7",
+    "de": "89cd5ab425c2",
+    "fr": "6a106fdf6282",
+    "it": "9437d0f84b1f",
+    "es": "7bb400f63297",
+    "pt": "0ff534de7b94"
+  },
+  "report.ts:reportMessages.nodes": {
+    "en": "4442656eee28",
+    "de": "a5ae417f2f75",
+    "fr": "731e2003e69e",
+    "it": "ade89d4fb2cb",
+    "es": "a1c58a9ad58d",
+    "pt": "ca7058948c91"
+  },
+  "report.ts:reportMessages.none": {
+    "en": "93198c2e6547",
+    "de": "b00f92dd9f26",
+    "fr": "ea434259617d",
+    "it": "e0b355bff620",
+    "es": "383376b4f439",
+    "pt": "9fb597e1e617"
+  },
+  "report.ts:reportMessages.p99VonMises": {
+    "en": "5280b97a0a18",
+    "de": "5c17d65b13bb",
+    "fr": "2cb668842c51",
+    "it": "415215210872",
+    "es": "e0ebfd6d039a",
+    "pt": "80ec3386cb08"
+  },
+  "report.ts:reportMessages.path": {
+    "en": "25497f543782",
+    "de": "168265390551",
+    "fr": "f9406d8e249b",
+    "it": "2955bac1d48c",
+    "es": "17eb1d73b294",
+    "pt": "824e2577776e"
+  },
+  "report.ts:reportMessages.pathAutoShell": {
+    "en": "919165b28c28",
+    "de": "e44d1245253f",
+    "fr": "d0731b0b179f",
+    "it": "864f1b167e05",
+    "es": "7bb37921b8de",
+    "pt": "4d8246092e7e"
+  },
+  "report.ts:reportMessages.pathCoupled": {
+    "en": "9b4de47d406b",
+    "de": "c85babe2d3a5",
+    "fr": "40534fce6cd3",
+    "it": "129b99d6af34",
+    "es": "4f76dfc2e74c",
+    "pt": "f22a5641e1cd"
+  },
+  "report.ts:reportMessages.pathShell": {
+    "en": "d0180986c5c7",
+    "de": "05c7195397f6",
+    "fr": "dafc8673a00f",
+    "it": "dd300bf60c21",
+    "es": "cce9f7faf41e",
+    "pt": "281063c5bcf2"
+  },
+  "report.ts:reportMessages.pathSolid": {
+    "en": "f7599d3f1ffb",
+    "de": "7c48a2c195df",
+    "fr": "d2ebd4818f9e",
+    "it": "0ec80b5e5292",
+    "es": "a0e0decf3a1a",
+    "pt": "f4469d0bd6fe"
+  },
+  "report.ts:reportMessages.preconditioner": {
+    "en": "782ee2f95f1c",
+    "de": "0fbceeadf9fb",
+    "fr": "544131bd09cf",
+    "it": "30c82dee4e86",
+    "es": "a0d265f7e0f4",
+    "pt": "8b7179ea38df"
+  },
+  "report.ts:reportMessages.prescribed": {
+    "en": "574687be98b7",
+    "de": "86be7a7e0d6b",
+    "fr": "efdd8013211e",
+    "it": "b664320f2eb2",
+    "es": "9090a96affc6",
+    "pt": "878d72a4f351"
+  },
+  "report.ts:reportMessages.pressure": {
+    "en": "950c179040a3",
+    "de": "010b0df202f8",
+    "fr": "a801063ca63e",
+    "it": "d62011d19325",
+    "es": "6e41c7b93dde",
+    "pt": "b8805e756078"
+  },
+  "report.ts:reportMessages.quadratic": {
+    "en": "2bae547cf5cf",
+    "de": "5d0b68ab387d",
+    "fr": "e063d3f98d3c",
+    "it": "fca5041c2206",
+    "es": "2e2cb8f4e5a3",
+    "pt": "91d8269645ce"
+  },
+  "report.ts:reportMessages.reactionArrows": {
+    "en": "e9856c512f0e",
+    "de": "0790abb3a947",
+    "fr": "e16a00beb758",
+    "it": "ef00f7aecdfc",
+    "es": "4500e2314d10",
+    "pt": "778ad0a66987"
+  },
+  "report.ts:reportMessages.reactions": {
+    "en": "5d6c9743c06e",
+    "de": "5f8b794ff983",
+    "fr": "e16a00beb758",
+    "it": "ef00f7aecdfc",
+    "es": "6894359d67e9",
+    "pt": "778ad0a66987"
+  },
+  "report.ts:reportMessages.reactionsNotRecorded": {
+    "en": "7b30d8730db5",
+    "de": "ad8e47f86e2e",
+    "fr": "9f66bf7941f3",
+    "it": "5515d15f06da",
+    "es": "c40dd25d467b",
+    "pt": "c1a3c81cbf5e"
+  },
+  "report.ts:reportMessages.regionSize": {
+    "en": "1e0759d29ea0",
+    "de": "de6495d5a973",
+    "fr": "fc49c4ff0383",
+    "it": "f779ba857ed7",
+    "es": "797289962687",
+    "pt": "98a261c2c55c"
+  },
+  "report.ts:reportMessages.reportFailed": {
+    "en": "280dc8e89ce2",
+    "de": "b96cd847597e",
+    "fr": "21c1e6907dca",
+    "it": "63e9f9e2a504",
+    "es": "76e38778d9e1",
+    "pt": "1e69e6883bd1"
+  },
+  "report.ts:reportMessages.results": {
+    "en": "ef2eeff8cb03",
+    "de": "383ebb9ab51e",
+    "fr": "495d1802d103",
+    "it": "87dec0c2e0d5",
+    "es": "62e421e91d28",
+    "pt": "62e421e91d28"
+  },
+  "report.ts:reportMessages.resultsNote": {
+    "en": "8961d2c6f5e6",
+    "de": "23517311c3b8",
+    "fr": "171af96b945a",
+    "it": "2dbd469ce43e",
+    "es": "036161b1631b",
+    "pt": "ec9aa1fc992d"
+  },
+  "report.ts:reportMessages.runNotRecorded": {
+    "en": "8d485cf424f9",
+    "de": "7d715f6f339a",
+    "fr": "ba24665eab3f",
+    "it": "1792552cf2ce",
+    "es": "e4cb3b68c2b3",
+    "pt": "8f34bb08e835"
+  },
+  "report.ts:reportMessages.saveReport": {
+    "en": "c4ae08be078e",
+    "de": "1d7cb403b712",
+    "fr": "60cdc1b3fc42",
+    "it": "6c44973480ae",
+    "es": "7609b728fa35",
+    "pt": "8287ea07f1e9"
+  },
+  "report.ts:reportMessages.saveReportHint": {
+    "en": "f0f611c59cee",
+    "de": "d40a51e9dde6",
+    "fr": "16758849c124",
+    "it": "6e7ecd523b85",
+    "es": "2be21e5a36b7",
+    "pt": "27ec7421cb40"
+  },
+  "report.ts:reportMessages.savingReport": {
+    "en": "45c84107ea00",
+    "de": "6b4694527050",
+    "fr": "e126100a33be",
+    "it": "c7a665066365",
+    "es": "b41fc857aefd",
+    "pt": "42a4dd0728c3"
+  },
+  "report.ts:reportMessages.shell": {
+    "en": "bd2f596e9d5e",
+    "de": "344f8585eed4",
+    "fr": "16ff2ad670d2",
+    "it": "074d812106e0",
+    "es": "e887363be7c8",
+    "pt": "d8510d3b4f67"
+  },
+  "report.ts:reportMessages.shellAtSolve": {
+    "en": "7816d8377f05",
+    "de": "50f6b4f75023",
+    "fr": "6de8fcb772b7",
+    "it": "55eebf0dca14",
+    "es": "d262c80deab2",
+    "pt": "f3f63d84a673"
+  },
+  "report.ts:reportMessages.shellOf": {
+    "en": "db96d4e1ce27",
+    "de": "ea97b735e961",
+    "fr": "5e954546f7fc",
+    "it": "41033b39c687",
+    "es": "d7278f223871",
+    "pt": "659cf9eaacd0"
+  },
+  "report.ts:reportMessages.sizesNotRecorded": {
+    "en": "c0d1885a235a",
+    "de": "4906bf3ff48e",
+    "fr": "90a2e8f75c5e",
+    "it": "c9b18014442b",
+    "es": "a2a5cc0c5dd8",
+    "pt": "e2a9bd2065d4"
+  },
+  "report.ts:reportMessages.solidHexes": {
+    "en": "a08399179cb8",
+    "de": "c5081853eaa9",
+    "fr": "28eb6b45aea3",
+    "it": "a0ccb7c26d5e",
+    "es": "87f421b3e480",
+    "pt": "87f421b3e480"
+  },
+  "report.ts:reportMessages.solidTets": {
+    "en": "ded960c2aea9",
+    "de": "4c464d5bb149",
+    "fr": "906e7308483f",
+    "it": "8b1ae8276c34",
+    "es": "c53b7b1530f1",
+    "pt": "c53b7b1530f1"
+  },
+  "report.ts:reportMessages.solver": {
+    "en": "3ca782d96048",
+    "de": "75785bdfd5b8",
+    "fr": "04c7aa475ea5",
+    "it": "e08c40edec97",
+    "es": "73f6d530a49a",
+    "pt": "73f6d530a49a"
+  },
+  "report.ts:reportMessages.supports": {
+    "en": "9129b25dc2d5",
+    "de": "f452bfb24538",
+    "fr": "5b72efe725c3",
+    "it": "ada6e99426b3",
+    "es": "83d72a99483d",
+    "pt": "0eb46bb6cc0a"
+  },
+  "report.ts:reportMessages.temperature": {
+    "en": "87c0205a66b9",
+    "de": "cce43af67222",
+    "fr": "411cda9237d0",
+    "it": "f59f87aed6ea",
+    "es": "6d5e1c2e57d3",
+    "pt": "581b13930fcb"
+  },
+  "report.ts:reportMessages.title": {
+    "en": "dc9467a85d31",
+    "de": "613c6ced7cd9",
+    "fr": "2d0cf89fd2f0",
+    "it": "25671a683a0b",
+    "es": "a1f5d66c60ae",
+    "pt": "ff1e0f098544"
+  },
+  "report.ts:reportMessages.totalApplied": {
+    "en": "590a7a0dbb1e",
+    "de": "22e6be4e5b45",
+    "fr": "d97381457f57",
+    "it": "9401268f2bec",
+    "es": "c3d59b3207b2",
+    "pt": "a03fd00769f2"
+  },
+  "report.ts:reportMessages.untitled": {
+    "en": "999d26edcf03",
+    "de": "358e2fff4de9",
+    "fr": "140851aa7364",
+    "it": "a0bb54bb1852",
+    "es": "946e9b43f867",
+    "pt": "fed1a7690acb"
+  },
+  "report.ts:reportMessages.value": {
+    "en": "8af5f4228537",
+    "de": "e970de1ce80f",
+    "fr": "ed90e1715b76",
+    "it": "280e24c4d05c",
+    "es": "7b80b6edde87",
+    "pt": "7b80b6edde87"
+  },
+  "report.ts:reportMessages.warnings": {
+    "en": "bb990dfda508",
+    "de": "19566d2ef189",
+    "fr": "1679d36d6c23",
+    "it": "f672b7ac6870",
+    "es": "9d1419b73002",
+    "pt": "21179d3ab2d6"
+  },
   "results.ts:resultFieldMessages.Displacement (magnitude)": {
     "en": "86e114d6ff61",
     "de": "ec485bed6395",

@@ -38,6 +38,7 @@ import {
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
 import { tr, useT } from "../i18n/useLocale";
+import type { SolveRun } from "../store/resultsSlice";
 import { solveMessages } from "../i18n/messages/solve";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
@@ -214,6 +215,26 @@ export function useSolver() {
   ]);
 
   function solve() {
+    // What the Solve panel shows now goes with the result into the report. A
+    // model no route takes is refused by the worker, so it has no run to keep.
+    const run: SolveRun | undefined =
+      route === null
+        ? undefined
+        : {
+            path: route.path,
+            preconditioner: solvePreconditioner(
+              solverMethod,
+              route,
+              amgReason,
+              elements,
+            ),
+            elementOrder,
+            warnings: [
+              ...(solverNote === null ? [] : [solverNote]),
+              ...thinWalls.map(thinWallMessage),
+              ...incompressible.map(incompressibleMessage),
+            ],
+          };
     setRunning(true);
     clearLogs();
     const workflow = workflowParams();
@@ -244,7 +265,7 @@ export function useSolver() {
       reactions: ReactionSummary | null;
     }>("solve", payload)
       .then(({ displacements, vonMises, stress, reactions }) => {
-        setResult({ displacements, vonMises, stress, reactions });
+        setResult({ displacements, vonMises, stress, reactions, run });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",
