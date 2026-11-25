@@ -21,8 +21,8 @@ export interface EngineFailure {
   stage: EngineFailureStage;
   /** What failed, in the loader's or the browser's own words. */
   detail: string;
-  /** The likely cause and what the visitor can do about it. */
-  hint: string;
+  /** Whether the browser was online when it failed, for the hint. */
+  online: boolean;
 }
 
 export interface EngineStatus {
@@ -44,12 +44,12 @@ export const useEngineStatus = create<EngineStatus>(() => ({
   wasReady: false,
 }));
 
-/** The likely cause of a failed engine start, in a few words. */
-export function failureHint(
-  stage: EngineFailureStage,
-  detail: string,
-  online: boolean,
-): string {
+/**
+ * The likely cause of a failed engine start, in a few words. Translated where
+ * it is shown, not when the failure is recorded: the engine can fail before
+ * the app's language has arrived (KOF-471).
+ */
+export function failureHint({ stage, detail, online }: EngineFailure): string {
   const text = tr(solveMessages);
   if (stage === "download") {
     if (!online) return text.hintOffline;

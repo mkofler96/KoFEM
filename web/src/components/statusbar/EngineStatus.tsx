@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEngineStatus } from "../../store/engineStore";
+import { failureHint, useEngineStatus } from "../../store/engineStore";
 import { retryEngine } from "../../workers/sharedWorker";
 import { useT } from "../../i18n/useLocale";
 import { statusMessages } from "../../i18n/messages/shell";
@@ -28,7 +28,7 @@ export function EngineStatus() {
         <span className={styles.failDot} />
         <span>
           {text.engineFailed}
-          <span className={styles.engineHint}>: {failure.hint}</span>
+          <span className={styles.engineHint}>: {failureHint(failure)}</span>
         </span>
         <button className={styles.engineRetry} onClick={retryEngine}>
           {text.retry}

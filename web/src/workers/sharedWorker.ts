@@ -9,11 +9,7 @@ import { durationBucket, trackOnce } from "../lib/analytics";
 import { isFailureStage, WorkerTaskError } from "../lib/workerError";
 import { askCgContinuation, dismissCgContinuation } from "./cgContinuation";
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
-import {
-  failureHint,
-  useEngineStatus,
-  type EngineFailureStage,
-} from "../store/engineStore";
+import { useEngineStatus, type EngineFailureStage } from "../store/engineStore";
 import { useLocaleStore } from "../i18n/useLocale";
 
 let _worker: Worker | null = null;
@@ -56,7 +52,7 @@ function failEngine(stage: EngineFailureStage, detail: string) {
     failure: {
       stage,
       detail,
-      hint: failureHint(stage, detail, navigator.onLine),
+      online: navigator.onLine,
     },
   });
 }

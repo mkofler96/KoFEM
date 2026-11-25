@@ -207,3 +207,72 @@ test("the solver worker refuses in the language picked in Settings", async ({
   expect(refusal).toContain("Körper 1 kann sich noch");
   expect(refusal).toContain("Fügen Sie eine Lagerung hinzu");
 });
+
+// A chunk the test releases: requests matching it wait until `open()`.
+function gate() {
+  let open = () => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  return { open, opened };
+}
+
+test("the last language picked in Settings wins over a slower earlier pick", async ({
+  page,
+}) => {
+  const german = gate();
+  await page.route(/\/assets\/de-[\w-]+\.js$/, async (route) => {
+    await german.opened;
+    await route.continue();
+  });
+  await gotoApp(page);
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByLabel("Language").selectOption("de");
+  await page.getByLabel("Language").selectOption("fr");
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+
+  const germanLoaded = page.waitForResponse(/\/assets\/de-[\w-]+\.js$/);
+  german.open();
+  const chunk = (await germanLoaded).url();
+  // Importing the chunk again resolves once the app's own import has run it
+  // and the switch it started has settled.
+  await page.evaluate((url) => import(url), chunk);
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await expect(page.getByLabel("Langue")).toHaveValue("fr");
+});
+
+test("an engine that fails before the language arrives is reported once it has", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ locale: "de-DE" });
+  // Marks the page once the worker reports the failed engine start.
+  await context.addInitScript(() => {
+    const Native = window.Worker;
+    window.Worker = class extends Native {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        this.addEventListener("message", (e: MessageEvent) => {
+          const data = e.data as { engineStatus?: { phase: string } };
+          if (data.engineStatus?.phase === "failed")
+            (window as unknown as { __engineFailed: boolean }).__engineFailed =
+              true;
+        });
+      }
+    };
+  });
+  await context.route(/kofem_wasm_emcc[^/]*\.wasm$/, (route) =>
+    route.abort("failed"),
+  );
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await context.route(/\/assets\/de-[\w-]+\.js$/, async (route) => {
+    await page.waitForFunction(
+      () => (window as unknown as { __engineFailed?: boolean }).__engineFailed,
+    );
+    await route.continue();
+  });
+  await page.goto("/app/");
+  const error = page.getByTestId("engine-error");
+  await expect(error).toContainText("Download blockiert");
+  expect(errors).toEqual([]);
+  await context.close();
+});

@@ -36,11 +36,17 @@ interface LocaleState {
   setLocale: (locale: Locale) => Promise<void>;
 }
 
+// The latest language asked for: a slower fetch of an earlier pick must not
+// switch the app after it.
+let requested: Locale | null = null;
+
 // The app's entry loads this language before it renders (main.tsx).
 export const useLocaleStore = create<LocaleState>((set) => ({
   locale: pickLocale(storedLocale(), browserLanguages()),
   setLocale: async (locale) => {
+    requested = locale;
     await loadLocale(locale);
+    if (requested !== locale) return;
     try {
       localStorage.setItem(LOCALE_KEY, locale);
     } catch {
