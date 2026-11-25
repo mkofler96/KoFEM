@@ -79,11 +79,31 @@ pub fn shell_wall_tets(
 /// no corner.
 const PARALLEL: f64 = 0.9;
 
-/// Facet edges where two walls meet at an angle (an L-corner or a
-/// T-junction), each with how far the wall material reaches from it: the
-/// outer corner of an L lies t/2 from both walls' mid-planes, so √2·t/2 from
-/// the line where the welded mid-surfaces end (KOF-452).
-fn corner_edges(shells: &ShellExtraction) -> Vec<([Vec3; 2], f64)> {
+/// The block where two walls meeting at an angle cross (an L-corner or a
+/// T-junction): along their shared facet edge, within half of each wall's
+/// thickness of its mid-plane. The outer corner of an L lies there, up to
+/// √2·t/2 from the line where the welded mid-surfaces end, so beyond the
+/// reach of either wall alone (KOF-452).
+struct CornerBlock {
+    ends: [Vec3; 2],
+    /// Each wall's unit normal and half thickness.
+    walls: [(Vec3, f64); 2],
+}
+
+impl CornerBlock {
+    fn contains(&self, point: Vec3) -> bool {
+        let along = sub(self.ends[1], self.ends[0]);
+        let offset = sub(point, self.ends[0]);
+        let fraction = dot(offset, along) / dot(along, along);
+        (0.0..=1.0).contains(&fraction)
+            && self
+                .walls
+                .iter()
+                .all(|&(normal, half)| dot(offset, normal).abs() <= half)
+    }
+}
+
+fn corner_blocks(shells: &ShellExtraction) -> Vec<CornerBlock> {
     let mut facets_of_edge: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
     for (facet, tri) in shells.triangles.iter().enumerate() {
         for corner in 0..3 {
@@ -99,39 +119,27 @@ fn corner_edges(shells: &ShellExtraction) -> Vec<([Vec3; 2], f64)> {
         let raw = cross(sub(second, first), sub(third, first));
         scale(raw, 1.0 / norm(raw).max(f64::MIN_POSITIVE))
     };
-    let mut edges = Vec::new();
+    let mut blocks = Vec::new();
     for (&(first, second), facets) in &facets_of_edge {
-        let mut thickest: Option<f64> = None;
+        if first == second {
+            continue;
+        }
         for (position, &one) in facets.iter().enumerate() {
             for &other in &facets[position + 1..] {
-                let angled = shells.triangle_source[one] != shells.triangle_source[other]
-                    && dot(normal(one), normal(other)).abs() <= PARALLEL;
-                if angled {
-                    let thickness = shells.thicknesses[one].max(shells.thicknesses[other]);
-                    thickest = Some(thickest.map_or(thickness, |value| value.max(thickness)));
+                let walls =
+                    [one, other].map(|facet| (normal(facet), 0.5 * shells.thicknesses[facet]));
+                if shells.triangle_source[one] != shells.triangle_source[other]
+                    && dot(walls[0].0, walls[1].0).abs() <= PARALLEL
+                {
+                    blocks.push(CornerBlock {
+                        ends: [shells.vertices[first], shells.vertices[second]],
+                        walls,
+                    });
                 }
             }
         }
-        if let Some(thickness) = thickest {
-            edges.push((
-                [shells.vertices[first], shells.vertices[second]],
-                std::f64::consts::SQRT_2 * 0.5 * thickness,
-            ));
-        }
     }
-    edges
-}
-
-/// Distance from `point` to the segment `ends`.
-fn segment_distance(point: Vec3, ends: [Vec3; 2]) -> f64 {
-    let along = sub(ends[1], ends[0]);
-    let length2 = dot(along, along);
-    let fraction = if length2 > 0.0 {
-        (dot(sub(point, ends[0]), along) / length2).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    norm(sub(point, add(ends[0], scale(along, fraction))))
+    blocks
 }
 
 /// Every tet of the shelled body — what the app replaces with shell facets.
@@ -153,7 +161,7 @@ pub fn shell_body_tets(
         .filter(|&element| mesh.body[element] == shell_body)
         .collect();
     let covered = shell_wall_tets(mesh, shells, 1.0)?;
-    let corners = corner_edges(shells);
+    let corners = corner_blocks(shells);
     let mut lost_volume = 0.0;
     let mut body_volume = 0.0;
     let mut lost = 0;
@@ -169,10 +177,7 @@ pub fn shell_body_tets(
                 .fold([0.0; 3], |sum, &vertex| add(sum, mesh.vertices[vertex])),
             0.25,
         );
-        if corners
-            .iter()
-            .any(|&(ends, reach)| segment_distance(centroid, ends) <= reach)
-        {
+        if corners.iter().any(|block| block.contains(centroid)) {
             continue;
         }
         lost += 1;

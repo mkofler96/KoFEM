@@ -78,14 +78,14 @@ const CASES = [
     refuses: 'Body 1 is marked "Shell", but 1101 of its 15626 elements (35.0 %',
   },
   // Still refused, but its 6 mm tube boss now collapses as a curved wall
-  // (KOF-448), and the outer corners of its L-bends count as wall material
-  // (KOF-452), so less of the body lies outside every wall (17.8 %, then
-  // 11.9 % before).
+  // (KOF-448), so less of the body lies outside every wall (17.8 % before).
+  // Two tets in the outer corner blocks of its L-bends count as wall
+  // material since KOF-452 (6536 before).
   {
     step: "Wall Bracket.stp",
     size: 6,
     shellBody: 1,
-    refuses: 'Body 1 is marked "Shell", but 6345 of its 38206 elements (11.5 %',
+    refuses: 'Body 1 is marked "Shell", but 6534 of its 38206 elements (11.9 %',
   },
   // The web and both flanges, welded along the two web/flange T-junctions
   // (KOF-205). Before, the 15 mm web just missed maxWall = 15 and the split

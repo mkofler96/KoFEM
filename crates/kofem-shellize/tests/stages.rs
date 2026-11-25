@@ -992,3 +992,57 @@ fn c_section_corner_tets_are_covered() {
     let tets = shell_body_tets(&mesh, &shells).expect("fully covered");
     assert_eq!(tets.len(), mesh.tets().len());
 }
+
+/// Two unit-thick walls meeting at an L along the y axis — mid-planes z = 0
+/// (running to +x) and x = 0 (running to +z) — as shell facets, with one small
+/// tet of the shelled body centred at `centre`.
+fn corner_with_tet(centre: [f64; 3]) -> (ShellizeMesh, ShellExtraction) {
+    let size = 0.05;
+    let vertices: Vec<f64> = [
+        [0.0, 0.0, 0.0],
+        [size, 0.0, 0.0],
+        [0.0, size, 0.0],
+        [0.0, 0.0, size],
+    ]
+    .iter()
+    .flat_map(|offset| (0..3).map(move |axis| centre[axis] + offset[axis] - size / 4.0))
+    .collect();
+    let mesh = ShellizeMesh::new(&vertices, &[0, 1, 2, 3], &[1], &[], &[]).expect("one tet");
+    // Facets: wall 1 in z = 0 over x ∈ [0, 2], wall 2 in x = 0 over z ∈ [0, 2],
+    // sharing the edge (0,0,0)–(0,1,0).
+    let shells = ShellExtraction::from_parts(
+        Some(1),
+        Vec::new(),
+        &[
+            0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 0.0, 2.0, 1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 1.0,
+            2.0,
+        ],
+        &[0, 2, 1, 1, 2, 3, 0, 1, 4, 1, 5, 4],
+        &[1.0; 4],
+        &[1, 1, 1, 1, 2, 2],
+        &[1, 1, 2, 2],
+    )
+    .expect("facets");
+    (mesh, shells)
+}
+
+/// The outer corner block of an L — within half a thickness of both walls'
+/// mid-planes — is wall material, though up to √2·t/2 from the mid-surfaces.
+#[test]
+fn outer_corner_block_is_covered() {
+    let (mesh, shells) = corner_with_tet([-0.4, 0.5, -0.4]);
+    assert_eq!(shell_wall_tets(&mesh, &shells, 1.0).expect("grid").len(), 0);
+    shell_body_tets(&mesh, &shells).expect("the corner block is covered");
+}
+
+/// Material beside the corner but outside the corner block (a tab sticking
+/// out past one wall's mid-plane) is no wall's: the body is refused.
+#[test]
+fn material_beside_the_corner_block_is_refused() {
+    let (mesh, shells) = corner_with_tet([-0.6, 0.5, -0.1]);
+    let error = shell_body_tets(&mesh, &shells).expect_err("outside the corner block");
+    assert!(matches!(
+        error,
+        ShellizeError::UncoveredShellBody { lost: 1, .. }
+    ));
+}
