@@ -9,6 +9,7 @@ import type {
   SolverResult,
 } from "../../store/modelStore";
 import type { TreeTarget } from "../../store/viewSlice";
+import { plotLabel } from "../../store/studySlice";
 import {
   computeResultRange,
   resultFieldSymbol,
@@ -45,22 +46,6 @@ function fieldSlug(field: ResultType): string {
     .replace(/^-|-$/g, "");
 }
 
-// A plot by name, as the model tree names it (studySlice.plotLabel), in the
-// current language.
-function usePlotTitle(): (plot: ResultPlot) => string {
-  const text = useT(resultsMessages);
-  const fields = useT(resultFieldMessages);
-  return (plot) => {
-    if (plot.source === "density") return text.density;
-    if (plot.source === "refinement") return text.meshRefinement;
-    if (plot.field === null)
-      throw new Error(
-        `Result plot ${plot.id} of the static solve has no field`,
-      );
-    return fields[plot.field];
-  };
-}
-
 // Results → + Add: pick the result to plot — a field of the static solve, or
 // the optimization's density. A result its study has not produced yet cannot
 // be picked.
@@ -80,7 +65,6 @@ function AddResultPlot() {
   );
   const text = useT(resultsMessages);
   const fields = useT(resultFieldMessages);
-  const plotTitle = usePlotTitle();
   return (
     <div className={styles.addChooser}>
       {RESULT_TYPES.map((field) => (
@@ -110,8 +94,8 @@ function AddResultPlot() {
           {!shownPlot
             ? text.showStaticFieldFirst
             : shownPlot.section !== null
-              ? text.alreadyHasCut(plotTitle(shownPlot))
-              : text.cutThrough(plotTitle(shownPlot))}
+              ? text.alreadyHasCut(plotLabel(shownPlot))
+              : text.cutThrough(plotLabel(shownPlot))}
         </span>
       </button>
       <button

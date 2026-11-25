@@ -21,6 +21,7 @@ import { useRefinementStudy } from "../../hooks/useRefinementStudy";
 import { LogSection } from "./LogSection";
 import { tr, useIntlTag, useT } from "../../i18n/useLocale";
 import { studiesMessages } from "../../i18n/messages/studies";
+import { resultFieldMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
 
@@ -272,6 +273,7 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
   const resultType = useModelStore((s) => s.resultType);
   const setResultType = useModelStore((s) => s.setResultType);
   const text = useT(studiesMessages);
+  const fields = useT(resultFieldMessages);
   // The levels are of the model the study solved; an edit since makes them
   // another model's.
   const stale = useModelStore(
@@ -348,7 +350,7 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
         >
           {RESULT_TYPES.map((t) => (
             <option key={t} value={t}>
-              {t}
+              {fields[t]}
             </option>
           ))}
         </select>
