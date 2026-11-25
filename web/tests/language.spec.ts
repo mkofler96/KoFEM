@@ -67,6 +67,12 @@ async function openExample(page: Page, id: string): Promise<string> {
       ),
     )
     .toBeGreaterThan(0);
+  // The status bar names the engine's loading phase; both pages are compared
+  // once it has loaded.
+  await expect(page.getByTestId("engine-status")).toHaveAttribute(
+    "data-phase",
+    "ready",
+  );
   return page.locator("#root").innerText();
 }
 

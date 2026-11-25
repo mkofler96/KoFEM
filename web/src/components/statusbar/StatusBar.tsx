@@ -305,7 +305,7 @@ export function StatusBar() {
                 strokeDasharray="2.5 1.5"
               />
             </svg>
-            {text.undeformed}
+            <span className={styles.toggleLabel}>{text.undeformed}</span>
           </button>
         )}
         {showLoadDisplayToggle && (
@@ -339,7 +339,7 @@ export function StatusBar() {
                 strokeLinejoin="round"
               />
             </svg>
-            {text.nodalLoads}
+            <span className={styles.toggleLabel}>{text.nodalLoads}</span>
           </button>
         )}
       </div>

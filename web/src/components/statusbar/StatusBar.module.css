@@ -249,8 +249,18 @@
 }
 
 /* Keep Retry on screen on a phone; the cause stays in the tooltip. */
+/* A toggle's name never wraps; on a phone its icon stands alone (the name is
+   its aria-label and tooltip), so the bar keeps room for the mesh and engine
+   status in every language. */
+.toggleLabel {
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .engineHint {
+    display: none;
+  }
+  .toggleLabel {
     display: none;
   }
 }
