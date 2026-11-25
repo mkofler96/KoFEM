@@ -2407,6 +2407,14 @@
     "es": "a6e890de46cd",
     "pt": "f1a82e028e18"
   },
+  "mesh.ts:meshMessages.clickFacesToPick": {
+    "en": "34c02d54ed28",
+    "de": "8ac557acd63e",
+    "fr": "ebbdc4bb63bb",
+    "it": "10b32d336df0",
+    "es": "f182888d1895",
+    "pt": "84aeb756df21"
+  },
   "mesh.ts:meshMessages.coneWarning": {
     "en": "376d765b0f86",
     "de": "da4a8477aa63",
@@ -2494,6 +2502,54 @@
     "it": "6b0d031730ca",
     "es": "6eb52713d2c6",
     "pt": "6eb52713d2c6"
+  },
+  "mesh.ts:meshMessages.faceList": {
+    "en": "94b047c6e092",
+    "de": "9ee63e06fb50",
+    "fr": "94b047c6e092",
+    "it": "e16ed39fef84",
+    "es": "046f7a3998b5",
+    "pt": "94b047c6e092"
+  },
+  "mesh.ts:meshMessages.faceSizeInvalid": {
+    "en": "e2a28c378335",
+    "de": "88641a7b607a",
+    "fr": "e4d01347f25c",
+    "it": "f0684d85f915",
+    "es": "df5f5019c291",
+    "pt": "e4cafe97e25c"
+  },
+  "mesh.ts:meshMessages.faceSizeTip": {
+    "en": "9e27902fab3a",
+    "de": "6ace500cd12c",
+    "fr": "97ea5c364961",
+    "it": "ded2b0db2a91",
+    "es": "a171e1f5b4bd",
+    "pt": "3138cc160d52"
+  },
+  "mesh.ts:meshMessages.faceSizes": {
+    "en": "52898a777089",
+    "de": "f3a8868c81e3",
+    "fr": "88d60c369e3d",
+    "it": "76c92c42ac60",
+    "es": "f01234513dfb",
+    "pt": "c6e91359c556"
+  },
+  "mesh.ts:meshMessages.faceSizesHint": {
+    "en": "aca35a1edbf4",
+    "de": "2860aa6d95f5",
+    "fr": "8c3457a431ab",
+    "it": "28755e7de8d9",
+    "es": "8abead110142",
+    "pt": "487dc751f64f"
+  },
+  "mesh.ts:meshMessages.facesPicked": {
+    "en": "172ee3d0eb42",
+    "de": "af01a250716a",
+    "fr": "4e277140fbb5",
+    "it": "4a4769514d27",
+    "es": "c920e1d86ac0",
+    "pt": "c106790d1372"
   },
   "mesh.ts:meshMessages.generateMesh": {
     "en": "c8971dfbe698",
@@ -2631,6 +2687,14 @@
     "es": "98ecd94a9b8a",
     "pt": "624538dd4fd1"
   },
+  "mesh.ts:meshMessages.minExceedsFaceSize": {
+    "en": "d3d8a508b474",
+    "de": "95ab5892b559",
+    "fr": "5ecda55455c1",
+    "it": "799bdf5db4e5",
+    "es": "825de844ee39",
+    "pt": "778c6ad85006"
+  },
   "mesh.ts:meshMessages.minExceedsMax": {
     "en": "6e8fdcf348f7",
     "de": "6a4ae6df7ab9",
@@ -2678,6 +2742,14 @@
     "it": "90a468b31d43",
     "es": "ef02d19694cb",
     "pt": "878ddc4b9e56"
+  },
+  "mesh.ts:meshMessages.noFacePicked": {
+    "en": "63a7a32d7399",
+    "de": "5e7a3e45930d",
+    "fr": "0843d41df107",
+    "it": "e7865ba8cdfa",
+    "es": "220d874b4ea3",
+    "pt": "5f36140e8720"
   },
   "mesh.ts:meshMessages.noGeometryToMesh": {
     "en": "22d5120a0bfe",
@@ -2815,6 +2887,14 @@
     "es": "59e7f6b868db",
     "pt": "316e9a798b12"
   },
+  "mesh.ts:meshMessages.pickFaces": {
+    "en": "40b8811a2cb6",
+    "de": "40e9f4f58906",
+    "fr": "dafee56c38aa",
+    "it": "c7547a6d32c9",
+    "es": "71cbc77dfe1e",
+    "pt": "001449de1006"
+  },
   "mesh.ts:meshMessages.quadratic": {
     "en": "49e1ed07afb3",
     "de": "7bb0ee25f5ee",
@@ -2838,6 +2918,14 @@
     "it": "cdaa84074ac9",
     "es": "5cae9def1630",
     "pt": "fb25519a65c6"
+  },
+  "mesh.ts:meshMessages.removeFaceSize": {
+    "en": "782ac899c0ff",
+    "de": "5c6787733324",
+    "fr": "a4970fb0c6b7",
+    "it": "1e09b9833cd8",
+    "es": "17ff2330700c",
+    "pt": "3df34ec9c68c"
   },
   "mesh.ts:meshMessages.removeNarrowFaces": {
     "en": "03c15ad6a1c8",
@@ -2903,6 +2991,14 @@
     "es": "84687ddbbf56",
     "pt": "56face13aa0a"
   },
+  "mesh.ts:meshMessages.setFaceSize": {
+    "en": "d531e925347b",
+    "de": "acb18fff5aac",
+    "fr": "3b6b184b0439",
+    "it": "3d6bb4026658",
+    "es": "9033ecc9380b",
+    "pt": "6de870996933"
+  },
   "mesh.ts:meshMessages.severalBodies": {
     "en": "74bc0da02b8f",
     "de": "27572dca76e6",
@@ -2942,6 +3038,14 @@
     "it": "f76215505b36",
     "es": "32e6eb71a2bf",
     "pt": "2961883588af"
+  },
+  "mesh.ts:meshMessages.stopPickingFaces": {
+    "en": "cdebac3599b4",
+    "de": "e36af8e2be16",
+    "fr": "af1cda4bb0f5",
+    "it": "75205286894b",
+    "es": "8607186be9c4",
+    "pt": "8a59085f438e"
   },
   "mesh.ts:meshMessages.suppressedStillMeshed": {
     "en": "5fa1f1e8a11f",

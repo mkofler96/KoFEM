@@ -46,8 +46,8 @@
 //                                       it into the Mesh panel's min field)
 // @property {1 | 2} order               linear or quadratic elements
 // @property {{ faces: FaceRef[], size: number }[]} [localSizes]
-//                                       per-face sizes, only if the app's
-//                                       mesher UI offers them
+//                                       element sizes on faces (mm), as the
+//                                       Mesh step's face sizes set them
 //
 // @typedef {{ kind: "solid" } | { kind: "shell", thickness: number }} Discretization
 //

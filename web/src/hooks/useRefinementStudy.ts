@@ -59,6 +59,7 @@ type StudySource = Pick<
   | "maxElementSize"
   | "minElementSize"
   | "properties"
+  | "faceSizes"
 >;
 
 // The sizes of the first level, and whether the current mesh is that level.
@@ -68,7 +69,12 @@ type StudySource = Pick<
 function studyBase(s: StudySource): { sizes: MeshSizes; remesh: boolean } {
   if (s.meshSizes !== null) return { sizes: s.meshSizes, remesh: false };
   return {
-    sizes: parseMeshSizes(s.maxElementSize, s.minElementSize, s.properties),
+    sizes: parseMeshSizes(
+      s.maxElementSize,
+      s.minElementSize,
+      s.properties,
+      s.faceSizes,
+    ),
     remesh: true,
   };
 }
@@ -203,6 +209,7 @@ export function useRefinementStudy() {
   const maxElementSize = useModelStore((s) => s.maxElementSize);
   const minElementSize = useModelStore((s) => s.minElementSize);
   const properties = useModelStore((s) => s.properties);
+  const faceSizes = useModelStore((s) => s.faceSizes);
   const refinementInput = useModelStore((s) => s.refinementInput);
 
   const source: StudySource = useMemo(
@@ -221,6 +228,7 @@ export function useRefinementStudy() {
       maxElementSize,
       minElementSize,
       properties,
+      faceSizes,
     }),
     [
       stepBytes,
@@ -237,6 +245,7 @@ export function useRefinementStudy() {
       maxElementSize,
       minElementSize,
       properties,
+      faceSizes,
     ],
   );
   const locale = useLocale();

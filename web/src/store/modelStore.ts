@@ -185,9 +185,16 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
       s.stepSurface = a.stepSurface;
-      // The file does not record the sizes the mesh was made with.
-      s.meshSizes = null;
-      suggestSizes(s, a.stepSurface);
+      // A file that records the sizes its mesh was made with opens with them in
+      // the settings; one that does not starts at the geometry's suggestion.
+      s.meshSizes = a.meshSizes;
+      if (a.meshSizes) {
+        s.maxElementSize = String(a.meshSizes.max);
+        s.minElementSize = String(a.meshSizes.min);
+      } else suggestSizes(s, a.stepSurface);
+      s.faceSizes = a.faceSizes;
+      s.faceSizePicking = false;
+      s.faceSizePickIds = [];
       s.interfaces = a.interfaces;
       s.highlightInterfaceId = null;
       // Saved analyses carry the tessellated surface but not the original STEP
@@ -277,6 +284,9 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.properties = [{ id: 1, materialId: 1 }];
       s.meshSuppressedIds = [];
       s.meshSizes = null;
+      s.faceSizes = [];
+      s.faceSizePicking = false;
+      s.faceSizePickIds = [];
       s.maxElementSize = String(DEFAULT_MAX_ELEMENT_SIZE);
       s.minElementSize = String(DEFAULT_MIN_ELEMENT_SIZE);
       s.bcGroups = [];

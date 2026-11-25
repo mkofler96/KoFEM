@@ -142,16 +142,16 @@ describe("mesh kind and mesh sizes", () => {
     expect(meshKind([{ type: "CTETRA" }, { type: "CTRIA3" }])).toBe("mixed");
   });
 
-  const meshed = { max: 5, min: 0.5, regions: { 2: 1 } };
+  const meshed = { max: 5, min: 0.5, regions: { 2: 1 }, faces: {} };
   const withSize = (size) =>
     props.map((p) => (p.id === 2 ? { ...p, maxElementSize: size } : p));
 
   test("mesh sizes: unchanged settings match the mesh", () => {
-    expect(meshSizesChanged(meshed, "5", "0.5", withSize("1"))).toBe(false);
+    expect(meshSizesChanged(meshed, "5", "0.5", withSize("1"), [])).toBe(false);
   });
 
   test("mesh sizes: a changed region size, or a region size cleared, is a change", () => {
-    expect(meshSizesChanged(meshed, "5", "0.5", withSize("2"))).toBe(true);
-    expect(meshSizesChanged(meshed, "5", "0.5", withSize(""))).toBe(true);
+    expect(meshSizesChanged(meshed, "5", "0.5", withSize("2"), [])).toBe(true);
+    expect(meshSizesChanged(meshed, "5", "0.5", withSize(""), [])).toBe(true);
   });
 });

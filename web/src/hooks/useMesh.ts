@@ -37,6 +37,7 @@ export function useMesh() {
   const setMeshOverlaps = useModelStore((s) => s.setMeshOverlaps);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
   const properties = useModelStore((s) => s.properties);
+  const faceSizes = useModelStore((s) => s.faceSizes);
   const elementOrder = useModelStore((s) => s.elementOrder);
   const setElementOrder = useModelStore((s) => s.setElementOrder);
 
@@ -104,7 +105,12 @@ export function useMesh() {
 
     let sizes: MeshSizes;
     try {
-      sizes = parseMeshSizes(maxElementSize, minElementSize, properties);
+      sizes = parseMeshSizes(
+        maxElementSize,
+        minElementSize,
+        properties,
+        faceSizes,
+      );
     } catch (err) {
       rejectInput(err instanceof Error ? err.message : String(err));
       return;

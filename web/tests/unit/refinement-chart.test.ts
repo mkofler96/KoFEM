@@ -21,7 +21,7 @@ const REFINEMENT_RATIO = settings.ratio;
 const CONVERGED_TOLERANCE = settings.tolerance;
 
 const box: ChartBox = { left: 50, right: 450, top: 20, bottom: 220 };
-const base = { max: 8, min: 0.8, regions: {} };
+const base = { max: 8, min: 0.8, regions: {}, faces: {} };
 
 function level(
   k: number,

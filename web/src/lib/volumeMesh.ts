@@ -13,6 +13,7 @@ import {
   meshKind,
   type Element,
   type GeometryFormat,
+  type FaceSize,
   type MeshSizes,
   type Node,
   type Property,
@@ -23,17 +24,19 @@ import {
   WorkerResetError,
 } from "../workers/sharedWorker";
 import { regionMaxSizes, solidName } from "./regions";
+import { parseFaceSizes } from "./faceSizes";
 import { tr } from "../i18n/useLocale";
 import { meshMessages } from "../i18n/messages/mesh";
 import type { ModelState } from "../store/modelStore";
 
-// The Mesh settings as typed (the global max and min, and each region's own
-// max), validated into sizes a mesh request takes. Throws with the message the
-// user sees for the first invalid one.
+// The Mesh settings as typed (the global max and min, each region's own max
+// and the face sizes), validated into sizes a mesh request takes. Throws with
+// the message the user sees for the first invalid one.
 export function parseMeshSizes(
   maxElementSize: string,
   minElementSize: string,
   properties: Property[],
+  faceSizes: FaceSize[],
 ): MeshSizes {
   const max = parseFloat(maxElementSize);
   const min = parseFloat(minElementSize);
@@ -54,7 +57,12 @@ export function parseMeshSizes(
           size,
         ),
       );
-  return { max, min, regions: Object.fromEntries(regions) };
+  return {
+    max,
+    min,
+    regions: Object.fromEntries(regions),
+    faces: parseFaceSizes(faceSizes, min),
+  };
 }
 
 export interface VolumeMeshInput {
@@ -62,7 +70,7 @@ export interface VolumeMeshInput {
   geometryFormat: GeometryFormat;
   properties: Property[];
   // Validated sizes: max > 0, 0 ≤ min ≤ every max, region sizes keyed by CAD
-  // solid id.
+  // solid id, face sizes by CAD face id.
   sizes: MeshSizes;
 }
 
@@ -125,6 +133,10 @@ export async function runVolumeMesh(
     maxElementSize: sizes.max,
     minElementSize: sizes.min,
     solidMaxSizes,
+    faceMaxSizes: Object.entries(sizes.faces).map(([face, size]) => ({
+      face: Number(face),
+      max_size: size,
+    })),
     // Bodies the user marked Shell, plus the property table: meshing
     // idealises them to a mid-surface shell mesh and returns the mixed
     // CTRIA3 + CTETRA model (#397). Only CAD bodies can be idealised — the
