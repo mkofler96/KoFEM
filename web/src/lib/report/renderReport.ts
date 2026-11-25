@@ -112,6 +112,9 @@ function bodiesSection(bodies: BodyRow[]): string {
   )}`;
 }
 
+const vectorText = (v: Vec3, unit: string) =>
+  `(${v.map(reportNumber).join(", ")}) ${unit}`;
+
 function boundarySection(doc: ReportDocument): string {
   const text = tr(reportMessages);
   const faces = (list: string[]) => list.join(", ");
@@ -145,9 +148,6 @@ function boundarySection(doc: ReportDocument): string {
       : `<p data-testid="report-applied-total" data-force="${doc.appliedTotal.join(",")}">${escape(text.totalApplied)}: ${escape(vectorText(doc.appliedTotal, "N"))}</p>`;
   return `<h2>${escape(text.supports)}</h2>${supports}<h2>${escape(text.loads)}</h2>${loads}${total}`;
 }
-
-const vectorText = (v: Vec3, unit: string) =>
-  `(${v.map(reportNumber).join(", ")}) ${unit}`;
 
 function meshSection(doc: ReportDocument): string {
   const text = tr(reportMessages);

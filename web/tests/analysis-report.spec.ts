@@ -108,11 +108,12 @@ test("the cantilever's report states the numbers Results shows @pipeline", async
   expect(p99).toBeGreaterThan(0);
   expect(p99).toBeLessThanOrEqual(maxVonMises);
 
-  const sum = (await report
+  const sumAttribute = await report
     .getByTestId("report-reaction-sum")
-    .getAttribute("data-force"))!
-    .split(",")
-    .map(Number);
+    .getAttribute("data-force");
+  if (sumAttribute === null)
+    throw new Error("the report's reaction sum has no data-force");
+  const sum = sumAttribute.split(",").map(Number);
   sum.forEach((value, axis) =>
     expect(Math.abs(value - reactionSum[axis])).toBeLessThan(1e-6),
   );
