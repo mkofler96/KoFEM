@@ -92,14 +92,11 @@ test("Optimize panel: invalid volume fraction blocks the run", async ({
   await expect(runButton).toBeEnabled();
 });
 
-test("Optimize panel: a multi-material model is blocked (v1 optimizes one material)", async ({
+test("Optimize panel: a model of two materials runs, each body keeping its own (KOF-415)", async ({
   page,
 }) => {
   await bootstrapCantilever(page);
 
-  // TO v1 optimizes a single design material — the engine reads only the first
-  // one — so a model whose bodies use different materials must be refused rather
-  // than optimized as if every body were the first material.
   await page.evaluate(() => {
     const store = (
       window as unknown as {
@@ -136,12 +133,16 @@ test("Optimize panel: a multi-material model is blocked (v1 optimizes one materi
   });
 
   await goToOptimizePanel(page);
-  await expect(
-    page.getByText(/uses one design material, but the model spans 2/),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /Run optimization/ }),
-  ).toBeDisabled();
+  await expect(page.getByText(/Materials assigned/)).toBeVisible();
+  await expect(page.getByText(/one design material/)).toHaveCount(0);
+  const runButton = page.getByRole("button", { name: /Run optimization/ });
+  await expect(runButton).toBeEnabled();
+
+  await page.getByLabel("Filter r_min").fill("0.15");
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await page.getByLabel("Max iters").fill("2");
+  await runButton.click();
+  await expect(page.getByText("Density threshold")).toBeVisible();
 });
 
 test("Optimize panel: a non-zero prescribed displacement is blocked", async ({

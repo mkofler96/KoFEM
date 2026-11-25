@@ -426,6 +426,52 @@ describe("solid topology optimization reports whether it converged", () => {
   });
 });
 
+// The MBB half-beam with its right half (x > 3) on a second body of Young's
+// modulus `young`, the left half keeping the unit material.
+function twoBodyMbb(young) {
+  const model = mbb();
+  const byId = new Map(model.nodes.map((node) => [node.id, node]));
+  const rightHalf = (element) =>
+    element.nodeIds.reduce((sum, id) => sum + byId.get(id).x, 0) /
+      element.nodeIds.length >
+    3;
+  return {
+    ...model,
+    materials: [
+      ...model.materials,
+      { id: 2, name: "Second", young, poisson: 0.3, density: 1 },
+    ],
+    properties: [...model.properties, { id: 2, materialId: 2 }],
+    elements: model.elements.map((element) =>
+      rightHalf(element) ? { ...element, propertyId: 2 } : element,
+    ),
+  };
+}
+
+// Topology optimization takes per-body materials (KOF-415): every element is
+// assembled with its own body's material, on SIMP and on the level-set method.
+describe("solid topology optimization keeps each body's material", () => {
+  const settingsOf = {
+    simp: { ...MBB_SETTINGS, maxIterations: 1 },
+    level_set: { ...MBB_SETTINGS, method: "level_set", maxIterations: 1 },
+  };
+  for (const [method, settings] of Object.entries(settingsOf)) {
+    const firstCompliance = (model) =>
+      optimizeInRust(model, settings).history[0].compliance;
+
+    test(`${method}: two bodies of one material give the one-body run`, () => {
+      expect(firstCompliance(twoBodyMbb(1))).toBe(firstCompliance(mbb()));
+    });
+
+    test(`${method}: a stiffer second body lowers the compliance, but less than a stiffer whole beam`, () => {
+      const unit = firstCompliance(mbb());
+      const mixed = firstCompliance(twoBodyMbb(4));
+      expect(mixed).toBeLessThan(unit * 0.99);
+      expect(mixed).toBeGreaterThan((unit / 4) * 1.01);
+    });
+  }
+});
+
 describe("level-set topology optimization: Rust against the C++ engine", () => {
   // Both paths reach the same design; the bisection on the volume can flip a
   // boundary element a few iterations earlier or later, so the histories are
