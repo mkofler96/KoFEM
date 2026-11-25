@@ -438,6 +438,33 @@ fn a_warm_start_meets_the_tolerance_in_fewer_iterations() {
     assert_eq!(again, cold);
 }
 
+/// Without a load the solution is zero, wherever the run starts.
+#[test]
+fn a_warm_start_without_a_load_returns_zero() {
+    let built = box_mesh([4, 2, 2], [20.0, 10.0, 10.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let mut prepared = prepare_static(
+        &built.mesh,
+        assemble_stiffness(&built.mesh),
+        &fixed,
+        &vec![0.0; fixed.len()],
+        &forces,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    )
+    .expect("prepares");
+    let unloaded = vec![0.0; prepared.rhs.len()];
+    let guess = vec![1.0; prepared.rhs.len()];
+    let settings = CgSettings {
+        relative_tolerance: 1e-8,
+        max_iterations: 1000,
+        stopping: StoppingRule::ResidualNorm,
+    };
+    let (solution, outcome) =
+        solve_pcg_from(prepared.system.as_mut(), &unloaded, &guess, settings).expect("solves");
+    assert_eq!(outcome.iterations, 0);
+    assert!(solution.iter().all(|&value| value == 0.0));
+}
+
 #[test]
 fn a_warm_start_of_the_wrong_length_is_refused() {
     let built = box_mesh([4, 2, 2], [20.0, 10.0, 10.0], steel());

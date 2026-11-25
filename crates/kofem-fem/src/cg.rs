@@ -125,6 +125,11 @@ impl PcgRun {
                 reason: "the initial guess must have one value per unknown",
             });
         }
+        // Without a load the solution is exactly zero, and ‖b‖ cannot scale
+        // the guess's residual.
+        if dot(rhs, rhs) == 0.0 {
+            return Self::start(system, rhs, relative_tolerance, stopping);
+        }
         let mut product = vec![0.0; size];
         system.matrix().mul_vec(guess, &mut product);
         let residual = rhs
