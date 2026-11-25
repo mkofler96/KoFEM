@@ -47,7 +47,10 @@ function messageLanguages(code: string): Map<string, string[]> {
           ts.isStringLiteral(property.name)
             ? property.name.text
             : property.name.getText(source),
-          property.initializer.properties.map((p) => p.name!.getText(source)),
+          property.initializer.properties.map((p) => {
+            if (!p.name) throw new Error("a language without a name");
+            return p.name.getText(source);
+          }),
         );
       }
     }
@@ -82,12 +85,12 @@ describe("each catalog splits by language", () => {
 
 describe("a catalog the split cannot read fails the build", () => {
   test("a catalog that is not exported", () => {
-    const code = `const m = defineMessages({ a: { en: "A", de: "A" } });`;
+    const code = 'const m = defineMessages({ a: { en: "A", de: "A" } });';
     expect(() => englishOnly(code, "m.ts")).toThrow("export const name");
   });
 
   test("a message without the language", () => {
-    const code = `export const m = defineMessages({ a: { en: "A" } });`;
+    const code = 'export const m = defineMessages({ a: { en: "A" } });';
     expect(() => oneLocale(code, "m.ts", "de")).toThrow('a has no "de" text');
   });
 });

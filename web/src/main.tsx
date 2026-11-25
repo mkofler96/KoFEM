@@ -29,7 +29,9 @@ import {
 // The workspace renders once its language has arrived, so it never shows
 // English first. A language that cannot be fetched is reported as such; the
 // workspace does not open in English in its place (KOF-471).
-const root = ReactDOM.createRoot(document.getElementById("root")!);
+const container = document.getElementById("root");
+if (!container) throw new Error("app/index.html has no #root element");
+const root = ReactDOM.createRoot(container);
 const { locale } = useLocaleStore.getState();
 loadLocale(locale).then(
   () =>

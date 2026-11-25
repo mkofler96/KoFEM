@@ -154,7 +154,7 @@ export function oneLocale(code: string, file: string, locale: string): string {
   const catalogs = catalogCalls(source, file);
   const base = JSON.stringify(file);
   const imports = [
-    `import { addTranslations as __addTranslations } from "../messages";`,
+    'import { addTranslations as __addTranslations } from "../messages";',
     `import { ${catalogs.map((c) => `${c.name} as __${c.name}`).join(", ")} } from ${base};`,
   ];
   const edits = catalogs.map((catalog) => ({
