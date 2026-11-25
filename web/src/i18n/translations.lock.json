@@ -5751,6 +5751,38 @@
     "es": "8b2cad2cb4ab",
     "pt": "ae3e1bd1f1bf"
   },
+  "shell.ts:statusMessages.projectionOrthographic": {
+    "en": "ae932ec954f2",
+    "de": "e84b2c570000",
+    "fr": "7b0e3202943b",
+    "it": "8f960f30f2e8",
+    "es": "3daf495e8e67",
+    "pt": "3daf495e8e67"
+  },
+  "shell.ts:statusMessages.projectionOrthographicTip": {
+    "en": "fc2fcd32f217",
+    "de": "43ebe4d499a8",
+    "fr": "735ccc4e8491",
+    "it": "eefda5ff0885",
+    "es": "de34373d2261",
+    "pt": "02335c3a1369"
+  },
+  "shell.ts:statusMessages.projectionPerspective": {
+    "en": "39038ce71a85",
+    "de": "eb630ae476ec",
+    "fr": "39038ce71a85",
+    "it": "3b8ac2be1db6",
+    "es": "dec501af3c37",
+    "pt": "dec501af3c37"
+  },
+  "shell.ts:statusMessages.projectionPerspectiveTip": {
+    "en": "629db38f29ed",
+    "de": "c50f2f4f4ff9",
+    "fr": "3c358528a062",
+    "it": "36957a571436",
+    "es": "e55628cbe5f6",
+    "pt": "d62a52983dbf"
+  },
   "shell.ts:statusMessages.purposeBc": {
     "en": "0b6c72e5f447",
     "de": "c7408f6775bb",
@@ -5815,22 +5847,6 @@
     "es": "7dc02fdc1563",
     "pt": "468ab4040280"
   },
-  "shell.ts:statusMessages.reprVolume": {
-    "en": "49c76fc49d2e",
-    "de": "be908f7bef13",
-    "fr": "49c76fc49d2e",
-    "it": "49c76fc49d2e",
-    "es": "be908f7bef13",
-    "pt": "49c76fc49d2e"
-  },
-  "shell.ts:statusMessages.reprVolumeTip": {
-    "en": "72a1499f04c2",
-    "de": "a9f6d4a1ed56",
-    "fr": "38f42cf3e9aa",
-    "it": "66e1c2f386a7",
-    "es": "1ed178f713ae",
-    "pt": "52bb52023472"
-  },
   "shell.ts:statusMessages.reprWireframe": {
     "en": "d4a17e076398",
     "de": "d92a7e7839ba",
@@ -5894,6 +5910,14 @@
     "it": "9c67660dc44c",
     "es": "8e2266a4777d",
     "pt": "bbe6cc60046a"
+  },
+  "shell.ts:statusMessages.viewToolbar": {
+    "en": "7e917def9505",
+    "de": "5b59d9a08de2",
+    "fr": "9ad21c183cb9",
+    "it": "d0d7281a3434",
+    "es": "d0d7281a3434",
+    "pt": "d6c502769bc2"
   },
   "solve.ts:solveMessages.amgCouplings": {
     "en": "6ece3f652001",

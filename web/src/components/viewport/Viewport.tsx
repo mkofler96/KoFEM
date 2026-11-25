@@ -6,6 +6,7 @@ import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { OrbitPivot } from "./OrbitPivot";
 import { ViewportTestHooks } from "./ViewportTestHooks";
+import { ProjectionSwitch } from "./ProjectionSwitch";
 import { pickingEvents } from "./pickingEvents";
 import { ColorBar } from "./ColorBar";
 import { DensityColorBar } from "./DensityColorBar";
@@ -15,6 +16,7 @@ import { TopOptChart } from "./TopOptChart";
 import { SampleGuide } from "./SampleGuide";
 import { useModelStore } from "../../store/modelStore";
 import { useFemModule } from "../../hooks/useFemModule";
+import { VIEW_FOV } from "../../lib/projection";
 import { useT } from "../../i18n/useLocale";
 import { viewportMessages } from "../../i18n/messages/viewport";
 
@@ -99,7 +101,7 @@ export function Viewport() {
       <Canvas
         frameloop="demand"
         events={pickingEvents}
-        camera={{ position: [5, 5, 5], fov: 45 }}
+        camera={{ position: [5, 5, 5], fov: VIEW_FOV }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         // Materials clip at the result section plane (KOF-390).
         onCreated={({ gl }) => {
@@ -117,6 +119,7 @@ export function Viewport() {
         {/* Rotation is OrbitPivot's: about the point under the cursor. */}
         <OrbitControls makeDefault enableRotate={false} zoomToCursor />
         <OrbitPivot />
+        <ProjectionSwitch />
         <ViewportTestHooks />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
           <GizmoViewport labelColor="#374151" axisHeadScale={1} />

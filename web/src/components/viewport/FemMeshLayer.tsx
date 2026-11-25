@@ -75,10 +75,10 @@ export function FemMeshLayer({
   } = topology;
 
   // Edge overlays per representation: Geometry → none, Surface → boundary edges,
-  // Volume → every element edge, Wireframe → every element edge with no fill.
+  // Wireframe → every element edge with no fill.
   const showSolid = repr !== "wireframe";
   const showSurfaceEdges = repr === "surface";
-  const showAllEdges = repr === "volume" || repr === "wireframe";
+  const showAllEdges = repr === "wireframe";
 
   // Every element edge once (lib/meshOutline), built only while a
   // representation shows them: on a large mesh it is the biggest buffer here.
@@ -249,7 +249,7 @@ export function FemMeshLayer({
         </lineSegments>
       )}
 
-      {/* All element edges — Volume and Wireframe representations */}
+      {/* All element edges — Wireframe representation */}
       {!showResult && showAllEdges && undeformedEdgePositions && (
         <lineSegments
           name="fem-element-edges"
@@ -286,7 +286,7 @@ export function FemMeshLayer({
         </lineSegments>
       )}
 
-      {/* Deformed element edges — Volume and Wireframe representations */}
+      {/* Deformed element edges — Wireframe representation */}
       {showResult && showAllEdges && deformedEdgePositions && (
         <lineSegments
           name="fem-element-edges"

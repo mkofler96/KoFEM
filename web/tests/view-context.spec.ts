@@ -49,14 +49,14 @@ test("switching between geometry and mesh entries switches the viewport @pipelin
   // Forward again: the mesh view chosen last comes back.
   await openTree(page, "mesh");
   await expect.poll(() => viewRepr(page)).toBe("surface");
-  await statusRepr(page, "Volume");
+  await statusRepr(page, "Wireframe");
   await page.getByTestId("tree-add-materials").click();
   await expect.poll(() => viewRepr(page)).toBe("geometry");
   await page.getByTestId("tree-add-boundary").click();
-  await expect.poll(() => viewRepr(page)).toBe("volume");
+  await expect.poll(() => viewRepr(page)).toBe("wireframe");
 
   // Within one context the user's own pick stays.
-  await statusRepr(page, "Wireframe");
+  await statusRepr(page, "Surface");
   await openTree(page, "static");
-  await expect.poll(() => viewRepr(page)).toBe("wireframe");
+  await expect.poll(() => viewRepr(page)).toBe("surface");
 });

@@ -681,7 +681,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   setVolMesh: (mesh) =>
     set((s) => {
       s.volMesh = mesh;
-      if (mesh) s.viewRepr = "volume";
+      if (mesh) s.viewRepr = "surface";
     }),
   setSurfaceFaceIds: (ids) =>
     set((s) => {

@@ -7,6 +7,7 @@
 import type { AppMode, ModelState, SliceCreator } from "./modelStore";
 import { showPlot, studyOf, type Study, type StudyKind } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
+import type { Projection } from "../lib/projection";
 import {
   AUTO_DEFORM_SCALE,
   checkDeformFactor,
@@ -20,7 +21,7 @@ import {
 // — which is what actually reaches the solver as a surface traction (issue #196).
 export type LoadDisplay = "resultant" | "nodal";
 
-export type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
+export type ViewRepr = "geometry" | "surface" | "wireframe";
 export type MeshRepr = Exclude<ViewRepr, "geometry">;
 
 // Default density cutoff for the topology-optimization result view (KOF-233).
@@ -191,6 +192,16 @@ function initialSidebarWidth(): number {
     : SIDEBAR_DEFAULT_WIDTH;
 }
 
+// The viewport projection (KOF-429) is a preference like the sidebar width,
+// so it is persisted the same way.
+const PROJECTION_KEY = "kofem.projection";
+
+function initialProjection(): Projection {
+  return localStorage.getItem(PROJECTION_KEY) === "orthographic"
+    ? "orthographic"
+    : "perspective";
+}
+
 export interface ViewSlice {
   viewRepr: ViewRepr;
   // The mesh representation last shown (surface / volume / wireframe), so a
@@ -205,6 +216,8 @@ export interface ViewSlice {
   // factor drawn is appliedDeformFactor (lib/deformScale, useDeformFactor).
   deformScale: DeformScale;
   fitViewTrigger: number;
+  // Perspective or orthographic projection of the viewport camera.
+  projection: Projection;
   // Sidebar layout (issue #339): collapsed on small screens so the viewport
   // gets the full width, resizable on desktop.
   sidebarOpen: boolean;
@@ -238,6 +251,7 @@ export interface ViewSlice {
   setLoadDisplay(v: LoadDisplay): void;
   setDeformScale(v: DeformScale): void;
   triggerFitView(): void;
+  setProjection(v: Projection): void;
   setSidebarOpen(v: boolean): void;
   setSidebarWidth(v: number): void;
   selectTreeNode(selection: TreeSelection): void;
@@ -258,6 +272,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   loadDisplay: "resultant",
   deformScale: AUTO_DEFORM_SCALE,
   fitViewTrigger: 0,
+  projection: initialProjection(),
   sidebarOpen: !window.matchMedia(SMALL_SCREEN_QUERY).matches,
   sidebarWidth: initialSidebarWidth(),
   treeSelection: addSelection("geometry"),
@@ -288,6 +303,11 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   triggerFitView: () =>
     set((s) => {
       s.fitViewTrigger++;
+    }),
+  setProjection: (v) =>
+    set((s) => {
+      s.projection = v;
+      localStorage.setItem(PROJECTION_KEY, v);
     }),
   setSidebarOpen: (v) =>
     set((s) => {
