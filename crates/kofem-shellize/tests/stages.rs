@@ -879,7 +879,7 @@ fn assert_welded_section(shells: &ShellExtraction, flange_reach: [[f64; 2]; 2]) 
         shells.walls
     );
     let mut span: [[f64; 2]; 3] = [[f64::INFINITY, f64::NEG_INFINITY]; 3];
-    let mut nodes_of: [HashSet<usize>; 3] = Default::default();
+    let mut nodes_of: [HashSet<usize>; 3] = [HashSet::new(), HashSet::new(), HashSet::new()];
     for (facet, tri) in shells.triangles.iter().enumerate() {
         let wall = wall_of_facet(shells, facet).expect("every facet on a wall mid-plane");
         // Flanges measured along x, the web along z.

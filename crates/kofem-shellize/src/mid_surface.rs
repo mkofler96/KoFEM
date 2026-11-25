@@ -740,12 +740,11 @@ fn weld_l_corners(raw: &mut RawShell, corners: &[Corner]) -> Vec<(usize, usize)>
             }),
         })
         .collect();
-    let by_original = raw.by_original();
+    // Only welded line nodes ask, a handful per corner: a scan is cheap.
     let copies = |node: usize| {
-        by_original
-            .get(&raw.original[node])
-            .cloned()
-            .unwrap_or_default()
+        (0..raw.original.len())
+            .filter(|&copy| raw.original[copy] == raw.original[node])
+            .collect()
     };
     let mut vertices = std::mem::take(&mut raw.vertices);
     let weld = weld_corners(
