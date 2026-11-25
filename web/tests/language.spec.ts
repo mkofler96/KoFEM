@@ -210,9 +210,8 @@ test("the solver worker refuses in the language picked in Settings", async ({
 
 // A chunk the test releases: requests matching it wait until `open()`.
 function gate() {
-  let open = () => {};
-  const opened = new Promise<void>((resolve) => (open = resolve));
-  return { open, opened };
+  const { promise, resolve } = Promise.withResolvers<void>();
+  return { open: resolve, opened: promise };
 }
 
 test("the last language picked in Settings wins over a slower earlier pick", async ({
