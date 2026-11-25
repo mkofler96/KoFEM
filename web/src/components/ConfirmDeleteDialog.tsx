@@ -7,6 +7,8 @@ import {
   useConfirmDelete,
   type DeleteRequest,
 } from "../store/confirmDelete";
+import { useT } from "../i18n/useLocale";
+import { dialogMessages } from "../i18n/messages/dialogs";
 import styles from "./CgContinuationDialog.module.css";
 
 export function ConfirmDeleteDialog() {
@@ -18,6 +20,7 @@ function DeletePrompt({ request }: { request: DeleteRequest }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [dontAsk, setDontAsk] = useState(false);
+  const text = useT(dialogMessages);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) throw new Error("Delete confirmation dialog did not mount");
@@ -34,15 +37,15 @@ function DeletePrompt({ request }: { request: DeleteRequest }) {
         answerDelete(false, false);
       }}
     >
-      <h2 id="confirm-delete-title">Delete {request.name}?</h2>
-      <p>This cannot be undone.</p>
+      <h2 id="confirm-delete-title">{text.deleteTitle(request.name)}</h2>
+      <p>{text.cannotUndo}</p>
       <label className={styles.checkbox}>
         <input
           type="checkbox"
           checked={dontAsk}
           onChange={(event) => setDontAsk(event.target.checked)}
         />
-        {"Don't ask again this session"}
+        {text.dontAskAgain}
       </label>
       <div className={styles.actions}>
         <button
@@ -50,14 +53,14 @@ function DeletePrompt({ request }: { request: DeleteRequest }) {
           type="button"
           onClick={() => answerDelete(false, false)}
         >
-          Cancel
+          {text.cancel}
         </button>
         <button
           type="button"
           className={styles.danger}
           onClick={() => answerDelete(true, dontAsk)}
         >
-          Delete
+          {text.delete}
         </button>
       </div>
     </dialog>

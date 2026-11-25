@@ -6,6 +6,8 @@ import {
   raisedIterationLimit,
   type TopOptConvergence,
 } from "../../lib/topOptConvergence";
+import { useT } from "../../i18n/useLocale";
+import { optimizeMessages } from "../../i18n/messages/optimize";
 import styles from "./Panel.module.css";
 
 // The warning for an optimization that stopped at its iteration limit
@@ -19,6 +21,7 @@ export function NotConvergedNotice({
   onRerun: () => void;
 }) {
   const notice = notConvergedNotice(run);
+  const text = useT(optimizeMessages);
   if (notice === null) return null;
   return (
     <div
@@ -28,7 +31,7 @@ export function NotConvergedNotice({
     >
       <span>{notice}</span>
       <button className={styles.outlineBtn} onClick={onRerun}>
-        Run again with {raisedIterationLimit(run.iterations)} iterations
+        {text.runAgain(raisedIterationLimit(run.iterations))}
       </button>
     </div>
   );

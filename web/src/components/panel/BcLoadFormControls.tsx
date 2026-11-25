@@ -16,13 +16,9 @@ import {
   MOMENT_LABELS,
   faceKey,
 } from "./bcFormUtils";
+import { useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
-
-const GEOMETRY_LABEL: Record<PickGeometry, string> = {
-  face: "Face",
-  edge: "Edge",
-  point: "Point",
-};
 
 // What a click selects. `options` is explicit because not every geometry suits
 // every model or every condition: edge picking only means something on a shell
@@ -38,9 +34,19 @@ export function PickGeometryToggle({
   options: PickGeometry[];
   onChange(geometry: PickGeometry): void;
 }) {
+  const text = useT(boundaryMessages);
   if (options.length < 2) return null;
+  const label: Record<PickGeometry, string> = {
+    face: text.geometryFace,
+    edge: text.geometryEdge,
+    point: text.geometryPoint,
+  };
   return (
-    <div className={styles.segToggle} role="group" aria-label="Pick geometry">
+    <div
+      className={styles.segToggle}
+      role="group"
+      aria-label={text.pickGeometry}
+    >
       {options.map((geometry) => (
         <button
           key={geometry}
@@ -50,18 +56,12 @@ export function PickGeometryToggle({
           aria-pressed={value === geometry}
           onClick={() => onChange(geometry)}
         >
-          {GEOMETRY_LABEL[geometry]}
+          {label[geometry]}
         </button>
       ))}
     </div>
   );
 }
-
-const PICK_HINT: Record<PickGeometry, string> = {
-  face: "Click a face in the 3D viewport",
-  edge: "Click near a mesh edge in the 3D viewport",
-  point: "Click near a mesh node in the 3D viewport",
-};
 
 export function PickedFaceList({
   faces,
@@ -72,8 +72,14 @@ export function PickedFaceList({
   onRemove(index: number): void;
   geometry: PickGeometry;
 }) {
+  const text = useT(boundaryMessages);
   if (faces.length === 0) {
-    return <div className={styles.pickHint}>{PICK_HINT[geometry]}</div>;
+    const hint: Record<PickGeometry, string> = {
+      face: text.pickHintFace,
+      edge: text.pickHintEdge,
+      point: text.pickHintPoint,
+    };
+    return <div className={styles.pickHint}>{hint[geometry]}</div>;
   }
   return (
     <div>
@@ -82,7 +88,7 @@ export function PickedFaceList({
           <span className={styles.bcFaceName}>{face.label}</span>
           <button
             className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-            title="Remove face"
+            title={text.removeFace}
             onClick={() => onRemove(i)}
           >
             ×
@@ -100,9 +106,10 @@ export function PressureInput({
   value: string;
   onChange(value: string): void;
 }) {
+  const text = useT(boundaryMessages);
   return (
     <div className={styles.formRow}>
-      <span className={styles.formLabel}>Pressure (MPa)</span>
+      <span className={styles.formLabel}>{text.pressureMpa}</span>
       <input
         className={styles.formInput}
         type="number"
@@ -152,27 +159,22 @@ export function LoadKindSelect({
   value: LoadKind;
   onChange(kind: LoadKind): void;
 }) {
+  const text = useT(boundaryMessages);
   return (
     <div className={styles.formRow}>
-      <span className={styles.formLabel}>Type</span>
+      <span className={styles.formLabel}>{text.type}</span>
       <select
         className={styles.formSelect}
         value={value}
         onChange={(e) => onChange(e.target.value as LoadKind)}
       >
-        <option value="force">Force</option>
-        <option value="moment">Moment</option>
-        <option value="pressure">Pressure</option>
+        <option value="force">{text.force}</option>
+        <option value="moment">{text.moment}</option>
+        <option value="pressure">{text.pressure}</option>
       </select>
     </div>
   );
 }
-
-// What each tie method does to the model, in one line under the select.
-export const TIE_METHOD_HINT: Record<TieMethod, string> = {
-  mpc: "nodes follow the opposite surface; the mesh is not changed",
-  merge: "node pairs are welded into one; the surfaces are pulled together",
-};
 
 // Method and extent of a tie connection: join the surfaces by constraint or by
 // node-merge, and couple them whole or only where they come within a search
@@ -194,36 +196,42 @@ export function TieExtentInputs({
   onExtentChange(extent: TieExtent): void;
   onDistanceChange(distance: string): void;
 }) {
+  const text = useT(boundaryMessages);
+  // What each tie method does to the model, in one line under the select.
+  const methodHint: Record<TieMethod, string> = {
+    mpc: text.methodMpcHint,
+    merge: text.methodMergeHint,
+  };
   return (
     <>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Method</span>
+        <span className={styles.formLabel}>{text.method}</span>
         <select
           className={styles.formSelect}
           data-testid="tie-method"
           value={method}
           onChange={(e) => onMethodChange(e.target.value as TieMethod)}
         >
-          <option value="mpc">Constraint (MPC)</option>
-          <option value="merge">Node merge</option>
+          <option value="mpc">{text.methodMpc}</option>
+          <option value="merge">{text.methodMerge}</option>
         </select>
       </div>
-      <div className={styles.pickNote}>{TIE_METHOD_HINT[method]}</div>
+      <div className={styles.pickNote}>{methodHint[method]}</div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Extent</span>
+        <span className={styles.formLabel}>{text.extent}</span>
         <select
           className={styles.formSelect}
           data-testid="tie-extent"
           value={extent}
           onChange={(e) => onExtentChange(e.target.value as TieExtent)}
         >
-          <option value="full">Full surface</option>
-          <option value="region">Within distance</option>
+          <option value="full">{text.extentFull}</option>
+          <option value="region">{text.extentRegion}</option>
         </select>
       </div>
       {extent === "region" && (
         <div className={styles.formRow}>
-          <span className={styles.formLabel}>Search distance</span>
+          <span className={styles.formLabel}>{text.searchDistance}</span>
           <input
             className={styles.formInput}
             data-testid="tie-distance"
@@ -280,24 +288,23 @@ export function CouplingKindSelect({
   value: CouplingKind;
   onChange(kind: CouplingKind): void;
 }) {
+  const text = useT(boundaryMessages);
   return (
     <>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Kind</span>
+        <span className={styles.formLabel}>{text.kind}</span>
         <select
           className={styles.formSelect}
           data-testid="coupling-kind"
           value={value}
           onChange={(e) => onChange(e.target.value as CouplingKind)}
         >
-          <option value="distributing">Distributing (RBE3)</option>
-          <option value="kinematic">Kinematic (RBE2)</option>
+          <option value="distributing">{text.distributing}</option>
+          <option value="kinematic">{text.kinematic}</option>
         </select>
       </div>
       <div className={styles.pickNote}>
-        {value === "distributing"
-          ? "the surface stays flexible and the point follows it — the point can be loaded, but not fixed"
-          : "the surface follows the point rigidly — the point can be fixed, loaded or coupled onward"}
+        {value === "distributing" ? text.distributingHint : text.kinematicHint}
       </div>
     </>
   );
@@ -319,11 +326,12 @@ export function ReferencePointInputs({
   onCoordChange(index: number, value: string): void;
   onPickOption(option: ReferencePointOption): void;
 }) {
+  const text = useT(boundaryMessages);
   return (
     <>
       {options.length > 0 && (
         <div className={styles.formRow}>
-          <span className={styles.formLabel}>Place at</span>
+          <span className={styles.formLabel}>{text.placeAt}</span>
           <select
             className={styles.formSelect}
             data-testid="coupling-place-at"
@@ -333,7 +341,7 @@ export function ReferencePointInputs({
               if (option) onPickOption(option);
             }}
           >
-            <option value="">Custom coordinates</option>
+            <option value="">{text.customCoordinates}</option>
             {options.map((option, i) => (
               <option key={option.label} value={i}>
                 {option.label}

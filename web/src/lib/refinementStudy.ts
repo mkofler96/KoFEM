@@ -17,6 +17,8 @@ import {
   type MeshSizes,
   type Property,
 } from "../store/geometrySlice";
+import { tr } from "../i18n/useLocale";
+import { studiesMessages } from "../i18n/messages/studies";
 
 export interface RefinementSettings {
   // Meshes the study solves, the current one included.
@@ -52,11 +54,13 @@ export const DEFAULT_REFINEMENT_INPUT: RefinementSettingsInput = {
 };
 
 // The ratios the panel offers, gentle to steep.
-export const REFINEMENT_RATIOS: { value: number; label: string }[] = [
-  { value: Math.SQRT2, label: "√2 ≈ 1.41" },
-  { value: 1.5, label: "1.5" },
-  { value: 2, label: "2 (halves the size)" },
-];
+export const REFINEMENT_RATIOS: readonly number[] = [Math.SQRT2, 1.5, 2];
+
+export function ratioLabel(ratio: number): string {
+  if (ratio === Math.SQRT2) return "√2 ≈ 1.41";
+  if (ratio === 2) return tr(studiesMessages).ratioHalves;
+  return String(ratio);
+}
 
 // A peak stress that grows by more than this fraction at every refinement is
 // not converging: it sits on a singularity (a re-entrant corner, a point
@@ -85,21 +89,30 @@ export function parseRefinementSettings(input: RefinementSettingsInput): {
     levels < LEVELS_RANGE.min ||
     levels > LEVELS_RANGE.max
   )
-    errors.levels = `Levels is a whole number from ${LEVELS_RANGE.min} to ${LEVELS_RANGE.max}.`;
+    errors.levels = tr(studiesMessages).levelsError(
+      LEVELS_RANGE.min,
+      LEVELS_RANGE.max,
+    );
   const ratio = number(input.ratio);
   if (
     !Number.isFinite(ratio) ||
     ratio <= RATIO_RANGE.min ||
     ratio > RATIO_RANGE.max
   )
-    errors.ratio = `The ratio is between ${RATIO_RANGE.min} and ${RATIO_RANGE.max}: above 1 to refine, at most 2 to keep the finest mesh solvable.`;
+    errors.ratio = tr(studiesMessages).ratioError(
+      RATIO_RANGE.min,
+      RATIO_RANGE.max,
+    );
   const percent = number(input.tolerance);
   if (
     !Number.isFinite(percent) ||
     percent < TOLERANCE_PERCENT_RANGE.min ||
     percent > TOLERANCE_PERCENT_RANGE.max
   )
-    errors.tolerance = `The target is ${TOLERANCE_PERCENT_RANGE.min} to ${TOLERANCE_PERCENT_RANGE.max} %.`;
+    errors.tolerance = tr(studiesMessages).toleranceError(
+      TOLERANCE_PERCENT_RANGE.min,
+      TOLERANCE_PERCENT_RANGE.max,
+    );
   return Object.keys(errors).length > 0
     ? { settings: null, errors }
     : {
@@ -291,9 +304,7 @@ export function checkLevelDisplacement(
   size: number,
 ): void {
   if (maxDisplacement === 0)
-    throw new Error(
-      `The solve at ${sizeLabel(size)} mm moved nothing (max displacement 0): the loads act only where the supports hold the part. Check the supports and loads.`,
-    );
+    throw new Error(tr(studiesMessages).movedNothing(sizeLabel(size)));
 }
 
 // A finer level's mesh can add a body that the body table did not have
@@ -305,10 +316,10 @@ export function checkLevelMaterials(
 ): void {
   const ids = unconfirmedMaterialBodies(properties);
   if (ids.length === 0) return;
-  const bodies =
-    ids.length === 1 ? `body ${ids[0]}` : `bodies ${ids.join(", ")}`;
   throw new Error(
-    `The mesh at ${sizeLabel(size)} mm added ${bodies}: choose ${ids.length === 1 ? "its material" : "their materials"} in the Geometry step, then run the study again.`,
+    ids.length === 1
+      ? tr(studiesMessages).addedBody(sizeLabel(size), ids[0])
+      : tr(studiesMessages).addedBodies(sizeLabel(size), ids.join(", ")),
   );
 }
 
@@ -328,10 +339,11 @@ export function verdictLine(
   const assessment = assessConvergence(levels, settings);
   // One decimal: an error below 0.1 % reads as "within 0.1 %", a true bound.
   const error = `${Math.max(assessment.estimatedError * 100, 0.1).toFixed(1)} %`;
+  const text = tr(studiesMessages);
   return assessment.converged
-    ? { converged: true, text: `Converged: max |U| within ${error}` }
+    ? { converged: true, text: text.converged(error) }
     : {
         converged: false,
-        text: `Not converged: max |U| still ${error} off (target ${percentLabel(settings.tolerance)} %)`,
+        text: text.notConverged(error, percentLabel(settings.tolerance)),
       };
 }

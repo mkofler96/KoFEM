@@ -3,6 +3,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { WorkerLogEntry } from "../../hooks/useWorkerLogs";
+import { useT } from "../../i18n/useLocale";
+import { meshMessages } from "../../i18n/messages/mesh";
 import styles from "./Panel.module.css";
 
 // VSCode-style collapsable log panel showing the worker's log stream — used
@@ -18,6 +20,7 @@ export function LogSection({
 }) {
   const [open, setOpen] = useState(true);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const text = useT(meshMessages);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,7 +36,7 @@ export function LogSection({
         >
           ▶
         </span>
-        <span>LOGS</span>
+        <span>{text.logs}</span>
         {busy && <span className={styles.logSpinner}>●</span>}
         {logs.length > 0 && (
           <span className={styles.logBadge}>{logs.length}</span>
@@ -42,7 +45,7 @@ export function LogSection({
       {open && (
         <div className={styles.logBody}>
           {logs.length === 0 ? (
-            <div className={styles.logEmpty}>Waiting…</div>
+            <div className={styles.logEmpty}>{text.waiting}</div>
           ) : (
             logs.map((entry) => (
               <div key={entry.id} className={styles.logLine}>

@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include <stdexcept>
 #include <string>
 
@@ -177,4 +178,21 @@ void kofem_delete_mesh(void* mesh) {
     // nglib::Ng_DeleteMesh because it additionally calls Mesh::DeleteMesh()
     // first, double-freeing those strings. See netgen_glue.h.
     delete static_cast<netgen::Mesh*>(mesh);
+}
+
+namespace {
+// BlockAllocator has no way to give its blocks back: Free only puts a node on
+// the free list. Its destructor deletes every block, so end the pool's
+// lifetime and start a new, empty one in the same storage.
+template <typename Node>
+void release_pool() {
+    Node::ball.~BlockAllocator();
+    new (&Node::ball) netgen::BlockAllocator(sizeof(Node));
+}
+}  // namespace
+
+void kofem_release_netgen_pools() {
+    release_pool<netgen::GradingBox>();
+    release_pool<netgen::ADTreeNode3>();
+    release_pool<netgen::ADTreeNode6>();
 }

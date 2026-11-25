@@ -10,6 +10,8 @@
 import * as THREE from "three";
 import { sectionCut } from "../wasm/fem/kofem_wasm.js";
 import type { Element, LegendRange, Node } from "../store/modelStore";
+import { tr } from "../i18n/useLocale";
+import { resultsMessages } from "../i18n/messages/results";
 
 /** Node coordinates as drawn: undeformed plus the scaled displacement. */
 export function deformedPoints(
@@ -19,7 +21,7 @@ export function deformedPoints(
 ): Float64Array {
   if (displacements.length !== nodes.length * 3)
     throw new Error(
-      `displacement result carries ${displacements.length} values for ${nodes.length} nodes — the result is stale or belongs to a different mesh`,
+      tr(resultsMessages).sectionStale(displacements.length, nodes.length),
     );
   const points = new Float64Array(nodes.length * 3);
   nodes.forEach((node, i) => {
@@ -42,7 +44,7 @@ export function sectionLevel(
     lo = Math.min(lo, points[i]);
     hi = Math.max(hi, points[i]);
   }
-  if (!(hi >= lo)) throw new Error("the model has no nodes to cut");
+  if (!(hi >= lo)) throw new Error(tr(resultsMessages).sectionNoNodes);
   return lo + position * (hi - lo);
 }
 

@@ -7,6 +7,7 @@ import { tieMethod, tiedNodePairs } from "../lib/tie";
 import type { TiePair, TieReport } from "../lib/tie";
 import { tieConstraints } from "../lib/tieConstraints";
 import type { TieConstraint } from "../lib/tieConstraints";
+import { useLocale } from "../i18n/useLocale";
 
 // What the model's tie connections join: the node pairs the node-merge ties
 // weld, the nodes the constraint ties tie to the opposite surface, and what
@@ -27,6 +28,7 @@ export function useTiePairs(): {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const tieGroups = useModelStore((s) => s.tieGroups);
+  const locale = useLocale();
   return useMemo(() => {
     const isMerge = tieGroups.map((group) => tieMethod(group) === "merge");
     const merged = tiedNodePairs(
@@ -56,5 +58,5 @@ export function useTiePairs(): {
       constraints: constrained.constraints,
       reports,
     };
-  }, [nodes, elements, tieGroups]);
+  }, [nodes, elements, tieGroups, locale]);
 }

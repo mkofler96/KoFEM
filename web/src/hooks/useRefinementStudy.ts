@@ -40,6 +40,8 @@ import { carryGroupsToMesh } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
 import { computeResultRange } from "../lib/resultField";
 import { sendToWorker } from "../workers/sharedWorker";
+import { intlTag, tr, useLocale } from "../i18n/useLocale";
+import { studiesMessages } from "../i18n/messages/studies";
 
 type StudySource = Pick<
   ModelState,
@@ -75,8 +77,7 @@ function studyBase(s: StudySource): { sizes: MeshSizes; remesh: boolean } {
 // re-meshed: a group that cannot follow onto a new mesh would be lost.
 export function refinementRefusal(s: StudySource): string | null {
   if (s.nodes.length === 0) return null; // the solve checks say "mesh first"
-  if (s.stepBytes === null)
-    return "The study re-meshes the geometry, and this model has none (an opened analysis keeps only its mesh). Re-import the STEP file to run it.";
+  if (s.stepBytes === null) return tr(studiesMessages).noGeometry;
   // Carry the groups onto the mesh they are on: what does not come across
   // here cannot come across to a finer mesh either.
   const carried = carryGroupsToMesh(
@@ -100,7 +101,7 @@ export function refinementRefusal(s: StudySource): string | null {
     ).nodesByFace,
   );
   if (carried.dropped.length > 0)
-    return `Only supports, loads and couplings picked as whole CAD faces follow onto a new mesh. Pick these again as faces to run the study: ${carried.dropped.join("; ")}.`;
+    return tr(studiesMessages).notFaces(carried.dropped.join("; "));
   try {
     studyBase(s);
   } catch (err) {
@@ -238,10 +239,11 @@ export function useRefinementStudy() {
       properties,
     ],
   );
-  const refusal = useMemo(() => refinementRefusal(source), [source]);
+  const locale = useLocale();
+  const refusal = useMemo(() => refinementRefusal(source), [source, locale]);
   const { settings, errors } = useMemo(
     () => parseRefinementSettings(refinementInput),
-    [refinementInput],
+    [refinementInput, locale],
   );
   // The sizes the levels will mesh at, for the hint under the button.
   const plannedSizes = useMemo(() => {
@@ -262,7 +264,9 @@ export function useRefinementStudy() {
     const parsed = parseRefinementSettings(s0.refinementInput);
     if (parsed.settings === null)
       throw new Error(
-        `The study settings are invalid: ${Object.values(parsed.errors).join(" ")}`,
+        tr(studiesMessages).settingsInvalid(
+          Object.values(parsed.errors).join(" "),
+        ),
       );
     const settings = parsed.settings;
     const { sizes: base, remesh } = studyBase(s0);
@@ -271,9 +275,7 @@ export function useRefinementStudy() {
     const fingerprint = studyFingerprint(s0);
     const assertUnchanged = () => {
       if (studyFingerprint(get()) !== fingerprint)
-        throw new Error(
-          "The model changed while the study ran (a material, body, support, load, coupling or solver setting). Run the study again to compare levels of one model.",
-        );
+        throw new Error(tr(studiesMessages).modelChanged);
     };
 
     let current: RefinementStudyRun = {
@@ -300,7 +302,8 @@ export function useRefinementStudy() {
     try {
       for (let k = 0; k < settings.levels; k++) {
         const sizes = levelSizes(base, k, settings.ratio);
-        const label = `Level ${k + 1} of ${settings.levels}`;
+        const text = tr(studiesMessages);
+        const label = text.levelOf(k + 1, settings.levels);
         const previous = current.levels[current.levels.length - 1];
         if (previous !== undefined) {
           const model = get();
@@ -310,13 +313,14 @@ export function useRefinementStudy() {
             model.elementOrder,
           );
           if (estimate > STUDY_NODE_BUDGET) {
-            const note = `The mesh at ${sizeLabel(sizes.max)} mm would have about ${Math.round(estimate).toLocaleString("en-US")} nodes, more than a browser solves comfortably (${STUDY_NODE_BUDGET.toLocaleString("en-US")}).`;
-            if (current.levels.length < 2)
-              throw new Error(
-                `${note} Coarsen the mesh to run the study from a coarser start.`,
-              );
+            const note = text.tooManyNodes(
+              sizeLabel(sizes.max),
+              Math.round(estimate).toLocaleString(intlTag()),
+              STUDY_NODE_BUDGET.toLocaleString(intlTag()),
+            );
+            if (current.levels.length < 2) throw new Error(text.coarsen(note));
             publish({
-              stopNote: `Stopped after ${current.levels.length} levels. ${note}`,
+              stopNote: text.stoppedAfter(current.levels.length, note),
             });
             break;
           }
@@ -324,7 +328,7 @@ export function useRefinementStudy() {
         assertUnchanged();
         if (k > 0 || remesh) {
           publish({
-            step: `${label} · meshing at ${sizeLabel(sizes.max)} mm`,
+            step: text.meshingAt(label, sizeLabel(sizes.max)),
             phase: "meshing",
           });
           get().setMeshing(true);
@@ -341,21 +345,22 @@ export function useRefinementStudy() {
           }
           if (reply.kind === "overlaps") {
             get().setMeshOverlaps(reply.overlaps);
-            throw new Error(
-              `The mesh at ${sizeLabel(sizes.max)} mm found overlapping bodies — see the Mesh step.`,
-            );
+            throw new Error(text.overlaps(sizeLabel(sizes.max)));
           }
           const before = entryCount(get());
           applyVolumeMesh(get().applyMeshResult, reply.mesh, sizes);
           if (entryCount(get()) !== before)
             throw new Error(
-              `Supports or loads did not follow onto the mesh at ${sizeLabel(sizes.max)} mm. ${get().remeshNotice ?? ""}`.trim(),
+              `${text.groupsLost(sizeLabel(sizes.max))} ${get().remeshNotice ?? ""}`.trim(),
             );
           checkLevelMaterials(get().properties, sizes.max);
         }
         const model = get();
         publish({
-          step: `${label} · solving ${model.nodes.length.toLocaleString("en-US")} nodes`,
+          step: text.solvingNodes(
+            label,
+            model.nodes.length.toLocaleString(intlTag()),
+          ),
           phase: "solving",
         });
         const { displacements, vonMises, stress } = await sendToWorker<{

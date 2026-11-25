@@ -6,25 +6,11 @@ import { useModelStore } from "../../store/modelStore";
 import { isCadBody } from "../../store/geometrySlice";
 import { useGeometryEdit, type BooleanOp } from "../../hooks/useGeometryEdit";
 import { solidName } from "../../lib/regions";
+import { useT } from "../../i18n/useLocale";
+import { geometryMessages } from "../../i18n/messages/geometry";
 import styles from "./Panel.module.css";
 
-const OPS: { op: BooleanOp; label: string; hint: string }[] = [
-  {
-    op: "union",
-    label: "Union",
-    hint: "Fuse the bodies into one. They must touch or overlap.",
-  },
-  {
-    op: "subtract",
-    label: "Subtract",
-    hint: "Cut the tool bodies out of the target body.",
-  },
-  {
-    op: "intersect",
-    label: "Intersect",
-    hint: "Keep only the volume the bodies share.",
-  },
-];
+const OPS: BooleanOp[] = ["union", "subtract", "intersect"];
 
 // Geometry → + Add → From boolean: combine bodies of the model into a new one.
 // The result takes the target's place; like a split it is a geometry edit, so
@@ -39,6 +25,17 @@ export function BooleanSection() {
   const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
   const { combine, undo, isSplitting, splitError, setSplitError } =
     useGeometryEdit();
+  const text = useT(geometryMessages);
+  const opLabel: Record<BooleanOp, string> = {
+    union: text.union,
+    subtract: text.subtract,
+    intersect: text.intersect,
+  };
+  const opHint: Record<BooleanOp, string> = {
+    union: text.unionHint,
+    subtract: text.subtractHint,
+    intersect: text.intersectHint,
+  };
 
   // A suppressed body is as good as deleted — nothing to combine with. The
   // engine combines CAD solids, so each choice is one solid, named as the tree
@@ -62,7 +59,7 @@ export function BooleanSection() {
       disabled={busy}
       onClick={undo}
     >
-      ↶ Undo
+      {text.undo}
     </button>
   );
 
@@ -71,7 +68,7 @@ export function BooleanSection() {
     return (
       <>
         <div className={styles.empty} data-testid="boolean-needs-bodies">
-          A Boolean combines bodies — the model needs at least two.
+          {text.booleanNeedsBodies}
         </div>
         {undoButton && <div className={styles.formBtns}>{undoButton}</div>}
       </>
@@ -103,27 +100,29 @@ export function BooleanSection() {
           <button onClick={() => setSplitError(null)}>×</button>
         </div>
       )}
-      <div className={styles.segToggle} role="group" aria-label="Operation">
+      <div
+        className={styles.segToggle}
+        role="group"
+        aria-label={text.operation}
+      >
         {OPS.map((o) => (
           <button
-            key={o.op}
+            key={o}
             type="button"
-            data-testid={`boolean-op-${o.op}`}
-            className={`${styles.segBtn} ${op === o.op ? styles.segBtnActive : ""}`}
-            aria-pressed={op === o.op}
-            onClick={() => setOp(o.op)}
+            data-testid={`boolean-op-${o}`}
+            className={`${styles.segBtn} ${op === o ? styles.segBtnActive : ""}`}
+            aria-pressed={op === o}
+            onClick={() => setOp(o)}
           >
-            {o.label}
+            {opLabel[o]}
           </button>
         ))}
       </div>
-      <div className={styles.pickHint}>
-        {OPS.find((o) => o.op === op)?.hint}
-      </div>
+      <div className={styles.pickHint}>{opHint[op]}</div>
 
       <div className={styles.formRow}>
         <span className={styles.formLabel}>
-          {op === "subtract" ? "Cut from" : "Target"}
+          {op === "subtract" ? text.cutFrom : text.target}
         </span>
         <select
           className={styles.formSelect}
@@ -142,7 +141,7 @@ export function BooleanSection() {
       </div>
 
       <div className={styles.sectionLabel}>
-        {op === "subtract" ? "Tool bodies" : "Combine with"}
+        {op === "subtract" ? text.toolBodies : text.combineWith}
       </div>
       {bodies
         .filter((id) => id !== target)
@@ -166,40 +165,28 @@ export function BooleanSection() {
         ))}
 
       {op === "subtract" && (
-        <label
-          className={styles.formRow}
-          title="Keep the tool bodies after the cut — they stay in the pocket they made and are bonded to the cut body, like an insert."
-        >
+        <label className={styles.formRow} title={text.keepToolBodiesTip}>
           <input
             type="checkbox"
             data-testid="boolean-keep-tools"
             checked={keepTools}
             onChange={(e) => setKeepTools(e.target.checked)}
           />
-          <span className={styles.bodyLabel}>Keep tool bodies</span>
+          <span className={styles.bodyLabel}>{text.keepToolBodies}</span>
         </label>
       )}
 
-      {hasMesh && (
-        <div className={styles.hint}>
-          A Boolean changes the geometry: the mesh and its supports, loads and
-          results are cleared.
-        </div>
-      )}
+      {hasMesh && <div className={styles.hint}>{text.booleanClearsMesh}</div>}
       <div className={styles.formBtns}>
         {undoButton}
         <button
           className={styles.primaryBtn}
           data-testid="boolean-apply"
           disabled={!editable || busy || activeTools.length === 0}
-          title={
-            editable
-              ? undefined
-              : "Re-import the CAD file to edit its geometry — a saved analysis does not carry it."
-          }
+          title={editable ? undefined : text.reimportToEdit}
           onClick={apply}
         >
-          {isSplitting ? "Combining…" : OPS.find((o) => o.op === op)?.label}
+          {isSplitting ? text.combining : opLabel[op]}
         </button>
       </div>
     </>

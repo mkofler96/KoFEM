@@ -8,6 +8,8 @@ import { useEngineGate } from "../../store/engineStore";
 import { LogSection } from "./LogSection";
 import { PreflightChecks } from "./PreflightChecks";
 import { isSolverMethod, SOLVER_METHODS } from "../../lib/solve/amg";
+import { useT } from "../../i18n/useLocale";
+import { solveMessages } from "../../i18n/messages/solve";
 import styles from "./Panel.module.css";
 
 // One static study: the pre-flight check, the solver settings and the run.
@@ -35,6 +37,7 @@ export function SolvePanel({
     logs,
   } = useSolver();
   const engine = useEngineGate();
+  const text = useT(solveMessages);
 
   return (
     <div className={styles.panel}>
@@ -49,14 +52,14 @@ export function SolvePanel({
         <PreflightChecks checks={checks} />
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Solver settings
+          {text.solverSettings}
         </div>
         <div className={styles.statRow}>
-          <span className={styles.statKey}>Step</span>
-          <span className={styles.statVal}>Static · {study.name}</span>
+          <span className={styles.statKey}>{text.step}</span>
+          <span className={styles.statVal}>{text.staticStep(study.name)}</span>
         </div>
         <div className={styles.formRow}>
-          <span className={styles.formLabel}>Solver</span>
+          <span className={styles.formLabel}>{text.solver}</span>
           <select
             className={styles.formSelect}
             data-testid="solver-method"
@@ -66,11 +69,11 @@ export function SolvePanel({
               if (isSolverMethod(e.target.value))
                 setSolverMethod(e.target.value);
             }}
-            title="Both solve the same equations to the same accuracy. AMG multigrid needs far fewer iterations on large and thin-walled models."
+            title={text.solverHint}
           >
-            {SOLVER_METHODS.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
+            {SOLVER_METHODS.map((method) => (
+              <option key={method} value={method}>
+                {method === "amg" ? text.methodAmg : text.methodGaussSeidel}
               </option>
             ))}
           </select>
@@ -81,17 +84,15 @@ export function SolvePanel({
           </div>
         )}
         <div className={styles.statRow}>
-          <span className={styles.statKey}>Output</span>
+          <span className={styles.statKey}>{text.output}</span>
           <span className={styles.statVal}>U, S, RF</span>
         </div>
         {/* The element order is set with the mesh controls (issue #286) —
             echoed here read-only so the pre-solve summary stays complete. */}
         <div className={styles.statRow}>
-          <span className={styles.statKey}>Element order</span>
+          <span className={styles.statKey}>{text.elementOrder}</span>
           <span className={styles.statVal}>
-            {elementOrder === 2
-              ? "Quadratic (2nd order)"
-              : "Linear (1st order)"}
+            {elementOrder === 2 ? text.quadratic : text.linear}
           </span>
         </div>
 
@@ -101,7 +102,7 @@ export function SolvePanel({
           title={engine.reason}
           onClick={solve}
         >
-          {isRunning ? "Solving…" : "▶  Run static solve"}
+          {isRunning ? text.solving : text.runStaticSolve}
         </button>
 
         <LogSection logs={logs} busy={isRunning} />

@@ -4,7 +4,11 @@
 import type { ElementStress } from "../lib/stressFields";
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import { fmt, loadsSummary } from "../lib/modelDisplay";
+import {
+  loadsSummary,
+  materialCheckLabel,
+  meshCheckLabel,
+} from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
 import {
@@ -13,7 +17,7 @@ import {
   solvePreconditioner,
 } from "../lib/solve/amg";
 import type { ReactionSummary } from "../lib/solve/reactions";
-import { routeSolve, type SolveRoute } from "../lib/solve/route";
+import { routeOrRefusal } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
@@ -29,6 +33,8 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { tr, useT } from "../i18n/useLocale";
+import { solveMessages } from "../i18n/messages/solve";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
 // protocol and result storage (displacements + von Mises), the solver log
@@ -57,6 +63,7 @@ export function useSolver() {
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(solveMessages);
   const { logs, clearLogs } = useWorkerLogs("solve");
   const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
 
@@ -96,7 +103,7 @@ export function useSolver() {
   // element order the path cannot apply, KOF-353) — the worker refuses it with
   // the same words, so say so before the solve. Only with a mesh: before one
   // there is no model.
-  const { route, routeRefusal } = solveRoute(
+  const { route, routeRefusal } = routeOrRefusal(
     nodes.length > 0
       ? {
           nodes,
@@ -243,7 +250,7 @@ export function useSolver() {
       })
       .catch((err) => {
         console.error("[solve] solver failed:", err.message);
-        setError(`Solver error: ${err.message}`);
+        setError(tr(solveMessages).solverError(err.message));
         track("solve_failed", {
           ...workflow,
           analysis_type: "static",
@@ -263,41 +270,34 @@ export function useSolver() {
   });
 
   const checks: [boolean, string][] = [
-    [
-      meshOk,
-      suppressionStale !== null
-        ? suppressionStale
-        : `Mesh ready · ${nodes.length} nodes · ${elements.length} elements`,
-    ],
+    [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
     [
       matOk,
       materials.length === 0
-        ? "No material assigned"
+        ? text.noMaterial
         : !materialsExist
-          ? "A body references a deleted material — reassign body materials"
+          ? text.deletedMaterial
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
-            : properties.length > 1
-              ? `Materials assigned · ${properties.length} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`
-              : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+            : materialCheckLabel(materials, properties.length),
     ],
     [
       bcOk,
       constraints.length === 0
-        ? "No boundary conditions"
+        ? text.noBoundaryConditions
         : unheld !== null
           ? unheld
-          : `BCs applied · ${new Set(constraints.map((c) => c.nodeId)).size} nodes fixed`,
+          : text.bcsApplied(new Set(constraints.map((c) => c.nodeId)).size),
     ],
     [
       drivingOk,
       loadOk
         ? loadsSummary(loads.length, surfaceLoads.length)
         : prescribedOk
-          ? "Prescribed displacement drives the model"
+          ? text.prescribedDrives
           : temperatureOk
-            ? "Temperature change drives the model"
-            : "No loads, prescribed displacement or temperature change",
+            ? text.temperatureDrives
+            : text.nothingDrives,
     ],
     ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
     ...(routeRefusal === null
@@ -337,19 +337,4 @@ export function useSolver() {
     solverNote,
     logs,
   };
-}
-
-// routeSolve on the panel's model: the route it takes, or the reason it is
-// refused. Null model (no mesh yet): neither.
-function solveRoute(model: Parameters<typeof routeSolve>[0] | null): {
-  route: SolveRoute | null;
-  routeRefusal: string | null;
-} {
-  if (model === null) return { route: null, routeRefusal: null };
-  try {
-    return { route: routeSolve(model), routeRefusal: null };
-  } catch (err) {
-    if (!(err instanceof Error)) throw err;
-    return { route: null, routeRefusal: err.message };
-  }
 }

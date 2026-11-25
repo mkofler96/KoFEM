@@ -15,35 +15,38 @@ import {
   type GuideStep,
 } from "../../lib/sampleGuide";
 import { useSampleGuideStep } from "./useSampleGuideStep";
+import { useT } from "../../i18n/useLocale";
+import { viewportMessages } from "../../i18n/messages/viewport";
 import styles from "./SampleGuide.module.css";
 
 type Step = Exclude<GuideStep, "done">;
 
 const fy = `${SAMPLE.loadFy < 0 ? "−" : ""}${Math.abs(SAMPLE.loadFy)} N`;
 
-const STEP_TEXT: Record<Step, { title: string; how: string; action: string }> =
-  {
+type StepText = { title: string; how: string; action: string };
+
+function stepTexts(
+  text: (typeof viewportMessages)["en"],
+): Record<Step, StepText> {
+  return {
     mesh: {
-      title: "Mesh",
-      how: "Fill the solid with elements: press Generate mesh.",
-      action: "Open mesh",
+      title: text.meshTitle,
+      how: text.meshHow,
+      action: text.meshAction,
     },
     support: {
-      title: "Fix bolt holes",
-      how: "Add a support, click the three highlighted holes, then Apply.",
-      action: "Add support",
+      title: text.supportTitle,
+      how: text.supportHow,
+      action: text.supportAction,
     },
     load: {
-      title: "Load hub",
-      how: `Add a load, click the highlighted bore, set Fy = ${fy}, then Apply.`,
-      action: "Add load",
+      title: text.loadTitle,
+      how: text.loadHow(fy),
+      action: text.loadAction,
     },
-    run: {
-      title: "Run",
-      how: "Add a static study and press Run.",
-      action: "Open study",
-    },
+    run: { title: text.runTitle, how: text.runHow, action: text.runAction },
   };
+}
 
 const sameSelection = (a: TreeSelection, b: TreeSelection) =>
   JSON.stringify(a) === JSON.stringify(b);
@@ -57,7 +60,9 @@ export function SampleGuide() {
   const step = useSampleGuideStep();
   const treeSelection = useModelStore((s) => s.treeSelection);
   const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const text = useT(viewportMessages);
   if (step === null) return null;
+  const steps = stepTexts(text);
 
   // Where the current step happens, so the shortcut can take the user there.
   function destination(current: Step): TreeSelection {
@@ -91,14 +96,14 @@ export function SampleGuide() {
       className={styles.guide}
       data-testid="sample-guide"
       data-step={step}
-      aria-label="Sample guide"
+      aria-label={text.sampleGuide}
     >
-      <span className={styles.title}>Sample</span>
+      <span className={styles.title}>{text.sample}</span>
       <ol className={styles.steps}>
         {GUIDE_STEPS.map((s, i) => {
           const state =
             i < currentIndex ? "done" : i === currentIndex ? "current" : "todo";
-          const text = STEP_TEXT[s];
+          const stepText = steps[s];
           return (
             <li key={s} className={styles.step} data-state={state}>
               <span
@@ -112,14 +117,14 @@ export function SampleGuide() {
                 <span className={styles.marker} aria-hidden>
                   {state === "done" ? "✓" : i + 1}
                 </span>
-                <span className={styles.stepTitle}>{text.title}</span>
+                <span className={styles.stepTitle}>{stepText.title}</span>
               </span>
               <span
                 className={styles.tip}
                 id={`sample-guide-tip-${s}`}
                 role="tooltip"
               >
-                {text.how}
+                {stepText.how}
               </span>
               {state === "current" &&
                 !sameSelection(treeSelection, destination(s)) && (
@@ -128,7 +133,7 @@ export function SampleGuide() {
                     data-testid="sample-guide-action"
                     onClick={() => go(s)}
                   >
-                    {text.action}
+                    {stepText.action}
                   </button>
                 )}
             </li>
@@ -142,24 +147,22 @@ export function SampleGuide() {
               aria-describedby="sample-guide-tip-done"
               data-testid="sample-guide-done"
             >
-              <span className={styles.stepTitle}>Done</span>
+              <span className={styles.stepTitle}>{text.done}</span>
             </span>
             <span
               className={styles.tip}
               id="sample-guide-tip-done"
               role="tooltip"
             >
-              The colours show how far each point moves under the load. Try von
-              Mises stress in the Results panel to see where the bracket works
-              hardest.
+              {text.doneTip}
             </span>
           </li>
         )}
       </ol>
       <button
         className={styles.close}
-        title="Close the guide"
-        aria-label="Close the guide"
+        title={text.closeGuide}
+        aria-label={text.closeGuide}
         onClick={dismissSampleGuide}
       >
         ×

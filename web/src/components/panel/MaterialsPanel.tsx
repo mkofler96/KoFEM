@@ -7,6 +7,8 @@ import type { Material } from "../../store/modelStore";
 import { isCadBody } from "../../store/geometrySlice";
 import { pickMaterialColor } from "../../store/materialSlice";
 import type { TreeTarget } from "../../store/viewSlice";
+import { useT } from "../../i18n/useLocale";
+import { materialsMessages } from "../../i18n/messages/materials";
 import styles from "./Panel.module.css";
 
 function MaterialForm({
@@ -36,6 +38,7 @@ function MaterialForm({
     mat?.expansion === undefined ? "" : String(mat.expansion),
   );
   const [error, setError] = useState<string | null>(null);
+  const text = useT(materialsMessages);
 
   function handleSave() {
     const youngModulus = parseFloat(young);
@@ -43,23 +46,23 @@ function MaterialForm({
     const densityValue = parseFloat(density);
 
     if (!isFinite(youngModulus) || youngModulus <= 0) {
-      setError("Young's modulus must be a positive number");
+      setError(text.youngInvalid);
       return;
     }
     // ν must lie in (-1, 0.5); ν = 0 is physically valid (e.g. auxetic foams,
     // cork) and must not be silently replaced by the steel default.
     if (!isFinite(poissonRatio) || poissonRatio <= -1 || poissonRatio >= 0.5) {
-      setError("Poisson's ratio must be in the range (-1, 0.5)");
+      setError(text.poissonInvalid);
       return;
     }
     if (!isFinite(densityValue) || densityValue < 0) {
-      setError("Density must be a non-negative number");
+      setError(text.densityInvalid);
       return;
     }
     const expansionValue =
       expansion.trim() === "" ? undefined : Number(expansion);
     if (expansionValue !== undefined && !Number.isFinite(expansionValue)) {
-      setError("The expansion coefficient must be a number, or blank for none");
+      setError(text.expansionInvalid);
       return;
     }
     onSave({
@@ -83,7 +86,7 @@ function MaterialForm({
         </div>
       )}
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Name</span>
+        <span className={styles.formLabel}>{text.name}</span>
         <input
           className={styles.formInput}
           value={name}
@@ -91,14 +94,14 @@ function MaterialForm({
         />
       </div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Colour</span>
+        <span className={styles.formLabel}>{text.colour}</span>
         <input
           className={styles.colorInput}
           type="color"
           value={color}
           data-testid="material-color"
           onChange={(e) => setColor(e.target.value)}
-          title="Colour used to paint the bodies made of this material"
+          title={text.colourTitle}
         />
       </div>
       <div className={styles.formRow}>
@@ -129,13 +132,10 @@ function MaterialForm({
           value={density}
           step="1e-9"
           onChange={(e) => setDensity(e.target.value)}
-          title="Stored with the material but not used by the current static solver (reserved for future gravity / inertial loads)."
+          title={text.densityTitle}
         />
       </div>
-      <p className={styles.formNote}>
-        Not used by the current static solver — reserved for future gravity /
-        inertial loads.
-      </p>
+      <p className={styles.formNote}>{text.densityNote}</p>
       <div className={styles.formRow}>
         <span className={styles.formLabel}>α (1/°C)</span>
         <input
@@ -143,19 +143,19 @@ function MaterialForm({
           type="number"
           value={expansion}
           step="1e-6"
-          placeholder="none"
+          placeholder={text.expansionPlaceholder}
           data-testid="material-expansion"
-          aria-label="Thermal expansion coefficient (1/°C)"
+          aria-label={text.expansionLabel}
           onChange={(e) => setExpansion(e.target.value)}
-          title="Coefficient of thermal expansion, used by a temperature change. Leave blank if the model has none."
+          title={text.expansionTitle}
         />
       </div>
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
+          {text.cancel}
         </button>
         <button className={styles.primaryBtn} onClick={handleSave}>
-          Save
+          {text.save}
         </button>
       </div>
     </div>
@@ -172,6 +172,7 @@ function MaterialDetail({ id }: { id: number }) {
   const deleteMaterial = useModelStore((s) => s.deleteMaterial);
   // Remount the form on save so its fields show the stored values again.
   const [revision, setRevision] = useState(0);
+  const text = useT(materialsMessages);
   if (!mat) return null;
 
   const bodies = properties.filter(
@@ -189,9 +190,9 @@ function MaterialDetail({ id }: { id: number }) {
         }}
         onCancel={() => setRevision((r) => r + 1)}
       />
-      <div className={styles.sectionLabel}>Used by</div>
+      <div className={styles.sectionLabel}>{text.usedBy}</div>
       {bodies.length === 0 ? (
-        <div className={styles.empty}>No body</div>
+        <div className={styles.empty}>{text.noBody}</div>
       ) : (
         bodies.map((p) => (
           <div key={p.id} className={styles.statRow}>
@@ -204,7 +205,7 @@ function MaterialDetail({ id }: { id: number }) {
           className={styles.outlineBtn}
           onClick={() => deleteMaterial(mat.id)}
         >
-          Remove material
+          {text.removeMaterial}
         </button>
       )}
     </>

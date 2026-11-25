@@ -19,6 +19,8 @@ import {
   useStartOnAdd,
   type SectionFocus,
 } from "./sectionFocus";
+import { useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 // Fixed-displacement section: pick faces to create a BC group ("+ Add" in the
@@ -54,6 +56,7 @@ export function BcSection({
     endPick,
     startPickForGroup,
   } = usePickedFaces(onError);
+  const text = useT(boundaryMessages);
 
   // Group whose values are being edited inline (✎), if any.
   const [editingBcId, setEditingBcId] = useState<number | null>(
@@ -101,7 +104,7 @@ export function BcSection({
       // only reject non-finite input — never silently coerce "abc" to 0.
       const value = parseFloat(bcValue);
       if (!isFinite(value)) {
-        onError("Prescribed displacement must be a finite number");
+        onError(text.displacementInvalid);
         return;
       }
       const dofs = checkedDofs
@@ -119,7 +122,7 @@ export function BcSection({
           className={styles.pickBtn}
           onClick={() => setPickMode("bc", null)}
         >
-          + Add BC
+          {text.addBc}
         </button>
       )}
 
@@ -127,9 +130,13 @@ export function BcSection({
         <div className={styles.pickPanel}>
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
-              {targetBcGroup ? `Add face to ${targetBcGroup.name}` : "New BC"}
+              {targetBcGroup ? text.addFaceTo(targetBcGroup.name) : text.newBc}
             </span>
-            <button className={styles.iconBtn} onClick={endPick} title="Cancel">
+            <button
+              className={styles.iconBtn}
+              onClick={endPick}
+              title={text.cancel}
+            >
               ✕
             </button>
           </div>
@@ -167,7 +174,7 @@ export function BcSection({
                 }
               />
               <div className={styles.formRow}>
-                <span className={styles.formLabel}>Value</span>
+                <span className={styles.formLabel}>{text.value}</span>
                 <input
                   className={styles.formInput}
                   type="number"
@@ -177,16 +184,14 @@ export function BcSection({
                 />
               </div>
               <button className={styles.primaryBtn} onClick={applyBc}>
-                Apply BC
+                {text.applyBc}
               </button>
             </>
           )}
 
           {allPickedFaces.length > 0 && targetBcGroup && (
             <button className={styles.primaryBtn} onClick={applyBc}>
-              {allPickedFaces.length === 1
-                ? "Add Face"
-                : `Add ${allPickedFaces.length} Faces`}
+              {text.addFaces(allPickedFaces.length)}
             </button>
           )}
         </div>
@@ -200,8 +205,8 @@ export function BcSection({
             name={group.name}
             meta={`${group.dofs.map((dof) => DOF_LABELS[dof]).join(", ")} = ${group.value}`}
             dotClassName={styles.bcDot}
-            editTitle="Edit BC"
-            deleteTitle="Delete BC"
+            editTitle={text.editBc}
+            deleteTitle={text.deleteBc}
             faces={group.faces}
             editForm={
               editingBcId === group.id && (

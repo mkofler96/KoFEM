@@ -19,6 +19,8 @@ import {
 import { buildReport, reportFileName } from "../../lib/bugReport";
 import { workerLogLines } from "../../hooks/useWorkerLogs";
 import { lastShownError, watchShownErrors } from "./shownErrors";
+import { useT } from "../../i18n/useLocale";
+import { feedbackMessages } from "../../i18n/messages/feedback";
 import styles from "./Feedback.module.css";
 
 // Top-bar "Report a problem" button. One click opens the dialog, for problems
@@ -72,6 +74,7 @@ export function FeedbackMenu() {
   // The diagnostics of an open report, taken when the user chose to report:
   // the state they are about to describe.
   const [report, setReport] = useState<Diagnostics | null>(null);
+  const text = useT(feedbackMessages);
 
   useEffect(() => watchShownErrors(), []);
 
@@ -80,9 +83,9 @@ export function FeedbackMenu() {
       <button
         type="button"
         className={styles.trigger}
-        aria-label="Report a problem"
+        aria-label={text.reportProblem}
         aria-haspopup="dialog"
-        title="Report a problem or an idea"
+        title={text.reportTitle}
         data-testid="feedback-button"
         onClick={() => {
           setReport(collectDiagnostics());
@@ -97,7 +100,7 @@ export function FeedbackMenu() {
             strokeLinejoin="round"
           />
         </svg>
-        <span className={styles.triggerLabel}>Report a problem</span>
+        <span className={styles.triggerLabel}>{text.reportProblem}</span>
       </button>
 
       {report && (
@@ -164,6 +167,7 @@ function ReportDialog({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [step, setStep] = useState<Step>("choose");
   const mailto = reportMailtoUrl(diagnostics);
+  const text = useT(feedbackMessages);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -190,15 +194,15 @@ function ReportDialog({
     >
       <div className={styles.body}>
         <h2 id="feedback-report-title" className={styles.title}>
-          Report a problem
+          {text.reportProblem}
         </h2>
 
         {step === "choose" && (
           <>
             <p className={styles.text}>
-              A bug or an idea: tell us either way. KoFEM sends nothing itself.{" "}
+              {text.intro}{" "}
               <a href="/privacy/#feedback" target="_blank" rel="noopener">
-                Privacy
+                {text.privacy}
               </a>
             </p>
             <div className={styles.choices}>
@@ -212,9 +216,9 @@ function ReportDialog({
                   track("feedback_email_opened", {});
                 }}
               >
-                <span className={styles.choiceTitle}>Send an email</span>
+                <span className={styles.choiceTitle}>{text.sendEmail}</span>
                 <span className={styles.choiceText}>
-                  Private, to {REPORT_EMAIL}. No account needed.
+                  {text.emailPrivate(REPORT_EMAIL)}
                 </span>
               </button>
               <button
@@ -223,10 +227,8 @@ function ReportDialog({
                 data-testid="report-github"
                 onClick={() => setStep("github")}
               >
-                <span className={styles.choiceTitle}>Open a GitHub issue</span>
-                <span className={styles.choiceText}>
-                  Public. Needs a GitHub account.
-                </span>
+                <span className={styles.choiceTitle}>{text.openIssue}</span>
+                <span className={styles.choiceText}>{text.issuePublic}</span>
               </button>
             </div>
             <div className={styles.actions}>
@@ -235,7 +237,7 @@ function ReportDialog({
                 className={styles.secondary}
                 onClick={close}
               >
-                Cancel
+                {text.cancel}
               </button>
             </div>
           </>
@@ -275,6 +277,7 @@ function EmailStep({
 }) {
   const hasCad = useModelStore((s) => s.stepBytes !== null);
   const [zip, setZip] = useState<ZipState>({ phase: "idle", error: null });
+  const text = useT(feedbackMessages);
 
   function download(withCad: boolean) {
     setZip({ phase: "saving" });
@@ -283,7 +286,7 @@ function EmailStep({
       (err: unknown) =>
         setZip({
           phase: "idle",
-          error: `Could not save the report: ${(err as Error).message}`,
+          error: text.saveFailed((err as Error).message),
         }),
     );
   }
@@ -291,8 +294,7 @@ function EmailStep({
   return (
     <div data-testid="report-email-sent">
       <p className={styles.text}>
-        Your email program opened with these diagnostics. Describe the problem
-        or idea and send it. No email? Write to{" "}
+        {text.emailOpened}{" "}
         <a href={mailto} data-testid="report-mailto">
           {REPORT_EMAIL}
         </a>
@@ -301,27 +303,18 @@ function EmailStep({
       <pre
         className={`${styles.preview} ${styles.previewOn}`}
         data-testid="email-diagnostics"
-        aria-label="Diagnostics in the email"
+        aria-label={text.diagnosticsInEmail}
       >
         {formatDiagnostics(diagnostics)}
       </pre>
 
       <div className={styles.section}>
-        <p className={styles.listTitle}>Attach your model (optional)</p>
-        <p className={styles.text}>
-          Download a report to attach to the email. It contains:
-        </p>
+        <p className={styles.listTitle}>{text.attachModel}</p>
+        <p className={styles.text}>{text.downloadToAttach}</p>
         <ul className={styles.contents} data-testid="report-contents">
-          <li>Your analysis: settings, supports, loads, mesh and results</li>
-          <li>
-            {hasCad
-              ? "Your CAD file — choose Without CAD for a confidential model"
-              : "No CAD file: this analysis has none loaded"}
-          </li>
-          <li>
-            App and engine versions, browser, the recent log and the last error
-            shown
-          </li>
+          <li>{text.containsAnalysis}</li>
+          <li>{hasCad ? text.containsCad : text.noCad}</li>
+          <li>{text.containsVersions}</li>
         </ul>
         {zip.phase === "idle" && zip.error && (
           <p className={styles.error} role="alert" data-testid="report-error">
@@ -330,8 +323,7 @@ function EmailStep({
         )}
         {zip.phase === "saved" && (
           <p className={styles.text} data-testid="report-saved">
-            Saved <strong>{zip.fileName}</strong> to your downloads. Attach it
-            to the email.
+            {text.savedBefore} <strong>{zip.fileName}</strong> {text.savedAfter}
           </p>
         )}
         <div className={styles.actions}>
@@ -343,7 +335,7 @@ function EmailStep({
               data-testid="report-without-cad"
               onClick={() => download(false)}
             >
-              Without CAD
+              {text.withoutCad}
             </button>
           )}
           <button
@@ -353,17 +345,17 @@ function EmailStep({
             data-testid="report-download"
             onClick={() => download(hasCad)}
           >
-            {zip.phase === "saving" ? "Saving…" : "Download report (ZIP)"}
+            {zip.phase === "saving" ? text.saving : text.downloadReport}
           </button>
         </div>
       </div>
 
       <div className={`${styles.actions} ${styles.footer}`}>
         <button type="button" className={styles.secondary} onClick={onBack}>
-          Back
+          {text.back}
         </button>
         <button type="button" className={styles.primary} onClick={onDone}>
-          Done
+          {text.done}
         </button>
       </div>
     </div>
@@ -384,6 +376,7 @@ function GitHubStep({
   // the user ticks the box after reading them. The feature form has no field
   // for them.
   const [include, setInclude] = useState(false);
+  const text = useT(feedbackMessages);
   const url = feedbackIssueUrl(
     kind,
     kind === "problem" && include ? diagnostics : null,
@@ -391,9 +384,9 @@ function GitHubStep({
 
   return (
     <div data-testid="feedback-github">
-      <p className={styles.text}>A public issue, without your model.</p>
+      <p className={styles.text}>{text.publicIssue}</p>
       <fieldset className={styles.kind}>
-        <legend className={styles.listTitle}>What is it?</legend>
+        <legend className={styles.listTitle}>{text.whatIsIt}</legend>
         <label className={styles.optIn}>
           <input
             type="radio"
@@ -401,7 +394,7 @@ function GitHubStep({
             checked={kind === "problem"}
             onChange={() => setKind("problem")}
           />
-          A problem
+          {text.aProblem}
         </label>
         <label className={styles.optIn}>
           <input
@@ -410,7 +403,7 @@ function GitHubStep({
             checked={kind === "improvement"}
             onChange={() => setKind("improvement")}
           />
-          An idea
+          {text.anIdea}
         </label>
       </fieldset>
       {kind === "problem" && (
@@ -422,12 +415,12 @@ function GitHubStep({
               onChange={(e) => setInclude(e.target.checked)}
               data-testid="feedback-include"
             />
-            Include diagnostics (no geometry, file names or results)
+            {text.includeDiagnostics}
           </label>
           <pre
             className={`${styles.preview} ${include ? styles.previewOn : ""}`}
             data-testid="feedback-diagnostics"
-            aria-label="Diagnostics preview"
+            aria-label={text.diagnosticsPreview}
           >
             {formatDiagnostics(diagnostics)}
           </pre>
@@ -435,7 +428,7 @@ function GitHubStep({
       )}
       <div className={`${styles.actions} ${styles.footer}`}>
         <button type="button" className={styles.secondary} onClick={onBack}>
-          Back
+          {text.back}
         </button>
         <a
           className={styles.primary}
@@ -448,7 +441,7 @@ function GitHubStep({
             onContinue();
           }}
         >
-          Continue on GitHub ↗
+          {text.continueGithub}
         </a>
       </div>
     </div>

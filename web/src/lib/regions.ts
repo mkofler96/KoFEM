@@ -14,14 +14,17 @@
 import type { Element, Property } from "../store/geometrySlice";
 import { isCadBody } from "../store/geometrySlice";
 import { orderedDesignElements } from "./designElements";
+import { tr } from "../i18n/useLocale";
+import { geometryMessages } from "../i18n/messages/geometry";
+import { meshMessages } from "../i18n/messages/mesh";
 
 export type OptimizationRole = "design" | "solid" | "void";
 
-export const OPTIMIZATION_ROLE_LABELS: Record<OptimizationRole, string> = {
-  design: "Design",
-  solid: "Keep solid",
-  void: "Keep empty",
-};
+export const OPTIMIZATION_ROLES: readonly OptimizationRole[] = [
+  "design",
+  "solid",
+  "void",
+];
 
 // The body a CAD solid is a region of.
 export function bodyOf(prop: Property): number {
@@ -80,15 +83,18 @@ export function bodyGroupOf(
 // "Body 1 · Region 2" when the body has several.
 export function solidName(properties: Property[], solidId: number): string {
   const group = groupOf(properties, solidId);
-  if (group.regions.length === 1) return `Body ${group.body}`;
+  const text = tr(geometryMessages);
+  if (group.regions.length === 1) return text.bodyName(group.body);
   const k = group.regions.findIndex((r) => r.id === solidId) + 1;
-  return `Body ${group.body} · Region ${k}`;
+  return text.bodyRegionName(group.body, k);
 }
 
 // The label of a region under its body in the model tree.
 export function regionLabel(properties: Property[], solidId: number): string {
   const group = groupOf(properties, solidId);
-  return `Region ${group.regions.findIndex((r) => r.id === solidId) + 1}`;
+  return tr(geometryMessages).regionName(
+    group.regions.findIndex((r) => r.id === solidId) + 1,
+  );
 }
 
 export function sameBody(
@@ -129,7 +135,7 @@ export function regionMaxSizes(properties: Property[]): Map<number, number> {
     const size = parseFloat(raw);
     if (!Number.isFinite(size) || size <= 0)
       throw new Error(
-        `The max element size of ${solidName(properties, p.id)} must be a positive number of mm — got "${raw}".`,
+        tr(meshMessages).regionSizeInvalid(solidName(properties, p.id), raw),
       );
     sizes.set(p.id, size);
   }

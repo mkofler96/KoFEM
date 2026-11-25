@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { tr } from "../i18n/useLocale";
+import { meshMessages } from "../i18n/messages/mesh";
+
 // The store and the worker each declare their own node/element types; the
 // filter only needs ids, connectivity and the body.
 interface MeshNode {
@@ -75,9 +78,7 @@ export function dropSuppressedBodies<N extends MeshNode, E extends MeshElement>(
     (el) => el.propertyId === undefined || !suppressed.has(el.propertyId),
   );
   if (kept.length === 0)
-    throw new Error(
-      `Every body of the mesh is suppressed (bodies ${[...suppressed].join(", ")}) — nothing is left to analyse. Unsuppress at least one body.`,
-    );
+    throw new Error(tr(meshMessages).allSuppressed([...suppressed].join(", ")));
 
   const newId = new Map<number, number>();
   const nodes: N[] = [];

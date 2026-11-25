@@ -8,6 +8,8 @@ import type { DerivedStudyKind } from "../../store/studySlice";
 import { SolvePanel } from "./SolvePanel";
 import { OptimizePanel } from "./OptimizePanel";
 import { RefinementStudyPanel } from "./RefinementStudy";
+import { useT } from "../../i18n/useLocale";
+import { studiesMessages } from "../../i18n/messages/studies";
 import styles from "./Panel.module.css";
 
 // Studies → + Add: a static solve, or a topology optimization or a mesh
@@ -15,6 +17,7 @@ import styles from "./Panel.module.css";
 function AddStudy() {
   const studies = useModelStore((s) => s.studies);
   const addStudy = useModelStore((s) => s.addStudy);
+  const text = useT(studiesMessages);
   const statics = studies.filter((st) => st.kind === "static");
   // The kind of study built on a static case whose case picker is open.
   const [derived, setDerived] = useState<DerivedStudyKind | null>(null);
@@ -28,10 +31,8 @@ function AddStudy() {
         data-testid="add-study-static"
         onClick={() => addStudy("static")}
       >
-        <span className={styles.addChoiceLabel}>Static</span>
-        <span className={styles.addChoiceHint}>
-          Linear-elastic response to the supports and loads
-        </span>
+        <span className={styles.addChoiceLabel}>{text.staticKind}</span>
+        <span className={styles.addChoiceHint}>{text.staticHint}</span>
       </button>
       <button
         className={`${styles.addChoice} ${derived === "topopt" ? styles.addChoiceActive : ""}`}
@@ -40,11 +41,9 @@ function AddStudy() {
         aria-expanded={derived === "topopt"}
         onClick={() => setDerived("topopt")}
       >
-        <span className={styles.addChoiceLabel}>Topology optimization</span>
+        <span className={styles.addChoiceLabel}>{text.topOptKind}</span>
         <span className={styles.addChoiceHint}>
-          {statics.length === 0
-            ? "Add a static study first — an optimization works on a static case"
-            : "Material layout that best carries a static case"}
+          {statics.length === 0 ? text.topOptNeedsStatic : text.topOptHint}
         </span>
       </button>
       <button
@@ -54,17 +53,17 @@ function AddStudy() {
         aria-expanded={derived === "refinement"}
         onClick={() => setDerived("refinement")}
       >
-        <span className={styles.addChoiceLabel}>Mesh refinement</span>
+        <span className={styles.addChoiceLabel}>{text.refinementKind}</span>
         <span className={styles.addChoiceHint}>
           {statics.length === 0
-            ? "Add a static study first — a refinement study checks a static case"
-            : "Solve a static case on finer meshes to check the result settles"}
+            ? text.refinementNeedsStatic
+            : text.refinementHint}
         </span>
       </button>
       {derived !== null && statics.length > 0 && (
         <div className={styles.inlineForm}>
           <div className={styles.formRow}>
-            <span className={styles.formLabel}>Static case</span>
+            <span className={styles.formLabel}>{text.staticCase}</span>
             <select
               className={styles.formSelect}
               data-testid="add-study-static-case"
@@ -83,16 +82,14 @@ function AddStudy() {
               className={styles.cancelBtn}
               onClick={() => setDerived(null)}
             >
-              Cancel
+              {text.cancel}
             </button>
             <button
               className={styles.primaryBtn}
               data-testid="add-study-create"
               onClick={() => addStudy(derived, staticId)}
             >
-              {derived === "topopt"
-                ? "Add optimization"
-                : "Add refinement study"}
+              {derived === "topopt" ? text.addOptimization : text.addRefinement}
             </button>
           </div>
         </div>
@@ -107,6 +104,7 @@ function StudyDetail({ id }: { id: number }) {
   const studies = useModelStore((s) => s.studies);
   const setStudyStatic = useModelStore((s) => s.setStudyStatic);
   const deleteStudy = useModelStore((s) => s.deleteStudy);
+  const text = useT(studiesMessages);
   const study = studies.find((st) => st.id === id);
   if (!study) return null;
 
@@ -116,7 +114,7 @@ function StudyDetail({ id }: { id: number }) {
       data-testid="delete-study"
       onClick={() => deleteStudy(study.id)}
     >
-      Delete study
+      {text.deleteStudy}
     </button>
   );
   if (study.kind === "static")
@@ -126,14 +124,14 @@ function StudyDetail({ id }: { id: number }) {
   const staticCase = statics.find((st) => st.id === study.staticId) ?? null;
   const header = (
     <div className={styles.formRow}>
-      <span className={styles.formLabel}>Static case</span>
+      <span className={styles.formLabel}>{text.staticCase}</span>
       <select
         className={styles.formSelect}
         data-testid="study-static-case"
         value={staticCase?.id ?? ""}
         onChange={(e) => setStudyStatic(study.id, Number(e.target.value))}
       >
-        {!staticCase && <option value="">— pick a static study —</option>}
+        {!staticCase && <option value="">{text.pickStaticStudy}</option>}
         {statics.map((st) => (
           <option key={st.id} value={st.id}>
             {st.name}

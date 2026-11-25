@@ -175,6 +175,48 @@ describe("buildDensitySurface: interior face dropped, boundary faces kept", () =
   });
 });
 
+describe("an element that references a node the model does not have", () => {
+  test("element view throws on an element that references an unknown node", () => {
+    const bad = {
+      id: 11,
+      type: "CTETRA",
+      nodeIds: [1, 2, 3, 99],
+      propertyId: 1,
+    };
+    const density = new Float64Array([0.9, 0.9]);
+    expect(() => buildDensitySurface(nodes, [tetA, bad], density, 0.5)).toThrow(
+      /unknown node 99/,
+    );
+    expect(() => buildDensityStl(nodes, [tetA, bad], density, 0.5)).toThrow(
+      /unknown node 99/,
+    );
+  });
+
+  test("element view throws on a shell facet with an unknown node", () => {
+    const bad = { id: 12, type: "CTRIA3", nodeIds: [1, 2, 99], propertyId: 1 };
+    const density = new Float64Array([0.9, 0.9]);
+    expect(() => buildDensitySurface(nodes, [tetA, bad], density, 0.5)).toThrow(
+      /element 12 references unknown node 99/,
+    );
+  });
+
+  test("smooth view of a level set names the element and the node", () => {
+    const bad = {
+      id: 11,
+      type: "CTETRA",
+      nodeIds: [1, 2, 3, 99],
+      propertyId: 1,
+    };
+    const field = levelSetField(new Float64Array([1, 1, 1, 1, 1]));
+    expect(() =>
+      buildSmoothDensitySurface(nodes, [tetA, bad], field, 0.5),
+    ).toThrow(/element 11 references unknown node 99/);
+    expect(() =>
+      buildSmoothDensityStl(nodes, [tetA, bad], field, 0.5, "level set"),
+    ).toThrow(/element 11 references unknown node 99/);
+  });
+});
+
 describe("smooth boundary: nodal field and isosurface", () => {
   // One tet, field 1 at node 0 and 0 elsewhere, level 0.5.
   const field = new Float64Array([1, 0, 0, 0, 0]);

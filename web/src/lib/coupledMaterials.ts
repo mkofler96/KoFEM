@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { Element, Material, Property } from "../workers/solverTypes.js";
+import { tr } from "../i18n/useLocale.js";
+import { boundaryChecksMessages } from "../i18n/messages/boundaryChecks.js";
 
 function materialResolver(materials: Material[], properties: Property[]) {
   const propertyById = new Map(
@@ -38,9 +40,13 @@ function singleDomainMaterial(
     const names = [...distinct.values()]
       .map((material) => material.name)
       .join(", ");
+    const text = tr(boundaryChecksMessages);
     throw new Error(
-      `coupled solve: this path supports only one ${domain} material, but the ${domain} domain spans ` +
-        `${distinct.size} distinct materials (${names}). Assign a single material to the ${domain} domain.`,
+      text.oneMaterialPerDomain(
+        domain === "solid" ? text.domainSolid : text.domainShell,
+        distinct.size,
+        names,
+      ),
     );
   }
   return [...distinct.values()][0];

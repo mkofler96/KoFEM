@@ -12,6 +12,8 @@ import {
   resultUnit,
 } from "../../lib/resultField";
 import { reactionRange } from "../../lib/reactionArrows";
+import { useT } from "../../i18n/useLocale";
+import { viewportMessages } from "../../i18n/messages/viewport";
 
 const GRADIENT_STOPS = 12;
 const TICKS = 5;
@@ -41,6 +43,7 @@ export function ColorBar() {
   const reactionsDisplay = useModelStore((s) => s.reactionsDisplay);
   // The legend range popup, opened from the pencil beside the title.
   const [editing, setEditing] = useState(false);
+  const text = useT(viewportMessages);
   const box = useRef<HTMLDivElement>(null);
 
   // Escape or a press outside the legend closes the popup.
@@ -109,8 +112,8 @@ export function ColorBar() {
         {resultFieldSymbol(resultType)} [{resultUnit(resultType)}]
         <button
           data-testid="legend-edit"
-          aria-label="Edit legend range"
-          title="Edit legend range"
+          aria-label={text.editLegendRange}
+          title={text.editLegendRange}
           aria-expanded={editing}
           onClick={() => setEditing((open) => !open)}
           style={{
@@ -155,7 +158,7 @@ export function ColorBar() {
           data-testid="colorbar-manual"
           style={{ marginBottom: 6, color: "#6b7280", whiteSpace: "nowrap" }}
         >
-          manual range
+          {text.manualRange}
         </div>
       )}
       <Bar

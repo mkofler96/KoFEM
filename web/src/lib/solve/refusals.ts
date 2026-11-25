@@ -8,13 +8,18 @@
 import type { TieDefinition } from "../tie.js";
 import type { Element, SurfaceLoad } from "../../workers/solverTypes.js";
 import { faceKey, loadableFaceKeys } from "../../store/boundaryRebuild.js";
+import { tr } from "../../i18n/useLocale.js";
+import { refusalMessages } from "../../i18n/messages/refusals.js";
 
 // `tie "Tie1"`, or `2 ties ("Tie1", "Pin")`.
 function namedTies(ties: TieDefinition[]): string {
-  const names = ties.map((tie) => `"${tie.name}"`);
+  const text = tr(refusalMessages);
   return ties.length === 1
-    ? `tie ${names[0]}`
-    : `${ties.length} ties (${names.join(", ")})`;
+    ? text.namedTie(ties[0].name)
+    : text.namedTies(
+        ties.length,
+        ties.map((tie) => `"${tie.name}"`).join(", "),
+      );
 }
 
 // The topology optimizer applies no tie in any design domain: a tied assembly
@@ -23,8 +28,7 @@ export function topOptTieRefusal(
   ties: TieDefinition[] | undefined,
 ): string | null {
   if (!ties || ties.length === 0) return null;
-  const them = ties.length === 1 ? "it" : "them";
-  return `Topology optimization does not support ties yet, but this model has ${namedTies(ties)}. Delete ${them} to optimize.`;
+  return tr(refusalMessages).topOptTies(namedTies(ties), ties.length);
 }
 
 // The Kirchhoff shell solver applies no tie: shell-to-shell ties need
@@ -33,15 +37,14 @@ export function shellTieRefusal(
   ties: TieDefinition[] | undefined,
 ): string | null {
   if (!ties || ties.length === 0) return null;
-  const them = ties.length === 1 ? "it" : "them";
-  return `The shell solver does not support ties yet, but this model has ${namedTies(ties)}. Delete ${them} to solve this shell model.`;
+  return tr(refusalMessages).shellTies(namedTies(ties), ties.length);
 }
 
 // Shell (DKT) facets are linear, and so are the tetrahedra the mixed
 // shell/solid assembler couples to them.
 export function shellOrderRefusal(elementOrder: number): string | null {
   if (elementOrder === 1) return null;
-  return `Shell and mixed shell/solid models solve with linear elements only, but element order ${elementOrder} is selected. Set Element order to Linear in the Mesh panel.`;
+  return tr(refusalMessages).shellOrder(elementOrder);
 }
 
 // A coupling is an RBE2/RBE3 constraint, and only the coupled assembler applies
@@ -49,18 +52,13 @@ export function shellOrderRefusal(elementOrder: number): string | null {
 // assembler needs a solid domain to assemble. An all-shell model therefore
 // cannot carry a coupling, in the solve or the optimizer.
 export function shellCouplingRefusal(couplingCount: number): string {
-  return (
-    `This model is all shell elements and declares ${couplingCount} surface-to-point ` +
-    "coupling(s), which the shell solver cannot apply — a coupling needs the " +
-    "coupled solid-shell assembler, and that needs at least one solid body. " +
-    "Delete the coupling, or keep one body solid."
-  );
+  return tr(refusalMessages).shellCoupling(couplingCount);
 }
 
 // A solid model the Rust solver does not take (amgUnavailableReason). The C++
 // solvers that once took these left the engine (KOF-309).
 export function solidModelRefusal(reason: string): string {
-  return `The solver cannot solve this model: ${reason}.`;
+  return tr(refusalMessages).solidModel(reason);
 }
 
 // A surface load the solve cannot apply in full (KOF-411): a selection that
@@ -79,37 +77,25 @@ export function surfaceLoadRefusal(
 ): string | null {
   if (!surfaceLoads || surfaceLoads.length === 0) return null;
   const loadable = loadableFaceKeys(elements);
+  const text = tr(refusalMessages);
   for (const [index, load] of surfaceLoads.entries()) {
     const name =
       load.name !== undefined
-        ? `Load "${load.name}"`
-        : `Surface load ${index + 1}`;
+        ? text.namedLoad(load.name)
+        : text.numberedLoad(index + 1);
     const stale =
       // eslint-disable-next-line kofem/no-silent-fallback -- counted only for loads rebuilt from groups (boundaryRebuild); a load built from faces directly has no selection that can have gone stale
       load.unmatchedSelections !== undefined ? load.unmatchedSelections : 0;
-    if (stale > 0 || load.faces.length === 0) {
-      const counted =
-        stale === 1
-          ? "1 of its selections matches"
-          : `${stale} of its selections match`;
-      const what =
-        load.faces.length === 0
-          ? "so it would apply no load at all"
-          : "so its total would act on the other selections alone";
-      return (
-        `${name}: ${stale > 0 ? counted : "its selection matches"} no face of the ` +
-        `current mesh, ${what}. Re-pick the load on faces of the mesh.`
-      );
-    }
+    if (stale === 0 && load.faces.length === 0)
+      return text.loadMatchesNoFace(name);
+    if (stale > 0)
+      return load.faces.length === 0
+        ? text.loadStaleNoLoad(name, stale)
+        : text.loadStalePartial(name, stale);
     const off = load.faces.filter(
       (face) => !loadable.has(faceKey(face)),
     ).length;
-    if (off > 0)
-      return (
-        `${name}: ${off} of its ${load.faces.length} faces ${off === 1 ? "is" : "are"} ` +
-        "not on the mesh boundary, so the rest would carry the whole load. Re-pick " +
-        "the load on faces of the mesh."
-      );
+    if (off > 0) return text.loadOffBoundary(name, off, load.faces.length);
   }
   return null;
 }
@@ -120,13 +106,12 @@ export function surfaceLoadRefusal(
 export function temperatureRefusal(
   where: "shell" | "coupled" | "auto-shell" | "optimization",
 ): string {
-  const what =
-    where === "optimization"
-      ? "A topology optimization"
-      : where === "shell"
-        ? "A shell model"
-        : where === "coupled"
-          ? "A model with shells and solids, or with a coupling,"
-          : "A model with a body marked Shell";
-  return `${what} cannot take a temperature change yet: only an all-solid model is solved with one. Remove the temperature change, or make every body Solid.`;
+  const text = tr(refusalMessages);
+  return where === "optimization"
+    ? text.temperatureOptimization
+    : where === "shell"
+      ? text.temperatureShell
+      : where === "coupled"
+        ? text.temperatureCoupled
+        : text.temperatureAutoShell;
 }

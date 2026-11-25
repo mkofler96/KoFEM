@@ -70,3 +70,24 @@
   border-radius: 6px 6px 0 0;
   color: #1f5fd0;
 }
+
+/* A labelled control in a popover: the Settings menu's language picker. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  color: #57606a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.field select {
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0d1117;
+  font: inherit;
+  font-size: 13px;
+}

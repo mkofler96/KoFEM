@@ -21,6 +21,8 @@ import type {
 import { meshCadFaceTriangles, type CadFacedMesh } from "./handCheck";
 import { nodalResultValues } from "./resultField";
 import type { ShellSurface } from "./stressFields";
+import { tr } from "../i18n/useLocale";
+import { resultFieldMessages, resultsMessages } from "../i18n/messages/results";
 
 type Vec3 = [number, number, number];
 type Tri = [number, number, number];
@@ -131,14 +133,14 @@ function nodalField(
   const disp = result.displacements;
   if (disp.length !== 3 * nodes.length)
     throw new Error(
-      `The result has ${disp.length} displacement values for ${nodes.length} nodes; it belongs to a different mesh.`,
+      tr(resultsMessages).resultOfOtherMesh(disp.length, nodes.length),
     );
   const values = nodalResultValues(result, field, nodes, elements, surface);
   if (!values)
     throw new Error(
       field === "Von Mises stress"
-        ? "The result has no von Mises stress."
-        : `The result has no ${field.toLowerCase()}; solve again to compute it.`,
+        ? tr(resultsMessages).noVonMises
+        : tr(resultsMessages).noField(tr(resultFieldMessages)[field]),
     );
   return (i) => values[i];
 }
@@ -156,7 +158,7 @@ export function anchorAtPoint(
     throw new Error(`A probe point must be finite, got ${point.join(", ")}`);
   const { surfaceTriangles, surfaceFaceIds, nodes } = model;
   if (!surfaceTriangles || surfaceTriangles.length === 0)
-    throw new Error("The mesh has no surface triangles to place a probe on");
+    throw new Error(tr(resultsMessages).noSurfaceTriangles);
   if (surfaceFaceIds && surfaceFaceIds.length !== surfaceTriangles.length)
     throw new Error(
       `the mesh has ${surfaceTriangles.length} surface triangles but ${surfaceFaceIds.length} CAD face ids`,
@@ -207,7 +209,7 @@ export function fieldExtremes(
   surface: ShellSurface,
 ): { min: ExtremeReading; max: ExtremeReading } {
   const { nodes, result } = model;
-  if (nodes.length === 0) throw new Error("The mesh has no nodes.");
+  if (nodes.length === 0) throw new Error(tr(resultsMessages).noNodes);
   const nodal = nodalField(model, field, surface);
   let lo = 0;
   let hi = 0;
@@ -249,9 +251,7 @@ export function readProbes(
   const nodeAt = (nodeId: number): number => {
     const i = index.get(nodeId);
     if (i === undefined)
-      throw new Error(
-        `Its triangle refers to node ${nodeId}, which is not in the mesh`,
-      );
+      throw new Error(tr(resultsMessages).probeNodeGone(nodeId));
     return i;
   };
   const position = (i: number): Vec3 => [nodes[i].x, nodes[i].y, nodes[i].z];
@@ -283,7 +283,7 @@ export function readProbes(
           best = { at, weights, corners };
         }
       }
-      if (!best) throw new Error("Its CAD face has no triangles on this mesh");
+      if (!best) throw new Error(tr(resultsMessages).probeFaceGone);
       const { at, weights, corners } = best;
       const [i, j, k] = corners;
       return {

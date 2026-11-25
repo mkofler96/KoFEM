@@ -30,6 +30,8 @@
 //              line, not over the whole cylinder).
 
 import { SpatialGrid } from "./spatialGrid.js";
+import { tr } from "../i18n/useLocale.js";
+import { boundaryChecksMessages } from "../i18n/messages/boundaryChecks.js";
 
 export type TieExtent = "full" | "region";
 export type TieMethod = "mpc" | "merge";
@@ -293,8 +295,7 @@ function pairOneTie(
       const node = nodeById.get(id);
       if (!node)
         throw new Error(
-          `Tie "${tie.name}" references node ${id}, which is not in the mesh — ` +
-            "re-pick its surfaces after remeshing",
+          tr(boundaryChecksMessages).tieNodeMissing(tie.name, id),
         );
       out.push(node);
     }
@@ -570,9 +571,11 @@ export function assertValidTiedMesh(
       ...(pairsOfTie.get(tieName) ?? []).map((pair) => pair.distance),
     );
     throw new Error(
-      `Tie "${tieName}" pulls nodes up to ${gap.toFixed(2)} mm apart together, ` +
-        `which ${problem}. Tie surfaces that touch or nearly touch, or set the ` +
-        "connection to a region with a search distance below the element size.",
+      tr(boundaryChecksMessages).tiePullsApart(
+        tieName,
+        gap.toFixed(2),
+        problem,
+      ),
     );
   };
 
@@ -590,10 +593,7 @@ export function assertValidTiedMesh(
 
   for (const { tied, tieName } of touched)
     if (new Set(tied.nodeIds).size !== tied.nodeIds.length)
-      refuse(
-        tieName,
-        "merges two nodes of one element and collapses it to zero volume",
-      );
+      refuse(tieName, tr(boundaryChecksMessages).tieCollapsesElement);
 
   const faceUse = new Map<string, { count: number; tieName: string }>();
   for (const { tied, tieName } of touched)
@@ -608,11 +608,7 @@ export function assertValidTiedMesh(
     }
   for (const use of faceUse.values())
     if (use.count > 2)
-      refuse(
-        use.tieName,
-        "leaves an element face shared by three elements, so the mesh is no " +
-          "longer a valid solid",
-      );
+      refuse(use.tieName, tr(boundaryChecksMessages).tieSharedFace);
 
   for (const { original, tied, tieName } of touched)
     for (const corner of elementShape(original).corners) {
@@ -626,7 +622,7 @@ export function assertValidTiedMesh(
         volumeBefore !== 0 &&
         Math.sign(volumeAfter) !== Math.sign(volumeBefore)
       )
-        refuse(tieName, "turns elements next to the weld inside out");
+        refuse(tieName, tr(boundaryChecksMessages).tieInsideOut);
     }
 }
 

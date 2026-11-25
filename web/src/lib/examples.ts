@@ -6,6 +6,8 @@ import { useModelStore } from "../store/modelStore";
 import { parseAnalysisFile } from "./analysisFile";
 import { categorizeError, setWorkflow, startTimer, track } from "./analytics";
 import { clearWorkerLogs } from "../hooks/useWorkerLogs";
+import { tr } from "../i18n/useLocale";
+import { dialogMessages } from "../i18n/messages/dialogs";
 
 // Opening an example (examples/gallery/site/, served at /examples/) in the
 // app, from the `/app/?example=<id>` deep-link the example pages' "Open in
@@ -85,7 +87,7 @@ export async function openExample(
       duration_bucket: elapsed(),
     });
   } catch (err) {
-    window.alert(`Could not load example: ${(err as Error).message}`);
+    window.alert(tr(dialogMessages).exampleFailed((err as Error).message));
     track("example_load_failed", {
       example_id: id,
       error_category: categorizeError(err),

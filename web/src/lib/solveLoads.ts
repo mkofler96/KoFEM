@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { Load, SurfaceLoad } from "../store/boundaryRebuild.js";
+import { tr } from "../i18n/useLocale.js";
+import { boundaryChecksMessages } from "../i18n/messages/boundaryChecks.js";
 
 type ShellNodalLoad = {
   force: [number, number, number];
@@ -176,9 +178,11 @@ export function coupledLoads(
     if (l.dof > 2 && !hasRotations(pi)) {
       if (l.value !== 0)
         throw new Error(
-          `Node ${l.nodeId} carries a moment (DOF ${l.dof} = ${l.value}), but it is a solid ` +
-            "node with no rotational DOF, so the moment would be dropped. Apply the moment " +
-            "to a face, or couple the surface to a reference point and apply it there.",
+          tr(boundaryChecksMessages).momentOnSolidNode(
+            l.nodeId,
+            l.dof,
+            l.value,
+          ),
         );
       continue;
     }

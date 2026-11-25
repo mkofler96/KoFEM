@@ -11,6 +11,8 @@ import { TieSection } from "./TieSection";
 import { CouplingSection } from "./CouplingSection";
 import { InterfaceSection } from "./InterfaceSection";
 import type { SectionFocus } from "./sectionFocus";
+import { useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 export const BOUNDARY_KINDS: {
@@ -47,11 +49,28 @@ function focusFor(
   return undefined;
 }
 
+// BOUNDARY_KINDS in the current language.
+export function useBoundaryKinds(): typeof BOUNDARY_KINDS {
+  const text = useT(boundaryMessages);
+  const translated: Record<BoundaryKind, { label: string; hint: string }> = {
+    bc: { label: text.kindSupport, hint: text.kindSupportHint },
+    load: { label: text.kindLoad, hint: text.kindLoadHint },
+    tie: { label: text.kindTie, hint: text.kindTieHint },
+    coupling: { label: text.kindCoupling, hint: text.kindCouplingHint },
+    temperature: {
+      label: text.kindTemperature,
+      hint: text.kindTemperatureHint,
+    },
+  };
+  return BOUNDARY_KINDS.map(({ kind }) => ({ kind, ...translated[kind] }));
+}
+
 function AddChooser() {
   const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const kinds = useBoundaryKinds();
   return (
     <div className={styles.addChooser}>
-      {BOUNDARY_KINDS.map(({ kind, label, hint }) => (
+      {kinds.map(({ kind, label, hint }) => (
         <button
           key={kind}
           className={styles.addChoice}
@@ -73,6 +92,7 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
   // defined once a volume mesh exists.
   const meshOk = useModelStore((s) => s.nodes.length > 0);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(boundaryMessages);
   const bc = focusFor(target, "bc");
   const load = focusFor(target, "load");
   const tie = focusFor(target, "tie");
@@ -93,7 +113,7 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
         {interfaceId !== null && <InterfaceSection id={interfaceId} />}
         {!meshOk && interfaceId === null && (
           <div className={styles.empty} data-testid="no-mesh-hint">
-            Generate a mesh before adding boundary conditions.
+            {text.noMeshHint}
           </div>
         )}
         {meshOk && (

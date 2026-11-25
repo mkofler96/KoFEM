@@ -410,6 +410,121 @@ describe("coupled topology optimization: the wall on a block", () => {
   });
 });
 
+// Topology optimization takes per-body materials (KOF-415): every facet and
+// tet is assembled with its own body's material. Each case compares the
+// first-iteration compliance: two bodies of one material must give the
+// one-body run, and a 4× stiffer second body must lower the compliance, but
+// less than a 4× stiffer whole model (C/4).
+describe("shell and coupled topology optimization keep each body's material", () => {
+  const firstCompliance = (domain, args, settings) =>
+    inRust(domain, args, { ...settings, maxIterations: 1 }).history[0]
+      .compliance;
+  const expectBetween = (mixed, unit) => {
+    expect(mixed).toBeLessThan(unit * 0.99);
+    expect(mixed).toBeGreaterThan((unit / 4) * 1.01);
+  };
+
+  // The plate with its facets in x > 50 on a second body of `young`, built
+  // through buildShellEngineInputs as the worker builds it.
+  function twoBodyPlate(young) {
+    const model = plateModel(16);
+    const byId = new Map(model.nodes.map((node) => [node.id, node]));
+    const rightHalf = (element) =>
+      element.nodeIds.reduce((sum, id) => sum + byId.get(id).x, 0) / 3 > 50;
+    return buildShellEngineInputs({
+      ...model,
+      materials: [
+        ...model.materials,
+        { id: 2, name: "Second", young, poisson: 0.3, density: 1 },
+      ],
+      properties: [...model.properties, { id: 2, materialId: 2, thickness: 2 }],
+      elements: model.elements.map((element) =>
+        rightHalf(element) ? { ...element, propertyId: 2 } : element,
+      ),
+    });
+  }
+
+  test("shell: two bodies of one material give the one-body run", () => {
+    const one = firstCompliance(
+      "shell",
+      buildShellEngineInputs(plateModel(16)),
+      PLATE_SETTINGS,
+    );
+    expect(firstCompliance("shell", twoBodyPlate(210000), PLATE_SETTINGS)).toBe(
+      one,
+    );
+  });
+
+  test("shell: a stiffer second body lowers the compliance, but less than a stiffer whole plate", () => {
+    const unit = firstCompliance(
+      "shell",
+      buildShellEngineInputs(plateModel(16)),
+      PLATE_SETTINGS,
+    );
+    expectBetween(
+      firstCompliance("shell", twoBodyPlate(4 * 210000), PLATE_SETTINGS),
+      unit,
+    );
+  });
+
+  // The wall on the block with the second half of the tets or of the facets
+  // on a second material of `young`, selected by 1-based attributes as
+  // mixedCoupledMaterials passes several materials per domain.
+  function twoMaterialWall(domain, young) {
+    const args = wallOnBlock();
+    const { solid, shell } = JSON.parse(args.matJson);
+    const base = domain === "solid" ? solid : shell;
+    const count =
+      domain === "solid"
+        ? args.mesh.tets.length / 4
+        : args.mesh.triangles.length / 3;
+    const attributes = Int32Array.from({ length: count }, (_, index) =>
+      index < count / 2 ? 1 : 2,
+    );
+    const pair = [base, { ...base, young_modulus: young }];
+    return {
+      ...args,
+      mesh: {
+        ...args.mesh,
+        ...(domain === "solid"
+          ? { attributes }
+          : { shell_attributes: attributes }),
+      },
+      matJson: JSON.stringify(
+        domain === "solid" ? { solid: pair, shell } : { solid, shell: pair },
+      ),
+    };
+  }
+
+  for (const [domain, young] of [
+    ["solid", 210000],
+    ["shell", 70000],
+  ]) {
+    test(`coupled ${domain} domain: two materials of the same stiffness give the one-material run`, () => {
+      const one = firstCompliance("coupled", wallOnBlock(), WALL_SETTINGS);
+      expect(
+        firstCompliance(
+          "coupled",
+          twoMaterialWall(domain, young),
+          WALL_SETTINGS,
+        ),
+      ).toBe(one);
+    });
+
+    test(`coupled ${domain} domain: a stiffer second material lowers the compliance, but less than a stiffer whole model`, () => {
+      const unit = firstCompliance("coupled", wallOnBlock(), WALL_SETTINGS);
+      expectBetween(
+        firstCompliance(
+          "coupled",
+          twoMaterialWall(domain, 4 * young),
+          WALL_SETTINGS,
+        ),
+        unit,
+      );
+    });
+  }
+});
+
 // KOF-412: a run that stops at its iteration cap says so.
 describe("shell and coupled topology optimization report whether they converged", () => {
   test("a shell run capped before it settles is not converged", () => {

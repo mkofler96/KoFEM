@@ -7,6 +7,8 @@ import { useExampleLoad } from "../../lib/examples";
 import { useGeometry } from "../../hooks/useGeometry";
 import { categorizeError, track } from "../../lib/analytics";
 import { SAMPLE, startSampleGuide } from "../../lib/sampleGuide";
+import { tr, useT } from "../../i18n/useLocale";
+import { geometryMessages } from "../../i18n/messages/geometry";
 import styles from "./EmptyState.module.css";
 
 // An empty workspace offers the sample (KOF-261): the wall bracket's CAD file,
@@ -19,6 +21,7 @@ export function EmptyState() {
   const { importCadFile } = useGeometry();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(geometryMessages);
   if (hasStarted) return null;
 
   async function openSample() {
@@ -27,10 +30,11 @@ export function EmptyState() {
     let bytes: ArrayBuffer;
     try {
       const res = await fetch(SAMPLE.url);
-      if (!res.ok) throw new Error(`the sample returned HTTP ${res.status}`);
+      if (!res.ok)
+        throw new Error(tr(geometryMessages).sampleHttpError(res.status));
       bytes = await res.arrayBuffer();
     } catch (err) {
-      setError(`Could not open the sample: ${(err as Error).message}`);
+      setError(tr(geometryMessages).sampleFailed((err as Error).message));
       setOpening(false);
       track("example_load_failed", {
         example_id: SAMPLE.exampleId,
@@ -46,7 +50,10 @@ export function EmptyState() {
     }
     // useGeometry tracked the failure and holds the reason.
     const reason = useModelStore.getState().stepImportError;
-    setError(`Could not open the sample${reason ? `: ${reason}` : "."}`);
+    const failed = tr(geometryMessages);
+    setError(
+      reason ? failed.sampleFailed(reason) : failed.sampleFailedNoReason,
+    );
     setOpening(false);
   }
 
@@ -58,13 +65,9 @@ export function EmptyState() {
           disabled={busy || opening || loadingExample !== null}
           onClick={openSample}
         >
-          {opening || loadingExample !== null
-            ? "Opening…"
-            : "Try a sample simulation"}
+          {opening || loadingExample !== null ? text.opening : text.trySample}
         </button>
-        <p className={styles.note}>
-          A steel wall bracket from CAD. A guide takes you from mesh to result.
-        </p>
+        <p className={styles.note}>{text.sampleNote}</p>
         {error && (
           <p className={styles.error} role="alert">
             {error}

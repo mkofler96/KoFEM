@@ -13,6 +13,8 @@ import {
   type RefinementSettings,
   type StudyLevel,
 } from "./refinementStudy";
+import { tr } from "../i18n/useLocale";
+import { studiesMessages } from "../i18n/messages/studies";
 
 export type ChartField = "displacement" | "stress";
 
@@ -133,6 +135,6 @@ export function bandLabel(
   if (layout.reference === null) return null;
   const target = `±${percentLabel(tolerance)} %`;
   return layout.extrapolated
-    ? `Extrapolated ${layout.reference.toPrecision(4)} mm · ${target}`
-    : `${target} of the finest level`;
+    ? tr(studiesMessages).extrapolated(layout.reference.toPrecision(4), target)
+    : tr(studiesMessages).ofFinest(target);
 }

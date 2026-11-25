@@ -17,11 +17,14 @@ import { SampleGuide } from "./SampleGuide";
 import { useModelStore } from "../../store/modelStore";
 import { useFemModule } from "../../hooks/useFemModule";
 import { VIEW_FOV } from "../../lib/projection";
+import { useT } from "../../i18n/useLocale";
+import { viewportMessages } from "../../i18n/messages/viewport";
 
 // The mesh is drawn from what the Rust module finds of it; if the module
 // cannot load, say so instead of showing an empty viewport.
 function FemModuleNotice() {
   const { error } = useFemModule();
+  const text = useT(viewportMessages);
   if (error === null) return null;
   return (
     <div
@@ -40,7 +43,7 @@ function FemModuleNotice() {
         color: "#991b1b",
       }}
     >
-      The mesh cannot be drawn: {error}. Reload the page to try again.
+      {text.meshCannotDraw(error)}
     </div>
   );
 }
@@ -49,6 +52,7 @@ export function Viewport() {
   const pickMode = useModelStore((s) => s.pickMode);
   const splitPicking = useModelStore((s) => s.splitPicking);
   const triggerFitView = useModelStore((s) => s.triggerFitView);
+  const text = useT(viewportMessages);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -68,7 +72,7 @@ export function Viewport() {
           }}
           onClick={triggerFitView}
         >
-          Fit View
+          {text.fitView}
         </button>
       </div>
 

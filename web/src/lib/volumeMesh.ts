@@ -23,6 +23,8 @@ import {
   WorkerResetError,
 } from "../workers/sharedWorker";
 import { regionMaxSizes, solidName } from "./regions";
+import { tr } from "../i18n/useLocale";
+import { meshMessages } from "../i18n/messages/mesh";
 import type { ModelState } from "../store/modelStore";
 
 // The Mesh settings as typed (the global max and min, and each region's own
@@ -36,24 +38,21 @@ export function parseMeshSizes(
   const max = parseFloat(maxElementSize);
   const min = parseFloat(minElementSize);
   if (!Number.isFinite(max) || max <= 0)
-    throw new Error(
-      `Max element size must be a positive number of mm — got "${maxElementSize}".`,
-    );
+    throw new Error(tr(meshMessages).maxSizeInvalid(maxElementSize));
   if (!Number.isFinite(min) || min < 0)
-    throw new Error(
-      `Min element size must be 0 or a positive number of mm — got "${minElementSize}".`,
-    );
-  if (min > max)
-    throw new Error(
-      `Min element size (${min} mm) must not exceed max element size (${max} mm).`,
-    );
+    throw new Error(tr(meshMessages).minSizeInvalid(minElementSize));
+  if (min > max) throw new Error(tr(meshMessages).minExceedsMax(min, max));
   // Regions with a size of their own (KOF-257). The min size stays global —
   // Netgen has one — so no region may go below it.
   const regions = regionMaxSizes(properties);
   for (const [id, size] of regions)
     if (min > size)
       throw new Error(
-        `Min element size (${min} mm) must not exceed the max element size of ${solidName(properties, id)} (${size} mm).`,
+        tr(meshMessages).minExceedsRegionMax(
+          min,
+          solidName(properties, id),
+          size,
+        ),
       );
   return { max, min, regions: Object.fromEntries(regions) };
 }

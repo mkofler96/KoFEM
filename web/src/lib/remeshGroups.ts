@@ -31,6 +31,8 @@ import type {
 import type { CouplingGroup } from "../store/couplingSlice";
 import type { Node } from "../store/geometrySlice";
 import type { TieGroup } from "../store/tieSlice";
+import { tr } from "../i18n/useLocale";
+import { meshMessages } from "../i18n/messages/mesh";
 
 export interface CarriedGroups {
   bcGroups: NamedBcGroup[];
@@ -74,13 +76,13 @@ function nodesByCadFace(
 }
 
 function whyNotCarried(entry: BcFaceEntry): string {
+  const text = tr(meshMessages);
   if (entry.cadFaceId !== undefined && entry.geometry === "edge")
-    return `CAD face ${entry.cadFaceId} is not on the new mesh's shell rim`;
-  if (entry.cadFaceId !== undefined)
-    return `CAD face ${entry.cadFaceId} is not on the new mesh's surface`;
-  if (entry.geometry === "edge") return "an edge pick";
-  if (entry.geometry === "point") return "a node pick";
-  return "not a whole CAD face";
+    return text.notOnShellRim(entry.cadFaceId);
+  if (entry.cadFaceId !== undefined) return text.notOnSurface(entry.cadFaceId);
+  if (entry.geometry === "edge") return text.edgePick;
+  if (entry.geometry === "point") return text.nodePick;
+  return text.notWholeFace;
 }
 
 export function carryGroupsToMesh(
@@ -101,6 +103,7 @@ export function carryGroupsToMesh(
     surfaceTriangles && surfaceFaceIds
       ? nodesByCadFace(surfaceTriangles, surfaceFaceIds, nodeIds)
       : new Map<number, number[]>();
+  const text = tr(meshMessages);
   const dropped: string[] = [];
   let kept = 0;
   // Old reference point node → the coupling it belonged to, and its new node
@@ -121,7 +124,7 @@ export function carryGroupsToMesh(
       if (point !== undefined) {
         if (point.newId === null) {
           dropped.push(
-            `${owner} ${entry.label} (the reference point of ${point.coupling}, which was cleared)`,
+            text.droppedReferencePoint(owner, entry.label, point.coupling),
           );
           continue;
         }
@@ -136,7 +139,9 @@ export function carryGroupsToMesh(
             ? rimNodesByFace.get(entry.cadFaceId)
             : faceNodes.get(entry.cadFaceId);
       if (!nodes) {
-        dropped.push(`${owner} ${entry.label} (${whyNotCarried(entry)})`);
+        dropped.push(
+          text.droppedEntry(owner, entry.label, whyNotCarried(entry)),
+        );
         continue;
       }
       out.push({ ...entry, nodeIds: nodes });
@@ -153,7 +158,7 @@ export function carryGroupsToMesh(
   for (const coupling of groups.couplingGroups) {
     const faces = carry(coupling.name, coupling.faces);
     if (faces.length === 0) {
-      dropped.push(`${coupling.name} — nothing left to grip`);
+      dropped.push(text.nothingToGrip(coupling.name));
       referencePoints.set(coupling.refNodeId, {
         coupling: coupling.name,
         newId: null,
@@ -174,22 +179,22 @@ export function carryGroupsToMesh(
   for (const group of groups.bcGroups) {
     const faces = carry(group.name, group.faces);
     if (faces.length > 0) bcGroups.push({ ...group, faces });
-    else dropped.push(`${group.name} — nothing left to apply it to`);
+    else dropped.push(text.nothingToApplyTo(group.name));
   }
   const loadGroups: NamedLoadGroup[] = [];
   for (const group of groups.loadGroups) {
     const faces = carry(group.name, group.faces);
     if (faces.length > 0) loadGroups.push({ ...group, faces });
-    else dropped.push(`${group.name} — nothing left to apply it to`);
+    else dropped.push(text.nothingToApplyTo(group.name));
   }
   // A tie joins two surfaces; with either side gone there is nothing to join.
   const tieGroups: TieGroup[] = [];
   for (const tie of groups.tieGroups) {
-    const facesA = carry(`${tie.name} side A`, tie.facesA);
-    const facesB = carry(`${tie.name} side B`, tie.facesB);
+    const facesA = carry(text.tieSideA(tie.name), tie.facesA);
+    const facesB = carry(text.tieSideB(tie.name), tie.facesB);
     if (facesA.length > 0 && facesB.length > 0)
       tieGroups.push({ ...tie, facesA, facesB });
-    else dropped.push(`${tie.name} — a side has nothing left to tie`);
+    else dropped.push(text.nothingToTie(tie.name));
   }
 
   return {
@@ -212,18 +217,14 @@ export function remeshNotice(carried: CarriedGroups): string | null {
     carried.loadGroups.length +
     carried.tieGroups.length;
   const couplings = carried.couplingGroups.length;
-  const kept = [
-    ...(groups > 0
-      ? [`${groups} support/load/tie group${groups === 1 ? "" : "s"}`]
-      : []),
-    ...(couplings > 0
-      ? [`${couplings} coupling${couplings === 1 ? "" : "s"}`]
-      : []),
-  ];
-  const keptText =
-    kept.length > 0
-      ? `Kept ${kept.join(" and ")} on their CAD faces.`
-      : "No group could be kept on the new mesh.";
+  const text = tr(meshMessages);
+  const keptGroups = groups > 0 ? text.keptGroups(groups) : null;
+  const keptCouplings = couplings > 0 ? text.keptCouplings(couplings) : null;
+  const kept =
+    keptGroups !== null && keptCouplings !== null
+      ? text.keptAndKept(keptGroups, keptCouplings)
+      : (keptGroups ?? keptCouplings);
+  const keptText = kept !== null ? text.keptOnFaces(kept) : text.noGroupKept;
   if (carried.dropped.length === 0) return keptText;
-  return `${keptText} Cleared — pick again: ${carried.dropped.join("; ")}.`;
+  return text.pickAgain(keptText, carried.dropped.join("; "));
 }

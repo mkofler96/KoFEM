@@ -18,6 +18,8 @@ import { refinementChartVisible } from "../../store/studySlice";
 import { probeLabel } from "../../lib/resultProbe";
 import { formatHandCheckValue } from "../../lib/handCheck";
 import { resultUnit } from "../../lib/resultField";
+import { useT } from "../../i18n/useLocale";
+import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./ProbeLayer.module.css";
 
 type Vec3 = [number, number, number];
@@ -53,6 +55,7 @@ function ProbeMarker({
   deformScale,
   radius,
 }: MarkerProps) {
+  const text = useT(resultsMessages);
   const position: Vec3 = [
     at[0] + u[0] * deformScale,
     at[1] + u[1] * deformScale,
@@ -89,7 +92,7 @@ function ProbeMarker({
             className={styles.details}
             data-testid={`probe-label-details-${testId}`}
           >
-            at {formatVector(at)}
+            {text.probeAt(formatVector(at))}
             <br />U = {formatVector(u)}
           </div>
         </div>
@@ -110,6 +113,7 @@ export function ProbeLayer({
   const resultType = useModelStore((s) => s.resultType);
   // The refinement chart covers the 3D view; its labels would float over it.
   const chartShown = useModelStore(refinementChartVisible);
+  const text = useT(resultsMessages);
   const unit = resultUnit(resultType);
   const common = { unit, deformScale, radius: 0.008 * modelSize };
   if (chartShown) return null;
@@ -121,7 +125,7 @@ export function ProbeLayer({
           <ProbeMarker
             key={end}
             testId={end}
-            name={end === "min" ? "Min" : "Max"}
+            name={text[end]}
             kind={end}
             {...extremes[end]}
             {...common}

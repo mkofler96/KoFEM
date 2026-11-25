@@ -6,6 +6,9 @@
 // finished one: Results and the Optimize panel say so, and offer to run again
 // with a higher limit.
 
+import { tr } from "../i18n/useLocale";
+import { optimizeMessages } from "../i18n/messages/optimize";
+
 export interface TopOptConvergence {
   converged: boolean;
   // The iterations the run took; at the limit when it did not converge.
@@ -15,7 +18,7 @@ export interface TopOptConvergence {
 // The notice for a run that stopped at its limit, or null for a converged run.
 export function notConvergedNotice(run: TopOptConvergence): string | null {
   if (run.converged) return null;
-  return `Not converged: the optimization stopped at its limit of ${run.iterations} iterations, so the design may still change.`;
+  return tr(optimizeMessages).notConverged(run.iterations);
 }
 
 // The limit a rerun of a capped run gets: twice the one it stopped at.

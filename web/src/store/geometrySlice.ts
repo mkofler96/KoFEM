@@ -9,6 +9,8 @@ import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
+import { tr } from "../i18n/useLocale";
+import { meshMessages } from "../i18n/messages/mesh";
 import {
   bodyGroupOf,
   bodyOf,
@@ -135,10 +137,7 @@ export function unconfirmedMaterialBodies(properties: Property[]): number[] {
 // The pre-flight line for bodies whose material is not confirmed, or null.
 export function unconfirmedMaterialMessage(ids: number[]): string | null {
   if (ids.length === 0) return null;
-  const list = ids.join(", ");
-  return ids.length === 1
-    ? `Choose the material of body ${list}: the mesh added it`
-    : `Choose the materials of bodies ${list}: the mesh added them`;
+  return tr(meshMessages).unconfirmedMaterial(ids.length, ids.join(", "));
 }
 
 // The pre-flight line for a mesh that disagrees with the suppression, or null.
@@ -151,10 +150,10 @@ export function suppressionMismatchMessage(
 ): string | null {
   const bodies = (ids: number[]) =>
     ids.map((id) => solidName(properties, id)).join(", ");
+  const text = tr(meshMessages);
   if (m.stillMeshed.length > 0)
-    return `Re-mesh: suppressed ${bodies(m.stillMeshed)} still in the mesh`;
-  if (m.missing.length > 0)
-    return `Re-mesh: restored ${bodies(m.missing)} not in the mesh`;
+    return text.suppressedStillMeshed(bodies(m.stillMeshed));
+  if (m.missing.length > 0) return text.restoredNotMeshed(bodies(m.missing));
   return null;
 }
 
@@ -451,10 +450,7 @@ function defaultBodiesOfModelWithoutImport(
 
 // The remesh-notice sentence for bodies the mesh added to an imported part.
 function newBodiesNotice(ids: number[]): string {
-  const list = ids.join(", ");
-  return ids.length === 1
-    ? `Meshing split the part: body ${list} is new — choose its material.`
-    : `Meshing split the part: bodies ${list} are new — choose their materials.`;
+  return tr(meshMessages).newBodies(ids.length, ids.join(", "));
 }
 
 // Everything built ON the geometry — mesh, groups, results, transient body view
