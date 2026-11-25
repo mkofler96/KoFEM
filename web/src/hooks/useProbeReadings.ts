@@ -10,6 +10,7 @@ import {
   type ProbeReading,
   type ResultProbe,
 } from "../lib/resultProbe";
+import { useLocale } from "../i18n/useLocale";
 
 export interface ProbeReadings {
   // The placed probes with what each reads; null readings while there is no
@@ -35,6 +36,7 @@ export function useProbeReadings(): ProbeReadings {
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
   const shellSurface = useModelStore((s) => s.shellSurface);
+  const locale = useLocale();
   return useMemo((): ProbeReadings => {
     if (!result)
       return {
@@ -68,5 +70,6 @@ export function useProbeReadings(): ProbeReadings {
     result,
     resultType,
     shellSurface,
+    locale,
   ]);
 }

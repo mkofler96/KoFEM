@@ -40,7 +40,7 @@ import { carryGroupsToMesh } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
 import { computeResultRange } from "../lib/resultField";
 import { sendToWorker } from "../workers/sharedWorker";
-import { intlTag, tr } from "../i18n/useLocale";
+import { intlTag, tr, useLocale } from "../i18n/useLocale";
 import { studiesMessages } from "../i18n/messages/studies";
 
 type StudySource = Pick<
@@ -239,10 +239,11 @@ export function useRefinementStudy() {
       properties,
     ],
   );
-  const refusal = useMemo(() => refinementRefusal(source), [source]);
+  const locale = useLocale();
+  const refusal = useMemo(() => refinementRefusal(source), [source, locale]);
   const { settings, errors } = useMemo(
     () => parseRefinementSettings(refinementInput),
-    [refinementInput],
+    [refinementInput, locale],
   );
   // The sizes the levels will mesh at, for the hint under the button.
   const plannedSizes = useMemo(() => {

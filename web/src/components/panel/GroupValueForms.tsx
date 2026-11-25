@@ -33,7 +33,7 @@ import {
   ReferencePointInputs,
   TieExtentInputs,
 } from "./BcLoadFormControls";
-import { useT } from "../../i18n/useLocale";
+import { useLocale, useT } from "../../i18n/useLocale";
 import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
@@ -284,9 +284,10 @@ export function CouplingValueForm({
 
   // Re-derived from the coupling's own surface, so a point can be re-centred
   // after the surface was extended or trimmed.
+  const locale = useLocale();
   const options = useMemo(
     () => referencePointOptions(group.faces, nodes, elements),
-    [group.faces, nodes, elements],
+    [group.faces, nodes, elements, locale],
   );
 
   // Preview the edited position in the viewport, alongside the coupling's

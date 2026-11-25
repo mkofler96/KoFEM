@@ -44,18 +44,18 @@ export function SettingsMenu() {
         onClick={() => setOpen((o) => !o)}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M6.76 3.16L6.87 1.5h2.26l.11 1.66 1.31.54 1.25-1.1 1.6 1.6-1.1 1.25.54 1.31 1.66.11v2.26l-1.66.11-.54 1.31 1.1 1.25-1.6 1.6-1.25-1.1-1.31.54-.11 1.66H6.87l-.11-1.66-1.31-.54-1.25 1.1-1.6-1.6 1.1-1.25-.54-1.31-1.66-.11V6.87l1.66-.11.54-1.31-1.1-1.25 1.6-1.6 1.25 1.1z"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinejoin="round"
+          />
           <circle
             cx="8"
             cy="8"
-            r="2.5"
-            stroke="currentColor"
-            strokeWidth="1.4"
-          />
-          <path
-            d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"
+            r="2.2"
             stroke="currentColor"
             strokeWidth="1.3"
-            strokeLinecap="round"
           />
         </svg>
       </button>

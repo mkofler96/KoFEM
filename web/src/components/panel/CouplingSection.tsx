@@ -27,7 +27,7 @@ import {
   type SectionFocus,
 } from "./sectionFocus";
 import { fmt } from "../../lib/modelDisplay";
-import { tr, useT } from "../../i18n/useLocale";
+import { tr, useLocale, useT } from "../../i18n/useLocale";
 import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
@@ -130,9 +130,10 @@ export function CouplingSection({
 
   // Positions derived from the surface picked so far — its centre, plus the two
   // ends of its axis when it is a cylinder (KOF-208).
+  const locale = useLocale();
   const options = useMemo(
     () => referencePointOptions(allPickedFaces, nodes, elements),
-    [allPickedFaces, nodes, elements],
+    [allPickedFaces, nodes, elements, locale],
   );
   // Default the point to the surface centre as soon as one is picked, and keep
   // following it while more faces are added — until the user picks another

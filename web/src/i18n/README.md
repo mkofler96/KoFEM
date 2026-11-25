@@ -34,6 +34,8 @@ export const meshMessages = defineMessages({
 - In a component: `const text = useT(meshMessages)`, then `text.nodes`.
 - Outside React (store actions, library functions): `tr(meshMessages).nodes`.
   The text is in the language current when it is built.
+- A `useMemo` whose result holds text lists `useLocale()` in its
+  dependencies, so a language switch rebuilds it.
 - Numbers shown with digit grouping: `toLocaleString(useIntlTag())`, or
   `intlTag()` outside React.
 - Message functions take strings and numbers only, and build whole
