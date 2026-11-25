@@ -38,3 +38,15 @@ export function meshCheckLabel(
   if (nodeCount === 0) return "No mesh";
   return `Mesh ready · ${nodeCount} nodes · ${elementCount} elements`;
 }
+
+// The material row of the Solve and Optimize pre-flight checks, once every
+// body resolves to a material. `materials` is non-empty.
+export function materialCheckLabel(
+  materials: readonly { name: string; young: number }[],
+  bodyCount: number,
+): string {
+  if (bodyCount > 1)
+    return `Materials assigned · ${bodyCount} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`;
+  const [material] = materials;
+  return `Material assigned · ${material.name} · E=${fmt(material.young, 3)} MPa`;
+}

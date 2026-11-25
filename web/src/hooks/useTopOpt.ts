@@ -11,7 +11,11 @@ import type {
   TopOptHistoryEntry,
   TopOptSettings,
 } from "../lib/solve/contracts.js";
-import { fmt, loadsSummary, meshCheckLabel } from "../lib/modelDisplay";
+import {
+  loadsSummary,
+  materialCheckLabel,
+  meshCheckLabel,
+} from "../lib/modelDisplay";
 import { resultUnit } from "../lib/resultField";
 import {
   resetWorker,
@@ -224,26 +228,8 @@ export function useTopOpt() {
   // unlike the static solve, which a non-zero prescribed displacement drives.
   const loadOk = loads.length > 0 || surfaceLoads.length > 0;
 
-  // TO optimizes ONE design material per sub-domain, as the engine's entries
-  // read a single (E, ν) for the solid tets and one for the shell facets
-  // (topology_simp.cpp / topology_shell_entry.cpp), so each sub-domain must
-  // resolve to one material — otherwise the per-body assignments would be
-  // silently discarded. Count the solid and shell domains separately, the way
-  // the shell/coupled solvers do (a coupled model legitimately carries one solid
-  // material and one shell material).
-  const propById = new Map(properties.map((p) => [p.id, p]));
-  const materialIdsOf = (els: typeof elements) =>
-    new Set(
-      els
-        .map((e) => propById.get(e.propertyId)?.materialId)
-        .filter((id): id is number => id !== undefined),
-    );
   const solidElements = elements.filter((e) => e.type !== "CTRIA3");
   const shellElements = elements.filter((e) => e.type === "CTRIA3");
-  const solidMaterialIds = materialIdsOf(solidElements);
-  const shellMaterialIds = materialIdsOf(shellElements);
-  const singleMaterialOk =
-    solidMaterialIds.size <= 1 && shellMaterialIds.size <= 1;
 
   // The engine's compliance sensitivity assumes homogeneous supports, so it
   // rejects any non-zero prescribed displacement (topology_simp.cpp). Catch it
@@ -287,7 +273,6 @@ export function useTopOpt() {
     !levelSetObjectiveBlock &&
     meshOk &&
     matOk &&
-    singleMaterialOk &&
     bcOk &&
     loadOk &&
     !hasPrescribed &&
@@ -439,7 +424,7 @@ export function useTopOpt() {
           ? "A body references a deleted material — reassign body materials"
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
-            : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
+            : materialCheckLabel(materials, properties.length),
     ],
     [
       bcOk,
@@ -464,20 +449,6 @@ export function useTopOpt() {
   // Blocker rows shown only when the condition applies, so the common case keeps
   // the familiar five-row checklist rather than always carrying two green rows
   // for constraints most models never hit.
-  if (matOk && !singleMaterialOk) {
-    // Pure-solid model: keep the original single-material wording. A shell or
-    // coupled model reports which sub-domain is over-assigned instead.
-    if (shellElements.length === 0)
-      checks.push([
-        false,
-        `Topology optimization uses one design material, but the model spans ${solidMaterialIds.size} — assign a single material to all bodies`,
-      ]);
-    else
-      checks.push([
-        false,
-        `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
-      ]);
-  }
   if (tieRefusal !== null) checks.push([false, tieRefusal]);
   if (noDesignRegion)
     checks.push([
