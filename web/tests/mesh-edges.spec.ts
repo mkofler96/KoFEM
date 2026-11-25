@@ -69,14 +69,11 @@ test("the Surface view draws the outline once and no element wireframe", async (
   expect(await drawnSegments(page, "fem-element-edges")).toBe(0);
 });
 
-test("the Volume and Wireframe views draw every element edge once", async ({
-  page,
-}) => {
-  await openBox(page, "volume");
+test("the Wireframe view draws every element edge once", async ({ page }) => {
+  await openBox(page, "surface");
+  await setRepr(page, "wireframe");
   await expect
     .poll(() => drawnSegments(page, "fem-element-edges"))
     .toBe(ELEMENT_EDGES);
   expect(await drawnSegments(page, "fem-surface-edges")).toBe(0);
-  await setRepr(page, "wireframe");
-  expect(await drawnSegments(page, "fem-element-edges")).toBe(ELEMENT_EDGES);
 });

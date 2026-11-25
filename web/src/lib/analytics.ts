@@ -16,6 +16,7 @@
 // id; raw error messages, file names, sizes and results never leave the page.
 
 import type { CadFormat } from "./cadFormat";
+import { inEnglish } from "../i18n/english";
 import { WorkerTaskError, type FailureStage } from "./workerError";
 
 export type Workflow = "cad_import" | "example" | "saved_file" | "none";
@@ -324,7 +325,11 @@ const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
 /** Map an error to a fixed category. The message itself stays in the browser. */
 export function categorizeError(err: unknown): ErrorCategory {
   const text =
-    err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    err instanceof WorkerTaskError
+      ? `${err.name}: ${err.english}`
+      : inEnglish(
+          err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+        );
   for (const [category, re] of ERROR_RULES) if (re.test(text)) return category;
   if (err instanceof WorkerTaskError && err.stage !== null)
     return STAGE_CATEGORY[err.stage];

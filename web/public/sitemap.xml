@@ -50,6 +50,11 @@
     <image:image><image:loc>https://kofem.org/examples/cooks-membrane.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-convergence-rate.png</image:loc></image:image>
   </url>
   <url>
+    <loc>https://kofem.org/examples/cooks-membrane-incompressible/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/cooks-membrane-incompressible.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane-incompressible/cooks-membrane-incompressible-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane-incompressible/cooks-membrane-incompressible-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
     <loc>https://kofem.org/examples/tie-patch-test/</loc>
     <priority>0.6</priority>
     <image:image><image:loc>https://kofem.org/examples/tie-patch-test.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/tie-patch-test/tie-patch-test-diagram.png</image:loc></image:image>

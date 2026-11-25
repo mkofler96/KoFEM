@@ -9,6 +9,8 @@
 // the solid (AMG) and shell solves.
 
 import type { CgLimitProgress } from "./contracts.js";
+import { tr } from "../../i18n/useLocale.js";
+import { solveMessages } from "../../i18n/messages/solve.js";
 
 // Asked when the iteration budget runs out while the residual is still
 // falling: resolves to the number of extra iterations, or 0 to stop. The
@@ -71,10 +73,11 @@ export async function iterateToConvergence(
     if (run.iterations >= limit) {
       if (!run.stillDescending(window))
         throw new Error(
-          `CG did not converge: relative residual ${run.relativeResidual.toExponential(3)} ` +
-            `after ${run.iterations} iterations (target ${run.tolerance.toExponential(0)}) ` +
-            "and is no longer improving. The partial result was discarded — check that the " +
-            "model is fully constrained, or refine the mesh.",
+          tr(solveMessages).cgNotConverged(
+            run.relativeResidual.toExponential(3),
+            run.iterations,
+            run.tolerance.toExponential(0),
+          ),
         );
       const asked = performance.now();
       const extra = await askToContinue({
@@ -86,10 +89,7 @@ export async function iterateToConvergence(
       });
       waitedMs += performance.now() - asked;
       lastYield = performance.now();
-      if (extra === 0)
-        throw new Error(
-          "Solve stopped by user. The partial result was discarded.",
-        );
+      if (extra === 0) throw new Error(tr(solveMessages).stoppedByUser);
       if (!Number.isSafeInteger(extra) || extra < 0 || extra > 1_000_000)
         throw new Error(
           "Extra CG iterations must be an integer from 1 to 1000000",

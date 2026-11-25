@@ -3,6 +3,8 @@
 
 import { useEngineStatus } from "../../store/engineStore";
 import { retryEngine } from "../../workers/sharedWorker";
+import { useT } from "../../i18n/useLocale";
+import { statusMessages } from "../../i18n/messages/shell";
 import styles from "./StatusBar.module.css";
 
 const mb = (bytes: number) => Math.round(bytes / 1e6);
@@ -10,6 +12,7 @@ const mb = (bytes: number) => Math.round(bytes / 1e6);
 // The solver engine's readiness (KOF-263). Import, mesh and solve wait on it.
 export function EngineStatus() {
   const { phase, loaded, total, failure, wasReady } = useEngineStatus();
+  const text = useT(statusMessages);
 
   if (phase === "idle") return null;
 
@@ -24,11 +27,11 @@ export function EngineStatus() {
       >
         <span className={styles.failDot} />
         <span>
-          Engine failed
+          {text.engineFailed}
           <span className={styles.engineHint}>: {failure.hint}</span>
         </span>
         <button className={styles.engineRetry} onClick={retryEngine}>
-          Retry
+          {text.retry}
         </button>
       </span>
     );
@@ -41,17 +44,17 @@ export function EngineStatus() {
         data-phase={phase}
       >
         <span className={styles.okDot} />
-        Engine ready
+        {text.engineReady}
       </span>
     );
 
   // Every start after the first is the restart a mesh triggers, from cache.
   const downloading = phase === "downloading" && !wasReady && total > 0;
   const label = wasReady
-    ? "Restarting engine…"
+    ? text.engineRestarting
     : downloading
-      ? `Loading engine… ${mb(loaded)}/${mb(total)} MB`
-      : "Starting engine…";
+      ? text.engineLoading(mb(loaded), mb(total))
+      : text.engineStarting;
   return (
     <span
       className={`${styles.engineChip} ${styles.engineLoading}`}

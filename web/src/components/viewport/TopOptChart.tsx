@@ -20,6 +20,8 @@ import {
   type ConvergencePoint,
 } from "../../lib/topOptProgress";
 import { resultUnit } from "../../lib/resultField";
+import { useT } from "../../i18n/useLocale";
+import { optimizeMessages } from "../../i18n/messages/optimize";
 import css from "./StudyChart.module.css";
 
 // The topology optimization's convergence chart, in the centre in place of the
@@ -39,12 +41,6 @@ const NARROW = {
   box: { left: 56, right: 340, top: 44, bottom: 264 },
 };
 
-const LABELS: Record<TopOptChartField, string> = {
-  compliance: "Compliance",
-  volume: "Volume",
-  stress: "Stress",
-};
-
 function format(value: number): string {
   return Math.abs(value) >= 1e4 || (value !== 0 && Math.abs(value) < 1e-2)
     ? value.toExponential(2)
@@ -59,6 +55,7 @@ export function TopOptChart() {
   const logs = useWorkerLogLines("optimize");
   const [chosen, setChosen] = useState<TopOptChartField>("compliance");
   const small = useMediaQuery(SMALL_SCREEN_QUERY);
+  const text = useT(optimizeMessages);
 
   // The finished run's history, or the run's log lines so far.
   const points: ConvergencePoint[] = useMemo(
@@ -121,7 +118,7 @@ export function TopOptChart() {
           <span className={css.status} data-testid="topopt-chart-status">
             {status}
           </span>
-          <div className={css.toggle} role="group" aria-label="Chart field">
+          <div className={css.toggle} role="group" aria-label={text.chartField}>
             {fields.map((f) => (
               <button
                 key={f}
@@ -129,21 +126,21 @@ export function TopOptChart() {
                 aria-pressed={f === field}
                 onClick={() => setChosen(f)}
               >
-                {LABELS[f]}
+                {text[f]}
               </button>
             ))}
           </div>
         </div>
 
         {main === undefined || range === null ? (
-          <div className={css.empty}>The first iteration is on its way…</div>
+          <div className={css.empty}>{text.firstIteration}</div>
         ) : (
           <>
             <svg
               className={css.svg}
               viewBox={`0 0 ${width} ${height}`}
               role="img"
-              aria-label={`${axis} against iteration`}
+              aria-label={text.againstIteration(axis)}
             >
               <text className={css.axisTitle} x={box.left} y={box.top - 22}>
                 {axis}
@@ -195,7 +192,7 @@ export function TopOptChart() {
                   cy={p.y}
                   r={main.points.length > 40 ? 2 : 3.5}
                 >
-                  <title>{`Iteration ${p.it}: ${format(p.value)}`}</title>
+                  <title>{text.iterationValue(p.it, format(p.value))}</title>
                 </circle>
               ))}
               {lastPoint && (
@@ -228,7 +225,7 @@ export function TopOptChart() {
                 y={height - 8}
                 textAnchor="middle"
               >
-                Iteration
+                {text.iteration}
               </text>
             </svg>
             {(peak || bound !== null) && (
@@ -237,11 +234,11 @@ export function TopOptChart() {
                   <>
                     <span>
                       <span className={css.legendLine} />
-                      Aggregated (the constraint)
+                      {text.aggregated}
                     </span>
                     <span data-testid="topopt-chart-max-stress">
                       <span className={css.legendLineSecondary} />
-                      True max
+                      {text.trueMax}
                     </span>
                   </>
                 )}

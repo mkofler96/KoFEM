@@ -17,6 +17,8 @@ import {
   startTimer,
   track,
 } from "../lib/analytics";
+import { tr } from "../i18n/useLocale";
+import { geometryMessages } from "../i18n/messages/geometry";
 
 // CAD import: tessellates a STEP/IGES file in the worker and stores the
 // resulting surface in the model store. Owns the import-in-flight flag and
@@ -83,7 +85,7 @@ export function useGeometry() {
           bodyCount: number;
         }>("parse_step", { bytes, format });
       if (points.length === 0) {
-        failed("empty_geometry", "No geometry found.");
+        failed("empty_geometry", tr(geometryMessages).noGeometryFound);
         return false;
       }
       // Retain the raw bytes + format so the geometry can be reloaded for a
@@ -115,7 +117,9 @@ export function useGeometry() {
       const detail =
         err instanceof Error && err.message
           ? err.message
-          : `${format === "iges" ? "IGES" : "STEP"} import failed`;
+          : tr(geometryMessages).importFailed(
+              format === "iges" ? "IGES" : "STEP",
+            );
       failed(category, importFailureMessage(category, format, detail));
       return false;
     } finally {

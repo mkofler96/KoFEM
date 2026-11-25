@@ -27,6 +27,8 @@ import {
   useStartOnAdd,
   type SectionFocus,
 } from "./sectionFocus";
+import { useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 // Applied-loads section: pick faces to create a load group (componentwise
@@ -72,6 +74,7 @@ export function LoadSection({
     endPick,
     startPickForGroup,
   } = usePickedFaces(onError);
+  const text = useT(boundaryMessages);
 
   // Group whose values are being edited inline (✎), if any.
   const [editingLoadId, setEditingLoadId] = useState<number | null>(
@@ -127,9 +130,7 @@ export function LoadSection({
       // reference point alike — has none. Refuse it here rather than create a
       // group whose selection contributes nothing to the solve.
       if (pickGeometry === "point") {
-        onError(
-          "A pressure cannot act on a single node — it has no area. Apply a force there, or pick a face.",
-        );
+        onError(text.pressureOnNode);
         return;
       }
       const pressure = parsePressure(pressureVal, onError);
@@ -146,11 +147,7 @@ export function LoadSection({
         !onlyReferencePoints &&
         !isPureShell
       ) {
-        onError(
-          "A moment cannot act on a single node of a solid mesh — its nodes carry no " +
-            "rotational DOF, so the couple would be dropped. Couple the surface to a " +
-            "reference point and apply the moment there.",
-        );
+        onError(text.momentOnSolidNode);
         return;
       }
       const components = parseLoadVector(
@@ -169,24 +166,19 @@ export function LoadSection({
   // concentrated nodal load, and a couple carried by a coupling — so which one
   // a selection lands on is worth saying before it is applied.
   function applicationNote(): string {
-    if (loadKindSel === "pressure")
-      return "applied as p·n̂ over each face (work-equivalent)";
+    if (loadKindSel === "pressure") return text.notePressure;
     if (loadKindSel === "force") {
-      if (onlyReferencePoints)
-        return "applied at the reference point, and spread over its coupled surface";
-      if (pickGeometry === "point")
-        return "applied at the picked node as a concentrated force";
-      if (pickGeometry === "edge")
-        return "applied as a work-equivalent line load along the edge";
-      return "applied as a work-equivalent surface traction";
+      if (onlyReferencePoints) return text.noteForceReference;
+      if (pickGeometry === "point") return text.noteForcePoint;
+      if (pickGeometry === "edge") return text.noteForceEdge;
+      return text.noteForceFace;
     }
-    if (onlyReferencePoints)
-      return "applied to the reference point as a couple, and spread over its coupled surface";
+    if (onlyReferencePoints) return text.noteMomentReference;
     if (pickGeometry === "point")
       return isPureShell
-        ? "applied at the picked node as a couple"
-        : "a solid mesh node carries no rotation — use a coupling's reference point";
-    return "distributed as equivalent nodal forces";
+        ? text.noteMomentShellPoint
+        : text.noteMomentSolidPoint;
+    return text.noteMomentFace;
   }
 
   function updateVecComponent(index: number, value: string) {
@@ -205,7 +197,7 @@ export function LoadSection({
           className={styles.pickBtn}
           onClick={() => setPickMode("load", null)}
         >
-          + Add Load
+          {text.addLoad}
         </button>
       )}
 
@@ -214,10 +206,14 @@ export function LoadSection({
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
               {targetLoadGroup
-                ? `Add face to ${targetLoadGroup.name}`
-                : "New Load"}
+                ? text.addFaceTo(targetLoadGroup.name)
+                : text.newLoad}
             </span>
-            <button className={styles.iconBtn} onClick={endPick} title="Cancel">
+            <button
+              className={styles.iconBtn}
+              onClick={endPick}
+              title={text.cancel}
+            >
               ✕
             </button>
           </div>
@@ -254,16 +250,14 @@ export function LoadSection({
               )}
               <div className={styles.pickNote}>{applicationNote()}</div>
               <button className={styles.loadBtn} onClick={applyLoad}>
-                Apply Load
+                {text.applyLoad}
               </button>
             </>
           )}
 
           {allPickedFaces.length > 0 && targetLoadGroup && (
             <button className={styles.loadBtn} onClick={applyLoad}>
-              {allPickedFaces.length === 1
-                ? "Add Face"
-                : `Add ${allPickedFaces.length} Faces`}
+              {text.addFaces(allPickedFaces.length)}
             </button>
           )}
         </div>
@@ -277,8 +271,8 @@ export function LoadSection({
             name={group.name}
             meta={loadGroupMeta(group)}
             dotClassName={styles.loadDot}
-            editTitle="Edit load"
-            deleteTitle="Delete Load"
+            editTitle={text.editLoad}
+            deleteTitle={text.deleteLoad}
             faces={group.faces}
             editForm={
               editingLoadId === group.id && (

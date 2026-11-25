@@ -26,6 +26,8 @@ import {
   topOptTieRefusal,
 } from "../../src/lib/solve/refusals.ts";
 import { WorkerTaskError } from "../../src/lib/workerError.ts";
+import { tr, useLocaleStore } from "../../src/i18n/useLocale.ts";
+import { solveMessages } from "../../src/i18n/messages/solve.ts";
 
 // A window with just what the loader and the utility touch.
 const sent = [];
@@ -379,6 +381,7 @@ describe("buckets and categories", () => {
     const err = new WorkerTaskError(
       "Standard_Failure: BRep_API: command not done",
       stage,
+      "Standard_Failure: BRep_API: command not done",
     );
     expect(categorizeError(err)).toBe(category);
   });
@@ -399,15 +402,47 @@ describe("buckets and categories", () => {
       solidModelRefusal("it does not support shell-only models"),
     ],
   ])("the %s refusal is unsupported_model", (_name, message) => {
-    expect(categorizeError(new WorkerTaskError(message, "solving"))).toBe(
-      "unsupported_model",
-    );
+    expect(
+      categorizeError(new WorkerTaskError(message, "solving", message)),
+    ).toBe("unsupported_model");
+  });
+
+  // The rules read English (KOF-468). An error a user reads in German is
+  // categorised by the English it was translated from.
+  describe("in another language", () => {
+    beforeAll(() => useLocaleStore.setState({ locale: "de" }));
+    afterAll(() => useLocaleStore.setState({ locale: "en" }));
+
+    test("a translated refusal is unsupported_model", () => {
+      const refusal = shellTieRefusal([{ name: "Tie1" }]);
+      expect(refusal).not.toContain("does not support");
+      expect(categorizeError(new Error(refusal))).toBe("unsupported_model");
+    });
+
+    test("a translated fixed message keeps its category", () => {
+      expect(categorizeError(new Error(tr(solveMessages).stoppedByUser))).toBe(
+        "cancelled",
+      );
+      expect(categorizeError(new Error(tr(solveMessages).outOfMemory))).toBe(
+        "resource_limit",
+      );
+    });
+
+    test("a worker failure is categorised by the English the worker sent", () => {
+      const err = new WorkerTaskError(
+        "Der Speicher ist voll",
+        "solving",
+        "The solver ran out of memory.",
+      );
+      expect(categorizeError(err)).toBe("resource_limit");
+    });
   });
 
   test("a recognised message wins over the step it failed in", () => {
     const err = new WorkerTaskError(
       "std::bad_alloc: std::bad_alloc",
       "meshing",
+      "std::bad_alloc: std::bad_alloc",
     );
     expect(categorizeError(err)).toBe("resource_limit");
   });
@@ -416,6 +451,7 @@ describe("buckets and categories", () => {
     const err = new WorkerTaskError(
       "Standard_Failure: BRep_API: command not done",
       null,
+      "Standard_Failure: BRep_API: command not done",
     );
     expect(categorizeError(err)).toBe("unknown");
   });

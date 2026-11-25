@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { loadFemModule } from "../../lib/femModule";
 import { checkFieldExpression } from "../../wasm/fem/kofem_wasm.js";
+import { useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
 // The parser's verdict on a formula: null when it parses, else its message.
@@ -47,21 +49,20 @@ export function TemperatureSection() {
   const blank = formula.trim() === "";
   const verdict = useFormulaCheck(blank ? "0" : formula);
   const usable = !blank && verdict === null;
+  const text = useT(boundaryMessages);
   return (
     <div data-testid="temperature-section">
-      <div className={styles.sectionLabel}>Temperature change</div>
+      <div className={styles.sectionLabel}>{text.kindTemperature}</div>
       <div className={`${styles.formNote} ${styles.formNoteFull}`}>
-        ΔT in °C from the stress-free state, as a formula in x, y and z (mm):
-        numbers, + − * / ^, sqrt, abs, exp, ln, sin, cos, min, max. Solid models
-        only; each material needs its expansion coefficient α.
+        {text.temperatureNote}
       </div>
       <div className={styles.formRow}>
         <span className={styles.formLabel}>ΔT (°C)</span>
         <input
           className={styles.formInput}
           data-testid="temperature-formula"
-          aria-label="Temperature change formula"
-          placeholder="e.g. 20 or 0.01 * z"
+          aria-label={text.temperatureFormula}
+          placeholder={text.temperaturePlaceholder}
           value={formula}
           onChange={(e) => setFormula(e.target.value)}
         />
@@ -81,7 +82,7 @@ export function TemperatureSection() {
               setFormula("");
             }}
           >
-            Remove
+            {text.remove}
           </button>
         )}
         <button
@@ -90,12 +91,12 @@ export function TemperatureSection() {
           disabled={!usable}
           onClick={() => setTemperature(formula)}
         >
-          Apply
+          {text.apply}
         </button>
       </div>
       {temperature !== null && (
         <div className={styles.formNote} data-testid="temperature-applied">
-          Applied: ΔT = {temperature.formula} °C
+          {text.temperatureApplied(temperature.formula)}
         </div>
       )}
     </div>

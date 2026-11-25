@@ -1155,6 +1155,20 @@ export async function buildByHand(
   return { counts, seconds };
 }
 
+// Mesh the built model again with other mesher settings (a different element
+// order, say) and run the static solve. The re-mesh keeps every support and
+// load on its CAD faces and clears the previous result.
+export async function remeshAndSolve(
+  page: Page,
+  mesh: MeshStep,
+): Promise<void> {
+  await meshIt(page, mesh);
+  await expect
+    .poll(async () => (await snapshot(page)).elementOrder)
+    .toBe(mesh.order);
+  await solve(page);
+}
+
 // ── What the build made ───────────────────────────────────────────────────────
 
 export interface FaceCheck {

@@ -17,7 +17,11 @@ import type { Property } from "../../store/modelStore";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
 import { MeshOverlapCard } from "./MeshOverlapCard";
+import { useIntlTag, useT } from "../../i18n/useLocale";
+import { meshMessages } from "../../i18n/messages/mesh";
 import styles from "./Panel.module.css";
+
+type MeshText = (typeof meshMessages)["en"];
 
 // Bounding box of the import, as "x × y × z". Three significant digits keep a
 // 0.8 mm part and a 2400 mm weldment equally readable.
@@ -39,8 +43,8 @@ function formatEstimate(measure: GeometryMeasure, size: string): string | null {
   return `${Math.round(count)}`;
 }
 
-function formatSizes({ max, min }: MeshSizes): string {
-  return `max ${max} mm, min ${min} mm`;
+function formatSizes({ max, min }: MeshSizes, text: MeshText): string {
+  return text.sizes(String(max), String(min));
 }
 
 // Whether the model has more than one body or region. Only then do sizes per
@@ -58,7 +62,11 @@ function isRegion(properties: Property[], solidId: number): boolean {
 // What Apply to all changes, in the words the model tree uses: "1 body: Body 2",
 // "2 regions: Body 1 · Region 1, Body 1 · Region 2". Past three names the rest
 // is a count, so the note stays one or two lines.
-function describeSolids(properties: Property[], solids: Property[]): string {
+function describeSolids(
+  properties: Property[],
+  solids: Property[],
+  text: MeshText,
+): string {
   const names = solids.map((p) => solidName(properties, p.id));
   const regions = solids.filter((p) => isRegion(properties, p.id)).length;
   const bodies = names.length - regions;
@@ -66,16 +74,16 @@ function describeSolids(properties: Property[], solids: Property[]): string {
   const noun =
     regions === 0
       ? plural
-        ? "bodies"
-        : "body"
+        ? text.severalBodies
+        : text.oneBody
       : bodies === 0
         ? plural
-          ? "regions"
-          : "region"
-        : "bodies and regions";
+          ? text.severalRegions
+          : text.oneRegion
+        : text.bodiesAndRegions;
   const shown = names.slice(0, 3).join(", ");
-  const rest = names.length > 3 ? ` and ${names.length - 3} more` : "";
-  return `${names.length} ${noun}: ${shown}${rest}`;
+  const rest = names.length > 3 ? text.andMore(names.length - 3) : "";
+  return text.changesSolids(names.length, noun, `${shown}${rest}`);
 }
 
 // The Mesh entry of the model tree. Before there is a mesh it is the mesh
@@ -87,6 +95,7 @@ export function MeshPanel() {
   const setRemeshNotice = useModelStore((s) => s.setRemeshNotice);
   const { stepSurface, isMeshing, meshError, setMeshError, logs, ...mesh } =
     useMesh();
+  const text = useT(meshMessages);
 
   return (
     <>
@@ -111,15 +120,10 @@ export function MeshPanel() {
         // opened from elsewhere can) cannot be re-meshed. Say so instead of
         // silently leaving out the mesh controls.
         <div className={styles.errorBanner} data-testid="mesh-no-geometry">
-          <span>
-            This mesh has no geometry, so it cannot be re-meshed. Import the
-            STEP file to mesh it again.
-          </span>
+          <span>{text.noGeometryToRemesh}</span>
         </div>
       ) : (
-        <div className={styles.empty}>
-          No mesh — import a STEP file to mesh.
-        </div>
+        <div className={styles.empty}>{text.noMesh}</div>
       )}
 
       {remeshNotice && (
@@ -130,7 +134,7 @@ export function MeshPanel() {
               className={styles.cancelBtn}
               onClick={() => setRemeshNotice(null)}
             >
-              OK
+              {text.ok}
             </button>
           </div>
         </div>
@@ -148,6 +152,8 @@ function MeshSummary() {
   const meshSizes = useModelStore((s) => s.meshSizes);
   const properties = useModelStore((s) => s.properties);
   const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const text = useT(meshMessages);
+  const intlTag = useIntlTag();
   const editable = hasSeveralSolids(properties);
   // A region's size is edited on its own tree entry; a body of one region has
   // only the body entry.
@@ -160,22 +166,22 @@ function MeshSummary() {
   return (
     <div data-testid="mesh-summary">
       <div className={styles.statRow}>
-        <span className={styles.statKey}>Nodes</span>
+        <span className={styles.statKey}>{text.nodes}</span>
         <span className={styles.statVal}>
-          {nodeCount.toLocaleString("en-US")}
+          {nodeCount.toLocaleString(intlTag)}
         </span>
       </div>
       <div className={styles.statRow}>
-        <span className={styles.statKey}>Elements</span>
+        <span className={styles.statKey}>{text.elements}</span>
         <span className={styles.statVal}>
-          {elementCount.toLocaleString("en-US")}
+          {elementCount.toLocaleString(intlTag)}
         </span>
       </div>
       {meshSizes && (
         <div className={styles.statRow}>
-          <span className={styles.statKey}>Made with</span>
+          <span className={styles.statKey}>{text.madeWith}</span>
           <span className={styles.statVal} data-testid="mesh-made-with">
-            {formatSizes(meshSizes)}
+            {formatSizes(meshSizes, text)}
           </span>
         </div>
       )}
@@ -193,14 +199,14 @@ function MeshSummary() {
                     className={styles.statVal}
                     data-testid={`mesh-region-size-${id}`}
                   >
-                    max {size} mm
+                    {text.maxSize(String(size))}
                   </span>
                   {editable && (
                     <button
                       className={styles.iconBtn}
                       data-testid={`mesh-region-edit-${id}`}
-                      title={`Edit the element size of ${name}`}
-                      aria-label={`Edit the element size of ${name}`}
+                      title={text.editElementSize(name)}
+                      aria-label={text.editElementSize(name)}
                       onClick={() => openSolid(id)}
                     >
                       ✎
@@ -239,6 +245,7 @@ function MeshSettings({
     (s) => s.clearRegionMaxElementSizes,
   );
   const engine = useEngineGate();
+  const text = useT(meshMessages);
   const {
     elementOrder,
     setElementOrder,
@@ -266,15 +273,15 @@ function MeshSettings({
 
   return (
     <>
-      <div className={styles.sectionLabel}>Mesh settings</div>
+      <div className={styles.sectionLabel}>{text.meshSettings}</div>
       {geometryMeasure && (
         <div className={styles.hint} data-testid="geometry-extent">
-          Model extent {formatExtent(geometryMeasure)} mm
-          {estimate && ` · ≈${estimate} elements`}
+          {text.modelExtent(formatExtent(geometryMeasure))}
+          {estimate && text.elementEstimate(estimate)}
         </div>
       )}
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Max element size</span>
+        <span className={styles.formLabel}>{text.maxElementSize}</span>
         <input
           className={styles.formInput}
           data-testid="max-element-size"
@@ -283,7 +290,7 @@ function MeshSettings({
           value={maxElementSize}
           disabled={isMeshing}
           onChange={(e) => setMaxElementSize(e.target.value)}
-          title="Upper bound on the element size, in mm. Any positive value is allowed — size it to the part, not to a fixed range."
+          title={text.maxElementSizeTip}
         />
         <span className={styles.toleranceUnit}>mm</span>
       </div>
@@ -293,21 +300,21 @@ function MeshSettings({
             className={styles.applyAllBtn}
             data-testid="mesh-size-apply-all"
             disabled={isMeshing}
-            title="Clear the max element size each body and region sets, so the whole model uses this one."
+            title={text.applyToAllBodiesTip}
             onClick={clearRegionMaxElementSizes}
           >
-            Apply to all bodies
+            {text.applyToAllBodies}
           </button>
           <span
             className={styles.applyAllNote}
             data-testid="mesh-size-apply-all-note"
           >
-            ⚠ Changes {describeSolids(properties, ownSize)}.
+            {describeSolids(properties, ownSize, text)}
           </span>
         </div>
       )}
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Min element size</span>
+        <span className={styles.formLabel}>{text.minElementSize}</span>
         <input
           className={styles.formInput}
           data-testid="min-element-size"
@@ -316,32 +323,30 @@ function MeshSettings({
           value={minElementSize}
           disabled={isMeshing}
           onChange={(e) => setMinElementSize(e.target.value)}
-          title="Floor for curvature-driven refinement, in mm. 0 lets Netgen refine fillets without limit."
+          title={text.minElementSizeTip}
         />
         <span className={styles.toleranceUnit}>mm</span>
       </div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>Element order</span>
+        <span className={styles.formLabel}>{text.elementOrder}</span>
         <select
           className={styles.formSelect}
           value={elementOrder}
           onChange={(e) => setElementOrder(Number(e.target.value))}
-          title="Applied when solving — changing it needs no new mesh."
+          title={text.elementOrderTip}
         >
-          <option value={1}>Linear (1st order)</option>
-          <option value={2}>Quadratic (2nd order)</option>
+          <option value={1}>{text.linear}</option>
+          <option value={2}>{text.quadratic}</option>
         </select>
       </div>
       {sizesChanged && meshSizes && (
         <p className={styles.formNote} data-testid="mesh-sizes-changed">
-          Regenerate to apply the new sizes — the current mesh was made with{" "}
-          {formatSizes(meshSizes)}.
+          {text.sizesChanged(formatSizes(meshSizes, text))}
         </p>
       )}
       {bodiesChanged && (
         <p className={styles.formNote} data-testid="mesh-bodies-changed">
-          Regenerate to match the bodies — one was suppressed or restored after
-          this mesh was made.
+          {text.bodiesChanged}
         </p>
       )}
       <button
@@ -358,10 +363,10 @@ function MeshSettings({
         onClick={meshVolume}
       >
         {isMeshing
-          ? "Meshing…"
+          ? text.meshing
           : hasMesh
-            ? "⟳ Regenerate mesh"
-            : "▶  Generate mesh"}
+            ? text.regenerateMesh
+            : text.generateMesh}
       </button>
     </>
   );

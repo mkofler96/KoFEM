@@ -7,13 +7,16 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  ACCEPTED_CAD_FORMATS,
   cadFormatFromName,
   importFailureMessage,
   sniffCadFormat,
 } from "../../src/lib/cadFormat.ts";
+import { LOCALES } from "../../src/i18n/locale";
+import { useLocaleStore } from "../../src/i18n/useLocale";
 
 const text = (s: string) => new TextEncoder().encode(s);
+
+const ACCEPTED_CAD_FORMATS = "STEP (.step, .stp) and IGES (.igs, .iges)";
 
 describe("cadFormatFromName", () => {
   test.each([
@@ -59,9 +62,18 @@ describe("sniffCadFormat", () => {
 });
 
 describe("importFailureMessage", () => {
-  test("the accepted formats name every extension the import cards take", () => {
-    for (const ext of [".step", ".stp", ".igs", ".iges"])
-      expect(ACCEPTED_CAD_FORMATS).toContain(ext);
+  test("in every language, the message names every extension the import cards take", () => {
+    for (const locale of LOCALES) {
+      useLocaleStore.setState({ locale });
+      const message = importFailureMessage("unsupported_format", null, "");
+      for (const ext of [".step", ".stp", ".igs", ".iges"])
+        expect({ locale, message, has: message.includes(ext) }).toEqual({
+          locale,
+          message,
+          has: true,
+        });
+    }
+    useLocaleStore.setState({ locale: "en" });
   });
 
   test("an unsupported file names the formats KoFEM imports", () => {

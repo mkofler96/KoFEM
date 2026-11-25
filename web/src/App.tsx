@@ -21,6 +21,8 @@ import {
   workflowParams,
   trackOnce,
 } from "./lib/analytics";
+import { tr } from "./i18n/useLocale";
+import { dialogMessages } from "./i18n/messages/dialogs";
 import styles from "./App.module.css";
 
 // `/app/?example=<id>` loads an example shipped in examples/gallery/site/.
@@ -29,7 +31,8 @@ function useExampleFromUrl() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("example");
     const controller = new AbortController();
-    if (id && !isExampleId(id)) window.alert(`Invalid example id: "${id}"`);
+    if (id && !isExampleId(id))
+      window.alert(tr(dialogMessages).invalidExample(id));
     else if (id) openExample(id, controller.signal);
     return () => controller.abort();
   }, []);

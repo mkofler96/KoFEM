@@ -395,3 +395,25 @@ for (const scenario of [
     expect(loadGroups[0].faces[0].geometry).toBe("point");
   });
 }
+
+// The "Place at" options are built once per surface; a language switch while
+// the editor is open relabels them too (KOF-468).
+test("an open coupling editor relabels its point options on a language switch", async ({
+  page,
+}) => {
+  const model = await openConstraintsMode(page);
+  await addBoundary(page, "coupling");
+  await pickFace(page, model.endFace);
+  await page.getByTestId("apply-coupling").click();
+  await page.getByTitle("Edit coupling").click();
+  const placeAt = page
+    .getByTestId("coupling-edit-form")
+    .getByTestId("coupling-place-at");
+  await expect(placeAt).toContainText("Selection centre");
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByLabel("Language").selectOption("de");
+
+  await expect(placeAt).toContainText("Mittelpunkt der Auswahl");
+  await expect(placeAt).not.toContainText("Selection centre");
+});

@@ -94,7 +94,7 @@ export function useMeshTopology(): MeshTopology {
   const modelSize = useMemo(() => modelExtent(nodes), [nodes]);
 
   // Bodies hidden via the Bodies panel eye toggle (#353) are dropped from the
-  // mesh here, so the eye hides a body in the FEM surface / volume views just
+  // mesh here, so the eye hides a body in the FEM surface and wireframe views just
   // as it does in the geometry tessellation. Nodes and modelSize stay whole
   // (fit-to-view and the deformed-result node count must not change).
   //

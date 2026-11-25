@@ -67,11 +67,16 @@ export function splitStage(err: unknown): {
     : { stage: null, error: err };
 }
 
-/** Page side: a worker task's failure, with the step the worker reported. */
+/**
+ * Page side: a worker task's failure, with the step the worker reported and
+ * the English of its message, which analytics categorises (the message is in
+ * the user's language; src/i18n/english.ts).
+ */
 export class WorkerTaskError extends Error {
   constructor(
     message: string,
     readonly stage: FailureStage | null,
+    readonly english: string,
   ) {
     super(message);
   }

@@ -18,6 +18,8 @@ import {
   topOptTieRefusal,
 } from "./refusals.js";
 import { elementOrderOf } from "./messageDefaults.js";
+import { tr } from "../../i18n/useLocale.js";
+import { refusalMessages } from "../../i18n/messages/refusals.js";
 
 export type SolveRoute =
   // All CTRIA3 → the Kirchhoff shell solve (shellRust.ts).
@@ -159,10 +161,7 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   const shellBodies = shellMarkedBodies(properties);
   if (shellBodies.length > 0 && shellElements.length === 0)
     throw new Error(
-      `Topology optimization: ${shellBodies.length} body/bodies are marked "Shell" ` +
-        "but were not idealised into shell elements. Re-mesh (which collapses their " +
-        "thin walls to a shell mid-surface), then optimize the mixed model — or switch " +
-        "them to Solid.",
+      tr(refusalMessages).topOptShellNotIdealised(shellBodies.length),
     );
 
   // The level-set optimizer runs through the plain solid entry only; a model
@@ -170,11 +169,11 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   // refuse it too), so say so before building their inputs.
   if (settings.method === "level_set" && shellElements.length > 0)
     throw new Error(
-      `Topology optimization: the level-set method supports solid models only, but this model has ${shellElements.length} shell (CTRIA3) element(s) — use SIMP for shell and coupled models.`,
+      tr(refusalMessages).topOptLevelSetShells(shellElements.length),
     );
   if (settings.method === "level_set" && couplings.length > 0)
     throw new Error(
-      `Topology optimization: the level-set method does not support couplings yet, but this model has ${couplings.length} — remove them or use SIMP.`,
+      tr(refusalMessages).topOptLevelSetCouplings(couplings.length),
     );
 
   if (solidElements.length === 0 && couplings.length > 0)

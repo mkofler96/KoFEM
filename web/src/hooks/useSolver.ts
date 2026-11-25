@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type { ElementStress } from "../lib/stressFields";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import {
   loadsSummary,
@@ -19,6 +19,10 @@ import {
 import type { ReactionSummary } from "../lib/solve/reactions";
 import { routeOrRefusal } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
+import {
+  incompressibleFindings,
+  incompressibleMessage,
+} from "../lib/solve/incompressible";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
@@ -33,6 +37,8 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { tr, useT } from "../i18n/useLocale";
+import { solveMessages } from "../i18n/messages/solve";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
 // protocol and result storage (displacements + von Mises), the solver log
@@ -61,6 +67,7 @@ export function useSolver() {
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
+  const text = useT(solveMessages);
   const { logs, clearLogs } = useWorkerLogs("solve");
   const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
 
@@ -247,7 +254,7 @@ export function useSolver() {
       })
       .catch((err) => {
         console.error("[solve] solver failed:", err.message);
-        setError(`Solver error: ${err.message}`);
+        setError(tr(solveMessages).solverError(err.message));
         track("solve_failed", {
           ...workflow,
           analysis_type: "static",
@@ -266,14 +273,21 @@ export function useSolver() {
     ).__kofemTriggerSolve = solve;
   });
 
+  // Linear elements lock on a nearly incompressible material (KOF-400).
+  const incompressible = useMemo(
+    () =>
+      incompressibleFindings({ elements, properties, materials, elementOrder }),
+    [elements, properties, materials, elementOrder],
+  );
+
   const checks: [boolean, string][] = [
     [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
     [
       matOk,
       materials.length === 0
-        ? "No material assigned"
+        ? text.noMaterial
         : !materialsExist
-          ? "A body references a deleted material — reassign body materials"
+          ? text.deletedMaterial
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
             : materialCheckLabel(materials, properties.length),
@@ -281,22 +295,26 @@ export function useSolver() {
     [
       bcOk,
       constraints.length === 0
-        ? "No boundary conditions"
+        ? text.noBoundaryConditions
         : unheld !== null
           ? unheld
-          : `BCs applied · ${new Set(constraints.map((c) => c.nodeId)).size} nodes fixed`,
+          : text.bcsApplied(new Set(constraints.map((c) => c.nodeId)).size),
     ],
     [
       drivingOk,
       loadOk
         ? loadsSummary(loads.length, surfaceLoads.length)
         : prescribedOk
-          ? "Prescribed displacement drives the model"
+          ? text.prescribedDrives
           : temperatureOk
-            ? "Temperature change drives the model"
-            : "No loads, prescribed displacement or temperature change",
+            ? text.temperatureDrives
+            : text.nothingDrives,
     ],
     ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
+    ...incompressible.map((f): [boolean, string] => [
+      false,
+      incompressibleMessage(f),
+    ]),
     ...(routeRefusal === null
       ? []
       : [[false, routeRefusal] satisfies [boolean, string]]),

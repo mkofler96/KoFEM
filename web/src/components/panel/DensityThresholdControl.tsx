@@ -3,6 +3,8 @@
 
 import { useModelStore } from "../../store/modelStore";
 import { visibleElementCount } from "../../lib/densityField";
+import { useT } from "../../i18n/useLocale";
+import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 
 // The density threshold slider that filters the viewport's density field, plus
@@ -19,10 +21,11 @@ export function DensityThresholdControl({
   const smooth = useModelStore((s) => s.densitySmooth);
   const setDensitySmooth = useModelStore((s) => s.setDensitySmooth);
   const visible = visibleElementCount(density, threshold);
+  const text = useT(resultsMessages);
 
   return (
     <>
-      <div className={styles.sectionLabel}>Density threshold</div>
+      <div className={styles.sectionLabel}>{text.densityThreshold}</div>
       <div
         style={{
           display: "flex",
@@ -39,7 +42,7 @@ export function DensityThresholdControl({
           value={threshold}
           onChange={(e) => setDensityThreshold(parseFloat(e.target.value))}
           style={{ flex: 1 }}
-          aria-label="Density threshold"
+          aria-label={text.densityThreshold}
         />
         <span
           className={styles.statVal}
@@ -49,26 +52,24 @@ export function DensityThresholdControl({
         </span>
       </div>
       <div className={styles.formNote} style={{ marginBottom: 8 }}>
-        {smooth
-          ? "Shows the surface where the density crosses the cutoff (the level set's own boundary at 0.50)."
-          : "Elements below the cutoff are hidden, revealing the optimized shape."}
+        {smooth ? text.smoothNote : text.elementsNote}
       </div>
       <div className={styles.segToggle} style={{ marginBottom: 12 }}>
         <button
           className={`${styles.segBtn} ${smooth ? styles.segBtnActive : ""}`}
           onClick={() => setDensitySmooth(true)}
         >
-          Smooth
+          {text.smooth}
         </button>
         <button
           className={`${styles.segBtn} ${!smooth ? styles.segBtnActive : ""}`}
           onClick={() => setDensitySmooth(false)}
         >
-          Elements
+          {text.elements}
         </button>
       </div>
       <div className={styles.statRow}>
-        <span className={styles.statKey}>Visible elements</span>
+        <span className={styles.statKey}>{text.visibleElements}</span>
         <span className={styles.statVal} data-testid="visible-element-count">
           {visible} / {density.length}
         </span>

@@ -20,6 +20,8 @@ import { parseTieDistance, toFaceEntries } from "./bcFormUtils";
 import { PickedFaceList, TieExtentInputs } from "./BcLoadFormControls";
 import { TieValueForm } from "./GroupValueForms";
 import { requestDelete } from "../../store/confirmDelete";
+import { tr, useT } from "../../i18n/useLocale";
+import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 import {
   focusedId,
@@ -28,11 +30,6 @@ import {
   useStartOnAdd,
   type SectionFocus,
 } from "./sectionFocus";
-
-const SIDE_LABEL: Record<TieSide, string> = {
-  a: "Surface A",
-  b: "Surface B",
-};
 
 // A connection with no Surface B is one picked interface split by body — see
 // applyTie.
@@ -43,13 +40,17 @@ export function isSelfSplitTie(group: TieGroup): boolean {
 // One-line summary of what a connection couples and how far it reaches: the
 // node pairs a node-merge welds, or the nodes a constraint ties.
 export function tieGroupMeta(group: TieGroup, nPaired: number): string {
+  const text = tr(boundaryMessages);
   const extent =
     group.extent === "full"
-      ? "full surface"
-      : `within ${group.searchDistance} mm`;
-  const split = isSelfSplitTie(group) ? " · split by body" : "";
-  const joined = group.method === "merge" ? "node pair" : "tied node";
-  return `${extent}${split} · ${nPaired} ${joined}${nPaired === 1 ? "" : "s"}`;
+      ? text.tieMetaFull
+      : text.tieMetaWithin(group.searchDistance);
+  const split = isSelfSplitTie(group) ? ` · ${text.tieMetaSplit}` : "";
+  const joined =
+    group.method === "merge"
+      ? text.tieMetaNodePairs(nPaired)
+      : text.tieMetaTiedNodes(nPaired);
+  return `${extent}${split} · ${joined}`;
 }
 
 // Tie connections section: pick the two surfaces a connection joins, choose
@@ -81,6 +82,11 @@ export function TieSection({
     endPick,
   } = usePickedFaces(onError);
   const { reports } = useTiePairs();
+  const text = useT(boundaryMessages);
+  const sideLabel: Record<TieSide, string> = {
+    a: text.surfaceA,
+    b: text.surfaceB,
+  };
 
   // Connection whose values are being edited inline (✎), if any.
   const [editingTieId, setEditingTieId] = useState<number | null>(
@@ -130,7 +136,7 @@ export function TieSection({
     const facesA = pickedOf("a");
     const facesB = pickedOf("b");
     if (facesA.length === 0) {
-      onError("A tie needs at least one picked face on Surface A");
+      onError(text.tieNeedsSurfaceA);
       return;
     }
     let searchDistance = 0;
@@ -157,7 +163,7 @@ export function TieSection({
           data-testid="add-tie"
           onClick={() => startTiePick(null, "a")}
         >
-          + Add Tie
+          {text.addTie}
         </button>
       )}
 
@@ -166,10 +172,14 @@ export function TieSection({
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
               {targetTieGroup
-                ? `Add face to ${targetTieGroup.name}`
-                : "New Tie"}
+                ? text.addFaceTo(targetTieGroup.name)
+                : text.newTie}
             </span>
-            <button className={styles.iconBtn} onClick={endPick} title="Cancel">
+            <button
+              className={styles.iconBtn}
+              onClick={endPick}
+              title={text.cancel}
+            >
               ✕
             </button>
           </div>
@@ -179,7 +189,7 @@ export function TieSection({
           <div
             className={styles.segToggle}
             role="group"
-            aria-label="Tie surface"
+            aria-label={text.tieSurface}
           >
             {(["a", "b"] as const).map((side) => (
               <button
@@ -190,7 +200,7 @@ export function TieSection({
                 aria-pressed={pickTieSide === side}
                 onClick={() => setPickTieSide(side)}
               >
-                {SIDE_LABEL[side]}
+                {sideLabel[side]}
                 {pickedOf(side).length > 0 ? ` (${pickedOf(side).length})` : ""}
               </button>
             ))}
@@ -213,15 +223,10 @@ export function TieSection({
                 onDistanceChange={setDistance}
               />
               <div className={styles.pickNote}>
-                {extent === "full"
-                  ? "the whole of the two surfaces is tied"
-                  : "only nodes within the search distance are tied"}
+                {extent === "full" ? text.noteTieFull : text.noteTieRegion}
               </div>
               {pickedOf("b").length === 0 && (
-                <div className={styles.pickNote}>
-                  leave Surface B empty to tie one picked interface, split
-                  between the two bodies that meet on it
-                </div>
+                <div className={styles.pickNote}>{text.noteSurfaceBEmpty}</div>
               )}
             </>
           )}
@@ -231,7 +236,7 @@ export function TieSection({
             data-testid="apply-tie"
             onClick={applyTie}
           >
-            {targetTieGroup ? "Add Face" : "Apply Tie"}
+            {targetTieGroup ? text.addFaces(1) : text.applyTie}
           </button>
         </div>
       )}
@@ -248,7 +253,7 @@ export function TieSection({
               <div className={styles.treeItemActions}>
                 <button
                   className={styles.iconBtn}
-                  title="Edit tie"
+                  title={text.editTie}
                   onClick={() =>
                     setEditingTieId(editingTieId === group.id ? null : group.id)
                   }
@@ -257,7 +262,7 @@ export function TieSection({
                 </button>
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Delete tie"
+                  title={text.deleteTie}
                   onClick={() =>
                     requestDelete(group.name, () => deleteTieGroup(group.id))
                   }
@@ -294,11 +299,11 @@ export function TieSection({
                 <div className={styles.tieSideRow}>
                   <span className={styles.bcFaceIndent}>└</span>
                   <span className={styles.tieSideLabel}>
-                    {isSelfSplitTie(group) ? "Interface" : SIDE_LABEL[side]}
+                    {isSelfSplitTie(group) ? text.interface : sideLabel[side]}
                   </span>
                   <button
                     className={styles.iconBtn}
-                    title={`Add face to ${SIDE_LABEL[side]}`}
+                    title={text.addFaceTo(sideLabel[side])}
                     data-testid={`tie-add-face-${group.id}-${side}`}
                     onClick={() => startTiePick(group.id, side)}
                   >
@@ -311,7 +316,7 @@ export function TieSection({
                     <span className={styles.bcFaceName}>{face.label}</span>
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                      title="Remove face"
+                      title={text.removeFace}
                       onClick={() =>
                         removeFaceFromTieGroup(group.id, side, face.id)
                       }

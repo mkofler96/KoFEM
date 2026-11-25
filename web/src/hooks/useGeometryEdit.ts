@@ -8,6 +8,8 @@ import { resetWorker, sendToWorker } from "../workers/sharedWorker";
 import { isCadBody } from "../store/geometrySlice";
 import { booleanBodySources } from "../lib/booleanBodies";
 import type { RepairHingesOptions } from "../wasm/pkg/kofem_wasm";
+import { tr } from "../i18n/useLocale";
+import { geometryMessages } from "../i18n/messages/geometry";
 
 export type SplitAxis = "x" | "y" | "z";
 
@@ -60,17 +62,15 @@ export function useGeometryEdit() {
     bodyIds: number[] = [],
   ): Promise<boolean> {
     if (!stepBytes) {
-      setSplitError(
-        "Cannot split: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
-      );
+      setSplitError(tr(geometryMessages).noFileToSplit);
       return false;
     }
     if (!Number.isFinite(position)) {
-      setSplitError("The plane position must be a number of mm.");
+      setSplitError(tr(geometryMessages).planeNotANumber);
       return false;
     }
     if (mode === "faces" && faceIds.length === 0) {
-      setSplitError("Pick at least one face to split.");
+      setSplitError(tr(geometryMessages).pickFaceToSplit);
       return false;
     }
     // The pieces of a split body stay regions of it (KOF-257): connected at
@@ -98,13 +98,11 @@ export function useGeometryEdit() {
     keepTools: boolean,
   ): Promise<boolean> {
     if (!stepBytes) {
-      setSplitError(
-        "Cannot combine bodies: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
-      );
+      setSplitError(tr(geometryMessages).noFileToCombine);
       return false;
     }
     if (tools.length === 0) {
-      setSplitError("Pick at least one tool body.");
+      setSplitError(tr(geometryMessages).pickToolBody);
       return false;
     }
     const bodyIds = properties
@@ -132,13 +130,11 @@ export function useGeometryEdit() {
   // pieces, which the user then has to decide about.
   async function repairHinges(repair: RepairHingesOptions): Promise<boolean> {
     if (!stepBytes) {
-      setSplitError(
-        "Cannot repair: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
-      );
+      setSplitError(tr(geometryMessages).noFileToRepair);
       return false;
     }
     if (!Number.isFinite(repair.width) || repair.width <= 0) {
-      setSplitError("The repair width must be a positive number of mm.");
+      setSplitError(tr(geometryMessages).repairWidthNotPositive);
       return false;
     }
     const bodiesBefore = properties.filter(isCadBody).length;
@@ -153,9 +149,7 @@ export function useGeometryEdit() {
       const state = useModelStore.getState();
       const bodies = state.properties.filter(isCadBody).length;
       if (bodies > bodiesBefore)
-        state.setRemeshNotice(
-          `The model is now ${bodies} separate bodies. Suppress any you don't need, or tie them together.`,
-        );
+        state.setRemeshNotice(tr(geometryMessages).nowSeparateBodies(bodies));
     }
     return ok;
   }
@@ -163,9 +157,7 @@ export function useGeometryEdit() {
   // Divide the cone tips a failed mesh reported.
   function splitConeTips(faceIds: number[]): Promise<boolean> {
     if (!stepBytes) {
-      setSplitError(
-        "Cannot split the cone tips: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
-      );
+      setSplitError(tr(geometryMessages).noFileToSplitConeTips);
       return Promise.resolve(false);
     }
     return run("split_cone_tips", { faceIds });
@@ -175,9 +167,7 @@ export function useGeometryEdit() {
   // faces around them. Changes the shape slightly: the card says so.
   function removeFaces(faceIds: number[]): Promise<boolean> {
     if (!stepBytes) {
-      setSplitError(
-        "Cannot remove the faces: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
-      );
+      setSplitError(tr(geometryMessages).noFileToRemoveFaces);
       return Promise.resolve(false);
     }
     return run("remove_faces", { faceIds });

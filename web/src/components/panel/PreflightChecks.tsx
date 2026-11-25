@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { useT } from "../../i18n/useLocale";
+import { solveMessages } from "../../i18n/messages/solve";
 import styles from "./Panel.module.css";
 
 const TICK = (
@@ -30,9 +32,10 @@ const CROSS = (
 // The readiness list a study shows before it runs: one badge per check, green
 // tick when it holds, amber cross when it does not.
 export function PreflightChecks({ checks }: { checks: [boolean, string][] }) {
+  const text = useT(solveMessages);
   return (
     <>
-      <div className={styles.sectionLabel}>Pre-flight check</div>
+      <div className={styles.sectionLabel}>{text.preflight}</div>
       {checks.map(([ok, label]) => (
         <div
           key={label}
@@ -41,7 +44,7 @@ export function PreflightChecks({ checks }: { checks: [boolean, string][] }) {
         >
           <span
             className={ok ? styles.checkOk : styles.checkFail}
-            aria-label={ok ? "passed" : "failed"}
+            aria-label={ok ? text.checkPassed : text.checkFailed}
           >
             {ok ? TICK : CROSS}
           </span>

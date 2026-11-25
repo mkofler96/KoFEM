@@ -6,30 +6,61 @@ import { useModelStore, loadKind } from "../../store/modelStore";
 import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import { consentBanner } from "../../lib/analytics";
-import { loadCounts } from "../../lib/modelDisplay";
+import type { ViewRepr } from "../../store/viewSlice";
+import type { Projection } from "../../lib/projection";
 import { EngineStatus } from "./EngineStatus";
+import { useT } from "../../i18n/useLocale";
+import { statusMessages } from "../../i18n/messages/shell";
+import type { PickGeometry } from "../../lib/facePick";
 import styles from "./StatusBar.module.css";
 
-type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
+type StatusText = (typeof statusMessages)["en"];
 
 // What the face being picked is for, shown next to the pick indicator.
-const PICK_PURPOSE: Record<PickMode, string> = {
-  bc: "fixed displacement",
-  load: "apply load",
-  tie: "tie connection",
-  coupling: "surface-to-point coupling",
-};
+function pickPurpose(text: StatusText, mode: PickMode): string {
+  return {
+    bc: text.purposeBc,
+    load: text.purposeLoad,
+    tie: text.purposeTie,
+    coupling: text.purposeCoupling,
+  }[mode];
+}
+
+function pickTarget(text: StatusText, geometry: PickGeometry): string {
+  return { face: text.pickFace, edge: text.pickEdge, point: text.pickPoint }[
+    geometry
+  ];
+}
+
+// The face and nodal-DOF load counts, faces first.
+function loadCountLabels(
+  text: StatusText,
+  nodalLoadDofs: number,
+  faceLoads: number,
+): string[] {
+  const parts: string[] = [];
+  if (faceLoads > 0) parts.push(text.faceLoads(faceLoads));
+  if (nodalLoadDofs > 0) parts.push(text.nodalLoadDofs(nodalLoadDofs));
+  return parts;
+}
+
+function reprLabels(
+  text: StatusText,
+  id: ViewRepr,
+): { label: string; tooltip: string } {
+  return {
+    geometry: { label: text.reprGeometry, tooltip: text.reprGeometryTip },
+    surface: { label: text.reprSurface, tooltip: text.reprSurfaceTip },
+    wireframe: { label: text.reprWireframe, tooltip: text.reprWireframeTip },
+  }[id];
+}
 
 const REPR_BUTTONS: {
   id: ViewRepr;
-  label: string;
-  tooltip: string;
   icon: React.ReactNode;
 }[] = [
   {
     id: "geometry",
-    label: "Geometry",
-    tooltip: "Shaded — smooth surface, no mesh edges",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
         <path
@@ -51,8 +82,6 @@ const REPR_BUTTONS: {
   },
   {
     id: "surface",
-    label: "Surface",
-    tooltip: "Surface mesh — shaded with element edges",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
         <path
@@ -73,31 +102,7 @@ const REPR_BUTTONS: {
     ),
   },
   {
-    id: "volume",
-    label: "Volume",
-    tooltip: "Volume mesh — all tetrahedral edges",
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
-        <path
-          d="M8 2L13 5v6L8 14L3 11V5z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M3 5l5 3.5M13 5l-5 3.5M8 8.5L8 14M3 5l5 9M13 5l-5 9M3 11l5-2.5M13 11l-5-2.5"
-          stroke="currentColor"
-          strokeWidth="0.8"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
     id: "wireframe",
-    label: "Wireframe",
-    tooltip: "Wireframe — edges only, no fill",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
         <path
@@ -119,6 +124,47 @@ const REPR_BUTTONS: {
   },
 ];
 
+// The projection toggle (KOF-429): what each projection looks like, a box
+// whose far face shrinks or keeps its size.
+const PROJECTION_ICON: Record<Projection, React.ReactNode> = {
+  perspective: (
+    <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
+      <path
+        d="M2 5h9v9H2zM8 2h6v6H8zM2 5l6-3M11 5l3-3M11 14l3-6M2 14l6-6"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  orthographic: (
+    <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
+      <path
+        d="M2 5h9v9H2zM5 2h9v9H5zM2 5l3-3M11 5l3-3M11 14l3-3M2 14l3-3"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+};
+
+function projectionLabels(
+  text: StatusText,
+  projection: Projection,
+): { label: string; tooltip: string } {
+  return {
+    perspective: {
+      label: text.projectionPerspective,
+      tooltip: text.projectionPerspectiveTip,
+    },
+    orthographic: {
+      label: text.projectionOrthographic,
+      tooltip: text.projectionOrthographicTip,
+    },
+  }[projection];
+}
+
 export function StatusBar() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -132,6 +178,8 @@ export function StatusBar() {
   const pickGeometry = useModelStore((s) => s.pickGeometry);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
+  const projection = useModelStore((s) => s.projection);
+  const setProjection = useModelStore((s) => s.setProjection);
   const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
   const setShowUndeformedOverlay = useModelStore(
     (s) => s.setShowUndeformedOverlay,
@@ -140,20 +188,14 @@ export function StatusBar() {
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const setLoadDisplay = useModelStore((s) => s.setLoadDisplay);
   const stepSurface = useModelStore((s) => s.stepSurface);
+  const text = useT(statusMessages);
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
   const hasSurface = nodes.length > 0;
-  // A volume mesh exists whenever the model has 3D solid elements — their edges
-  // are what the "all tetrahedral" representation draws.
-  const hasVolume = elements.some(
-    (e) => e.type === "CTETRA" || e.type === "CHEXA",
-  );
 
   function isDisabled(id: ViewRepr) {
     if (id === "geometry" || id === "wireframe") return !hasGeometry;
-    if (id === "surface") return !hasSurface;
-    if (id === "volume") return !hasVolume;
-    return false;
+    return !hasSurface;
   }
 
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
@@ -179,18 +221,23 @@ export function StatusBar() {
         {pickMode && (
           <span className={styles.pickChip}>
             <span className={styles.pickDot} />
-            {`Pick ${pickGeometry} — ${PICK_PURPOSE[pickMode]}`}
+            {text.pick(
+              pickTarget(text, pickGeometry),
+              pickPurpose(text, pickMode),
+            )}
           </span>
         )}
 
         {selectedFace && !pickMode && (
-          <span className={styles.selChip}>Selected: {selectedFace.label}</span>
+          <span className={styles.selChip}>
+            {text.selected(selectedFace.label)}
+          </span>
         )}
 
         {nodes.length > 0 && (
           <>
             <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{nodes.length} nodes</span>
+            <span className={styles.stat}>{text.nodes(nodes.length)}</span>
           </>
         )}
 
@@ -212,42 +259,61 @@ export function StatusBar() {
           <>
             <span className={styles.sep}>·</span>
             <span className={styles.stat}>
-              {new Set(constraints.map((c) => c.nodeId)).size} nodes fixed
+              {text.nodesFixed(new Set(constraints.map((c) => c.nodeId)).size)}
             </span>
           </>
         )}
 
-        {loadCounts(loads.length, surfaceLoads.length).map((count) => (
-          <Fragment key={count}>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{count}</span>
-          </Fragment>
-        ))}
+        {loadCountLabels(text, loads.length, surfaceLoads.length).map(
+          (count) => (
+            <Fragment key={count}>
+              <span className={styles.sep}>·</span>
+              <span className={styles.stat}>{count}</span>
+            </Fragment>
+          ),
+        )}
       </div>
 
       {/* Center — repr toolbar + undeformed overlay toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div
+        role="toolbar"
+        aria-label={text.viewToolbar}
+        style={{ display: "flex", alignItems: "center", gap: 6 }}
+      >
         <div className={styles.reprGroup}>
-          {REPR_BUTTONS.map(({ id, label, tooltip, icon }, i) => (
+          {REPR_BUTTONS.map(({ id, icon }, i) => (
             <button
               key={id}
               disabled={isDisabled(id)}
               onClick={() => setViewRepr(id)}
               className={`${styles.reprBtn} ${viewRepr === id ? styles.reprBtnActive : ""}`}
-              aria-label={label}
-              data-tooltip={tooltip}
+              aria-label={reprLabels(text, id).label}
+              data-tooltip={reprLabels(text, id).tooltip}
               style={{ borderLeft: i > 0 ? "1px solid #e2e5ea" : "none" }}
             >
               {icon}
             </button>
           ))}
+          <button
+            onClick={() =>
+              setProjection(
+                projection === "perspective" ? "orthographic" : "perspective",
+              )
+            }
+            className={styles.reprBtn}
+            aria-label={projectionLabels(text, projection).label}
+            data-tooltip={projectionLabels(text, projection).tooltip}
+            style={{ borderLeft: "1px solid #e2e5ea" }}
+          >
+            {PROJECTION_ICON[projection]}
+          </button>
         </div>
         {result && (
           <button
             onClick={() => setShowUndeformedOverlay(!showUndeformedOverlay)}
             className={`${styles.reprBtn} ${showUndeformedOverlay ? styles.reprBtnActive : ""}`}
-            aria-label="Toggle undeformed overlay"
-            data-tooltip="Show undeformed geometry as overlay"
+            aria-label={text.undeformedToggle}
+            data-tooltip={text.undeformedTip}
             style={{
               width: "auto",
               padding: "0 7px",
@@ -271,7 +337,7 @@ export function StatusBar() {
                 strokeDasharray="2.5 1.5"
               />
             </svg>
-            Undeformed
+            <span className={styles.toggleLabel}>{text.undeformed}</span>
           </button>
         )}
         {showLoadDisplayToggle && (
@@ -280,8 +346,8 @@ export function StatusBar() {
               setLoadDisplay(loadDisplay === "nodal" ? "resultant" : "nodal")
             }
             className={`${styles.reprBtn} ${loadDisplay === "nodal" ? styles.reprBtnActive : ""}`}
-            aria-label="Toggle per-node load display"
-            data-tooltip="Show the load on each node instead of a single resultant arrow"
+            aria-label={text.nodalToggle}
+            data-tooltip={text.nodalTip}
             style={{
               width: "auto",
               padding: "0 7px",
@@ -305,7 +371,7 @@ export function StatusBar() {
                 strokeLinejoin="round"
               />
             </svg>
-            Nodal loads
+            <span className={styles.toggleLabel}>{text.nodalLoads}</span>
           </button>
         )}
       </div>
@@ -315,12 +381,12 @@ export function StatusBar() {
         {result ? (
           <span className={styles.resultChip}>
             <span className={styles.okDot} />
-            Solved · converged
+            {text.solved}
           </span>
         ) : meshOk ? (
           <span className={styles.meshChip}>
             <span className={styles.okDot} />
-            Mesh OK
+            {text.meshOk}
           </span>
         ) : null}
         <EngineStatus />
@@ -330,9 +396,9 @@ export function StatusBar() {
           href="https://github.com/mkofler96/KoFEM/blob/main/DISCLAIMER.md"
           target="_blank"
           rel="noopener"
-          title="No warranty — FEM results are approximations. Verify independently before relying on them."
+          title={text.noWarrantyTip}
         >
-          No warranty
+          {text.noWarranty}
         </a>
         {consentBanner() && (
           <a
@@ -343,7 +409,7 @@ export function StatusBar() {
               consentBanner()?.removeAttribute("hidden");
             }}
           >
-            Cookie settings
+            {text.cookieSettings}
           </a>
         )}
       </div>

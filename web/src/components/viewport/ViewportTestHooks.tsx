@@ -6,6 +6,14 @@ import { addTail, useThree } from "@react-three/fiber";
 import { Mesh, Vector3, type BufferGeometry } from "three";
 import { applyPendingSceneCommits } from "./pickingEvents";
 
+export interface ViewCamera {
+  type: "PerspectiveCamera" | "OrthographicCamera";
+  // The unit vector the camera looks along.
+  direction: [number, number, number];
+  // The orbit target.
+  target: [number, number, number];
+}
+
 export interface ViewportHooks {
   // Where a model-space point lands on the page (client pixels), so an E2E test
   // can click a known face the way a user does instead of writing the pick
@@ -14,6 +22,8 @@ export interface ViewportHooks {
   // Turn the camera to look at the orbit target from `direction`, keeping its
   // distance — what clicking an axis of the view gizmo does.
   lookFrom(direction: [number, number, number]): void;
+  // The camera's kind (projection), where it looks and what at.
+  camera(): ViewCamera;
   // Resolves once the viewport shows the store as it is now: the scene's React
   // tree has applied every pending change (Fit View moves the camera in one of
   // its effects), that state has been drawn, and nothing asks for another
@@ -63,6 +73,25 @@ export function ViewportTestHooks() {
           .addScaledVector(new Vector3(...direction).normalize(), distance);
         orbit.update();
         invalidate();
+      },
+      camera() {
+        const orbit = controls as unknown as { target: Vector3 } | null;
+        if (!orbit)
+          throw new Error("camera: the orbit controls are not mounted yet");
+        if (
+          camera.type !== "PerspectiveCamera" &&
+          camera.type !== "OrthographicCamera"
+        )
+          throw new Error(`camera: unexpected camera ${camera.type}`);
+        // An up-to-date copy, as in project().
+        const view = camera.clone();
+        view.updateMatrixWorld();
+        const direction = view.getWorldDirection(new Vector3());
+        return {
+          type: camera.type,
+          direction: [direction.x, direction.y, direction.z],
+          target: [orbit.target.x, orbit.target.y, orbit.target.z],
+        };
       },
       settled() {
         // The scene's tree applies a store change in a scheduled task (see

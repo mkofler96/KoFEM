@@ -4,14 +4,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useModelStore } from "../../store/modelStore";
 import {
-  MESH_KIND_LABEL,
   meshKind,
   meshSizesChanged,
   suppressionMismatch,
 } from "../../store/geometrySlice";
 import { plotLabel } from "../../store/studySlice";
 import {
-  INTERFACE_TYPE_LABELS,
   interfaceLabel,
   isInterfaceActive,
   isInternalInterface,
@@ -26,6 +24,8 @@ import {
   type TreeGroup,
   type TreeItemKind,
 } from "../../store/viewSlice";
+import { useIntlTag, useT } from "../../i18n/useLocale";
+import { shellMessages } from "../../i18n/messages/shell";
 
 export interface TreeItem {
   kind: TreeItemKind;
@@ -46,10 +46,6 @@ export interface TreeItem {
   nested?: boolean;
 }
 
-// The tree's note on a body or region whose material the mesh offered and
-// nobody has chosen yet (KOF-413).
-const CHOOSE_MATERIAL = "choose material";
-
 // The model objects listed under each tree group. Groups without objects map
 // to an empty list.
 export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
@@ -65,9 +61,11 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const temperature = useModelStore((s) => s.temperature);
   const nodeCount = useModelStore((s) => s.nodes.length);
-  const meshLabel = useModelStore((s) =>
-    s.nodes.length > 0 ? MESH_KIND_LABEL[meshKind(s.elements)] : null,
+  const meshType = useModelStore((s) =>
+    s.nodes.length > 0 ? meshKind(s.elements) : null,
   );
+  const text = useT(shellMessages);
+  const intl = useIntlTag();
   const meshOutOfDate = useMeshOutOfDate();
   const studies = useModelStore((s) => s.studies);
   const resultPlots = useModelStore((s) => s.resultPlots);
@@ -77,6 +75,9 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     const colorOf = (materialId: number) =>
       materials.find((m) => m.id === materialId)?.color;
     const unbonded = new Set(unconnectedBodies(interfaces, properties));
+    // The tree's note on a body or region whose material the mesh offered
+    // and nobody has chosen yet (KOF-413).
+    const chooseMaterial = text.chooseMaterial;
     return {
       // The store always carries a default body; it is only a body of the
       // model once there is geometry.
@@ -95,9 +96,9 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                   label: `Body ${body}`,
                   color: colorOf(regions[0].materialId),
                   detail: unconfirmed
-                    ? CHOOSE_MATERIAL
+                    ? chooseMaterial
                     : floating
-                      ? "unbonded"
+                      ? text.unbonded
                       : undefined,
                   solidIds: [regions[0].id],
                 },
@@ -108,10 +109,10 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                 id: body,
                 label: `Body ${body}`,
                 detail: unconfirmed
-                  ? CHOOSE_MATERIAL
+                  ? chooseMaterial
                   : floating
-                    ? "unbonded"
-                    : `${regions.length} regions`,
+                    ? text.unbonded
+                    : text.regionCount(regions.length),
                 solidIds: regions.map((r) => r.id),
               },
               ...regions.map((r, k): TreeItem => ({
@@ -119,7 +120,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                 id: r.id,
                 label: `Region ${k + 1}`,
                 color: colorOf(r.materialId),
-                detail: r.materialUnconfirmed ? CHOOSE_MATERIAL : undefined,
+                detail: r.materialUnconfirmed ? chooseMaterial : undefined,
                 solidIds: [r.id],
                 nested: true,
               })),
@@ -133,15 +134,19 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
         color: m.color,
       })),
       mesh:
-        meshLabel !== null
+        meshType !== null
           ? [
               {
                 kind: "mesh" as const,
                 id: MESH_ITEM_ID,
-                label: meshLabel,
+                label: {
+                  volume: text.volumeMesh,
+                  shell: text.shellMesh,
+                  mixed: text.mixedMesh,
+                }[meshType],
                 detail: meshOutOfDate
-                  ? "out of date"
-                  : `${nodeCount.toLocaleString("en-US")} nodes`,
+                  ? text.outOfDate
+                  : text.nodeCount(nodeCount.toLocaleString(intl)),
               },
             ]
           : [],
@@ -172,7 +177,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
               {
                 kind: "temperature" as const,
                 id: TEMPERATURE_ITEM_ID,
-                label: "Temperature change",
+                label: text.temperatureChange,
                 detail: `ΔT = ${temperature.formula}`,
               },
             ]
@@ -189,9 +194,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
               kind: "interface" as const,
               id: i.id,
               label: interfaceLabel(i, properties),
-              detail: active
-                ? INTERFACE_TYPE_LABELS[i.type].toLowerCase()
-                : "inactive",
+              detail: active ? { bonded: text.bonded }[i.type] : text.inactive,
               inactive: !active,
             };
           }),
@@ -211,7 +214,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                 {
                   kind: "section" as const,
                   id: p.id,
-                  label: `Section ${"XYZ"[p.section.axis]}`,
+                  label: text.section("XYZ"[p.section.axis]),
                   nested: true,
                 },
               ]
@@ -222,7 +225,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
               {
                 kind: "reactions" as const,
                 id: REACTIONS_ITEM_ID,
-                label: "Reactions",
+                label: text.reactions,
               },
             ]
           : []),
@@ -239,11 +242,13 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     couplingGroups,
     temperature,
     nodeCount,
-    meshLabel,
+    meshType,
     meshOutOfDate,
     studies,
     resultPlots,
     showReactions,
+    text,
+    intl,
   ]);
 }
 

@@ -14,6 +14,7 @@ import {
   useEngineStatus,
   type EngineFailureStage,
 } from "../store/engineStore";
+import { useLocaleStore } from "../i18n/useLocale";
 
 let _worker: Worker | null = null;
 let _msgId = 0;
@@ -176,17 +177,22 @@ function createWorker(): Worker {
     } else {
       // A failure that arrived without a message still needs a text.
       const msg = (rest.error as string | undefined) ?? "Worker error";
+      // Only a message the worker sent can be a translation.
+      const english = (rest.english as string | undefined) ?? msg;
       console.error("[worker] task failed:", msg);
       const { stage } = rest;
       if (stage === undefined || isFailureStage(stage))
-        pending.reject(new WorkerTaskError(msg, stage ?? null));
-      else
+        pending.reject(new WorkerTaskError(msg, stage ?? null, english));
+      else {
+        const unknownStep = ` (the worker also reported an unknown step "${String(stage)}")`;
         pending.reject(
           new WorkerTaskError(
-            `${msg} (the worker also reported an unknown step "${String(stage)}")`,
+            `${msg}${unknownStep}`,
             null,
+            `${english}${unknownStep}`,
           ),
         );
+      }
     }
   };
 
@@ -240,7 +246,10 @@ export function sendToWorker<T = unknown>(
   return new Promise<T>((resolve, reject) => {
     const id = ++_msgId;
     _pending.set(id, { resolve: (v) => resolve(v as T), reject });
-    getWorker().postMessage({ id, type, payload });
+    // The worker has no storage to read the language chosen in Settings from;
+    // the refusals and errors it builds are in the language sent along.
+    const { locale } = useLocaleStore.getState();
+    getWorker().postMessage({ id, type, payload, locale });
   });
 }
 

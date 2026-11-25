@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { useExampleLoad } from "../../lib/examples";
 import { SITE_PAGES } from "../../lib/siteLinks";
+import { tr, useT } from "../../i18n/useLocale";
+import { topbarMessages } from "../../i18n/messages/topbar";
 import styles from "./SiteMenu.module.css";
 
 // The way back to the public site (KOF-381), behind the "K" button at the
@@ -17,18 +19,14 @@ import styles from "./SiteMenu.module.css";
 export function confirmLeave(e: MouseEvent<HTMLAnchorElement>): void {
   const newTab = e.ctrlKey || e.metaKey || e.shiftKey;
   if (newTab || !useModelStore.getState().hasStarted) return;
-  if (
-    !window.confirm(
-      "Leave the app? Unsaved changes will be lost — save the current analysis first if you want to keep it.",
-    )
-  )
-    e.preventDefault();
+  if (!window.confirm(tr(topbarMessages).confirmLeave)) e.preventDefault();
 }
 
 export function SiteMenu() {
   const [open, setOpen] = useState(false);
   const example = useExampleLoad((s) => s.opened);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const text = useT(topbarMessages);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -55,17 +53,17 @@ export function SiteMenu() {
     <div className={styles.wrap} ref={wrapRef}>
       <button
         className={styles.trigger}
-        aria-label="Site menu"
+        aria-label={text.siteMenu}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Examples and theory"
+        title={text.siteMenuTitle}
         onClick={() => setOpen((o) => !o)}
       >
         K
       </button>
 
       {open && (
-        <div className={styles.menu} role="menu" aria-label="Site">
+        <div className={styles.menu} role="menu" aria-label={text.site}>
           {example && (
             <a
               className={`${styles.item} ${styles.back}`}
@@ -73,20 +71,22 @@ export function SiteMenu() {
               href={`/examples/${example.id}/`}
               onClick={leave}
             >
-              Back to {example.name}
+              {text.backTo(example.name)}
             </a>
           )}
-          {SITE_PAGES.filter((page) => page.section !== "home").map((page) => (
-            <a
-              key={page.href}
-              className={styles.item}
-              role="menuitem"
-              href={page.href}
-              onClick={leave}
-            >
-              {page.label}
-            </a>
-          ))}
+          {SITE_PAGES.map((page) =>
+            page.section === "home" ? null : (
+              <a
+                key={page.href}
+                className={styles.item}
+                role="menuitem"
+                href={page.href}
+                onClick={leave}
+              >
+                {text[page.section]}
+              </a>
+            ),
+          )}
         </div>
       )}
     </div>

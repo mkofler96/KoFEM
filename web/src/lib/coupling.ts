@@ -26,6 +26,10 @@
 // through θ_R × r); it earns its keep on a point-to-point coupling, where
 // x,y,z alone is a spherical joint and all six is a rigid link.
 
+import { tr } from "../i18n/useLocale.js";
+import { boundaryMessages } from "../i18n/messages/boundary.js";
+import { boundaryChecksMessages } from "../i18n/messages/boundaryChecks.js";
+
 // ── Model types ───────────────────────────────────────────────────────────────
 
 export type CouplingKind = "distributing" | "kinematic";
@@ -348,7 +352,7 @@ export function referencePointOptions(
 
   const centroid = centroidOf(points);
   const options: ReferencePointOption[] = [
-    { label: "Selection centre", point: centroid },
+    { label: tr(boundaryMessages).selectionCentre, point: centroid },
   ];
 
   const fit = fitCylinderAxis(
@@ -377,8 +381,8 @@ export function referencePointOptions(
   // axis has no preferred sign, and a bore drilled along −Z would have its ends
   // labelled backwards by any fixed naming.
   options.push(
-    { label: "Axis end (−)", point: at(lo) },
-    { label: "Axis end (+)", point: at(hi) },
+    { label: tr(boundaryMessages).axisEndMinus, point: at(lo) },
+    { label: tr(boundaryMessages).axisEndPlus, point: at(hi) },
   );
   return options;
 }
@@ -421,21 +425,18 @@ export function buildReferenceCouplings(
     const coupled = coupledNodeIds(coupling);
     if (coupled.length === 0)
       throw new Error(
-        `Coupling "${coupling.name}" grips no node — pick the surface it couples to ` +
-          "its reference point, or delete the coupling.",
+        tr(boundaryChecksMessages).couplingGripsNothing(coupling.name),
       );
     if (coupling.kind === "distributing" && coupled.length < 3)
       throw new Error(
-        `Coupling "${coupling.name}" is distributing but grips only ${coupled.length} ` +
-          "node(s); an RBE3 average needs at least 3. Pick a larger surface, or make " +
-          "the coupling kinematic.",
+        tr(boundaryChecksMessages).couplingTooFewNodes(
+          coupling.name,
+          coupled.length,
+        ),
       );
     const mask = couplingDofMask(coupling.kind, coupling.dofs);
     if (mask === 0)
-      throw new Error(
-        `Coupling "${coupling.name}" is kinematic but ties no DOF at all — select at ` +
-          "least one of Ux…Rz.",
-      );
+      throw new Error(tr(boundaryChecksMessages).couplingNoDof(coupling.name));
 
     const refPool = poolOf(coupling.refNodeId, `coupling "${coupling.name}"`);
     for (const nodeId of coupled) {
@@ -443,9 +444,11 @@ export function buildReferenceCouplings(
         const owner = kinematicOwner.get(nodeId);
         if (owner !== undefined)
           throw new Error(
-            `Node ${nodeId} is gripped by both kinematic couplings "${owner}" and ` +
-              `"${coupling.name}" — a DOF can be eliminated by only one constraint. ` +
-              "Make one of them distributing, or pick surfaces that do not overlap.",
+            tr(boundaryChecksMessages).couplingOverlap(
+              nodeId,
+              owner,
+              coupling.name,
+            ),
           );
         kinematicOwner.set(nodeId, coupling.name);
       }

@@ -17,6 +17,8 @@ import {
   studyFingerprint,
   verdictLine,
 } from "../../lib/refinementStudy";
+import { useIntlTag, useT } from "../../i18n/useLocale";
+import { studiesMessages } from "../../i18n/messages/studies";
 import css from "./StudyChart.module.css";
 
 // The mesh refinement study's convergence chart (KOF-401), in the centre in
@@ -43,17 +45,11 @@ const POINT_INSET = 36;
 
 const FIELDS: {
   value: ChartField;
-  label: string;
   axis: string;
   unit: string;
 }[] = [
-  {
-    value: "displacement",
-    label: "Displacement",
-    axis: "Max |U|",
-    unit: "mm",
-  },
-  { value: "stress", label: "Stress", axis: "Max σ_vm", unit: "MPa" },
+  { value: "displacement", axis: "Max |U|", unit: "mm" },
+  { value: "stress", axis: "Max σ_vm", unit: "MPa" },
 ];
 
 export function RefinementChart() {
@@ -67,6 +63,8 @@ export function RefinementChart() {
   );
   const [field, setField] = useState<ChartField>("displacement");
   const small = useMediaQuery(SMALL_SCREEN_QUERY);
+  const text = useT(studiesMessages);
+  const intl = useIntlTag();
   if (!visible || run === null) return null;
 
   const { width: WIDTH, height: HEIGHT, box: BOX } = small ? NARROW : WIDE;
@@ -86,7 +84,7 @@ export function RefinementChart() {
       : run.status === "done" && run.levels.length >= 2
         ? verdictLine(run.levels, run.settings).text
         : run.status === "failed"
-          ? "The study stopped — see the panel"
+          ? text.studyStopped
           : null;
   const range = layout.range;
   const ticks =
@@ -107,7 +105,7 @@ export function RefinementChart() {
           <span className={css.status} data-testid="refinement-chart-status">
             {status}
           </span>
-          <div className={css.toggle} role="group" aria-label="Chart field">
+          <div className={css.toggle} role="group" aria-label={text.chartField}>
             {FIELDS.map((f) => (
               <button
                 key={f.value}
@@ -115,7 +113,7 @@ export function RefinementChart() {
                 aria-pressed={f.value === field}
                 onClick={() => setField(f.value)}
               >
-                {f.label}
+                {text[f.value]}
               </button>
             ))}
           </div>
@@ -123,16 +121,14 @@ export function RefinementChart() {
 
         {layout.points.length === 0 ? (
           <div className={css.empty}>
-            {run.status === "running"
-              ? "The first level is on its way…"
-              : "No level to plot."}
+            {run.status === "running" ? text.firstLevel : text.noLevel}
           </div>
         ) : (
           <svg
             className={css.svg}
             viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
             role="img"
-            aria-label={`${spec.axis} against element count`}
+            aria-label={text.againstElements(spec.axis)}
           >
             <text className={css.axisTitle} x={BOX.left} y={BOX.top - 22}>
               {spec.axis} ({spec.unit})
@@ -199,8 +195,8 @@ export function RefinementChart() {
               >
                 <title>
                   {openable
-                    ? `Open the ${sizeLabel(run.plannedSizes[p.level])} mm level in 3D`
-                    : `${sizeLabel(run.plannedSizes[p.level])} mm level`}
+                    ? text.openLevelAt(sizeLabel(run.plannedSizes[p.level]))
+                    : text.levelAt(sizeLabel(run.plannedSizes[p.level]))}
                 </title>
                 <circle cx={p.x} cy={p.y} r={6} />
                 <text
@@ -217,7 +213,7 @@ export function RefinementChart() {
                   y={BOX.bottom + 20}
                   textAnchor="middle"
                 >
-                  {p.elements.toLocaleString("en-US")}
+                  {p.elements.toLocaleString(intl)}
                 </text>
                 <text
                   className={css.tickSub}
@@ -235,7 +231,7 @@ export function RefinementChart() {
               y={HEIGHT - 8}
               textAnchor="middle"
             >
-              Elements (log scale)
+              {text.elementsAxis}
             </text>
           </svg>
         )}

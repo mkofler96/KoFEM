@@ -8,10 +8,10 @@
 // apart, both on screen and in analytics.
 
 import type { ErrorCategory } from "./analytics";
+import { tr } from "../i18n/useLocale";
+import { geometryMessages } from "../i18n/messages/geometry";
 
 export type CadFormat = "step" | "iges";
-
-export const ACCEPTED_CAD_FORMATS = "STEP (.step, .stp) and IGES (.igs, .iges)";
 
 const EXTENSIONS: Record<string, CadFormat> = {
   step: "step",
@@ -57,10 +57,10 @@ export function importFailureMessage(
   format: CadFormat | null,
   detail: string,
 ): string {
-  if (category === "unsupported_format")
-    return `This file type is not supported. KoFEM imports ${ACCEPTED_CAD_FORMATS} files.`;
+  const text = tr(geometryMessages);
+  if (category === "unsupported_format") return text.unsupportedFormat;
   if (category === "parse_error" && format !== null)
-    return `Could not read this file as ${LABEL[format]}. Export it again from your CAD program; KoFEM imports ${ACCEPTED_CAD_FORMATS} files.`;
+    return text.unreadableFile(LABEL[format]);
   // The engine words these for the user; the C++ exception type is noise.
   if (category === "empty_geometry") return detail.replace(/^std::\w+: /, "");
   return detail;

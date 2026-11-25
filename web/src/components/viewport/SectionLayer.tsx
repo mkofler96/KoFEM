@@ -20,6 +20,7 @@ import {
 } from "../../lib/resultField";
 import type { MeshTopology } from "./useMeshTopology";
 import type { DrawnSection } from "./useResultSection";
+import { useLocale } from "../../i18n/useLocale";
 
 interface SectionLayerProps {
   topology: MeshTopology;
@@ -63,6 +64,7 @@ export function SectionLayer({ topology, section }: SectionLayerProps) {
   }, [setSectionError]);
 
   const { nodeMap, tetElements, hexElements, triElements } = topology;
+  const locale = useLocale();
   const cut = useMemo(() => {
     if (!ready || !result) return null;
     const values = nodalResultValues(
@@ -120,6 +122,7 @@ export function SectionLayer({ topology, section }: SectionLayerProps) {
     triElements,
     section,
     legendRange,
+    locale,
   ]);
 
   useEffect(() => {

@@ -33,6 +33,8 @@
 // one would leave fine-side nodes free to pass through the coarse faces.
 
 import { SpatialGrid, type Point3 } from "./spatialGrid.js";
+import { tr } from "../i18n/useLocale.js";
+import { boundaryChecksMessages } from "../i18n/messages/boundaryChecks.js";
 import {
   bodyMembership,
   tieLimit,
@@ -408,8 +410,7 @@ export function tieConstraints(
       const node = nodeById.get(id);
       if (!node)
         throw new Error(
-          `Tie "${tie.name}" references node ${id}, which is not in the mesh — ` +
-            "re-pick its surfaces after remeshing",
+          tr(boundaryChecksMessages).tieNodeMissing(tie.name, id),
         );
       return [node.x, node.y, node.z];
     };
