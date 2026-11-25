@@ -43,7 +43,10 @@ pub mod topology;
 
 pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;
-pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
+pub use cg::{
+    solve_pcg, solve_pcg_from, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus,
+    StoppingRule,
+};
 pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
 pub use coupled_static::{
     prepare_coupled_static, prepare_mixed_static, solve_coupled_static, solve_mixed_static,

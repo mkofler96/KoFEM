@@ -60,7 +60,7 @@ pub enum PcgStatus {
 /// is at most this long.
 const HISTORY: usize = 100;
 
-/// A conjugate-gradient solve in progress, from x = 0. Holds the iterate and
+/// A conjugate-gradient solve in progress. Holds the iterate and
 /// search state only; the matrix and preconditioner are passed to each call,
 /// so the caller owns them.
 #[derive(Debug, Clone)]
@@ -82,7 +82,7 @@ pub struct PcgRun {
 }
 
 impl PcgRun {
-    /// Set up the iteration for A·x = b (A and M from `system`).
+    /// Set up the iteration for A·x = b (A and M from `system`), from x = 0.
     ///
     /// # Errors
     /// [`FemError::InvalidSettings`] for a non-positive or non-finite
@@ -93,18 +93,75 @@ impl PcgRun {
         relative_tolerance: f64,
         stopping: StoppingRule,
     ) -> Result<Self, FemError> {
+        let size = system.matrix().rows();
+        Self::begin(
+            system,
+            rhs,
+            vec![0.0; size],
+            rhs.to_vec(),
+            relative_tolerance,
+            stopping,
+        )
+    }
+
+    /// As [`PcgRun::start`], from x = `guess`: a nearby solution, such as
+    /// the previous one of a sequence of similar systems, saves iterations.
+    /// [`StoppingRule::ResidualNorm`] still measures against ‖b‖, so the
+    /// result is as accurate as from zero; [`StoppingRule::PreconditionedNorm`]
+    /// measures against the guess's residual instead.
+    ///
+    /// # Errors
+    /// As [`PcgRun::start`], or a guess that is not one value per unknown.
+    pub fn start_from(
+        system: &mut dyn Preconditioner,
+        rhs: &[f64],
+        guess: &[f64],
+        relative_tolerance: f64,
+        stopping: StoppingRule,
+    ) -> Result<Self, FemError> {
+        let size = system.matrix().rows();
+        if guess.len() != size {
+            return Err(FemError::InvalidSettings {
+                reason: "the initial guess must have one value per unknown",
+            });
+        }
+        let mut product = vec![0.0; size];
+        system.matrix().mul_vec(guess, &mut product);
+        let residual = rhs
+            .iter()
+            .zip(&product)
+            .map(|(value, applied)| value - applied)
+            .collect();
+        Self::begin(
+            system,
+            rhs,
+            guess.to_vec(),
+            residual,
+            relative_tolerance,
+            stopping,
+        )
+    }
+
+    /// The run at `solution` with b − A·solution = `residual`.
+    fn begin(
+        system: &mut dyn Preconditioner,
+        rhs: &[f64],
+        solution: Vec<f64>,
+        residual: Vec<f64>,
+        relative_tolerance: f64,
+        stopping: StoppingRule,
+    ) -> Result<Self, FemError> {
         if !(relative_tolerance.is_finite() && relative_tolerance > 0.0) {
             return Err(FemError::InvalidSettings {
                 reason: "the tolerance must be positive",
             });
         }
-        let size = system.matrix().rows();
-        let residual = rhs.to_vec();
+        let size = solution.len();
         let mut preconditioned = vec![0.0; size];
         system.apply(&residual, &mut preconditioned);
         let rho = dot(&residual, &preconditioned);
-        Ok(Self {
-            solution: vec![0.0; size],
+        let mut run = Self {
+            solution,
             direction: preconditioned.clone(),
             product: vec![0.0; size],
             preconditioned,
@@ -116,9 +173,13 @@ impl PcgRun {
             tolerance: relative_tolerance,
             iterations: 0,
             recent: VecDeque::with_capacity(HISTORY),
-            // No load and nothing prescribed: the solution is exactly zero.
-            converged: rho == 0.0,
-        })
+            converged: false,
+        };
+        // Nothing to do: no load and nothing prescribed (the solution is
+        // exactly zero), or a guess that already meets the tolerance.
+        run.converged =
+            rho == 0.0 || run.squared_measure(rho) <= relative_tolerance * relative_tolerance;
+        Ok(run)
     }
 
     /// Iterate until converged or `until` iterations have run in total.
@@ -288,6 +349,7 @@ pub fn solve_pcg(
 }
 
 /// Solve A·x = b from x = 0 with the system's matrix A and preconditioner M.
+/// (See [`solve_pcg_from`] to start elsewhere.)
 /// With [`StoppingRule::PreconditionedNorm`] the tolerance is measured in M's
 /// norm, so it compares only between runs with the same preconditioner;
 /// [`StoppingRule::ResidualNorm`] compares across preconditioners.
@@ -302,14 +364,41 @@ pub fn solve_pcg_with(
     rhs: &[f64],
     settings: CgSettings,
 ) -> Result<(Vec<f64>, CgOutcome), FemError> {
+    check_budget(settings)?;
+    let mut run = PcgRun::start(system, rhs, settings.relative_tolerance, settings.stopping)?;
+    run.advance(system, settings.max_iterations)?;
+    run.into_solution()
+}
+
+/// As [`solve_pcg_with`], from x = `guess` (see [`PcgRun::start_from`]).
+///
+/// # Errors
+/// As [`solve_pcg_with`], or a guess that is not one value per unknown.
+pub fn solve_pcg_from(
+    system: &mut dyn Preconditioner,
+    rhs: &[f64],
+    guess: &[f64],
+    settings: CgSettings,
+) -> Result<(Vec<f64>, CgOutcome), FemError> {
+    check_budget(settings)?;
+    let mut run = PcgRun::start_from(
+        system,
+        rhs,
+        guess,
+        settings.relative_tolerance,
+        settings.stopping,
+    )?;
+    run.advance(system, settings.max_iterations)?;
+    run.into_solution()
+}
+
+fn check_budget(settings: CgSettings) -> Result<(), FemError> {
     if settings.max_iterations == 0 {
         return Err(FemError::InvalidSettings {
             reason: "the iteration budget must be positive",
         });
     }
-    let mut run = PcgRun::start(system, rhs, settings.relative_tolerance, settings.stopping)?;
-    run.advance(system, settings.max_iterations)?;
-    run.into_solution()
+    Ok(())
 }
 
 fn dot(lhs: &[f64], rhs: &[f64]) -> f64 {

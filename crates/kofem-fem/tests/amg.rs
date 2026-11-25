@@ -12,9 +12,10 @@
 mod support;
 
 use kofem_fem::{
-    apply_dirichlet, assemble_stiffness, prepare_static, solve_static, AmgSettings, CgSettings,
-    CsrMatrix, Dirichlet, FemError, Isotropic, PcgRun, PcgStatus, Preconditioner,
-    PreconditionerChoice, SmoothedAggregation, StaticSolution, StoppingRule,
+    apply_dirichlet, assemble_stiffness, prepare_static, solve_pcg_from, solve_pcg_with,
+    solve_static, AmgSettings, CgSettings, CsrMatrix, Dirichlet, FemError, Isotropic, PcgRun,
+    PcgStatus, Preconditioner, PreconditionerChoice, SmoothedAggregation, StaticSolution,
+    StoppingRule,
 };
 use support::{box_mesh, BoxMesh};
 
@@ -382,6 +383,84 @@ fn stepwise_run_matches_a_single_solve() {
     .expect("solves");
     assert_eq!(single.iterations, iterations);
     assert_eq!(single.displacements, stepwise);
+}
+
+/// ‖b − A·x‖ / ‖b‖.
+fn relative_residual(matrix: &CsrMatrix, rhs: &[f64], solution: &[f64]) -> f64 {
+    let mut product = vec![0.0; rhs.len()];
+    matrix.mul_vec(solution, &mut product);
+    let residual: f64 = rhs
+        .iter()
+        .zip(&product)
+        .map(|(value, applied)| (value - applied).powi(2))
+        .sum();
+    let load: f64 = rhs.iter().map(|value| value * value).sum();
+    (residual / load).sqrt()
+}
+
+/// A solve that starts from an earlier solution meets the same residual
+/// tolerance as one from zero, in fewer iterations; from the solution itself it
+/// stops before the first iteration.
+#[test]
+fn a_warm_start_meets_the_tolerance_in_fewer_iterations() {
+    let built = box_mesh([12, 3, 3], [60.0, 10.0, 10.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let mut prepared = prepare_static(
+        &built.mesh,
+        assemble_stiffness(&built.mesh),
+        &fixed,
+        &vec![0.0; fixed.len()],
+        &forces,
+        PreconditionerChoice::SmoothedAggregation(DEEP),
+    )
+    .expect("prepares");
+    let settings = CgSettings {
+        relative_tolerance: 1e-8,
+        max_iterations: 1000,
+        stopping: StoppingRule::ResidualNorm,
+    };
+    let system = prepared.system.as_mut();
+    let (cold, cold_outcome) = solve_pcg_with(system, &prepared.rhs, settings).expect("cold");
+
+    let nearby: Vec<f64> = cold.iter().map(|value| 0.9 * value).collect();
+    let (warm, warm_outcome) =
+        solve_pcg_from(system, &prepared.rhs, &nearby, settings).expect("warm");
+    assert!(
+        warm_outcome.iterations < cold_outcome.iterations,
+        "warm {} vs cold {} iterations",
+        warm_outcome.iterations,
+        cold_outcome.iterations
+    );
+    assert!(relative_residual(system.matrix(), &prepared.rhs, &warm) <= 1e-8);
+
+    let (again, outcome) = solve_pcg_from(system, &prepared.rhs, &cold, settings).expect("again");
+    assert_eq!(outcome.iterations, 0);
+    assert_eq!(again, cold);
+}
+
+#[test]
+fn a_warm_start_of_the_wrong_length_is_refused() {
+    let built = box_mesh([4, 2, 2], [20.0, 10.0, 10.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let mut prepared = prepare_static(
+        &built.mesh,
+        assemble_stiffness(&built.mesh),
+        &fixed,
+        &vec![0.0; fixed.len()],
+        &forces,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    )
+    .expect("prepares");
+    let guess = vec![0.0; prepared.rhs.len() - 1];
+    let settings = CgSettings {
+        relative_tolerance: 1e-8,
+        max_iterations: 1000,
+        stopping: StoppingRule::ResidualNorm,
+    };
+    assert!(matches!(
+        solve_pcg_from(prepared.system.as_mut(), &prepared.rhs, &guess, settings),
+        Err(FemError::InvalidSettings { .. })
+    ));
 }
 
 /// The continuation test offers more iterations to a run that is still

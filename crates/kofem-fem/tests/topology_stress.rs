@@ -87,6 +87,56 @@ fn aggregate_at(model: &mut SimpModel, rho: &[f64], stress: &StressConstraint) -
     (evaluation.aggregate, evaluation.daggregate)
 }
 
+/// The adjoint solve of the next design starts from the previous adjoint, as
+/// the state solve starts from the previous displacement.
+#[test]
+fn the_next_adjoint_starts_from_the_previous_one() {
+    let problem = l_bracket(10);
+    let count = problem.mesh.element_count();
+    let previous = vec![0.6; count];
+    let next: Vec<f64> = (0..count)
+        .map(|element| if element % 3 == 0 { 0.65 } else { 0.6 })
+        .collect();
+    let stress = constraint(0.5, Aggregation::PNorm, 8.0);
+    let adjoint = |model: &mut SimpModel, rho: &[f64]| {
+        let state = model
+            .evaluate_compliance(rho, PENALTY, EMIN)
+            .expect("state solve");
+        model
+            .evaluate_stress(
+                rho,
+                &state.displacements,
+                PENALTY,
+                EMIN,
+                PENALTY - 2.5,
+                &stress,
+                None,
+            )
+            .expect("stress")
+    };
+
+    let mut warm = problem.model(tight_solver());
+    adjoint(&mut warm, &previous);
+    let continued = adjoint(&mut warm, &next);
+    let fresh = adjoint(&mut problem.model(tight_solver()), &next);
+
+    assert!(
+        continued.adjoint_cg_iterations < fresh.adjoint_cg_iterations,
+        "warm {} vs cold {} iterations",
+        continued.adjoint_cg_iterations,
+        fresh.adjoint_cg_iterations
+    );
+    // Both solves meet the same residual tolerance, so the gradients agree to
+    // about it, measured against their largest entry.
+    let largest = fresh
+        .daggregate
+        .iter()
+        .fold(0.0_f64, |max, value| max.max(value.abs()));
+    for (got, want) in continued.daggregate.iter().zip(&fresh.daggregate) {
+        assert!((got - want).abs() <= 1e-9 * largest, "{got} vs {want}");
+    }
+}
+
 #[test]
 fn adjoint_sensitivities_match_central_differences() {
     let problem = l_bracket(10);

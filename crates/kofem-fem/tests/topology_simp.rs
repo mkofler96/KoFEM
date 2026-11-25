@@ -101,6 +101,47 @@ fn full_material_reproduces_the_plain_static_compliance() {
     }
 }
 
+/// The SIMP loop moves every density by at most the move limit, so the
+/// previous design's displacement is a close start for the next solve.
+#[test]
+fn the_next_design_starts_from_the_previous_displacement() {
+    let problem = cantilever();
+    let solver = SimpSolver {
+        preconditioner: SimpPreconditioner::GaussSeidel,
+        relative_tolerance: 1e-10,
+    };
+    let count = problem.mesh.element_count();
+    let previous = vec![0.5; count];
+    let next: Vec<f64> = (0..count)
+        .map(|element| if element % 2 == 0 { 0.505 } else { 0.5 })
+        .collect();
+
+    let mut warm = problem.model(solver);
+    warm.evaluate_compliance(&previous, PENALTY, EMIN)
+        .expect("previous design");
+    let continued = warm
+        .evaluate_compliance(&next, PENALTY, EMIN)
+        .expect("next design");
+    let fresh = problem
+        .model(solver)
+        .evaluate_compliance(&next, PENALTY, EMIN)
+        .expect("fresh model");
+
+    assert!(
+        continued.cg_iterations < fresh.cg_iterations,
+        "warm {} vs cold {} iterations",
+        continued.cg_iterations,
+        fresh.cg_iterations
+    );
+    let relative = (continued.compliance - fresh.compliance).abs() / fresh.compliance;
+    assert!(
+        relative < 1e-9,
+        "{} vs {}",
+        continued.compliance,
+        fresh.compliance
+    );
+}
+
 #[test]
 fn compliance_scales_exactly_with_the_simp_modulus() {
     let mut model = cantilever().model(tight_solver());

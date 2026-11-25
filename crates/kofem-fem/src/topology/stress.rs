@@ -23,7 +23,7 @@ use crate::element::{hex8_reference_gradients, hex_gradients, tet4_gradients, HE
 use crate::error::FemError;
 use crate::mesh::{ElementShape, TetMesh};
 
-use super::simp::{simp_scale_deriv, SimpModel};
+use super::simp::{simp_scale_deriv, Load, SimpModel};
 use super::topology_error;
 
 /// Voigt components: xx, yy, zz, yz, xz, xy.
@@ -353,7 +353,8 @@ impl SimpModel {
             }
         }
 
-        let (adjoint, adjoint_cg_iterations) = self.solve(&adjoint_load, rho, penalty, emin_rel)?;
+        let (adjoint, adjoint_cg_iterations) =
+            self.solve(Load::Adjoint, &adjoint_load, rho, penalty, emin_rel)?;
         for (element, value) in daggregate.iter_mut().enumerate() {
             *value -= simp_scale_deriv(rho[element], penalty, emin_rel)
                 * self.element_product(element, &adjoint, displacements);

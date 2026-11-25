@@ -17,7 +17,7 @@
 
 use crate::amg::{AmgSettings, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::assembly::node_neighbours;
-use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
+use crate::cg::{solve_pcg_from, solve_pcg_with, CgSettings, StoppingRule};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex8_stiffness, hex_gradients, tet4_stiffness,
@@ -104,6 +104,17 @@ enum System {
     },
 }
 
+/// What a SIMP solve is for. Each starts from its own previous solution: the
+/// loop moves every density by at most the move limit, so the last design's
+/// solution is a close start (KOF-341: 10–15 % fewer CG iterations).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Load {
+    /// K·u = f.
+    State,
+    /// The stress constraint's adjoint K·λ = ∂P/∂u.
+    Adjoint,
+}
+
 impl System {
     fn preconditioner(&mut self) -> &mut dyn Preconditioner {
         match self {
@@ -136,6 +147,9 @@ pub struct SimpModel {
     /// Element scale factors of the system in `system`.
     scale: Vec<f64>,
     system: Option<System>,
+    /// The last solution of each [`Load`]; empty before its first solve.
+    previous_state: Vec<f64>,
+    previous_adjoint: Vec<f64>,
     /// Built on the first stress evaluation.
     pub(super) stress_operators: Option<StressOperators>,
 }
@@ -250,6 +264,8 @@ impl SimpModel {
             solver,
             scale: Vec::new(),
             system: None,
+            previous_state: Vec::new(),
+            previous_adjoint: Vec::new(),
             stress_operators: None,
         })
     }
@@ -327,13 +343,15 @@ impl SimpModel {
 
     /// Solve `K(ρ)·x = rhs` with `K(ρ) = Σ_e s(ρ_e)·k0_e` and x = 0 on the
     /// supports; `rhs` on the supports is ignored. Returns x (3 per node) and
-    /// the CG iterations. A second solve at the same design reuses its system.
+    /// the CG iterations. A second solve at the same design reuses its system;
+    /// each solve starts from the previous solution for the same `load`.
     ///
     /// # Errors
     /// A density field that does not fit the mesh, a multigrid setup that finds
     /// the model under-constrained, or a CG breakdown or non-convergence.
-    pub fn solve(
+    pub(crate) fn solve(
         &mut self,
+        load_kind: Load,
         rhs: &[f64],
         rho: &[f64],
         penalty: f64,
@@ -368,7 +386,16 @@ impl SimpModel {
             .system
             .as_mut()
             .ok_or_else(|| topology_error("the SIMP system was not assembled"))?;
-        let (solution, outcome) = solve_pcg_with(system.preconditioner(), &load, settings)?;
+        let previous = match load_kind {
+            Load::State => &mut self.previous_state,
+            Load::Adjoint => &mut self.previous_adjoint,
+        };
+        let (solution, outcome) = if previous.is_empty() {
+            solve_pcg_with(system.preconditioner(), &load, settings)?
+        } else {
+            solve_pcg_from(system.preconditioner(), &load, previous, settings)?
+        };
+        previous.clone_from(&solution);
         Ok((solution, outcome.iterations))
     }
 
@@ -429,7 +456,7 @@ impl SimpModel {
         emin_rel: f64,
     ) -> Result<ComplianceEvaluation, FemError> {
         let forces = std::mem::take(&mut self.forces);
-        let solved = self.solve(&forces, rho, penalty, emin_rel);
+        let solved = self.solve(Load::State, &forces, rho, penalty, emin_rel);
         self.forces = forces;
         let (displacements, cg_iterations) = solved?;
         let count = self.element_count();
