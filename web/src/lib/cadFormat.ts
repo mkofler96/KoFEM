@@ -13,8 +13,6 @@ import { geometryMessages } from "../i18n/messages/geometry";
 
 export type CadFormat = "step" | "iges";
 
-export const ACCEPTED_CAD_FORMATS = "STEP (.step, .stp) and IGES (.igs, .iges)";
-
 const EXTENSIONS: Record<string, CadFormat> = {
   step: "step",
   stp: "step",

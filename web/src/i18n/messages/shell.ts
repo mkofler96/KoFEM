@@ -336,11 +336,11 @@ export const shellMessages = defineMessages({
   },
   kindSection: {
     en: "Section cut",
-    de: "Schnittebene",
-    fr: "Plan de coupe",
-    it: "Piano di sezione",
-    es: "Plano de corte",
-    pt: "Plano de corte",
+    de: "Schnitt",
+    fr: "Coupe",
+    it: "Sezione",
+    es: "Corte",
+    pt: "Corte",
   },
   kindReactions: {
     en: "Reactions",

@@ -608,11 +608,11 @@ export const optimizeMessages = defineMessages({
   },
   noDesignRegion: {
     en: "Every region is set to Keep solid or Keep empty — set at least one to Design so the optimizer has material to shape",
-    de: "Jeder Bereich ist auf „Fest erhalten“ oder „Leer erhalten“ gesetzt – setzen Sie mindestens einen auf „Design“, damit der Optimierer Material formen kann",
+    de: "Jeder Bereich ist auf „Voll erhalten“ oder „Leer erhalten“ gesetzt – setzen Sie mindestens einen auf „Design“, damit der Optimierer Material formen kann",
     fr: "Chaque région est réglée sur Garder plein ou Garder vide — réglez-en au moins une sur Conception pour que l'optimiseur ait de la matière à façonner",
-    it: "Ogni regione è impostata su Mantieni piena o Mantieni vuota — impostane almeno una su Progetto perché l'ottimizzatore abbia materiale da modellare",
-    es: "Todas las regiones están en Mantener sólida o Mantener vacía: pon al menos una en Diseño para que el optimizador tenga material que modelar",
-    pt: "Toda região está como Manter sólida ou Manter vazia — defina pelo menos uma como Projeto para que o otimizador tenha material a moldar",
+    it: "Ogni regione è impostata su Mantieni pieno o Mantieni vuoto — impostane almeno una su Progetto perché l'ottimizzatore abbia materiale da modellare",
+    es: "Todas las regiones están en Mantener sólido o Mantener vacío: pon al menos una en Diseño para que el optimizador tenga material que modelar",
+    pt: "Toda região está como Manter sólido ou Manter vazio — defina pelo menos uma como Projeto para que o otimizador tenha material a moldar",
   },
   levelSetShells: {
     en: "The level-set method supports solid models only — use SIMP for shell and coupled models",

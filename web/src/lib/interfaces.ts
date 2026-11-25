@@ -26,10 +26,6 @@ import { geometryMessages } from "../i18n/messages/geometry";
 export const INTERFACE_TYPES = ["bonded"] as const;
 export type InterfaceType = (typeof INTERFACE_TYPES)[number];
 
-export const INTERFACE_TYPE_LABELS: Record<InterfaceType, string> = {
-  bonded: "Bonded",
-};
-
 // The type's name in the current language, for display.
 export function interfaceTypeLabel(type: InterfaceType): string {
   const labels: Record<InterfaceType, string> = {

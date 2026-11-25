@@ -177,17 +177,22 @@ function createWorker(): Worker {
     } else {
       // A failure that arrived without a message still needs a text.
       const msg = (rest.error as string | undefined) ?? "Worker error";
+      // Only a message the worker sent can be a translation.
+      const english = (rest.english as string | undefined) ?? msg;
       console.error("[worker] task failed:", msg);
       const { stage } = rest;
       if (stage === undefined || isFailureStage(stage))
-        pending.reject(new WorkerTaskError(msg, stage ?? null));
-      else
+        pending.reject(new WorkerTaskError(msg, stage ?? null, english));
+      else {
+        const unknownStep = ` (the worker also reported an unknown step "${String(stage)}")`;
         pending.reject(
           new WorkerTaskError(
-            `${msg} (the worker also reported an unknown step "${String(stage)}")`,
+            `${msg}${unknownStep}`,
             null,
+            `${english}${unknownStep}`,
           ),
         );
+      }
     }
   };
 

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 
@@ -48,3 +49,46 @@ test("a language chosen in Settings is kept after a reload", async ({
   await page.getByRole("button", { name: "Paramètres" }).click();
   await expect(page.getByLabel("Langue")).toHaveValue("fr");
 });
+
+// Every label follows a switch at once, memoised ones too: the app switched
+// to German reads exactly as the app opened in German.
+async function openExample(page: Page, id: string): Promise<string> {
+  await page.goto(`/app/?example=${id}`);
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __kofemStore: { getState(): { elements: unknown[] } };
+            }
+          ).__kofemStore.getState().elements.length,
+      ),
+    )
+    .toBeGreaterThan(0);
+  return page.locator("#root").innerText();
+}
+
+for (const id of ["axial-bar", "cantilever-beam"]) {
+  test(`switching to German relabels everything in the ${id} example`, async ({
+    browser,
+  }) => {
+    const english = await browser.newContext({ locale: "en-US" });
+    const switched = await english.newPage();
+    await openExample(switched, id);
+    await switched.getByRole("button", { name: "Settings" }).click();
+    await switched.getByLabel("Language").selectOption("de");
+    await switched.keyboard.press("Escape");
+
+    const german = await browser.newContext({ locale: "de-DE" });
+    const opened = await german.newPage();
+    const expected = await openExample(opened, id);
+
+    await expect(switched.locator("#root")).toHaveText(expected, {
+      useInnerText: true,
+    });
+    await english.close();
+    await german.close();
+  });
+}

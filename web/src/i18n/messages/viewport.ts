@@ -109,11 +109,11 @@ export const viewportMessages = defineMessages({
   },
   supportHow: {
     en: "Add a support, click the three highlighted holes, then Apply.",
-    de: "Fügen Sie eine Lagerung hinzu, klicken Sie die drei markierten Bohrungen an, dann Übernehmen.",
-    fr: "Ajoutez un appui, cliquez sur les trois trous en surbrillance, puis Appliquer.",
-    it: "Aggiungi un vincolo, fai clic sui tre fori evidenziati, poi Applica.",
-    es: "Añade un apoyo, haz clic en los tres agujeros resaltados y luego Aplicar.",
-    pt: "Adicione um apoio, clique nos três furos destacados e depois em Aplicar.",
+    de: "Fügen Sie eine Lagerung hinzu, klicken Sie die drei markierten Bohrungen an, dann auf Lagerung anwenden.",
+    fr: "Ajoutez un appui, cliquez sur les trois trous en surbrillance, puis sur Appliquer l'appui.",
+    it: "Aggiungi un vincolo, fai clic sui tre fori evidenziati, poi su Applica vincolo.",
+    es: "Añade un apoyo, haz clic en los tres agujeros resaltados y luego en Aplicar apoyo.",
+    pt: "Adicione um apoio, clique nos três furos destacados e depois em Aplicar apoio.",
   },
   supportAction: {
     en: "Add support",
@@ -135,15 +135,15 @@ export const viewportMessages = defineMessages({
     en: (force: string) =>
       `Add a load, click the highlighted bore, set Fy = ${force}, then Apply.`,
     de: (force: string) =>
-      `Fügen Sie eine Last hinzu, klicken Sie die markierte Bohrung an, setzen Sie Fy = ${force}, dann Übernehmen.`,
+      `Fügen Sie eine Last hinzu, klicken Sie die markierte Bohrung an, setzen Sie Fy = ${force}, dann auf Last anwenden.`,
     fr: (force: string) =>
-      `Ajoutez une charge, cliquez sur l'alésage en surbrillance, réglez Fy = ${force}, puis Appliquer.`,
+      `Ajoutez une charge, cliquez sur l'alésage en surbrillance, réglez Fy = ${force}, puis cliquez sur Appliquer la charge.`,
     it: (force: string) =>
-      `Aggiungi un carico, fai clic sul foro evidenziato, imposta Fy = ${force}, poi Applica.`,
+      `Aggiungi un carico, fai clic sul foro evidenziato, imposta Fy = ${force}, poi fai clic su Applica carico.`,
     es: (force: string) =>
-      `Añade una carga, haz clic en el agujero resaltado, fija Fy = ${force} y luego Aplicar.`,
+      `Añade una carga, haz clic en el agujero resaltado, fija Fy = ${force} y luego pulsa Aplicar carga.`,
     pt: (force: string) =>
-      `Adicione uma carga, clique no furo destacado, defina Fy = ${force} e depois clique em Aplicar.`,
+      `Adicione uma carga, clique no furo destacado, defina Fy = ${force} e depois clique em Aplicar carga.`,
   },
   loadAction: {
     en: "Add load",
@@ -163,11 +163,11 @@ export const viewportMessages = defineMessages({
   },
   runHow: {
     en: "Add a static study and press Run.",
-    de: "Fügen Sie eine statische Studie hinzu und klicken Sie auf Ausführen.",
-    fr: "Ajoutez une étude statique et cliquez sur Lancer.",
-    it: "Aggiungi uno studio statico e premi Esegui.",
-    es: "Añade un estudio estático y pulsa Ejecutar.",
-    pt: "Adicione um estudo estático e clique em Executar.",
+    de: "Fügen Sie eine statische Studie hinzu und starten Sie die Berechnung.",
+    fr: "Ajoutez une étude statique et lancez le calcul.",
+    it: "Aggiungi uno studio statico e avvia l'analisi.",
+    es: "Añade un estudio estático y ejecuta el cálculo.",
+    pt: "Adicione um estudo estático e execute a análise.",
   },
   runAction: {
     en: "Open study",

@@ -3537,11 +3537,11 @@
   },
   "optimize.ts:optimizeMessages.noDesignRegion": {
     "en": "3bc090b487bf",
-    "de": "f6fb4977ec7c",
+    "de": "4c24b9111c72",
     "fr": "61d9c25a50ea",
-    "it": "71dbeac53e16",
-    "es": "fea1e249ada9",
-    "pt": "0f2757e3dfc5"
+    "it": "19a7ceb8836d",
+    "es": "2de561bca940",
+    "pt": "5cefa30b2d46"
   },
   "optimize.ts:optimizeMessages.noLoads": {
     "en": "4bdbb298eebd",
@@ -5353,11 +5353,11 @@
   },
   "shell.ts:shellMessages.kindSection": {
     "en": "bd8e4d4fe467",
-    "de": "367f4a5a824a",
-    "fr": "48dcc2ebdada",
-    "it": "1b8ca2a7feec",
-    "es": "fe2657cd13af",
-    "pt": "fe2657cd13af"
+    "de": "a8af0746c638",
+    "fr": "c32b38ace0d7",
+    "it": "f54ee1e42079",
+    "es": "4a82994ca32e",
+    "pt": "4a82994ca32e"
   },
   "shell.ts:shellMessages.kindStudy": {
     "en": "83bfc610449e",
@@ -7137,11 +7137,11 @@
   },
   "viewport.ts:viewportMessages.loadHow": {
     "en": "d151401f60d5",
-    "de": "ab3da569954c",
-    "fr": "53f8fc384b64",
-    "it": "a3a2a4afacb7",
-    "es": "027838844525",
-    "pt": "5dbb4cd860a4"
+    "de": "df1a2926d66d",
+    "fr": "dc6db6d0fd43",
+    "it": "1a7a8a8b8ffa",
+    "es": "a8269f7f4d02",
+    "pt": "1520d6985e96"
   },
   "viewport.ts:viewportMessages.loadTitle": {
     "en": "1e110c3d57ae",
@@ -7201,11 +7201,11 @@
   },
   "viewport.ts:viewportMessages.runHow": {
     "en": "9d34ec904a52",
-    "de": "ea409e6f1313",
-    "fr": "b528060526eb",
-    "it": "4fa8ce692ea8",
-    "es": "4561ab3702d4",
-    "pt": "c48f8cccb2f5"
+    "de": "5f032f33f862",
+    "fr": "4abd9e8f94f6",
+    "it": "d5a9ccac59a9",
+    "es": "13e6aa203aa1",
+    "pt": "3472bfa12dc7"
   },
   "viewport.ts:viewportMessages.runTitle": {
     "en": "a61ccdd37452",
@@ -7241,11 +7241,11 @@
   },
   "viewport.ts:viewportMessages.supportHow": {
     "en": "8cfcdc3c1df7",
-    "de": "2aef1753c25d",
-    "fr": "14650e134cad",
-    "it": "8775c860d037",
-    "es": "2e06fb0e3f32",
-    "pt": "2ae7251a5b1a"
+    "de": "31cdb77462b7",
+    "fr": "9a2094b6fbd6",
+    "it": "1b5e6dfabb4e",
+    "es": "f62a9b4878a8",
+    "pt": "4eacf6fdd5e7"
   },
   "viewport.ts:viewportMessages.supportTitle": {
     "en": "0c1d1e11779f",

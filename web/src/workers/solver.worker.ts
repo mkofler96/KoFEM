@@ -106,6 +106,7 @@ import {
 } from "../lib/solve/topOptRust.js";
 import { elementOrderOf } from "../lib/solve/messageDefaults.js";
 import { useLocaleStore } from "../i18n/useLocale";
+import { inEnglish } from "../i18n/english";
 import type { Locale } from "../i18n/locale";
 
 let Module: KofemModule | null = null;
@@ -1214,6 +1215,7 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
     id,
     ok: false,
     error: errorMessage,
+    english: inEnglish(errorMessage),
     ...(stage === null ? {} : { stage }),
   });
 }
