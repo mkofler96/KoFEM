@@ -234,6 +234,8 @@ export function useSolver() {
               ...thinWalls.map(thinWallMessage),
               ...incompressible.map(incompressibleMessage),
             ],
+            materials,
+            properties,
           };
     setRunning(true);
     clearLogs();

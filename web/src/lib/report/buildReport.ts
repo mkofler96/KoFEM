@@ -124,6 +124,9 @@ function bodyName(properties: Property[], property: Property): string {
 
 function bodyRows(input: ReportInput, run: SolveRun | null): BodyRow[] {
   const text = tr(reportMessages);
+  // The bodies and materials the solve used; a result loaded from a file has
+  // no run, and the file's own are the model's.
+  const { properties, materials } = run ?? input;
   const counts = new Map<number, Map<Element["type"], number>>();
   for (const element of input.elements) {
     const byType = counts.get(element.propertyId) ?? new Map();
@@ -133,14 +136,12 @@ function bodyRows(input: ReportInput, run: SolveRun | null): BodyRow[] {
   return [...counts.entries()]
     .sort(([a], [b]) => a - b)
     .map(([propertyId, byType]) => {
-      const property = input.properties.find((p) => p.id === propertyId);
+      const property = properties.find((p) => p.id === propertyId);
       if (!property)
         throw new Error(
           `report: elements use property ${propertyId}, which the model does not have`,
         );
-      const material = input.materials.find(
-        (m) => m.id === property.materialId,
-      );
+      const material = materials.find((m) => m.id === property.materialId);
       if (!material)
         throw new Error(
           `report: property ${propertyId} uses material ${property.materialId}, which the model does not have`,
@@ -174,7 +175,7 @@ function bodyRows(input: ReportInput, run: SolveRun | null): BodyRow[] {
             : "solid";
       return {
         propertyId,
-        name: bodyName(input.properties, property),
+        name: bodyName(properties, property),
         material,
         family,
         thickness,

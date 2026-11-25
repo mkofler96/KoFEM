@@ -17,6 +17,8 @@ import {
   type SolverMethod,
 } from "../lib/solve/amg";
 import type { SolveRoute } from "../lib/solve/route";
+import type { Material } from "./materialSlice";
+import type { Property } from "./geometrySlice";
 import {
   SHELL_SURFACES,
   STRESS_FIELDS,
@@ -46,12 +48,16 @@ export interface SolverResult {
 }
 
 // What a static solve was run with: its path, its preconditioner, the element
-// order and the warnings the Solve panel showed when it started.
+// order, the warnings the Solve panel showed when it started, and the
+// materials and body properties it solved. A material can be edited after the
+// solve without clearing the result, so the report reads them from here.
 export interface SolveRun {
   path: SolveRoute["path"];
   preconditioner: Preconditioner;
   elementOrder: number;
   warnings: string[];
+  materials: Material[];
+  properties: Property[];
 }
 
 export const RESULT_TYPES = [

@@ -27,11 +27,16 @@ const steel = {
   color: "#4e79a7",
 };
 
-const run = (path: SolveRun["path"]): SolveRun => ({
+const run = (
+  path: SolveRun["path"],
+  properties: Property[] = [],
+): SolveRun => ({
   path,
   preconditioner: "amg",
   elementOrder: 1,
   warnings: [],
+  materials: [steel],
+  properties,
 });
 
 const result = (solveRun?: SolveRun): SolverResult => ({
@@ -65,11 +70,16 @@ const element = (
   propertyId,
 });
 
+// A run solved with the model's own bodies, unless the test gives others.
 function input(
   properties: Property[],
   elements: Element[],
-  solved: SolverResult | null,
+  given: SolverResult | null,
 ): ReportInput {
+  const solved =
+    given?.run && given.run.properties.length === 0
+      ? { ...given, run: { ...given.run, properties } }
+      : given;
   return {
     modelName: "Bracket",
     createdAt: "25 November 2026",
@@ -190,6 +200,25 @@ describe("the report's bodies", () => {
         ),
       ),
     ).toThrow(/property 1 have no thickness/);
+  });
+});
+
+describe("the report states what was solved", () => {
+  test("a material edited after the solve is reported as solved", () => {
+    const solvedWith: Property[] = [{ id: 1, materialId: 1 }];
+    const doc = buildReport({
+      ...input(
+        [{ id: 1, materialId: 2 }],
+        [element(1, "CTETRA", 1)],
+        result(run("solid", solvedWith)),
+      ),
+      materials: [
+        { ...steel, young: 70000 },
+        { ...steel, id: 2, name: "Aluminium", young: 70000 },
+      ],
+    });
+    expect(doc.bodies[0].material.name).toBe("Steel");
+    expect(doc.bodies[0].material.young).toBe(210000);
   });
 });
 
