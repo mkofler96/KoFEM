@@ -30,7 +30,7 @@ cd web && bun run validate:report
 | NAFEMS LE2: cylindrical shell patch | tangential stress at E, outer surface | 61.042 MPa | NAFEMS LE2 target, 6·m / t² | +1.74% | 3% | ✅ |
 | NAFEMS LE3: hemisphere with point loads | radial displacement at A | 183.18 mm | NAFEMS LE3 target | -0.99% | 5% | ✅ |
 | NAFEMS LE4: hyperbolic shell | meridional stress at K, mid-surface | -49.857 MPa | NAFEMS LE4 target | -0.29% | 3% | ✅ |
-| NAFEMS LE5: Z-section cantilever | axial stress at A, mid-surface | -109.32 MPa | NAFEMS LE5 target | +1.22% | 3% | ✅ |
+| NAFEMS LE5: Z-section cantilever | axial stress at A, mid-surface | -106.19 MPa | NAFEMS LE5 target | -1.68% | 3% | ✅ |
 | NAFEMS LE6: skew plate | max principal stress at E, lower surface | 0.80543 MPa | NAFEMS LE6 target | +0.43% | 2% | ✅ |
 | NAFEMS LE7: cylinder with hemispherical cap | axial stress at D, outer surface | 25.920 MPa | NAFEMS LE7 target | +0.08% | 3% | ✅ |
 | NAFEMS LE8: axisymmetric shell under pressure | hoop stress at D, outer surface | 87.222 MPa | NAFEMS LE8 target | -7.70% | 10% | ✅ |
