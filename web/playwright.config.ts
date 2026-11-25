@@ -59,6 +59,9 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:4173",
     headless: true,
+    // The app opens in the browser's language (KOF-468); the suite reads its
+    // English text whatever the machine's language.
+    locale: "en-US",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     ...(executablePath ? { launchOptions: { executablePath } } : {}),

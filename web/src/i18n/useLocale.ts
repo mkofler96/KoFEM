@@ -1,0 +1,75 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { create } from "zustand";
+import { INTL_TAGS, pickLocale, type Locale } from "./locale";
+import type { Catalog, Message } from "./messages";
+
+const LOCALE_KEY = "kofem.locale";
+
+// localStorage throws where the browser blocks storage (some private modes);
+// outside a browser (bun tests) there is neither storage nor a browser
+// language, and the app speaks English.
+function storedLocale(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    return localStorage.getItem(LOCALE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function browserLanguages(): readonly string[] {
+  if (typeof navigator === "undefined" || !navigator.languages) return [];
+  return navigator.languages;
+}
+
+function markDocument(locale: Locale): void {
+  if (typeof document !== "undefined") document.documentElement.lang = locale;
+}
+
+interface LocaleState {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+}
+
+export const useLocaleStore = create<LocaleState>((set) => ({
+  locale: pickLocale(storedLocale(), browserLanguages()),
+  setLocale: (locale) => {
+    try {
+      localStorage.setItem(LOCALE_KEY, locale);
+    } catch {
+      // Blocked storage: the language holds for this visit only.
+    }
+    markDocument(locale);
+    set({ locale });
+  },
+}));
+
+markDocument(useLocaleStore.getState().locale);
+
+export function useLocale(): Locale {
+  return useLocaleStore((s) => s.locale);
+}
+
+// The catalog's messages in the current language, re-rendering on a change.
+export function useT<M extends Record<string, Message>>(
+  catalog: Catalog<M>,
+): M {
+  return catalog[useLocale()];
+}
+
+// The same outside React: text a store action or a library function builds
+// is in the language current when it is built.
+export function tr<M extends Record<string, Message>>(catalog: Catalog<M>): M {
+  return catalog[useLocaleStore.getState().locale];
+}
+
+// For `toLocaleString` and `Intl` number formats in the current language.
+export function useIntlTag(): string {
+  return INTL_TAGS[useLocale()];
+}
+
+export function intlTag(): string {
+  return INTL_TAGS[useLocaleStore.getState().locale];
+}
