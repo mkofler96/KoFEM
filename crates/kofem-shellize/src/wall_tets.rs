@@ -3,10 +3,12 @@
 
 //! Which solid tets the shell mid-surface replaces.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::error::ShellizeError;
-use crate::geometry::{max_of, triangle_extent, ShellizeMesh, Vec3};
+use crate::geometry::{
+    add, cross, dot, max_of, norm, scale, sub, triangle_extent, ShellizeMesh, Vec3,
+};
 use crate::grid::TriangleGrid;
 use crate::mid_surface::ShellExtraction;
 
@@ -73,6 +75,65 @@ pub fn shell_wall_tets(
     Ok(wall_tets)
 }
 
+/// Two facets `|n₁·n₂|` above this are (near) parallel: their shared edge is
+/// no corner.
+const PARALLEL: f64 = 0.9;
+
+/// Facet edges where two walls meet at an angle (an L-corner or a
+/// T-junction), each with how far the wall material reaches from it: the
+/// outer corner of an L lies t/2 from both walls' mid-planes, so √2·t/2 from
+/// the line where the welded mid-surfaces end (KOF-452).
+fn corner_edges(shells: &ShellExtraction) -> Vec<([Vec3; 2], f64)> {
+    let mut facets_of_edge: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+    for (facet, tri) in shells.triangles.iter().enumerate() {
+        for corner in 0..3 {
+            let (first, second) = (tri[corner], tri[(corner + 1) % 3]);
+            facets_of_edge
+                .entry((first.min(second), first.max(second)))
+                .or_default()
+                .push(facet);
+        }
+    }
+    let normal = |facet: usize| {
+        let [first, second, third] = shells.triangles[facet].map(|node| shells.vertices[node]);
+        let raw = cross(sub(second, first), sub(third, first));
+        scale(raw, 1.0 / norm(raw).max(f64::MIN_POSITIVE))
+    };
+    let mut edges = Vec::new();
+    for (&(first, second), facets) in &facets_of_edge {
+        let mut thickest: Option<f64> = None;
+        for (position, &one) in facets.iter().enumerate() {
+            for &other in &facets[position + 1..] {
+                let angled = shells.triangle_source[one] != shells.triangle_source[other]
+                    && dot(normal(one), normal(other)).abs() <= PARALLEL;
+                if angled {
+                    let thickness = shells.thicknesses[one].max(shells.thicknesses[other]);
+                    thickest = Some(thickest.map_or(thickness, |value| value.max(thickness)));
+                }
+            }
+        }
+        if let Some(thickness) = thickest {
+            edges.push((
+                [shells.vertices[first], shells.vertices[second]],
+                std::f64::consts::SQRT_2 * 0.5 * thickness,
+            ));
+        }
+    }
+    edges
+}
+
+/// Distance from `point` to the segment `ends`.
+fn segment_distance(point: Vec3, ends: [Vec3; 2]) -> f64 {
+    let along = sub(ends[1], ends[0]);
+    let length2 = dot(along, along);
+    let fraction = if length2 > 0.0 {
+        (dot(sub(point, ends[0]), along) / length2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    norm(sub(point, add(ends[0], scale(along, fraction))))
+}
+
 /// Every tet of the shelled body — what the app replaces with shell facets.
 /// Sound only when the detected walls cover all of it: a curved wall, a small
 /// tab or a thick block yields no facets, and dropping its tets would remove
@@ -92,6 +153,7 @@ pub fn shell_body_tets(
         .filter(|&element| mesh.body[element] == shell_body)
         .collect();
     let covered = shell_wall_tets(mesh, shells, 1.0)?;
+    let corners = corner_edges(shells);
     let mut lost_volume = 0.0;
     let mut body_volume = 0.0;
     let mut lost = 0;
@@ -99,6 +161,18 @@ pub fn shell_body_tets(
         let volume = mesh.tet_volume(element);
         body_volume += volume;
         if covered.contains(&element) {
+            continue;
+        }
+        let centroid = scale(
+            mesh.tets[element]
+                .iter()
+                .fold([0.0; 3], |sum, &vertex| add(sum, mesh.vertices[vertex])),
+            0.25,
+        );
+        if corners
+            .iter()
+            .any(|&(ends, reach)| segment_distance(centroid, ends) <= reach)
+        {
             continue;
         }
         lost += 1;

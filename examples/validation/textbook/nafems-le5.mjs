@@ -8,7 +8,7 @@ import { REF } from "./refs.mjs";
 
 export default {
   description:
-    "NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's quadratic tetrahedra.",
+    "NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's shell triangles.",
   searchTitle: "NAFEMS LE5 Z-section cantilever benchmark",
   figure: () => zSectionFigure(),
   intro: ({ tex, n, row }) => `
@@ -33,14 +33,14 @@ export default {
         is the couple of the two shears, <i>T</i>&nbsp;=&nbsp;${inp("T") / 1e9}&nbsp;MN·m.
         The beam runs along the app's <i>z</i> axis, so NAFEMS'
         <i>σxx</i> is the app's <i>σzz</i>.</p>
-        <p>NAFEMS meant the walls for shells. KoFEM's shell idealisation welds
-        walls where one stands on another (a T-junction) but not yet at the
-        L-corners of a Z, so the beam is solid:
-        ${row.mesh.elements.toLocaleString("en-US")} quadratic tetrahedra.</p>`,
+        <p>The body is marked Shell, as NAFEMS meant it: each wall collapses
+        to its mid-surface, and web and flanges are welded where their
+        mid-planes cross at the corners.
+        ${row.mesh.elements.toLocaleString("en-US")} linear shell
+        triangles.</p>`,
   discussion: ({ row, pct }) => `
         <p>KoFEM reads ${pct(row.errPct)} from the NAFEMS target. The
-        convergence study shows the solid settling slightly beyond the thin-shell
-        value: walls 0.1&nbsp;m thick on a section 2&nbsp;m deep are not quite
-        thin.</p>`,
+        convergence study shows the shell approaching it from below as the
+        mesh is refined.</p>`,
   references: [REF.nafems],
 };

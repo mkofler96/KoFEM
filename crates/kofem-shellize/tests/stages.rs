@@ -17,6 +17,8 @@ use kofem_shellize::{
     extract_thin_wall_shells, shell_body_tets, shell_wall_tets, CouplingOptions, ExtractOptions,
     ShellExtraction, ShellizeError, ShellizeMesh, TieSurfaces,
 };
+use std::collections::{HashMap, HashSet};
+
 use support::{boxes, boxes_labelled, BoxSpec};
 
 fn extract(mesh: &ShellizeMesh, max_wall: f64, ids: Option<Vec<i32>>) -> ShellExtraction {
@@ -715,4 +717,278 @@ fn malformed_meshes_are_refused() {
         ShellizeMesh::new(&[f64::NAN; 3], &[], &[], &[], &[]),
         Err(ShellizeError::NonFinite { .. })
     ));
+}
+
+// ── L-corners (KOF-452) ───────────────────────────────────────────────────────
+//
+// A Z-section and a C-section marked Shell collapse to one welded mid-surface:
+// at each corner the two walls meet on the line where their mid-planes cross,
+// and the corner block's tets are covered.
+
+/// Equal to fixture round-off.
+fn close(value: f64, at: f64) -> bool {
+    (value - at).abs() < 1e-9
+}
+
+/// Wall thickness, section height, flange width (beyond the web) and length.
+const THICK: f64 = 2.0;
+const HEIGHT: f64 = 30.0;
+const WIDTH: f64 = 12.0;
+const LENGTH: f64 = 20.0;
+
+fn section_piece(min: [f64; 3], max: [f64; 3], cells: [usize; 3]) -> BoxSpec {
+    BoxSpec {
+        min,
+        max,
+        cells,
+        body: 1,
+        face_base: 0,
+    }
+}
+
+/// Label each boundary triangle with its CAD face: one id per (plane, region),
+/// as the section's own WIDTH-rep has them. `faces` lists (axis, plane, region
+/// test on the triangle's corners).
+type FaceTest = (usize, f64, fn([[f64; 3]; 3]) -> bool);
+
+fn label_by(faces: &[FaceTest], corners: [[f64; 3]; 3]) -> i32 {
+    faces
+        .iter()
+        .position(|&(axis, at, region)| {
+            corners.iter().all(|point| close(point[axis], at)) && region(corners)
+        })
+        .map_or(0, |index| i32::try_from(index).expect("few faces") + 1)
+}
+
+fn anywhere(_: [[f64; 3]; 3]) -> bool {
+    true
+}
+
+/// A Z-section along y: the bottom flange runs to −x, the top flange to +x,
+/// the web x ∈ [0, THICK] between them. Whichever web face is kept lies on the
+/// inside of one corner.
+fn z_section() -> ShellizeMesh {
+    let faces: [FaceTest; 10] = [
+        (2, 0.0, anywhere),            // 1 bottom flange outer
+        (2, THICK, anywhere),          // 2 bottom flange inner
+        (0, -WIDTH, anywhere),         // 3 bottom flange end
+        (0, 0.0, anywhere),            // 4 web, left
+        (0, THICK, anywhere),          // 5 web, right
+        (2, HEIGHT - THICK, anywhere), // 6 top flange inner
+        (2, HEIGHT, anywhere),         // 7 top flange outer
+        (0, WIDTH + THICK, anywhere),  // 8 top flange end
+        (1, 0.0, anywhere),            // 9 section end
+        (1, LENGTH, anywhere),         // 10 section end
+    ];
+    boxes_labelled(
+        &[
+            section_piece([-WIDTH, 0.0, 0.0], [THICK, LENGTH, THICK], [14, 4, 2]),
+            section_piece(
+                [0.0, 0.0, THICK],
+                [THICK, LENGTH, HEIGHT - THICK],
+                [2, 4, 13],
+            ),
+            section_piece(
+                [0.0, 0.0, HEIGHT - THICK],
+                [WIDTH + THICK, LENGTH, HEIGHT],
+                [14, 4, 2],
+            ),
+        ],
+        |corners| label_by(&faces, corners),
+    )
+}
+
+/// A C-section along y: both flanges run to +x from the web x ∈ [0, THICK].
+fn c_section() -> ShellizeMesh {
+    fn low(corners: [[f64; 3]; 3]) -> bool {
+        corners.iter().all(|point| point[2] <= THICK + 1e-9)
+    }
+    fn high(corners: [[f64; 3]; 3]) -> bool {
+        corners
+            .iter()
+            .all(|point| point[2] >= HEIGHT - THICK - 1e-9)
+    }
+    let faces: [FaceTest; 10] = [
+        (2, 0.0, anywhere),            // 1 bottom flange outer
+        (2, THICK, anywhere),          // 2 bottom flange inner
+        (0, WIDTH + THICK, low),       // 3 bottom flange end
+        (0, 0.0, anywhere),            // 4 web outer
+        (0, THICK, anywhere),          // 5 web inner
+        (2, HEIGHT - THICK, anywhere), // 6 top flange inner
+        (2, HEIGHT, anywhere),         // 7 top flange outer
+        (0, WIDTH + THICK, high),      // 8 top flange end
+        (1, 0.0, anywhere),            // 9 section end
+        (1, LENGTH, anywhere),         // 10 section end
+    ];
+    boxes_labelled(
+        &[
+            section_piece([0.0, 0.0, 0.0], [WIDTH + THICK, LENGTH, THICK], [14, 4, 2]),
+            section_piece(
+                [0.0, 0.0, THICK],
+                [THICK, LENGTH, HEIGHT - THICK],
+                [2, 4, 13],
+            ),
+            section_piece(
+                [0.0, 0.0, HEIGHT - THICK],
+                [WIDTH + THICK, LENGTH, HEIGHT],
+                [14, 4, 2],
+            ),
+        ],
+        |corners| label_by(&faces, corners),
+    )
+}
+
+fn extract_section(mesh: &ShellizeMesh) -> ShellExtraction {
+    assert!(
+        !mesh.surface_faces().contains(&0),
+        "every boundary triangle labelled"
+    );
+    extract_thin_wall_shells(
+        mesh,
+        &ExtractOptions {
+            max_wall: 15.0,
+            shell_body_ids: Some(vec![1]),
+        },
+    )
+    .expect("extraction")
+}
+
+/// The three walls' mid-planes: web x = t/2, flanges z = t/2 and h − t/2.
+/// Returns which of them a facet lies on: 0 bottom flange, 1 web, 2 top.
+fn wall_of_facet(shells: &ShellExtraction, facet: usize) -> Option<usize> {
+    let corners = shells.triangles[facet].map(|node| shells.vertices[node]);
+    let on = |axis: usize, at: f64| corners.iter().all(|point| close(point[axis], at));
+    [
+        (2, THICK / 2.0),
+        (0, THICK / 2.0),
+        (2, HEIGHT - THICK / 2.0),
+    ]
+    .iter()
+    .position(|&(axis, at)| on(axis, at))
+}
+
+/// The section's mid-surface, checked wall by wall: every facet on its wall's
+/// mid-plane, each flange ending at the web's mid-plane (no overhang past it,
+/// no gap before it), the web ending at both flanges' mid-planes, and each
+/// corner line a facet edge of exactly the web and that flange.
+fn assert_welded_section(shells: &ShellExtraction, flange_reach: [[f64; 2]; 2]) {
+    assert_eq!(
+        shells.walls.len(),
+        3,
+        "web and both flanges: {:?}",
+        shells.walls
+    );
+    let mut span: [[f64; 2]; 3] = [[f64::INFINITY, f64::NEG_INFINITY]; 3];
+    let mut nodes_of: [HashSet<usize>; 3] = Default::default();
+    for (facet, tri) in shells.triangles.iter().enumerate() {
+        let wall = wall_of_facet(shells, facet).expect("every facet on a wall mid-plane");
+        // Flanges measured along x, the web along z.
+        let axis = if wall == 1 { 2 } else { 0 };
+        for &node in tri {
+            let value = shells.vertices[node][axis];
+            span[wall] = [span[wall][0].min(value), span[wall][1].max(value)];
+            nodes_of[wall].insert(node);
+        }
+    }
+    for (flange, reach) in [0, 2].into_iter().zip(flange_reach) {
+        assert!(
+            close(span[flange][0], reach[0]) && close(span[flange][1], reach[1]),
+            "flange {flange} spans x {:?}, expected {reach:?}",
+            span[flange]
+        );
+    }
+    assert!(
+        close(span[1][0], THICK / 2.0) && close(span[1][1], HEIGHT - THICK / 2.0),
+        "web spans z {:?}, expected [THICK/2, HEIGHT − THICK/2]",
+        span[1]
+    );
+    // Each corner node lies on both walls' mid-planes.
+    for (flange, height) in [(0, THICK / 2.0), (2, HEIGHT - THICK / 2.0)] {
+        let corner: Vec<usize> = nodes_of[1]
+            .intersection(&nodes_of[flange])
+            .copied()
+            .collect();
+        assert!(!corner.is_empty(), "web and flange {flange} share no node");
+        for node in &corner {
+            let vertex = shells.vertices[*node];
+            assert!(
+                close(vertex[0], THICK / 2.0) && close(vertex[2], height),
+                "corner node {vertex:?} off the mid-plane crossing (x {}, z {height})",
+                THICK / 2.0
+            );
+        }
+        let reaches = |end: f64| {
+            corner
+                .iter()
+                .any(|&node| close(shells.vertices[node][1], end))
+        };
+        assert!(
+            reaches(0.0) && reaches(LENGTH),
+            "corner line runs the full length"
+        );
+    }
+    // Conforming corner lines: each edge along one is used by two facets.
+    let mut uses: HashMap<(usize, usize), usize> = HashMap::new();
+    for tri in &shells.triangles {
+        for corner in 0..3 {
+            let (first, second) = (tri[corner], tri[(corner + 1) % 3]);
+            *uses
+                .entry((first.min(second), first.max(second)))
+                .or_insert(0) += 1;
+        }
+    }
+    for (&(first, second), &count) in &uses {
+        let [start, end] = [first, second].map(|node| shells.vertices[node]);
+        let on_corner = close(start[0], THICK / 2.0)
+            && close(end[0], THICK / 2.0)
+            && close(start[2], end[2])
+            && (close(start[2], THICK / 2.0) || close(start[2], HEIGHT - THICK / 2.0));
+        if on_corner {
+            assert_eq!(
+                count, 2,
+                "corner edge {start:?}–{end:?} used by {count} facets"
+            );
+        }
+    }
+}
+
+/// The Z-section: the bottom flange runs from its end (x = −WIDTH) to the web's
+/// mid-plane, the top flange from the web's mid-plane to its end (x = WIDTH + THICK).
+#[test]
+fn z_section_welds_at_both_corners() {
+    let mesh = z_section();
+    let shells = extract_section(&mesh);
+    assert_welded_section(
+        &shells,
+        [[-WIDTH, THICK / 2.0], [THICK / 2.0, WIDTH + THICK]],
+    );
+}
+
+/// The Z-section's corner blocks are covered by the walls: no tet is lost.
+#[test]
+fn z_section_corner_tets_are_covered() {
+    let mesh = z_section();
+    let shells = extract_section(&mesh);
+    let tets = shell_body_tets(&mesh, &shells).expect("fully covered");
+    assert_eq!(tets.len(), mesh.tets().len());
+}
+
+/// The C-section: both flanges run from the web's mid-plane to their ends.
+#[test]
+fn c_section_welds_at_both_corners() {
+    let mesh = c_section();
+    let shells = extract_section(&mesh);
+    assert_welded_section(
+        &shells,
+        [[THICK / 2.0, WIDTH + THICK], [THICK / 2.0, WIDTH + THICK]],
+    );
+}
+
+/// The C-section's corner blocks are covered by the walls: no tet is lost.
+#[test]
+fn c_section_corner_tets_are_covered() {
+    let mesh = c_section();
+    let shells = extract_section(&mesh);
+    let tets = shell_body_tets(&mesh, &shells).expect("fully covered");
+    assert_eq!(tets.len(), mesh.tets().len());
 }
