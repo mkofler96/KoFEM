@@ -171,13 +171,13 @@ describe("element sizes on selected faces", () => {
     end = faceWhere(tessellation, (x) => Math.abs(x - HALF_LENGTH) < 1e-6);
 
     sized = meshOf(engine, [{ face: hole, max_size: HOLE_SIZE }]);
-    clearedAfterSized = summary(meshOf(engine, undefined));
+    clearedAfterSized = summary(meshOf(engine));
     emptyList = summary(meshOf(engine, []));
     unknownFace = errorOf(engine, [{ face: 999, max_size: HOLE_SIZE }]);
     zeroSize = errorOf(engine, [{ face: hole, max_size: 0 }]);
     negativeSize = errorOf(engine, [{ face: hole, max_size: -1 }]);
 
-    plain = meshOf((await loadedEngine()).engine, undefined);
+    plain = meshOf((await loadedEngine()).engine);
   });
 
   test("the hole face meshes at the face size", () => {
