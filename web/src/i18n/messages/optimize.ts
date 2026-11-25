@@ -578,34 +578,6 @@ export const optimizeMessages = defineMessages({
     es: (errors: string) => `Corrige los ajustes de optimización: ${errors}`,
     pt: (errors: string) => `Corrija as configurações de otimização: ${errors}`,
   },
-  oneMaterial: {
-    en: (count: number) =>
-      `Topology optimization uses one design material, but the model spans ${count} — assign a single material to all bodies`,
-    de: (count: number) =>
-      `Die Topologieoptimierung verwendet einen Design-Werkstoff, das Modell hat aber ${count} – weisen Sie allen Körpern denselben Werkstoff zu`,
-    fr: (count: number) =>
-      `L'optimisation topologique utilise un seul matériau de conception, mais le modèle en compte ${count} — affectez un seul matériau à tous les corps`,
-    it: (count: number) =>
-      `L'ottimizzazione topologica usa un solo materiale di progetto, ma il modello ne ha ${count} — assegna un unico materiale a tutti i corpi`,
-    es: (count: number) =>
-      `La optimización topológica usa un solo material de diseño, pero el modelo tiene ${count}: asigna un único material a todos los cuerpos`,
-    pt: (count: number) =>
-      `A otimização topológica usa um só material de projeto, mas o modelo tem ${count} — atribua um único material a todos os corpos`,
-  },
-  oneMaterialPerDomain: {
-    en: (solid: number, shell: number) =>
-      `Topology optimization uses one material per design domain — the solid domain spans ${solid} and the shell domain ${shell}; assign a single material to each`,
-    de: (solid: number, shell: number) =>
-      `Die Topologieoptimierung verwendet einen Werkstoff je Designbereich – der Volumenbereich hat ${solid} und der Schalenbereich ${shell}; weisen Sie jedem einen einzigen Werkstoff zu`,
-    fr: (solid: number, shell: number) =>
-      `L'optimisation topologique utilise un matériau par domaine de conception — le domaine volumique en compte ${solid} et le domaine coque ${shell} ; affectez un seul matériau à chacun`,
-    it: (solid: number, shell: number) =>
-      `L'ottimizzazione topologica usa un materiale per dominio di progetto — il dominio solido ne ha ${solid} e il dominio a gusci ${shell}; assegna un unico materiale a ciascuno`,
-    es: (solid: number, shell: number) =>
-      `La optimización topológica usa un material por dominio de diseño: el dominio sólido tiene ${solid} y el de láminas ${shell}; asigna un único material a cada uno`,
-    pt: (solid: number, shell: number) =>
-      `A otimização topológica usa um material por domínio de projeto — o domínio sólido tem ${solid} e o domínio de cascas ${shell}; atribua um único material a cada um`,
-  },
   noDesignRegion: {
     en: "Every region is set to Keep solid or Keep empty — set at least one to Design so the optimizer has material to shape",
     de: "Jeder Bereich ist auf „Voll erhalten“ oder „Leer erhalten“ gesetzt – setzen Sie mindestens einen auf „Design“, damit der Optimierer Material formen kann",

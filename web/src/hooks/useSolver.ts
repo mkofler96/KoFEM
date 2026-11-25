@@ -4,7 +4,11 @@
 import type { ElementStress } from "../lib/stressFields";
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import { fmt, loadsSummary, meshCheckLabel } from "../lib/modelDisplay";
+import {
+  loadsSummary,
+  materialCheckLabel,
+  meshCheckLabel,
+} from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
 import {
@@ -275,12 +279,7 @@ export function useSolver() {
           ? text.deletedMaterial
           : unconfirmedMaterial !== null
             ? unconfirmedMaterial
-            : properties.length > 1
-              ? text.materialsAssigned(properties.length, materials.length)
-              : text.materialAssigned(
-                  materials[0].name,
-                  fmt(materials[0].young, 3),
-                ),
+            : materialCheckLabel(materials, properties.length),
     ],
     [
       bcOk,

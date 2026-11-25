@@ -3583,22 +3583,6 @@
     "es": "788ae9507543",
     "pt": "788ae9507543"
   },
-  "optimize.ts:optimizeMessages.oneMaterial": {
-    "en": "6e3c52883234",
-    "de": "c88ef5053a83",
-    "fr": "f203be6448a8",
-    "it": "08cafbfd450b",
-    "es": "93062a24a5ad",
-    "pt": "f20a34ad6288"
-  },
-  "optimize.ts:optimizeMessages.oneMaterialPerDomain": {
-    "en": "db7047585545",
-    "de": "8e049fde8eb1",
-    "fr": "25dbaf79bd27",
-    "it": "aec497b868f5",
-    "es": "a15dae417172",
-    "pt": "57746b4d3cb6"
-  },
   "optimize.ts:optimizeMessages.optimizationError": {
     "en": "16c11781785b",
     "de": "601fac583b4a",

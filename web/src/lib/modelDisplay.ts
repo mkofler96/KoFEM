@@ -3,6 +3,7 @@
 
 import { tr } from "../i18n/useLocale";
 import { modelSummaryMessages } from "../i18n/messages/viewport";
+import { solveMessages } from "../i18n/messages/solve";
 
 // eslint-disable-next-line kofem/no-silent-fallback -- display precision of a formatter, not model data
 export function fmt(v: number, digits = 3) {
@@ -40,4 +41,16 @@ export function meshCheckLabel(
   const text = tr(modelSummaryMessages);
   if (nodeCount === 0) return text.noMesh;
   return text.meshReady(nodeCount, elementCount);
+}
+
+// The material row of the Solve and Optimize pre-flight checks, once every
+// body resolves to a material. `materials` is non-empty.
+export function materialCheckLabel(
+  materials: readonly { name: string; young: number }[],
+  bodyCount: number,
+): string {
+  const text = tr(solveMessages);
+  if (bodyCount > 1) return text.materialsAssigned(bodyCount, materials.length);
+  const [material] = materials;
+  return text.materialAssigned(material.name, fmt(material.young, 3));
 }
