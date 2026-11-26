@@ -9,8 +9,11 @@ Playwright runs in offline/sandboxed environments).
 | Geist / Geist Mono        | 400–700 / 400, 500 | landing page (`/`), example pages (`/examples/`)           |
 | IBM Plex Sans / Plex Mono | 400–600 / 400, 600 | solver app (`/app/`)                                       |
 | KoFEM Math                | 400                | example pages (`/examples/`): equations and figure symbols |
+| STIX Two Text             | 400, 600           | analysis report (`lib/report`): body text                  |
+| Caladea                   | 700                | analysis report (`lib/report`): headings                   |
 
-Only the `latin` and `latin-ext` subsets are included. The `.css` files are
+Only the `latin` and `latin-ext` subsets are included (STIX Two Text and
+Caladea: `latin` only). The `.css` files are
 the Google Fonts `css2` responses with the `fonts.gstatic.com` URLs rewritten
 to `/fonts/*.woff2`.
 
@@ -18,6 +21,15 @@ Geist and IBM Plex are licensed under the SIL Open Font License 1.1:
 
 - Geist / Geist Mono — © Vercel, <https://github.com/vercel/geist-font>
 - IBM Plex — © IBM, <https://github.com/IBM/plex>
+- STIX Two Text — © 2001–2021 The STIX Fonts Project Authors,
+  <https://github.com/stipub/stixfonts>
+- Caladea — © 2012 The Caladea Project Authors,
+  <https://github.com/huertatipografica/Caladea>
+
+The STIX Two Text and Caladea files are the `latin` woff2 files of the npm
+packages `@fontsource/stix-two-text` and `@fontsource/caladea` 5.3.0. The
+analysis report inlines them, with KoFEM Math, into the HTML file it saves, so
+the file looks the same offline.
 
 `kofem-math.woff2` (family "KoFEM Math") is a subset of New Computer Modern
 Math 3.00, © 2019–2021 Antonis Tsolomitis, released under the GUST Font

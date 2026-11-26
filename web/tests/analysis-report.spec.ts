@@ -59,8 +59,9 @@ async function shownReactionSum(page: Page): Promise<number[]> {
 async function saveReport(
   page: Page,
   browser: Browser,
+  plot = "tree-plot-1",
 ): Promise<{ report: Page; html: string; requests: string[] }> {
-  await page.getByTestId("tree-plot-1").click();
+  await page.getByTestId(plot).click();
   const button = page.getByTestId("report-save");
   await expect(button).toBeEnabled();
   const download = page.waitForEvent("download");
@@ -290,4 +291,123 @@ test("a coupled shell and solid model's report lists both families @pipeline", a
     maxDisplacement,
     9,
   );
+});
+
+// The report prints as A4 pages with a footer on each (KOF-391 style).
+test("the report prints with a page footer and keeps every block whole @pipeline", async ({
+  page,
+  browser,
+}) => {
+  await solveExample(page, "cantilever-beam");
+  const { report, html } = await saveReport(page, browser);
+  expect(html).toMatch(/@page\s*\{[^}]*size:\s*A4/);
+  expect(html).toContain("counter(pages)");
+  // Every section is one block that print never splits, and no table shares
+  // a row with a figure.
+  const blocks = report.locator("section.blk");
+  expect(await blocks.count()).toBeGreaterThan(4);
+  expect(
+    await report.evaluate(
+      () => [...document.querySelectorAll(".figs table, figure table")].length,
+    ),
+  ).toBe(0);
+  await expect(report.locator("math").first()).toBeAttached();
+});
+
+type StoreWindow = { __kofemStore: { getState(): Record<string, unknown> } };
+
+test("a mesh refinement study gets its own section in the report @pipeline", async ({
+  page,
+  browser,
+}) => {
+  await solveExample(page, "cantilever-beam");
+  await openTree(page, "refinement");
+  await page.getByTestId("refinement-study-run").click();
+  const verdict = page.getByTestId("refinement-study-verdict");
+  await expect(verdict).toBeVisible();
+  const appVerdict = (await verdict.textContent()) ?? "";
+  const levels = await page.evaluate(
+    () =>
+      (
+        (window as unknown as StoreWindow).__kofemStore.getState()
+          .refinementStudy as {
+          levels: { elements: number; maxDisplacement: number }[];
+        }
+      ).levels,
+  );
+  expect(levels.length).toBeGreaterThanOrEqual(2);
+
+  const { report } = await saveReport(page, browser);
+  const section = report.getByTestId("report-refinement");
+  await expect(section).toBeVisible();
+  await expect(section.locator("svg.chart")).toHaveCount(2);
+  await expect(section).toContainText(appVerdict.trim());
+  const rows = section.getByTestId("report-refinement-level");
+  await expect(rows).toHaveCount(levels.length);
+  for (const [k, level] of levels.entries()) {
+    await expect(rows.nth(k)).toHaveAttribute(
+      "data-elements",
+      String(level.elements),
+    );
+    expect(
+      Number(await rows.nth(k).getAttribute("data-max-displacement")),
+    ).toBeCloseTo(level.maxDisplacement, 9);
+  }
+});
+
+test("a topology optimization gets its own section in the report @pipeline", async ({
+  page,
+  browser,
+}) => {
+  // The example opens on its optimization; a few iterations make a history,
+  // and the static solve after it gives the report its result.
+  await page.goto("/app/?example=mbb-beam-topopt");
+  await expect(page.locator("nav")).toBeVisible();
+  await openTree(page, "topopt");
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await page.getByLabel("Max iters").fill("12");
+  await page.getByRole("button", { name: /Run optimization/ }).click();
+  await expect(page.getByText("Run summary")).toBeVisible();
+  await openTree(page, "static");
+  await runSolve(page);
+  const run = await page.evaluate(() => {
+    const state = (window as unknown as StoreWindow).__kofemStore.getState();
+    const result = state.densityResult as {
+      iterations: number;
+      history: unknown[];
+    };
+    const plots = state.resultPlots as { id: number; source: string }[];
+    const plot = plots.find((p) => p.source === "static");
+    if (!plot) throw new Error("the static solve made no result plot");
+    return {
+      iterations: result.iterations,
+      history: result.history.length,
+      threshold: state.densityThreshold as number,
+      staticPlot: plot.id,
+    };
+  });
+
+  // Plot 1 is the density; Report sits on the static result's plot.
+  const { report } = await saveReport(
+    page,
+    browser,
+    `tree-plot-${run.staticPlot}`,
+  );
+  const section = report.getByTestId("report-topology");
+  await expect(section).toBeVisible();
+  await expect(section.locator("svg.chart")).toHaveCount(2);
+  const density = report.getByTestId("report-figure-density");
+  await expect(density).toHaveAttribute("src", /^data:image\/png;base64,/);
+  expect(
+    await density.evaluate((img: HTMLImageElement) => img.naturalWidth),
+  ).toBeGreaterThan(0);
+  await expect(
+    report.getByTestId("report-topology-iterations"),
+  ).toHaveAttribute("data-value", String(run.iterations));
+  await expect(report.getByTestId("report-density-cutoff")).toHaveAttribute(
+    "data-value",
+    String(run.threshold),
+  );
+  // The static figures still show the static result, not the density.
+  await expect(report.getByTestId("report-figure-current")).toBeVisible();
 });

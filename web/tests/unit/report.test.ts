@@ -17,6 +17,8 @@ import type {
   SolverResult,
   SolveRun,
 } from "../../src/store/modelStore";
+import type { RefinementStudyRun } from "../../src/store/studySlice";
+import type { DensityResult } from "../../src/store/topOptSlice";
 
 const steel = {
   id: 1,
@@ -112,7 +114,13 @@ function input(
     meshSizes: { max: 5, min: 0.5, regions: {} },
     result: solved,
     stats: { maxDisplacement: 1.5, maxVonMises: 200, p99VonMises: 150 },
-    figures: { current: "data:image/png;base64,AA", isometric: "data:x" },
+    figures: {
+      current: { src: "data:image/png;base64,AA", width: 400, height: 300 },
+      isometric: { src: "data:image/png;base64,BB", width: 400, height: 300 },
+    },
+    assets: { fontCss: "@font-face{font-family:Test}", logo: "<svg></svg>" },
+    refinement: null,
+    topology: null,
     legend: {
       title: "|U| [mm]",
       min: 0,
@@ -249,10 +257,10 @@ describe("what the report refuses or says it lacks", () => {
       ),
     );
     expect(html).toContain(
-      "Not recorded: this result was loaded from a file. Solve again to include the solver.",
+      "Not recorded: this result did not come from a static solve in this session (it was loaded from a file or solved by a study). Solve again to include the solver.",
     );
     expect(html).toContain(
-      "Not recorded: this result was loaded from a file. Solve again to include the reactions.",
+      "Not recorded: this result did not come from a static solve in this session (it was loaded from a file or solved by a study). Solve again to include the reactions.",
     );
     expect(html).not.toContain('data-testid="report-reaction-sum"');
   });
@@ -302,5 +310,120 @@ describe("the HTML file", () => {
 
   test("escapes the text it carries", () => {
     expect(html).toContain("<li>Thin &lt;wall&gt;</li>");
+  });
+});
+
+describe("the printed report", () => {
+  const base = () =>
+    input(
+      [{ id: 1, materialId: 1 }],
+      [element(1, "CTETRA", 1)],
+      result(run("solid")),
+    );
+
+  test("prints on A4 with a footer naming the model on every page", () => {
+    const html = renderReport(
+      buildReport({ ...base(), modelName: 'Bracket "A"' }),
+    );
+    expect(html).toMatch(/@page\s*\{[^}]*size:\s*A4/);
+    expect(html).toContain('"KoFEM analysis report · Bracket \\"A\\""');
+    expect(html).toContain('"Page " counter(page) " of " counter(pages)');
+  });
+
+  test("embeds its fonts and logo, and fetches nothing", () => {
+    const html = renderReport(buildReport(base()));
+    expect(html).toContain("@font-face{font-family:Test}");
+    expect(html).toContain("<svg></svg>");
+    expect(html).not.toMatch(/<script|<link|@import/i);
+  });
+
+  test("every section is a block print keeps whole, and no table sits beside a figure", () => {
+    const html = renderReport(buildReport(base()));
+    expect((html.match(/<section class="blk"/g) ?? []).length).toBeGreaterThan(
+      4,
+    );
+    for (const row of html.match(
+      /<div class="figs">[\s\S]*?<\/div><\/section>/g,
+    ) ?? [])
+      expect(row).not.toContain("<table");
+  });
+
+  test("a refinement study adds its charts, verdict and levels", () => {
+    const study: RefinementStudyRun = {
+      status: "done",
+      settings: { levels: 2, ratio: Math.SQRT2, tolerance: 0.02 },
+      step: null,
+      phase: null,
+      plannedSizes: [11.2, 7.92],
+      levels: [
+        {
+          sizes: { max: 11.2, min: 1.12, regions: {} },
+          nodes: 8494,
+          elements: 38899,
+          maxDisplacement: 1.9113,
+          maxVonMises: 59.01,
+        },
+        {
+          sizes: { max: 7.92, min: 0.79, regions: {} },
+          nodes: 24923,
+          elements: 125483,
+          maxDisplacement: 1.9118,
+          maxVonMises: 66.3,
+        },
+      ],
+      snapshots: [],
+      fingerprint: "",
+      error: null,
+    } as unknown as RefinementStudyRun;
+    const html = renderReport(buildReport({ ...base(), refinement: study }));
+    expect(html).toContain('data-testid="report-refinement"');
+    expect((html.match(/<svg class="chart/g) ?? []).length).toBe(2);
+    expect(html).toContain('data-elements="125483"');
+    expect(html).toContain("Converged");
+  });
+
+  test("a topology optimization adds its charts, density figure and settings", () => {
+    const history = [192.5, 120, 60, 47.4].map((c, k) => ({
+      it: k + 1,
+      objective: c,
+      compliance: c,
+      volume: [0.5, 0.46, 0.49, 0.5][k],
+      max_change: 0.1,
+    }));
+    const density: DensityResult = {
+      density: new Float64Array(3),
+      history,
+      converged: true,
+      iterations: 4,
+      run: {
+        method: "simp",
+        objective: "min_compliance",
+        constraints: { volumeFraction: 0.5 },
+        penalty: 3,
+        filterRadius: 10,
+        moveLimit: 0.2,
+        maxIterations: 200,
+        tolerance: 0.01,
+      },
+    };
+    const html = renderReport(
+      buildReport({
+        ...base(),
+        topology: {
+          result: density,
+          threshold: 0.5,
+          figure: { src: "data:image/png;base64,CC", width: 300, height: 200 },
+        },
+      }),
+    );
+    expect(html).toContain('data-testid="report-topology"');
+    expect((html.match(/<svg class="chart/g) ?? []).length).toBe(2);
+    expect(html).toContain(
+      'data-testid="report-topology-iterations" data-value="4"',
+    );
+    expect(html).toContain(
+      'data-testid="report-density-cutoff" data-value="0.5"',
+    );
+    expect(html).toContain('data-testid="report-figure-density"');
   });
 });

@@ -22,6 +22,7 @@ import {
   type ResultRange,
 } from "./resultField";
 import { reactionRange, type ReactionDisplay } from "./reactionArrows";
+import { densityColor } from "./densityField";
 
 const GRADIENT_STOPS = 12;
 const TICKS = 5;
@@ -33,6 +34,17 @@ export const LEGEND_GRADIENT = (() => {
   for (let i = 0; i <= GRADIENT_STOPS; i++) {
     const frac = i / GRADIENT_STOPS;
     stops.push(`${resultColor(frac).getStyle()} ${frac * 100}%`);
+  }
+  return `linear-gradient(to top, ${stops.join(", ")})`;
+})();
+
+// The density field's grayscale ramp, 0 at the bottom to 1 at the top
+// (DensityColorBar and the report's density figure).
+export const DENSITY_GRADIENT = (() => {
+  const stops: string[] = [];
+  for (let i = 0; i <= GRADIENT_STOPS; i++) {
+    const frac = i / GRADIENT_STOPS;
+    stops.push(`${densityColor(frac).getStyle()} ${frac * 100}%`);
   }
   return `linear-gradient(to top, ${stops.join(", ")})`;
 })();

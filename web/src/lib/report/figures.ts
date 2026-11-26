@@ -8,14 +8,28 @@
 import { tr } from "../../i18n/useLocale";
 import { reportMessages } from "../../i18n/messages/report";
 
-export interface ReportFigures {
-  // The view as the user left it, once it has settled.
-  current: string;
-  // The whole model from the isometric direction (1, 1, 1).
-  isometric: string;
+// One figure, cropped to what the canvas drew; its size in pixels lets the
+// report lay it out before the image decodes.
+export interface FigureImage {
+  src: string;
+  width: number;
+  height: number;
 }
 
-type Capture = () => Promise<ReportFigures>;
+export interface ReportFigures {
+  // The view as the user left it, once it has settled.
+  current: FigureImage;
+  // The whole model from the isometric direction (1, 1, 1).
+  isometric: FigureImage;
+}
+
+export interface CapturedViews {
+  current: FigureImage;
+  // Null when the caller asked for the current view alone.
+  isometric: FigureImage | null;
+}
+
+type Capture = (isometric: boolean) => Promise<CapturedViews>;
 
 let capture: Capture | null = null;
 
@@ -27,7 +41,8 @@ export function registerFigureCapture(next: Capture): () => void {
   };
 }
 
-export function captureFigures(): Promise<ReportFigures> {
+/** The settled view, and with `isometric` the isometric view as well. */
+export function captureViews(isometric: boolean): Promise<CapturedViews> {
   if (capture === null) throw new Error(tr(reportMessages).noViewport);
-  return capture();
+  return capture(isometric);
 }

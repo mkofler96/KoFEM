@@ -22,7 +22,11 @@ import { loadComponents, loadKind } from "../../store/boundaryGroups";
 import type { TemperatureLoad } from "../../workers/solverTypes";
 import type { ReactionSummary, Vec3 } from "../solve/reactions";
 import type { Legend } from "../legend";
-import type { ReportFigures } from "./figures";
+import type { FigureImage, ReportFigures } from "./figures";
+import type { ReportAssets } from "./assets";
+import type { RefinementStudyRun } from "../../store/studySlice";
+import type { DensityResult } from "../../store/topOptSlice";
+import { verdictLine, type StudyLevel } from "../refinementStudy";
 import { solidName } from "../regions";
 import { tr } from "../../i18n/useLocale";
 import { reportMessages } from "../../i18n/messages/report";
@@ -49,9 +53,28 @@ export interface ReportInput {
   result: SolverResult | null;
   stats: ReportStats;
   figures: ReportFigures;
+  assets: ReportAssets;
+  // The mesh refinement study as the store holds it; reported once it is done.
+  refinement: RefinementStudyRun | null;
+  topology: ReportTopology | null;
   // The legend of the view the figures show, and the field's name.
   legend: Legend;
   figureField: string;
+}
+
+// The topology optimization's run, the density cutoff the view applies and
+// the density field drawn in the current view.
+export interface ReportTopology {
+  result: DensityResult;
+  threshold: number;
+  figure: FigureImage;
+}
+
+export interface ReportRefinement {
+  levels: StudyLevel[];
+  converged: boolean;
+  // The verdict as the study panel words it.
+  verdict: string;
 }
 
 export type ElementFamily = "solid" | "shell" | "mixed";
@@ -78,12 +101,17 @@ export interface LoadRow {
   name: string;
   kind: string;
   faces: string[];
-  value: string;
+  // The pressure, or the force or moment vector, in `unit`.
+  value: number[];
+  unit: "MPa" | "N" | "N mm";
 }
 
 export interface ReportDocument {
   modelName: string;
-  created: string;
+  // When the report was made, as the user's locale writes it, and the
+  // KoFEM version that made it.
+  date: string;
+  version: string;
   bodies: BodyRow[];
   supports: SupportRow[];
   loads: LoadRow[];
@@ -101,6 +129,9 @@ export interface ReportDocument {
   reactions: ReactionSummary | null;
   appliedTotal: Vec3 | null;
   figures: ReportFigures;
+  assets: ReportAssets;
+  refinement: ReportRefinement | null;
+  topology: ReportTopology | null;
   legend: Legend;
   figureField: string;
 }
@@ -110,9 +141,6 @@ const DOF_NAMES = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 // A number as the report prints it: four significant digits.
 export const reportNumber = (value: number): string =>
   String(Number(value.toPrecision(4)));
-
-const vector = (v: readonly number[], unit: string) =>
-  `(${v.map(reportNumber).join(", ")}) ${unit}`;
 
 function bodyName(properties: Property[], property: Property): string {
   if (property.sourceBodyId === undefined)
@@ -185,20 +213,32 @@ function bodyRows(input: ReportInput, run: SolveRun | null): BodyRow[] {
     });
 }
 
-function loadValue(group: NamedLoadGroup): { kind: string; value: string } {
+function loadValue(
+  group: NamedLoadGroup,
+): Pick<LoadRow, "kind" | "value" | "unit"> {
   const text = tr(reportMessages);
   const kind = loadKind(group);
   if (kind === "pressure")
-    return {
-      kind: text.pressure,
-      value: `${reportNumber(group.totalForce)} MPa`,
-    };
+    return { kind: text.pressure, value: [group.totalForce], unit: "MPa" };
   if (kind === "moment")
-    return {
-      kind: text.moment,
-      value: vector(loadComponents(group), "N·mm"),
-    };
-  return { kind: text.force, value: vector(loadComponents(group), "N") };
+    return { kind: text.moment, value: loadComponents(group), unit: "N mm" };
+  return { kind: text.force, value: loadComponents(group), unit: "N" };
+}
+
+// A study still running, or one that failed, has no verdict to report; one
+// level cannot be compared.
+function refinement(study: RefinementStudyRun | null): ReportRefinement | null {
+  if (study === null || study.status !== "done" || study.levels.length < 2)
+    return null;
+  const { converged, text } = verdictLine(study.levels, study.settings);
+  return { levels: study.levels, converged, verdict: text };
+}
+
+function topology(given: ReportTopology | null): ReportTopology | null {
+  if (given === null) return null;
+  if (given.result.history.length === 0)
+    throw new Error(tr(reportMessages).noTopologyHistory);
+  return given;
 }
 
 export function buildReport(input: ReportInput): ReportDocument {
@@ -209,7 +249,8 @@ export function buildReport(input: ReportInput): ReportDocument {
   const reactions = result.reactions ?? null;
   return {
     modelName: input.modelName.trim() === "" ? text.untitled : input.modelName,
-    created: text.created(input.createdAt, input.version),
+    date: input.createdAt,
+    version: input.version,
     bodies: bodyRows(input, run),
     supports: input.bcGroups.map((group) => ({
       name: group.name,
@@ -248,6 +289,9 @@ export function buildReport(input: ReportInput): ReportDocument {
     reactions,
     appliedTotal: reactions?.applied ?? null,
     figures: input.figures,
+    assets: input.assets,
+    refinement: refinement(input.refinement),
+    topology: topology(input.topology),
     legend: input.legend,
     figureField: input.figureField,
   };
