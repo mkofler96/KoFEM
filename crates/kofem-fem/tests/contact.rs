@@ -430,17 +430,35 @@ fn contact_on_quadratic_elements_is_refused() {
 
 #[test]
 fn a_node_on_two_slave_surfaces_is_refused() {
+    // Which side is the slave depends on the supports, so the solve refuses
+    // it when it starts.
     let model = pressed(Shape::Hex, Shape::Hex);
     let pair = ContactPair {
         slave: model.upper_bottom.clone(),
         master: model.lower_top.clone(),
     };
-    let result = ContactInterface::new(&model.mesh, &[pair.clone(), pair]);
-    assert!(
-        matches!(result, Err(FemError::Contact { .. })),
-        "got {:?}",
-        result.err()
+    let interface =
+        ContactInterface::new(&model.mesh, &[pair.clone(), pair]).expect("a valid interface");
+    let (dofs, values) = model.symmetry_supports();
+    let result = NewtonRun::start(
+        LinearElastic::new(assemble_stiffness(&model.mesh)),
+        ContactCg::new(
+            &model.mesh,
+            interface,
+            None,
+            CG,
+            PreconditionerChoice::SymmetricGaussSeidel,
+        ),
+        &model.mesh,
+        &dofs,
+        &values,
+        &model.top_traction(|_, _| TRACTION),
+        settings(1),
     );
+    let Err(FemError::TangentSolve { reason, .. }) = result else {
+        panic!("expected a refusal, got {:?}", result.err());
+    };
+    assert!(reason.contains("two slave surfaces"), "{reason}");
 }
 
 /// Grid lines over [0, `extent`]: uniform steps of `fine` up to `uniform`,
@@ -819,5 +837,150 @@ fn contact_and_a_tie_in_one_model_pass_the_patch_test() {
     println!(
         "tie + contact: max |p − σ|/σ = {:.2e}, worst z-displacement error {worst_displacement:.2e}",
         worst / TRACTION.abs()
+    );
+}
+
+/// Surfaces that overlap at the start, with no load: the closed nodes' gap
+/// equations still have to be solved, pushing the upper block out of the
+/// lower one, before the run may converge.
+#[test]
+fn an_initial_overlap_is_pushed_apart_before_convergence() {
+    let overlap = 1e-3;
+    let model = stacked(
+        Block {
+            cells: [2, 2, 2],
+            height: 1.0,
+            shape: Shape::Hex,
+            young: 70_000.0,
+        },
+        Block {
+            cells: [3, 3, 2],
+            height: 0.5,
+            shape: Shape::Hex,
+            young: 210_000.0,
+        },
+        -overlap,
+    );
+    let (dofs, values) = model.symmetry_supports();
+    let outcome = solve(
+        &model.mesh,
+        interface(&model),
+        &dofs,
+        &values,
+        &vec![0.0; 3 * model.vertices.len()],
+        1,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    );
+    // Pushed apart without load, the surfaces just touch: zero gap and zero
+    // pressure, which a node satisfies closed or open.
+    let state = &outcome.state;
+    let pressure_scale = model.upper.young * overlap / model.upper.height;
+    for pressure in &state.pressure {
+        assert!(
+            pressure.abs() < 1e-9 * pressure_scale,
+            "pressure {pressure:e} without load"
+        );
+    }
+    for gap in &state.gap {
+        assert!(
+            gap.abs() < 1e-9 * overlap,
+            "gap {gap:e} left open or overlapping"
+        );
+    }
+    for node in model.first_upper..model.vertices.len() {
+        let lift = outcome.displacements[3 * node + 2];
+        assert!(
+            (lift - overlap).abs() < 1e-9 * overlap,
+            "upper block lifted by {lift:e}"
+        );
+    }
+    assert!(outcome.iterations[0] >= 1, "the gap equations were solved");
+}
+
+/// The finer surface on a body its supports hold: it cannot follow the other
+/// surface, so the other surface takes the contact condition, and the pushed
+/// block stops on the held one instead of passing through it.
+#[test]
+fn a_held_finer_surface_makes_the_other_side_the_slave() {
+    let push = 1e-3;
+    let model = stacked(
+        Block {
+            cells: [4, 4, 2],
+            height: 1.0,
+            shape: Shape::Hex,
+            young: 70_000.0,
+        },
+        Block {
+            cells: [2, 2, 2],
+            height: 0.5,
+            shape: Shape::Hex,
+            young: 210_000.0,
+        },
+        0.0,
+    );
+    let mut dofs = Vec::new();
+    let mut values = Vec::new();
+    let top = model.lower_height + model.upper.height;
+    for (node, point) in model.vertices.iter().enumerate() {
+        let dof = 3 * node as u32;
+        if node < model.first_upper {
+            dofs.extend([dof, dof + 1, dof + 2]);
+            values.extend([0.0; 3]);
+            continue;
+        }
+        if point[0] == 0.0 {
+            dofs.push(dof);
+            values.push(0.0);
+        }
+        if point[1] == 0.0 {
+            dofs.push(dof + 1);
+            values.push(0.0);
+        }
+        if (point[2] - top).abs() < 1e-12 {
+            dofs.push(dof + 2);
+            values.push(-push);
+        }
+    }
+    let boundary = BoundaryFaces::new(&model.mesh);
+    let side = |upper: bool| -> Vec<u32> {
+        model
+            .vertices
+            .iter()
+            .enumerate()
+            .filter(|&(node, point)| {
+                (point[2] - model.lower_height).abs() < 1e-12
+                    && (node >= model.first_upper) == upper
+            })
+            .map(|(node, _)| node as u32)
+            .collect()
+    };
+    let pair = ContactPair::between(&model.mesh, &boundary, &side(false), &side(true))
+        .expect("both sides name faces");
+    let interface = ContactInterface::new(&model.mesh, &[pair]).expect("a valid interface");
+    let outcome = solve(
+        &model.mesh,
+        interface,
+        &dofs,
+        &values,
+        &vec![0.0; 3 * model.vertices.len()],
+        1,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    );
+    let state = &outcome.state;
+    assert!(
+        state.held.is_empty(),
+        "no slave node is held: {:?}",
+        state.held
+    );
+    assert!(
+        state.nodes.iter().all(|&node| node >= model.first_upper),
+        "the upper (free) surface is the slave"
+    );
+    // The upper block is squeezed between its pushed top and the held block.
+    let expected = model.upper.young * push / model.upper.height;
+    assert!(
+        (state.force() - expected).abs() <= 1e-8 * expected,
+        "force {}, expected {expected}",
+        state.force()
     );
 }

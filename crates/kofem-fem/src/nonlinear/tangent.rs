@@ -35,10 +35,17 @@ pub struct Settled {
     /// The out-of-balance force less the reactions of the solver's own
     /// constraints, one entry per DOF: what vanishes at equilibrium.
     pub residual: Vec<f64>,
-    /// Whether the solver's set of constraints changed at this iterate (a
-    /// contact node opened or closed): the iterate is then no equilibrium of
-    /// the new set, whatever its residual.
-    pub changed: bool,
+    /// Whether the solver's constraints are not settled at this iterate:
+    /// their set changed (a contact node opened or closed), or the iterate
+    /// does not satisfy them yet (an overlap still to push apart). It is then
+    /// no solution, whatever its residual.
+    pub pending: bool,
+    /// The force the solver's constraints impose at this iterate: the
+    /// tangent times the displacement they still prescribe (contact closing
+    /// a gap or pushing an overlap apart), on the free DOFs. A scale for the
+    /// residual where loads and supports give none, as the prescribed
+    /// displacements' force is.
+    pub load: f64,
 }
 
 /// One linear solve per Newton correction: tangent · Δu = residual, with Δu
@@ -47,7 +54,7 @@ pub trait TangentSolver {
     /// Bring the solver's own constraints to the iterate `displacements`,
     /// with out-of-balance force `residual` (zero at the `supports`, the
     /// supports at load factor 1): take their reactions out of the residual
-    /// and update their set. The driver calls it after every evaluation, and
+    /// and update their set, saying whether they are settled. The driver calls it after every evaluation, and
     /// before each [`TangentSolver::start`], which solves with the set it
     /// leaves.
     ///
@@ -57,6 +64,7 @@ pub trait TangentSolver {
         &mut self,
         displacements: &[f64],
         residual: Vec<f64>,
+        tangent: &CsrMatrix,
         supports: &Dirichlet,
     ) -> Result<Settled, FemError>;
 
@@ -130,11 +138,13 @@ impl TangentSolver for DirichletCg {
         &mut self,
         _displacements: &[f64],
         residual: Vec<f64>,
+        _tangent: &CsrMatrix,
         _supports: &Dirichlet,
     ) -> Result<Settled, FemError> {
         Ok(Settled {
             residual,
-            changed: false,
+            pending: false,
+            load: 0.0,
         })
     }
 

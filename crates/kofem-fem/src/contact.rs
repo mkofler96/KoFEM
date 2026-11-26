@@ -64,7 +64,7 @@ use crate::coupled_static::{
 use crate::coupling::{Coupling, DOFS_PER_NODE};
 use crate::error::FemError;
 use crate::mesh::{ElementOrder, TetMesh};
-use crate::mortar::{mortar_integrals, MortarFace};
+use crate::mortar::{mortar_integrals, MortarFace, SlaveIntegrals};
 use crate::nonlinear::{Settled, SolveProgress, TangentSolver};
 use crate::sparse::CsrMatrix;
 use crate::static_solve::PreconditionerChoice;
@@ -157,21 +157,23 @@ struct SlaveNode {
     area: f64,
 }
 
-/// The slave nodes of every contact pair with their mortar integrals.
+/// The mortar integrals of every contact pair, both ways round: with its
+/// slave side as the slave (the preferred way, the finer mesh), and with its
+/// master side as the slave. Which one a solve uses depends on its supports
+/// (see [`ContactCg`]).
 #[derive(Debug, Clone)]
 pub struct ContactInterface {
-    nodes: Vec<SlaveNode>,
+    pairs: Vec<[Vec<SlaveNode>; 2]>,
 }
 
 impl ContactInterface {
-    /// The mortar integrals of each pair's slave nodes over its master
-    /// surface, on linear elements.
+    /// The mortar integrals of each pair's surfaces over each other, on
+    /// linear elements.
     ///
     /// # Errors
     /// [`FemError::Contact`] for a quadratic mesh, no pair, a pair without
     /// slave or master faces, a face node outside the mesh, a degenerate
-    /// face, surfaces with no slave node opposite the master surface, or a
-    /// node that is a slave twice or both a slave and a master.
+    /// face, or surfaces with no node of either opposite the other.
     pub fn new(mesh: &TetMesh, pairs: &[ContactPair]) -> Result<Self, FemError> {
         if mesh.order() != ElementOrder::Linear {
             return Err(contact_error(
@@ -184,9 +186,7 @@ impl ContactInterface {
             return Err(contact_error("no contact pair is given".into()));
         }
         let vertices = mesh.vertex_count();
-        let mut nodes: Vec<SlaveNode> = Vec::new();
-        let mut slaves = BTreeSet::new();
-        let mut masters = BTreeSet::new();
+        let mut both_ways = Vec::with_capacity(pairs.len());
         for (index, pair) in pairs.iter().enumerate() {
             let fail = |reason: &str| contact_error(format!("contact pair {index}: {reason}"));
             if pair.slave.is_empty() {
@@ -206,54 +206,38 @@ impl ContactInterface {
                     "face node {node} is outside the mesh ({vertices} vertices)"
                 )));
             }
-            let integrals = mortar_integrals(&pair.slave, &pair.master, f64::INFINITY)
-                .map_err(|error| fail(&error.to_string()))?;
-            if integrals.is_empty() {
+            let nodes = |slave: &[MortarFace], master: &[MortarFace]| {
+                mortar_integrals(slave, master, f64::INFINITY)
+                    .map(|integrals| integrals.into_iter().map(SlaveNode::from).collect())
+                    .map_err(|error| fail(&error.to_string()))
+            };
+            let preferred: Vec<SlaveNode> = nodes(&pair.slave, &pair.master)?;
+            let reversed: Vec<SlaveNode> = nodes(&pair.master, &pair.slave)?;
+            if preferred.is_empty() && reversed.is_empty() {
                 return Err(fail(
-                    "no slave node lies opposite the master surface — the two surfaces do not \
-                     face each other",
+                    "no node of either surface lies opposite the other — the two surfaces do \
+                     not face each other",
                 ));
             }
-            for slave in integrals {
-                if !slaves.insert(slave.slave) {
-                    return Err(fail(&format!(
-                        "node {} is on two slave surfaces — a node can be in contact with one \
-                         surface only",
-                        slave.slave
-                    )));
-                }
-                masters.extend(slave.masters.iter().copied());
-                nodes.push(SlaveNode {
-                    node: slave.slave,
-                    normal: slave.normal,
-                    weights: slave
-                        .coupling
-                        .iter()
-                        .map(|value| value / slave.diagonal)
-                        .collect(),
-                    masters: slave.masters,
-                    area: slave.diagonal,
-                });
-            }
+            both_ways.push([preferred, reversed]);
         }
-        if let Some(node) = slaves.intersection(&masters).next() {
-            return Err(contact_error(format!(
-                "node {node} is on a slave surface and on a master surface — a node can be one \
-                 side of contact only"
-            )));
+        Ok(Self { pairs: both_ways })
+    }
+}
+
+impl From<SlaveIntegrals> for SlaveNode {
+    fn from(integrals: SlaveIntegrals) -> Self {
+        Self {
+            node: integrals.slave,
+            normal: integrals.normal,
+            weights: integrals
+                .coupling
+                .iter()
+                .map(|value| value / integrals.diagonal)
+                .collect(),
+            masters: integrals.masters,
+            area: integrals.diagonal,
         }
-        Ok(Self { nodes })
-    }
-
-    /// Slave nodes with mortar integrals.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
     }
 }
 
@@ -293,7 +277,7 @@ impl ContactState {
 /// A slave node as the supports leave it.
 #[derive(Debug, Clone)]
 struct ActiveNode {
-    /// Index into the interface's nodes.
+    /// Index into the set-up's slave nodes.
     index: usize,
     normal: [f64; 3],
     /// The gap at zero displacement.
@@ -305,6 +289,8 @@ struct ActiveNode {
 
 /// What the solver knows once it has seen the supports.
 struct Setup {
+    /// The slave nodes of every pair, the way round the supports allow.
+    slaves: Vec<SlaveNode>,
     couplings: Vec<Coupling>,
     ties: TieReport,
     nodes: Vec<ActiveNode>,
@@ -368,7 +354,7 @@ impl ContactCg {
             nodes: setup
                 .nodes
                 .iter()
-                .map(|active| self.interface.nodes[active.index].node)
+                .map(|active| setup.slaves[active.index].node)
                 .collect(),
             pressure: setup.nodes.iter().map(|active| active.pressure).collect(),
             gap: setup.nodes.iter().map(|active| active.gap).collect(),
@@ -376,7 +362,7 @@ impl ContactCg {
             area: setup
                 .nodes
                 .iter()
-                .map(|active| self.interface.nodes[active.index].area)
+                .map(|active| setup.slaves[active.index].area)
                 .collect(),
             held: setup.held.clone(),
             ties: setup.ties,
@@ -394,10 +380,11 @@ impl ContactCg {
             Some(ties) => tie_couplings(&self.mesh, ties, &fixed_dofs, &fixed_values)?,
             None => (Vec::new(), TieReport::default()),
         };
+        let slaves = self.slave_sides(supports)?;
         let points = self.mesh.vertices();
         let mut nodes = Vec::new();
         let mut held = Vec::new();
-        for (index, slave) in self.interface.nodes.iter().enumerate() {
+        for (index, slave) in slaves.iter().enumerate() {
             let mut normal = slave.normal;
             for (axis, component) in normal.iter_mut().enumerate() {
                 if supports.value(3 * slave.node + axis).is_some() {
@@ -433,6 +420,7 @@ impl ContactCg {
         let (tie_reduction, tie_held) =
             constrained_reduction(&self.mesh, &couplings, &[], &wide_dofs, &fixed_values)?;
         Ok(Setup {
+            slaves,
             couplings,
             ties,
             nodes,
@@ -440,6 +428,68 @@ impl ContactCg {
             tie_reduction,
             tie_held,
         })
+    }
+
+    /// The slave nodes of every pair, each pair the preferred way round
+    /// unless its supports hold a slave node along its whole normal while a
+    /// master of it can still move — the master would pass through, so the
+    /// other side is the slave then.
+    ///
+    /// # Errors
+    /// [`FemError::Contact`] when neither way round avoids that, or when a
+    /// node ends up a slave twice, or both a slave and a master.
+    fn slave_sides(&self, supports: &Dirichlet) -> Result<Vec<SlaveNode>, FemError> {
+        let held_along = |node: usize, normal: [f64; 3]| {
+            (0..3).all(|axis| normal[axis] == 0.0 || supports.value(3 * node + axis).is_some())
+        };
+        let stuck = |side: &[SlaveNode]| {
+            side.iter()
+                .find(|slave| {
+                    held_along(slave.node, slave.normal)
+                        && slave
+                            .masters
+                            .iter()
+                            .any(|&master| !held_along(master, slave.normal))
+                })
+                .map(|slave| slave.node)
+        };
+        let mut chosen: Vec<SlaveNode> = Vec::new();
+        for (index, ways) in self.interface.pairs.iter().enumerate() {
+            let side = ways
+                .iter()
+                .filter(|side| !side.is_empty())
+                .find(|side| stuck(side).is_none())
+                .ok_or_else(|| {
+                    let node = ways.iter().find_map(|side| stuck(side)).unwrap_or_default();
+                    contact_error(format!(
+                        "contact pair {index}: supports hold both surfaces along the contact \
+                         normal (at node {node}) where the other surface can still move — \
+                         release the support on one of them"
+                    ))
+                })?;
+            chosen.extend(side.iter().cloned());
+        }
+        let mut slaves = BTreeSet::new();
+        for slave in &chosen {
+            if !slaves.insert(slave.node) {
+                return Err(contact_error(format!(
+                    "node {} is on two slave surfaces — a node can be in contact with one \
+                     surface only",
+                    slave.node
+                )));
+            }
+        }
+        if let Some(node) = chosen
+            .iter()
+            .flat_map(|slave| &slave.masters)
+            .find(|master| slaves.contains(master))
+        {
+            return Err(contact_error(format!(
+                "node {node} is on a slave surface and on a master surface — a node can be one \
+                 side of contact only"
+            )));
+        }
+        Ok(chosen)
     }
 
     fn running(&mut self) -> Result<&mut ActiveSolve, FemError> {
@@ -451,40 +501,16 @@ impl ContactCg {
     }
 }
 
-impl TangentSolver for ContactCg {
-    /// Measures the pressures of the closed nodes from the residual, takes
-    /// their reactions and the ties' out of it, then updates the active set
-    /// (see the module notes).
-    fn settle(
-        &mut self,
-        displacements: &[f64],
-        residual: Vec<f64>,
-        supports: &Dirichlet,
-    ) -> Result<Settled, FemError> {
-        let count = self.mesh.dof_count();
-        if displacements.len() != count || residual.len() != count {
-            return Err(FemError::DisplacementLength {
-                len: displacements.len().min(residual.len()),
-                count,
-            });
-        }
-        if self.setup.is_none() {
-            self.setup = Some(self.set_up(supports)?);
-        }
-        let interface = &self.interface;
-        let Some(setup) = self.setup.as_mut() else {
-            return Err(FemError::NonlinearInput {
-                reason: String::from("the contact set-up is missing (internal error)"),
-            });
-        };
-        let wide = widen(&residual);
+impl Setup {
+    /// The pressure and gap of every slave node at `displacements`, and the
+    /// residual `wide` (6 per node) less the reactions of the closed nodes
+    /// and the ties, back on 3 DOFs per node (see the module notes).
+    fn measure(&mut self, displacements: &[f64], wide: &[f64]) -> Result<Vec<f64>, FemError> {
         // The force along each closed node's normal, gathered over the ties.
-        let gathered = setup
-            .tie_reduction
-            .place(&setup.tie_reduction.reduce(&wide)?);
+        let gathered = self.tie_reduction.place(&self.tie_reduction.reduce(wide)?);
         let mut reactions = vec![0.0; wide.len()];
-        for active in &mut setup.nodes {
-            let slave = &interface.nodes[active.index];
+        for active in &mut self.nodes {
+            let slave = &self.slaves[active.index];
             let along = (0..3)
                 .map(|axis| active.normal[axis] * gathered[DOFS_PER_NODE * slave.node + axis])
                 .sum::<f64>();
@@ -516,30 +542,37 @@ impl TangentSolver for ContactCg {
             .zip(&reactions)
             .map(|(force, reaction)| force - reaction)
             .collect();
-        let mut reduced = setup.tie_reduction.reduce(&free)?;
-        for (value, &held) in reduced.iter_mut().zip(&setup.tie_held) {
+        let mut reduced = self.tie_reduction.reduce(&free)?;
+        for (value, &held) in reduced.iter_mut().zip(&self.tie_held) {
             if held {
                 *value = 0.0;
             }
         }
-        let free = translations(&setup.tie_reduction.place(&reduced));
+        Ok(translations(&self.tie_reduction.place(&reduced)))
+    }
 
-        // Round-off of the solve, below which a gap or a pressure carries no
-        // sign.
-        let tolerance = self.cg.relative_tolerance;
+    /// Open the closed nodes that pull and close the open nodes that
+    /// penetrate; returns whether the set is unsettled: it changed, or a
+    /// closed node's gap is not yet zero (an overlap at the start). Below
+    /// `tolerance` (the solve's) times the largest displacement or pressure,
+    /// a gap or a pressure carries no sign.
+    fn update_active_set(&mut self, tolerance: f64, displacements: &[f64]) -> bool {
         let gap_tolerance = tolerance
             * displacements
                 .iter()
                 .map(|value| value.abs())
                 .fold(0.0, f64::max);
         let pressure_tolerance = tolerance
-            * setup
+            * self
                 .nodes
                 .iter()
                 .map(|active| active.pressure.abs())
                 .fold(0.0, f64::max);
-        let mut changed = false;
-        for active in &mut setup.nodes {
+        let mut pending = self
+            .nodes
+            .iter()
+            .any(|active| active.closed && active.gap.abs() > gap_tolerance);
+        for active in &mut self.nodes {
             let flip = if active.closed {
                 active.pressure < -pressure_tolerance
             } else {
@@ -548,12 +581,68 @@ impl TangentSolver for ContactCg {
             if flip {
                 active.closed = !active.closed;
                 active.pressure = 0.0;
-                changed = true;
+                pending = true;
             }
         }
+        pending
+    }
+
+    /// The force on the free DOFs of moving each closed node by its gap
+    /// along its normal: what the closed nodes still impose.
+    fn imposed_load(&self, tangent: &CsrMatrix, supports: &Dirichlet) -> f64 {
+        let count = tangent.rows();
+        let mut imposed = vec![0.0; count];
+        for active in self.nodes.iter().filter(|active| active.closed) {
+            let node = self.slaves[active.index].node;
+            for axis in 0..3 {
+                imposed[3 * node + axis] = active.normal[axis] * active.gap;
+            }
+        }
+        let mut force = vec![0.0; count];
+        tangent.mul_vec(&imposed, &mut force);
+        force
+            .iter()
+            .enumerate()
+            .filter(|(dof, _)| supports.value(*dof).is_none())
+            .map(|(_, value)| value * value)
+            .sum::<f64>()
+            .sqrt()
+    }
+}
+
+impl TangentSolver for ContactCg {
+    /// Measures the pressures of the closed nodes from the residual, takes
+    /// their reactions and the ties' out of it, then updates the active set
+    /// (see the module notes).
+    fn settle(
+        &mut self,
+        displacements: &[f64],
+        residual: Vec<f64>,
+        tangent: &CsrMatrix,
+        supports: &Dirichlet,
+    ) -> Result<Settled, FemError> {
+        let count = self.mesh.dof_count();
+        if displacements.len() != count || residual.len() != count {
+            return Err(FemError::DisplacementLength {
+                len: displacements.len().min(residual.len()),
+                count,
+            });
+        }
+        if self.setup.is_none() {
+            self.setup = Some(self.set_up(supports)?);
+        }
+        let Some(setup) = self.setup.as_mut() else {
+            return Err(FemError::NonlinearInput {
+                reason: String::from("the contact set-up is missing (internal error)"),
+            });
+        };
+        let free = setup.measure(displacements, &widen(&residual))?;
+        let pending = setup.update_active_set(self.cg.relative_tolerance, displacements);
+        let load = setup.imposed_load(tangent, supports);
         Ok(Settled {
             residual: free,
-            changed,
+            pending,
+            load,
         })
     }
 
@@ -578,7 +667,7 @@ impl TangentSolver for ContactCg {
             .iter()
             .filter(|active| active.closed)
             .map(|active| {
-                let slave = &self.interface.nodes[active.index];
+                let slave = &setup.slaves[active.index];
                 NormalConstraint {
                     node: slave.node,
                     normal: active.normal,
