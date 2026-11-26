@@ -8,6 +8,9 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
+use crate::corner::{
+    corner_walls, find_corners, split_triangle, weld_corners, Corner, CornerLine, NodeWalls,
+};
 use crate::curved_walls::{curved_walls, CurvedWall};
 use crate::error::ShellizeError;
 use crate::geometry::{
@@ -217,7 +220,8 @@ fn collapse_walls_to_mid_surface(
         raw.triangle_source.push(wall.keep);
     }
 
-    let merged = weld_t_junctions(
+    let mut merged = weld_l_corners(&mut raw, &placement.corners);
+    merged.extend(weld_t_junctions(
         &mut raw,
         &Junctions {
             mesh,
@@ -225,7 +229,7 @@ fn collapse_walls_to_mid_surface(
             face_of: &face_of,
             nodes: &placement,
         },
-    )?;
+    )?);
 
     let mut representative: Vec<usize> = (0..raw.vertices.len()).collect();
     let union = |representative: &mut Vec<usize>, first: usize, second: usize| {
@@ -281,6 +285,9 @@ struct WallNodes {
     /// For a node that also lies on another wall's inner face, the offset
     /// with that wall's mid-plane added: its place if it is a T-junction.
     junction_offset: HashMap<usize, Vec3>,
+    /// L-corners ([`crate::corner`]), with the original nodes of each wall
+    /// whose offset reaches the corner line.
+    corners: Vec<Corner>,
 }
 
 fn wall_nodes(
@@ -323,6 +330,15 @@ fn wall_nodes(
             }
         }
     }
+    let mut corners = find_corners(
+        &mesh.vertices,
+        &NodeWalls {
+            walls_of_node: &walls_of_node,
+            inner_walls_of_node: &inner_walls_of_node,
+        },
+        keep,
+        face_of,
+    );
     let mut offset_of_node: HashMap<usize, Vec3> = HashMap::with_capacity(walls_of_node.len());
     let mut junction_offset: HashMap<usize, Vec3> = HashMap::new();
     for (&vertex, node_walls) in walls_of_node.iter() {
@@ -339,20 +355,23 @@ fn wall_nodes(
                 target: -kept.thickness / 2.0,
             });
         }
+        // A node that reaches an L-corner's line takes the other wall's
+        // mid-plane too ([`crate::corner`]).
+        let point = add(mesh.vertices[vertex], mid_surface_offset(&constraints));
+        let mut cornered: BTreeSet<i32> = BTreeSet::new();
+        for &face in node_walls {
+            cornered.extend(corner_walls(&mut corners, face, vertex, point));
+        }
+        for &face in cornered.difference(node_walls) {
+            constraints.push(mid_plane_constraint(mesh, face_of, wall(face)?, vertex)?);
+        }
         offset_of_node.insert(vertex, mid_surface_offset(&constraints));
         let kept_only = constraints.len();
         for &face in inner_walls_of_node.get(&vertex).into_iter().flatten() {
-            if node_walls.contains(&face) {
+            if node_walls.contains(&face) || cornered.contains(&face) {
                 continue;
             }
-            let base = wall(face)?;
-            let kept_face = face_of
-                .get(&face)
-                .ok_or(ShellizeError::UnknownWallFace { face })?;
-            constraints.push(Constraint {
-                normal: base.normal,
-                target: -from_mid_plane(mesh.vertices[vertex], base, kept_face),
-            });
+            constraints.push(mid_plane_constraint(mesh, face_of, wall(face)?, vertex)?);
         }
         if constraints.len() > kept_only {
             junction_offset.insert(vertex, mid_surface_offset(&constraints));
@@ -363,6 +382,23 @@ fn wall_nodes(
         inner_walls_of_node,
         offset_of_node,
         junction_offset,
+        corners,
+    })
+}
+
+/// The constraint that moves `vertex` onto planar wall `base`'s mid-plane.
+fn mid_plane_constraint(
+    mesh: &ShellizeMesh,
+    face_of: &HashMap<i32, &FaceProp>,
+    base: &Wall,
+    vertex: usize,
+) -> Result<Constraint, ShellizeError> {
+    let kept_face = face_of
+        .get(&base.keep)
+        .ok_or(ShellizeError::UnknownWallFace { face: base.keep })?;
+    Ok(Constraint {
+        normal: base.normal,
+        target: -from_mid_plane(mesh.vertices[vertex], base, kept_face),
     })
 }
 
@@ -679,6 +715,63 @@ impl RawShell {
             .map(|(&tri, _)| tri)
             .collect()
     }
+}
+
+/// Join the two walls' node chains along every L-corner line
+/// ([`crate::corner`]), and split the facets the other chain's nodes land on.
+/// Returns the node pairs to weld.
+fn weld_l_corners(raw: &mut RawShell, corners: &[Corner]) -> Vec<(usize, usize)> {
+    if corners.is_empty() {
+        return Vec::new();
+    }
+    let raw_of: HashMap<(i32, usize), usize> = (0..raw.vertices.len())
+        .map(|node| ((raw.source[node], raw.original[node]), node))
+        .collect();
+    let lines: Vec<CornerLine> = corners
+        .iter()
+        .map(|corner| CornerLine {
+            walls: corner.walls,
+            normals: corner.normals,
+            nodes: [0, 1].map(|index| {
+                corner.members[index]
+                    .iter()
+                    .filter_map(|&original| raw_of.get(&(corner.walls[index], original)).copied())
+                    .collect()
+            }),
+        })
+        .collect();
+    // Only welded line nodes ask, a handful per corner: a scan is cheap.
+    let copies = |node: usize| {
+        (0..raw.original.len())
+            .filter(|&copy| raw.original[copy] == raw.original[node])
+            .collect()
+    };
+    let mut vertices = std::mem::take(&mut raw.vertices);
+    let weld = weld_corners(
+        &mut vertices,
+        &copies,
+        &raw.triangles,
+        &raw.triangle_source,
+        &lines,
+    );
+    raw.vertices = vertices;
+    let mut triangles = Vec::with_capacity(raw.triangles.len());
+    let mut thickness = Vec::with_capacity(raw.triangles.len());
+    let mut source = Vec::with_capacity(raw.triangles.len());
+    for (index, &tri) in raw.triangles.iter().enumerate() {
+        if weld.dropped.contains(&index) {
+            continue;
+        }
+        for piece in split_triangle(tri, &weld.splits) {
+            triangles.push(piece);
+            thickness.push(raw.thickness[index]);
+            source.push(raw.triangle_source[index]);
+        }
+    }
+    raw.triangles = triangles;
+    raw.thickness = thickness;
+    raw.triangle_source = source;
+    weld.merged
 }
 
 /// What the T-junction weld reads about the walls.

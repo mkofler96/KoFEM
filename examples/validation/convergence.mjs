@@ -299,16 +299,16 @@ export default [
   recipeStudy({
     id: "nafems-le5",
     caseId: "nafems-le5",
-    title: "NAFEMS LE5, quadratic tetrahedra",
-    note: "The solid settles about 1.5 % beyond NAFEMS' thin-shell value: the walls are a tenth of a flange wide.",
+    title: "NAFEMS LE5, shell triangles",
+    note: "The axial stress at A approaches NAFEMS' value from below as the mesh is refined, within a percent at 50 mm.",
     expect: null,
-    noRate: NAFEMS_STRESS_SOLID,
+    noRate: NAFEMS_STRESS_SHELL,
     series: [
       {
-        label: "P2 (quadratic)",
+        label: "Shell (linear)",
         caseId: "nafems-le5",
-        order: 2,
-        levels: [200, 100, 70],
+        order: 1,
+        levels: [200, 100, 70, 50],
       },
     ],
   }),
