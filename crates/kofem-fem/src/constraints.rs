@@ -57,6 +57,27 @@ impl Dirichlet {
     pub fn value(&self, dof: usize) -> Option<f64> {
         self.value_of_dof[dof]
     }
+
+    /// Every prescribed DOF with its value, in DOF order.
+    pub fn prescribed(&self) -> impl Iterator<Item = (usize, f64)> + '_ {
+        self.value_of_dof
+            .iter()
+            .enumerate()
+            .filter_map(|(dof, value)| value.map(|value| (dof, value)))
+    }
+
+    /// The same prescribed DOFs, each with the value `value(dof, current)`
+    /// gives for it.
+    #[must_use]
+    pub fn with_values(&self, mut value: impl FnMut(usize, f64) -> f64) -> Self {
+        let value_of_dof = self
+            .value_of_dof
+            .iter()
+            .enumerate()
+            .map(|(dof, current)| current.map(|current| value(dof, current)))
+            .collect();
+        Self { value_of_dof }
+    }
 }
 
 /// Eliminate the prescribed DOFs symmetrically: move their known columns to

@@ -139,6 +139,37 @@ pub fn prepare_static(
     forces: &[f64],
     preconditioner: PreconditionerChoice,
 ) -> Result<PreparedStatic, FemError> {
+    let constraints = static_constraints(mesh, fixed_dofs, fixed_values, forces)?;
+    let mut matrix = stiffness;
+    let mut rhs = forces.to_vec();
+    let eliminated = eliminate_dirichlet(&mut matrix, &mut rhs, &constraints);
+    let (system, levels) = precondition(
+        mesh.node_coordinates(),
+        matrix,
+        &constraints,
+        preconditioner,
+    )?;
+    Ok(PreparedStatic {
+        system,
+        rhs,
+        levels,
+        unused_vertices: mesh.unused_vertex_count(),
+        eliminated: Some(eliminated),
+    })
+}
+
+/// The checks of [`prepare_static`] and the full set of conditions it
+/// eliminates: the caller's, their extension to the edge and face nodes of
+/// supported boundary faces, and every unused vertex held at zero.
+///
+/// # Errors
+/// As [`prepare_static`], less the multigrid setup.
+pub(crate) fn static_constraints(
+    mesh: &TetMesh,
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+) -> Result<Dirichlet, FemError> {
     let dof_count = mesh.dof_count();
     if forces.len() != dof_count {
         return Err(FemError::ForceLength {
@@ -181,35 +212,34 @@ pub fn prepare_static(
             values.push(0.0);
         }
     }
-    let constraints = Dirichlet::new(dof_count, &dofs, &values)?;
+    Dirichlet::new(dof_count, &dofs, &values)
+}
 
-    let mut matrix = stiffness;
-    let mut rhs = forces.to_vec();
-    let eliminated = eliminate_dirichlet(&mut matrix, &mut rhs, &constraints);
-    let (system, levels): (Box<dyn Preconditioner>, Vec<LevelInfo>) = match preconditioner {
+/// Wrap a matrix whose `constraints` are already eliminated in the chosen
+/// preconditioner, with the multigrid levels (empty for Gauss–Seidel).
+/// Multigrid aggregates by `node_coordinates`, the mesh's nodes.
+///
+/// # Errors
+/// A multigrid setup that finds the model under-constrained.
+pub(crate) fn precondition(
+    node_coordinates: &[[f64; 3]],
+    matrix: CsrMatrix,
+    constraints: &Dirichlet,
+    preconditioner: PreconditionerChoice,
+) -> Result<(Box<dyn Preconditioner>, Vec<LevelInfo>), FemError> {
+    Ok(match preconditioner {
         PreconditionerChoice::SymmetricGaussSeidel => {
             (Box::new(SymmetricGaussSeidel::new(matrix)), Vec::new())
         }
         PreconditionerChoice::SmoothedAggregation(amg_settings) => {
-            let constrained: Vec<bool> = (0..dof_count)
+            let constrained: Vec<bool> = (0..matrix.rows())
                 .map(|dof| constraints.value(dof).is_some())
                 .collect();
-            let amg = SmoothedAggregation::new(
-                matrix,
-                mesh.node_coordinates(),
-                &constrained,
-                amg_settings,
-            )?;
+            let amg =
+                SmoothedAggregation::new(matrix, node_coordinates, &constrained, amg_settings)?;
             let levels = amg.levels();
             (Box::new(amg), levels)
         }
-    };
-    Ok(PreparedStatic {
-        system,
-        rhs,
-        levels,
-        unused_vertices: mesh.unused_vertex_count(),
-        eliminated: Some(eliminated),
     })
 }
 
