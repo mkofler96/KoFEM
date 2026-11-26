@@ -24,6 +24,7 @@ pub mod coupling;
 pub mod element;
 pub mod error;
 pub mod field_expression;
+pub mod field_statistics;
 pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
@@ -54,6 +55,7 @@ pub use coupled_static::{
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;
 pub use field_expression::{FieldExpression, FieldExpressionError};
+pub use field_statistics::{nodal_percentiles, StatisticsMesh};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};

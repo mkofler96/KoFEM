@@ -123,6 +123,8 @@ pub enum FemError {
     CoarseNotPositiveDefinite { unknowns: usize },
     #[error("section cut: {reason}")]
     SectionInput { reason: String },
+    #[error("field statistics: {reason}")]
+    StatisticsInput { reason: String },
     #[error("coupling {coupling}: {reason}")]
     Coupling { coupling: usize, reason: String },
     #[error("coupling input is invalid: {reason}")]

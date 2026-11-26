@@ -1003,6 +1003,65 @@ export const resultsMessages = defineMessages({
     pt: (values: number, nodes: number) =>
       `o resultado de deslocamento tem ${values} valores para ${nodes} nós — está desatualizado ou pertence a outra malha`,
   },
+  percentile: {
+    en: (percent: number) => `P${percent}`,
+    de: (percent: number) => `P${percent}`,
+    fr: (percent: number) => `P${percent}`,
+    it: (percent: number) => `P${percent}`,
+    es: (percent: number) => `P${percent}`,
+    pt: (percent: number) => `P${percent}`,
+  },
+  percentileHint: {
+    en: (percent: number) =>
+      `${percent}th percentile by volume: ${100 - percent} % of the model is stressed above it. Unlike the max, it does not grow at a singularity when the mesh is refined.`,
+    de: (percent: number) =>
+      `${percent}. Perzentil nach Volumen: ${100 - percent} % des Modells sind höher beansprucht. Anders als das Maximum wächst es an einer Singularität nicht, wenn das Netz verfeinert wird.`,
+    fr: (percent: number) =>
+      `${percent}e centile en volume : ${100 - percent} % du modèle est plus sollicité. Contrairement au max., il ne croît pas à une singularité quand le maillage est raffiné.`,
+    it: (percent: number) =>
+      `${percent}° percentile per volume: il ${100 - percent} % del modello è sollecitato di più. A differenza del max, non cresce in una singolarità quando la mesh viene raffinata.`,
+    es: (percent: number) =>
+      `Percentil ${percent} por volumen: el ${100 - percent} % del modelo está más solicitado. A diferencia del máx., no crece en una singularidad al refinar la malla.`,
+    pt: (percent: number) =>
+      `Percentil ${percent} por volume: ${100 - percent} % do modelo está mais solicitado. Ao contrário do máx., não cresce numa singularidade quando a malha é refinada.`,
+  },
+  percentileUnreadable: {
+    en: (reason: string) => `The percentiles cannot be read. ${reason}`,
+    de: (reason: string) =>
+      `Die Perzentile lassen sich nicht ablesen. ${reason}`,
+    fr: (reason: string) => `Impossible de lire les centiles. ${reason}`,
+    it: (reason: string) => `Impossibile leggere i percentili. ${reason}`,
+    es: (reason: string) => `No se pueden leer los percentiles. ${reason}`,
+    pt: (reason: string) => `Não é possível ler os percentis. ${reason}`,
+  },
+  percentileUnknownNode: {
+    en: (element: number, node: number) =>
+      `element ${element} references node ${node}, which the mesh does not have`,
+    de: (element: number, node: number) =>
+      `Element ${element} verweist auf Knoten ${node}, den das Netz nicht hat`,
+    fr: (element: number, node: number) =>
+      `l'élément ${element} référence le nœud ${node}, absent du maillage`,
+    it: (element: number, node: number) =>
+      `l'elemento ${element} fa riferimento al nodo ${node}, che la mesh non ha`,
+    es: (element: number, node: number) =>
+      `el elemento ${element} hace referencia al nodo ${node}, que la malla no tiene`,
+    pt: (element: number, node: number) =>
+      `o elemento ${element} referencia o nó ${node}, que a malha não tem`,
+  },
+  percentileNoThickness: {
+    en: (element: number) =>
+      `shell element ${element} has no thickness, so its volume is unknown`,
+    de: (element: number) =>
+      `Schalenelement ${element} hat keine Dicke, sein Volumen ist daher unbekannt`,
+    fr: (element: number) =>
+      `l'élément coque ${element} n'a pas d'épaisseur, son volume est donc inconnu`,
+    it: (element: number) =>
+      `l'elemento guscio ${element} non ha spessore, quindi il suo volume è ignoto`,
+    es: (element: number) =>
+      `el elemento lámina ${element} no tiene espesor, así que su volumen es desconocido`,
+    pt: (element: number) =>
+      `o elemento de casca ${element} não tem espessura, logo o seu volume é desconhecido`,
+  },
   sectionNoNodes: {
     en: "the model has no nodes to cut",
     de: "das Modell hat keine Knoten zum Schneiden",

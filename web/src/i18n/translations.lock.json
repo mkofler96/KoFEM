@@ -4903,6 +4903,46 @@
     "es": "451536f65e85",
     "pt": "b1016f81b706"
   },
+  "results.ts:resultsMessages.percentile": {
+    "en": "51d85195c417",
+    "de": "51d85195c417",
+    "fr": "51d85195c417",
+    "it": "51d85195c417",
+    "es": "51d85195c417",
+    "pt": "51d85195c417"
+  },
+  "results.ts:resultsMessages.percentileHint": {
+    "en": "29e240232079",
+    "de": "53d1540aad8a",
+    "fr": "845a8c1357c0",
+    "it": "aca0a0958e62",
+    "es": "10d9f5e82667",
+    "pt": "6e0b761fdbcd"
+  },
+  "results.ts:resultsMessages.percentileNoThickness": {
+    "en": "0e6c6d25775e",
+    "de": "297f4fea86e8",
+    "fr": "64e39b563220",
+    "it": "c3479b0e8697",
+    "es": "12829c38c36c",
+    "pt": "61e747011ced"
+  },
+  "results.ts:resultsMessages.percentileUnknownNode": {
+    "en": "33977f4144af",
+    "de": "2068d90ccb36",
+    "fr": "68a971a43abb",
+    "it": "d11570b8ae60",
+    "es": "e12463b5568a",
+    "pt": "5c4907697447"
+  },
+  "results.ts:resultsMessages.percentileUnreadable": {
+    "en": "8ab2b8f9eab9",
+    "de": "6f46879ab624",
+    "fr": "333dc9f248d3",
+    "it": "b5c5f10417ef",
+    "es": "e3144116e8c8",
+    "pt": "b13d409379b0"
+  },
   "results.ts:resultsMessages.placeProbes": {
     "en": "23c717232e3c",
     "de": "704604897b86",
