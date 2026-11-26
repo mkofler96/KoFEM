@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-25",
-  "engine": "engine-eb6356518f17",
-  "fem": "fem-e22298e777ec",
+  "generated": "2026-11-26",
+  "engine": "engine-32198cb04210",
+  "fem": "fem-724e4e1365f1",
   "cases": [
     {
       "id": "axial-bar",
@@ -1052,18 +1052,18 @@
       "reference": -108,
       "referenceLabel": "NAFEMS LE5 target",
       "tolPct": 3,
-      "fe": -109.31648825554653,
-      "errPct": 1.2189706069875288,
+      "fe": -109.39881278172889,
+      "errPct": 1.295197020119345,
       "pass": true,
       "mesh": {
-        "order": 2,
-        "elementType": "CTETRA",
-        "elements": 26977,
-        "vertices": 9276,
-        "nodes": 54792,
-        "dofs": 164376,
-        "maxElementSize": 100,
-        "minElementSize": 10
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 19270,
+        "vertices": 9838,
+        "nodes": 9838,
+        "dofs": 59028,
+        "maxElementSize": 70,
+        "minElementSize": 7
       },
       "inputs": [
         {
@@ -1105,11 +1105,11 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 5.417091654058963,
-        "max": 189.143407919238,
+        "min": 11.339884001622174,
+        "max": 170.01425023307493,
         "deform": 20,
         "width": 1200,
-        "height": 493
+        "height": 488
       }
     },
     {
@@ -2874,53 +2874,67 @@
     {
       "id": "nafems-le5",
       "caseId": "nafems-le5",
-      "title": "NAFEMS LE5, quadratic tetrahedra",
+      "title": "NAFEMS LE5, shell triangles",
       "series": [
         {
-          "label": "P2 (quadratic)",
+          "label": "Shell (linear)",
           "caseId": "nafems-le5",
-          "order": 2,
+          "order": 1,
           "points": [
             {
               "mesh": "200 mm",
-              "order": 2,
-              "elementType": "CTETRA",
-              "elements": 6886,
-              "vertices": 2460,
-              "nodes": 14262,
-              "dofs": 42786,
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 2399,
+              "vertices": 1281,
+              "nodes": 1281,
+              "dofs": 7686,
               "maxElementSize": 200,
               "minElementSize": 20,
-              "fe": -108.93008027355938,
-              "errPct": 0.8611854384809106,
+              "fe": -109.21532021305325,
+              "errPct": 1.1252964935678207,
               "ci": false
             },
             {
               "mesh": "100 mm",
-              "order": 2,
-              "elementType": "CTETRA",
-              "elements": 26977,
-              "vertices": 9276,
-              "nodes": 54792,
-              "dofs": 164376,
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 9295,
+              "vertices": 4793,
+              "nodes": 4793,
+              "dofs": 28758,
               "maxElementSize": 100,
               "minElementSize": 10,
-              "fe": -109.31648825554653,
-              "errPct": 1.2189706069875288,
-              "ci": true
+              "fe": -109.38818630223504,
+              "errPct": 1.2853576872546681,
+              "ci": false
             },
             {
               "mesh": "70 mm",
-              "order": 2,
-              "elementType": "CTETRA",
-              "elements": 56652,
-              "vertices": 19286,
-              "nodes": 114496,
-              "dofs": 343488,
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 19270,
+              "vertices": 9838,
+              "nodes": 9838,
+              "dofs": 59028,
               "maxElementSize": 70,
               "minElementSize": 7,
-              "fe": -109.50376400193883,
-              "errPct": 1.3923740758692902,
+              "fe": -109.39881278172889,
+              "errPct": 1.295197020119345,
+              "ci": true
+            },
+            {
+              "mesh": "50 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 36656,
+              "vertices": 18608,
+              "nodes": 18608,
+              "dofs": 111648,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": -109.42115645145518,
+              "errPct": 1.3158856031992363,
               "ci": false
             }
           ]
@@ -2929,7 +2943,7 @@
       "rates": {
         "reference": null,
         "series": [],
-        "noRate": "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only."
+        "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
       }
     },
     {

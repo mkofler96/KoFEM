@@ -65,53 +65,68 @@ void* kofem_occ_geometry_from_shape(const TopoDS_Shape& shape) {
     return geometry;
 }
 
-void kofem_set_solid_max_sizes(const TopoDS_Shape& shape, const std::vector<double>& max_sizes) {
+void kofem_set_max_sizes(const TopoDS_Shape& shape, const std::vector<double>& solid_max_sizes,
+                         const std::vector<KofemFaceMaxSize>& face_max_sizes) {
     TopTools_IndexedMapOfShape solids;
     TopTools_IndexedMapOfShape faces;
     TopTools_IndexedMapOfShape edges;
     TopExp::MapShapes(shape, TopAbs_SOLID, solids);
     TopExp::MapShapes(shape, TopAbs_FACE, faces);
     TopExp::MapShapes(shape, TopAbs_EDGE, edges);
-    // Netgen's "no limit" (ShapeProperties::maxh's default).
-    constexpr double NO_LIMIT = 1e99;
-    if (max_sizes.empty()) {
-        // No region sizes: back to Netgen's defaults everywhere, so the mesh is
-        // exactly what it was before regions existed.
-        for (int i = 1; i <= solids.Extent(); ++i)
-            netgen::OCCGeometry::GetProperties(solids(i)).maxh = NO_LIMIT;
-        for (int k = 1; k <= faces.Extent(); ++k)
-            netgen::OCCGeometry::GetProperties(faces(k)).maxh = NO_LIMIT;
-        for (int k = 1; k <= edges.Extent(); ++k)
-            netgen::OCCGeometry::GetProperties(edges(k)).maxh = NO_LIMIT;
-        return;
-    }
-    if (static_cast<int>(max_sizes.size()) != solids.Extent())
-        throw std::runtime_error("kofem_set_solid_max_sizes: " + std::to_string(max_sizes.size()) +
+    if (!solid_max_sizes.empty() && static_cast<int>(solid_max_sizes.size()) != solids.Extent())
+        throw std::runtime_error("kofem_set_max_sizes: " + std::to_string(solid_max_sizes.size()) +
                                  " sizes for " + std::to_string(solids.Extent()) + " solids");
 
+    // Netgen's "no limit" (ShapeProperties::maxh's default). Every solid, face
+    // and edge is assigned, not just the sized ones: Netgen's table is static
+    // and keyed by shape, so a size left from an earlier mesh of the same shape
+    // would otherwise still apply.
+    constexpr double NO_LIMIT = 1e99;
+    std::vector<double> solid_h(static_cast<size_t>(solids.Extent()), NO_LIMIT);
     std::vector<double> face_h(static_cast<size_t>(faces.Extent()), NO_LIMIT);
     std::vector<double> edge_h(static_cast<size_t>(edges.Extent()), NO_LIMIT);
-    for (int i = 1; i <= solids.Extent(); ++i) {
-        const double h = max_sizes[static_cast<size_t>(i - 1)];
+
+    for (size_t k = 0; k < solid_max_sizes.size(); ++k) {
+        const double h = solid_max_sizes[k];
         if (!std::isfinite(h) || h <= 0.0)
-            throw std::runtime_error("kofem_set_solid_max_sizes: solid " + std::to_string(i) +
+            throw std::runtime_error("kofem_set_max_sizes: solid " + std::to_string(k + 1) +
                                      " has max size " + std::to_string(h) +
                                      " — it must be a positive number");
-        netgen::OCCGeometry::GetProperties(solids(i)).maxh = h;
+        solid_h[k] = h;
         // A face or edge between two regions takes the finer of their sizes, so
         // the finer region is fine right up to the cut.
-        for (TopExp_Explorer f(solids(i), TopAbs_FACE); f.More(); f.Next()) {
+        const TopoDS_Shape& solid = solids(static_cast<int>(k + 1));
+        for (TopExp_Explorer f(solid, TopAbs_FACE); f.More(); f.Next()) {
             double& fh = face_h[static_cast<size_t>(faces.FindIndex(f.Current()) - 1)];
             fh = std::min(fh, h);
         }
-        for (TopExp_Explorer e(solids(i), TopAbs_EDGE); e.More(); e.Next()) {
+        for (TopExp_Explorer e(solid, TopAbs_EDGE); e.More(); e.Next()) {
             double& eh = edge_h[static_cast<size_t>(edges.FindIndex(e.Current()) - 1)];
             eh = std::min(eh, h);
         }
     }
-    // Every face and edge is assigned, not just those of sized solids: Netgen's
-    // table is static and keyed by shape, so a size left from an earlier mesh of
-    // the same shape would otherwise still apply.
+
+    for (const KofemFaceMaxSize& sized : face_max_sizes) {
+        if (sized.face < 1 || sized.face > faces.Extent())
+            throw std::runtime_error("kofem_set_max_sizes: face " + std::to_string(sized.face) +
+                                     " has an element size, but the geometry has faces 1 to " +
+                                     std::to_string(faces.Extent()));
+        if (!std::isfinite(sized.max_size) || sized.max_size <= 0.0)
+            throw std::runtime_error("kofem_set_max_sizes: face " + std::to_string(sized.face) +
+                                     " has max size " + std::to_string(sized.max_size) +
+                                     " — it must be a positive number");
+        double& fh = face_h[static_cast<size_t>(sized.face - 1)];
+        fh = std::min(fh, sized.max_size);
+        // The face's boundary edges are meshed before the face; left at the
+        // solid's size, they would hand the face a coarse rim to fill.
+        for (TopExp_Explorer e(faces(sized.face), TopAbs_EDGE); e.More(); e.Next()) {
+            double& eh = edge_h[static_cast<size_t>(edges.FindIndex(e.Current()) - 1)];
+            eh = std::min(eh, sized.max_size);
+        }
+    }
+
+    for (int i = 1; i <= solids.Extent(); ++i)
+        netgen::OCCGeometry::GetProperties(solids(i)).maxh = solid_h[static_cast<size_t>(i - 1)];
     for (int k = 1; k <= faces.Extent(); ++k)
         netgen::OCCGeometry::GetProperties(faces(k)).maxh = face_h[static_cast<size_t>(k - 1)];
     for (int k = 1; k <= edges.Extent(); ++k)

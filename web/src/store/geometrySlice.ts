@@ -9,6 +9,7 @@ import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
+import { assignFaceSize, faceSizesMatch } from "../lib/faceSizes";
 import { tr } from "../i18n/useLocale";
 import { meshMessages } from "../i18n/messages/mesh";
 import {
@@ -178,12 +179,22 @@ export function meshKind(elements: { type: ElementType }[]): MeshKind {
   return shell ? "shell" : "volume";
 }
 
+// Element size on selected CAD faces (KOF-394), as typed: Netgen meshes the
+// faces at `size` and grades out to the body size. Face ids are 1-based CAD
+// face indices of the current geometry.
+export interface FaceSize {
+  faceIds: number[];
+  size: string;
+}
+
 // The element sizes a mesh was made with, in mm.
 export interface MeshSizes {
   max: number;
   min: number;
   // The regions meshed at a size of their own, by solid id.
   regions: Record<number, number>;
+  // The CAD faces meshed at a size of their own, by face id.
+  faces: Record<number, number>;
 }
 
 // Whether the sizes typed in the mesh settings differ from the ones the current
@@ -196,11 +207,13 @@ export function meshSizesChanged(
   maxElementSize: string,
   minElementSize: string,
   properties: Property[],
+  faceSizes: FaceSize[],
 ): boolean {
   if (!meshSizes) return false;
   if (
     parseFloat(maxElementSize) !== meshSizes.max ||
-    parseFloat(minElementSize) !== meshSizes.min
+    parseFloat(minElementSize) !== meshSizes.min ||
+    !faceSizesMatch(faceSizes, meshSizes.faces)
   )
     return true;
   const typed = new Map<number, number>();
@@ -274,6 +287,7 @@ export interface GeometryVersion {
   stepSurface: StepTessellation;
   properties: Property[];
   interfaces: BodyInterface[] | null;
+  faceSizes: FaceSize[];
 }
 
 // How the split tool cuts: imprint the plane on the picked faces (the part stays
@@ -348,6 +362,13 @@ export interface GeometrySlice {
   // moved on (meshSizesChanged). Null without a mesh, and for a loaded
   // analysis, whose file does not record them.
   meshSizes: MeshSizes | null;
+  // Element sizes on selected CAD faces (KOF-394). Saved with the analysis;
+  // dropped with the geometry they number the faces of.
+  faceSizes: FaceSize[];
+  // Face-size picking in the Mesh step: while on, a click on the geometry
+  // view toggles a CAD face in `faceSizePickIds`. Transient.
+  faceSizePicking: boolean;
+  faceSizePickIds: number[];
 
   addNode(node: Node): void;
   addElement(el: Element): void;
@@ -379,6 +400,12 @@ export interface GeometrySlice {
   setMeshing(v: boolean): void;
   setMaxElementSize(size: string): void;
   setMinElementSize(size: string): void;
+  // Turning picking off drops the faces picked so far.
+  setFaceSizePicking(on: boolean): void;
+  toggleFaceSizePick(faceId: number): void;
+  // Give the picked faces the element size `size` and end the picking.
+  addFaceSize(size: string): void;
+  removeFaceSize(index: number): void;
   setStepImportError(msg: string | null): void;
   // Replace the geometry with the result of an edit (a split): the new file and
   // its tessellation. The mesh, groups and results of the old geometry are
@@ -494,6 +521,10 @@ function dropAnalysis(s: ModelState): void {
   s.splitPicking = false;
   s.splitFaceIds = [];
   s.splitError = null;
+  // Face sizes name faces of the geometry that is gone.
+  s.faceSizes = [];
+  s.faceSizePicking = false;
+  s.faceSizePickIds = [];
   s.remeshNotice = null;
   s.meshOverlaps = [];
   // A pick session picks on the mesh that is now gone — and an edit can land
@@ -533,6 +564,9 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   maxElementSize: String(DEFAULT_MAX_ELEMENT_SIZE),
   minElementSize: String(DEFAULT_MIN_ELEMENT_SIZE),
   meshSizes: null,
+  faceSizes: [],
+  faceSizePicking: false,
+  faceSizePickIds: [],
 
   addNode: (node) =>
     set((s) => {
@@ -699,6 +733,30 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.minElementSize = size;
     }),
+  setFaceSizePicking: (on) =>
+    set((s) => {
+      s.faceSizePicking = on;
+      if (on) s.splitPicking = false;
+      else s.faceSizePickIds = [];
+    }),
+  toggleFaceSizePick: (faceId) =>
+    set((s) => {
+      s.faceSizePickIds = s.faceSizePickIds.includes(faceId)
+        ? s.faceSizePickIds.filter((id) => id !== faceId)
+        : [...s.faceSizePickIds, faceId];
+    }),
+  addFaceSize: (size) =>
+    set((s) => {
+      s.faceSizes = assignFaceSize(s.faceSizes, s.faceSizePickIds, size);
+      s.faceSizePickIds = [];
+      s.faceSizePicking = false;
+    }),
+  removeFaceSize: (index) =>
+    set((s) => {
+      if (index < 0 || index >= s.faceSizes.length)
+        throw new Error(`Cannot remove face size ${index}: there is none`);
+      s.faceSizes.splice(index, 1);
+    }),
   setStepImportError: (msg) =>
     set((s) => {
       s.stepImportError = msg;
@@ -721,6 +779,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         stepSurface: s.stepSurface,
         properties: cadBodies,
         interfaces: s.interfaces,
+        faceSizes: s.faceSizes,
       });
       s.stepBytes = bytes;
       // The engine writes every edit as STEP, whatever the source format was.
@@ -784,11 +843,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.properties = previous.properties;
       s.interfaces = previous.interfaces;
       dropAnalysis(s);
+      s.faceSizes = previous.faceSizes;
       suggestSizes(s, previous.stepSurface);
     }),
   setSplitPicking: (on) =>
     set((s) => {
       s.splitPicking = on;
+      if (on) s.faceSizePicking = false;
     }),
   toggleSplitFace: (faceId) =>
     set((s) => {

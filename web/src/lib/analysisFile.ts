@@ -28,6 +28,7 @@ import type {
   VolMesh,
 } from "../store/modelStore";
 import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
+import type { FaceSize, MeshSizes } from "../store/geometrySlice";
 import { parseHandCheck, type HandCheck } from "./handCheck";
 import { tieMethod, type TieMethod } from "./tie";
 import { restoreInterfaces, type BodyInterface } from "./interfaces";
@@ -120,6 +121,10 @@ export interface AnalysisState {
   elementOrder: number;
   // The closed-form check a gallery example carries (lib/handCheck), or null.
   handCheck: HandCheck | null;
+  // Element sizes on selected CAD faces (KOF-394); empty for none.
+  faceSizes: FaceSize[];
+  // The element sizes the mesh was made with, or null when unknown.
+  meshSizes: MeshSizes | null;
 }
 
 // Setup state embedded as JSON in the "KoFEM" FieldData string array.
@@ -172,6 +177,12 @@ interface KofemFieldDataV1 {
   elementOrder?: number;
   // Only gallery examples carry one.
   handCheck?: HandCheck;
+  // Written only when there are some (KOF-394), so files without face sizes
+  // are unchanged.
+  faceSizes?: FaceSize[];
+  // Written only when known: absent in files written before the sizes were
+  // saved, and for a mesh whose sizes the session did not know.
+  meshSizes?: MeshSizes;
 }
 
 // ── VTK cell types (vtkCellType.h) ────────────────────────────────────────────
@@ -326,6 +337,8 @@ export function serializeAnalysis(state: AnalysisState): string {
     topOpt: state.topOpt,
     elementOrder: state.elementOrder,
     ...(state.handCheck ? { handCheck: state.handCheck } : {}),
+    ...(state.faceSizes.length > 0 ? { faceSizes: state.faceSizes } : {}),
+    ...(state.meshSizes ? { meshSizes: state.meshSizes } : {}),
   };
 
   const pointData: string[] = [
@@ -480,6 +493,57 @@ function expectLength(actual: number, expected: number, context: string): void {
     );
 }
 
+const isPositiveId = (v: unknown): boolean =>
+  typeof v === "number" && Number.isInteger(v) && v > 0;
+const isPositive = (v: unknown): boolean =>
+  typeof v === "number" && Number.isFinite(v) && v > 0;
+
+function isSizeTable(v: unknown): boolean {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    Object.entries(v).every(
+      ([id, size]) => isPositiveId(Number(id)) && isPositive(size),
+    )
+  );
+}
+
+// Face sizes as the store holds them: faces by id, each entry's size as typed.
+function checkFaceSizes(value: unknown): void {
+  const valid =
+    Array.isArray(value) &&
+    value.every(
+      (e: unknown) =>
+        typeof e === "object" &&
+        e !== null &&
+        Array.isArray((e as FaceSize).faceIds) &&
+        (e as FaceSize).faceIds.length > 0 &&
+        (e as FaceSize).faceIds.every(isPositiveId) &&
+        typeof (e as FaceSize).size === "string",
+    );
+  if (!valid)
+    throw new Error(
+      'Invalid analysis file: "faceSizes" must list entries of face ids and a size',
+    );
+}
+
+function checkMeshSizes(value: unknown): void {
+  const sizes = value as Partial<MeshSizes> | null;
+  const valid =
+    typeof sizes === "object" &&
+    sizes !== null &&
+    isPositive(sizes.max) &&
+    typeof sizes.min === "number" &&
+    sizes.min >= 0 &&
+    isSizeTable(sizes.regions) &&
+    isSizeTable(sizes.faces);
+  if (!valid)
+    throw new Error(
+      'Invalid analysis file: "meshSizes" must hold max, min, regions and faces sizes',
+    );
+}
+
 function parseMetadata(xml: string): KofemFieldDataV1 {
   const match = xml.match(
     /<DataArray[^>]*Name="KoFEM"[^>]*>([\s\S]*?)<\/DataArray>/,
@@ -539,6 +603,9 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
           `Invalid analysis file: ${what} ${String(group.id)} has a blank name`,
         );
     }
+
+  if (meta.faceSizes !== undefined) checkFaceSizes(meta.faceSizes);
+  if (meta.meshSizes !== undefined) checkMeshSizes(meta.meshSizes);
 
   // Ties postdate the first analysis files, so absence is legitimate — but a
   // present entry of the wrong shape is not.
@@ -804,5 +871,7 @@ export function parseAnalysisFile(text: string): AnalysisState {
     elementOrder: meta.elementOrder ?? 1,
     // Only gallery examples carry a hand check.
     handCheck: meta.handCheck ?? null,
+    faceSizes: meta.faceSizes ?? [],
+    meshSizes: meta.meshSizes ?? null,
   };
 }

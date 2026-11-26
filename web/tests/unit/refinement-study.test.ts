@@ -24,7 +24,7 @@ const settings = DEFAULT_REFINEMENT_SETTINGS;
 const { ratio } = settings;
 const assess = (levels: StudyLevel[], with_: RefinementSettings = settings) =>
   assessConvergence(levels, with_);
-const base = { max: 8, min: 0.8, regions: { 2: 4 } };
+const base = { max: 8, min: 0.8, regions: { 2: 4 }, faces: {} };
 
 function level(
   k: number,

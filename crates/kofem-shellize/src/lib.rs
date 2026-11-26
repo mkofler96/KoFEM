@@ -12,6 +12,7 @@
 //!   [`walls`]          thin-wall detection (opposite planar CAD-face pairs)
 //!   [`curved_walls`]   curved thin walls (cylinders, spheres, cones, bends)
 //!   [`mid_surface`]    collapse both kinds to welded mid-surface facets
+//!   `corner`           weld L-corners kept on opposite sides (Z-sections)
 //!   `junction`         imprint T-junctions into the wall they stand on
 //!   [`wall_tets`]      which solid tets the shell facets replace
 //!   [`transition`]     cut retained solid at a wall root ([`clip`])
@@ -29,6 +30,7 @@
 )]
 
 pub mod clip;
+mod corner;
 pub mod coupled_model;
 pub mod coupling_set;
 pub mod curved_walls;

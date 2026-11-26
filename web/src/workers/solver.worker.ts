@@ -477,6 +477,9 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     ...(payload.solidMaxSizes
       ? { solid_max_sizes: payload.solidMaxSizes }
       : {}),
+    ...(payload.faceMaxSizes && payload.faceMaxSizes.length > 0
+      ? { face_max_sizes: payload.faceMaxSizes }
+      : {}),
     grading: 0.3,
     second_order: false,
     elementsperedge: 2.0,

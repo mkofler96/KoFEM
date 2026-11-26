@@ -200,6 +200,17 @@ export function buildAnalysisSetup(build, title) {
     surfaceTriangles: build.surfaceTriangles,
     surfaceFaceIds: build.surfaceFaceIds,
     elementOrder: build.meshSettings.order,
+    // The Mesh step's face sizes (KOF-394), as the store holds them, so a
+    // re-mesh of the opened example keeps them. Only written when there are
+    // some, as the app writes them.
+    ...(build.meshSettings.localSizes.length > 0
+      ? {
+          faceSizes: build.meshSettings.localSizes.map(({ faceIds, size }) => ({
+            faceIds,
+            size: String(size),
+          })),
+        }
+      : {}),
     ...(build.optimization
       ? optimizeSetup(build.optimization.settings)
       : { handCheck: build.handCheck }),

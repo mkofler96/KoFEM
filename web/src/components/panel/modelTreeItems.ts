@@ -265,6 +265,7 @@ export function useMeshOutOfDate(): boolean {
         s.maxElementSize,
         s.minElementSize,
         s.properties,
+        s.faceSizes,
       ) ||
       bodies.stillMeshed.length > 0 ||
       bodies.missing.length > 0
