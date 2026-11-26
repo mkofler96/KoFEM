@@ -117,6 +117,35 @@ test("min and max probes mark where the plotted field peaks @pipeline", async ({
   await expect(page.getByTestId("probe-label-max")).toBeVisible();
 });
 
+test("von Mises lists its 95th and 99th percentile by volume next to the max @pipeline", async ({
+  page,
+}) => {
+  await solveExample(page, "axial-bar");
+  await page.getByTestId("plot-field").selectOption("Von Mises stress");
+
+  const percentile = async (p: 95 | 99) => {
+    const value = page.getByTestId(`percentile-value-${p}`);
+    await expect(value).toContainText("MPa");
+    return Number(await value.getAttribute("data-value"));
+  };
+  const p95 = await percentile(95);
+  const p99 = await percentile(99);
+  const min = await probeValue(page, "min");
+  const max = await probeValue(page, "max");
+  // σ = P / A = 100 MPa over almost all of the bar; only the clamped end
+  // departs from it.
+  expect(Math.abs(p95 - 100)).toBeLessThan(2);
+  expect(Math.abs(p99 - 100)).toBeLessThan(2);
+  expect(min).toBeLessThanOrEqual(p95);
+  expect(p95).toBeLessThanOrEqual(p99);
+  expect(p99).toBeLessThanOrEqual(max);
+
+  // A percentile is a judgement on stress; displacement fields list none.
+  await page.getByTestId("plot-field").selectOption("Ux");
+  await expect(page.getByTestId("probe-value-max")).toContainText("mm");
+  await expect(page.getByTestId("percentile-row-95")).toHaveCount(0);
+});
+
 test("a probe stays on its CAD face through a re-mesh and shows the new value @pipeline", async ({
   page,
 }) => {

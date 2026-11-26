@@ -19,6 +19,7 @@ mod rigid_body;
 mod section;
 mod shell;
 mod shellize;
+mod statistics;
 mod stiffness;
 mod tie;
 mod topology;
