@@ -18,6 +18,7 @@
 use std::collections::VecDeque;
 
 use crate::amg::{Preconditioner, SymmetricGaussSeidel};
+use crate::count::count_as_f64;
 use crate::error::FemError;
 use crate::sparse::CsrMatrix;
 
@@ -239,11 +240,7 @@ impl PcgRun {
         }
         let half = recent.len() / 2;
         let mean_log = |values: &[f64]| -> f64 {
-            #[allow(
-                clippy::cast_precision_loss,
-                reason = "a window of at most 100 residuals"
-            )]
-            let count = values.len() as f64;
+            let count = count_as_f64(values.len());
             values.iter().map(|value| value.ln()).sum::<f64>() / count
         };
         let margin = 0.999_999_f64;

@@ -51,6 +51,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::count::count_as_f64;
 use crate::error::FemError;
 
 /// One element face on a tied surface: its nodes in cyclic order (3 or 4),
@@ -417,7 +418,7 @@ struct MasterSurface<'a> {
     grid: FaceGrid,
     max_radius: f64,
     /// Rings needed to reach every master from anywhere near the surface.
-    max_ring: i64,
+    max_ring: i32,
 }
 
 impl<'a> MasterSurface<'a> {
@@ -450,12 +451,12 @@ impl<'a> MasterSurface<'a> {
         }
         #[allow(
             clippy::cast_possible_truncation,
-            reason = "the ring count of a finite model fits in i64"
+            reason = "the ring count of a finite model fits in i32"
         )]
         let max_ring = if frames.is_empty() {
             -1
         } else {
-            (norm(sub(high, low)) / grid.cell).ceil() as i64 + 2
+            (norm(sub(high, low)) / grid.cell).ceil() as i32 + 2
         };
         Ok(Self {
             frames,
@@ -478,7 +479,7 @@ impl<'a> MasterSurface<'a> {
             f64::INFINITY
         };
         for ring in 0..=self.max_ring {
-            self.grid.ring(slave.centroid, ring, &mut |index| {
+            self.grid.ring(slave.centroid, ring.into(), &mut |index| {
                 let master = &self.frames[index];
                 if dot(master.normal, slave.normal) > FACING {
                     return;
@@ -491,8 +492,7 @@ impl<'a> MasterSurface<'a> {
                 nearest = nearest.min(gap);
             });
             // Every master not yet scanned is at least this far away.
-            #[allow(clippy::cast_precision_loss, reason = "a ring count is far below 2^52")]
-            let scanned = ring as f64 * self.grid.cell - self.max_radius;
+            let scanned = f64::from(ring) * self.grid.cell - self.max_radius;
             if scanned > reach || scanned > nearest + 2.0 * (slave.radius + self.max_radius) {
                 break;
             }
@@ -683,8 +683,7 @@ fn combine(points: &[[f64; 3]], weights: &[f64]) -> [f64; 3] {
 }
 
 fn average(points: &[[f64; 3]]) -> [f64; 3] {
-    #[allow(clippy::cast_precision_loss, reason = "a face has 3 or 4 points")]
-    let share = 1.0 / points.len() as f64;
+    let share = 1.0 / count_as_f64(points.len());
     combine(points, &vec![share; points.len()])
 }
 

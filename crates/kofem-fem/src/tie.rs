@@ -39,6 +39,7 @@ use std::collections::HashSet;
 
 use crate::amg::LevelInfo;
 use crate::cg::{solve_pcg_with, CgSettings};
+use crate::count::count_as_f64;
 use crate::coupled_static::{
     prepare_mixed_static, CoupledReduction, MixedPreconditioner, PreparedMixed,
 };
@@ -359,11 +360,7 @@ pub fn node_ties(mesh: &TetMesh, ties: &VertexTies) -> Result<Vec<NodeTie>, FemE
         else {
             continue;
         };
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "an edge or face has 2 or 4 corners"
-        )]
-        let share = 1.0 / targets.len() as f64;
+        let share = 1.0 / count_as_f64(targets.len());
         let mut target = [0.0; 3];
         for point in &targets {
             for (axis, value) in target.iter_mut().enumerate() {
