@@ -236,6 +236,14 @@ async function rebuild(
   return value;
 }
 
+// Relative tolerance on the published read-out. A topology optimization
+// amplifies round-off over its iterations, so a solver change that keeps every
+// solve to the same accuracy still moves its final compliance by a few tenths
+// of a percent (KOF-341); a static solve reproduces its number far closer.
+function readoutTolerance(recipe: ReturnType<typeof recipeFor>): number {
+  return recipe.optimize === undefined ? 1e-3 : 5e-3;
+}
+
 // ── The examples, in page order ───────────────────────────────────────────────
 
 for (const id of ORDER as string[]) {
@@ -249,7 +257,7 @@ for (const id of ORDER as string[]) {
     expect(
       Math.abs(value - published),
       `${id}: by hand ${value}, published ${published}`,
-    ).toBeLessThanOrEqual(1e-3 * Math.abs(published));
+    ).toBeLessThanOrEqual(readoutTolerance(recipe) * Math.abs(published));
 
     const failure = publishedExpectedFailure(id);
     if (failure === null || recipe.optimize !== undefined) return;
