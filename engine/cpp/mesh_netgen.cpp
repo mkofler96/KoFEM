@@ -27,6 +27,8 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <new>
@@ -217,6 +219,29 @@ val generate_fem_mesh_owned(const std::string& opts_json)
     std::vector<double> solid_max_sizes;
     if (!solid_sizes_js.isUndefined() && !solid_sizes_js.isNull())
         solid_max_sizes = f64_vector(solid_sizes_js, "solid_max_sizes");
+    // Face sizes (KOF-394): [{face, max_size}], face a 1-based OCC face index.
+    // Absent or empty: no face is meshed finer than its solid.
+    const val face_sizes_js = opts["face_max_sizes"];
+    std::vector<KofemFaceMaxSize> face_max_sizes;
+    if (!face_sizes_js.isUndefined() && !face_sizes_js.isNull()) {
+        if (!face_sizes_js.isArray())
+            throw std::runtime_error("generate_fem_mesh: face_max_sizes must be an array");
+        const int count = face_sizes_js["length"].as<int>();
+        for (int k = 0; k < count; ++k) {
+            const val entry = face_sizes_js[k];
+            if (!entry["face"].isNumber() || !entry["max_size"].isNumber())
+                throw std::runtime_error("generate_fem_mesh: face_max_sizes entry " +
+                                         std::to_string(k) +
+                                         " needs a numeric face and max_size");
+            const double face = entry["face"].as<double>();
+            if (face != std::floor(face) || face < 1.0 || face > INT_MAX)
+                throw std::runtime_error("generate_fem_mesh: face_max_sizes entry " +
+                                         std::to_string(k) + " names face " +
+                                         std::to_string(face) +
+                                         ", which is not a face number");
+            face_max_sizes.push_back({static_cast<int>(face), entry["max_size"].as<double>()});
+        }
+    }
 
 #ifdef KOFEM_NETGEN_OCC
     // ── OCC path: Netgen meshes the CAD geometry directly ────────────────────
@@ -234,9 +259,10 @@ val generate_fem_mesh_owned(const std::string& opts_json)
     // With region sizes, every solid gets one — the global size where no region
     // size is given — and the global maxh, which caps every size, becomes the
     // largest of them: a region may be coarser than the rest as well as finer.
-    // Without, every size is reset to Netgen's default, so the mesh is the one
-    // the global settings alone make. Either way Netgen's static size table
-    // keeps nothing from an earlier mesh.
+    // Face sizes only ever refine, so they leave maxh alone. Without either,
+    // every size is reset to Netgen's default, so the mesh is the one the
+    // global settings alone make. Either way Netgen's static size table keeps
+    // nothing from an earlier mesh.
     {
         TopTools_IndexedMapOfShape solids;
         TopExp::MapShapes(cached_shape(), TopAbs_SOLID, solids);
@@ -245,7 +271,7 @@ val generate_fem_mesh_owned(const std::string& opts_json)
             throw std::runtime_error(
                 "generate_fem_mesh: solid_max_sizes has " + std::to_string(solid_max_sizes.size()) +
                 " entries but the geometry has " + std::to_string(solids.Extent()) + " solids");
-        kofem_set_solid_max_sizes(cached_shape(), solid_max_sizes);
+        kofem_set_max_sizes(cached_shape(), solid_max_sizes, face_max_sizes);
         for (const double h : solid_max_sizes)
             max_size = std::max(max_size, h);
     }

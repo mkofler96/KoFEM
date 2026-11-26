@@ -31,6 +31,7 @@ async function fakeMesh(page: Page, max: number, min: number): Promise<void> {
                   max: number;
                   min: number;
                   regions: Record<number, number>;
+                  faces: Record<number, number>;
                 },
               ): void;
             };
@@ -47,7 +48,7 @@ async function fakeMesh(page: Page, max: number, min: number): Promise<void> {
           ],
           [{ id: 1, type: "CTETRA", nodeIds: [1, 2, 3, 4], propertyId: 1 }],
           "STEP Volume Mesh",
-          { max, min, regions: {} },
+          { max, min, regions: {}, faces: {} },
         );
     },
     { max, min },

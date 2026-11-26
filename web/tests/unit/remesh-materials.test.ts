@@ -50,7 +50,7 @@ const elements = [
   { id: 2, type: "CTETRA" as const, nodeIds: [2, 3, 4, 5], propertyId: 2 },
 ];
 
-const sizes = { max: 1, min: 0.1, regions: {} };
+const sizes = { max: 1, min: 0.1, regions: {}, faces: {} };
 
 function mesh() {
   useModelStore

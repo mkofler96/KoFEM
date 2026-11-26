@@ -40,7 +40,7 @@ const nodes = [
 const elements = [
   { id: 1, type: "CTETRA" as const, nodeIds: [1, 2, 3, 4], propertyId: 1 },
 ];
-const sizes = { max: 1, min: 0.1, regions: {} };
+const sizes = { max: 1, min: 0.1, regions: {}, faces: {} };
 
 describe("renaming a load group (KOF-462)", () => {
   beforeEach(() => {

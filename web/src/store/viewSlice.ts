@@ -165,6 +165,10 @@ export function applyTreeSelection(
   selection: TreeSelection,
 ): void {
   s.treeSelection = selection;
+  // Face sizes are picked from the Mesh settings; opening anything else ends
+  // the picking. Hiding the panel (on a phone, to see the view) does not.
+  s.faceSizePicking = false;
+  s.faceSizePickIds = [];
   const { target } = selection;
   s.reactionsShown = target.type === "item" && target.kind === "reactions";
   // The reactions come from the static solve: show it, even when an

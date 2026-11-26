@@ -27,7 +27,8 @@
 //     Howland assume. Netgen puts at least two elements along every edge, so
 //     the 0.5 mm edge through the thickness at the peak keeps the elements
 //     there at about 0.3 mm on every mesh: a local refinement the mesher makes
-//     by itself, as the app has no per-face element size.
+//     by itself. A face size on the hole (mesh.localSizes, KOF-394) would say
+//     so explicitly, but changes the mesh the stored references were made on.
 //   - Quadratic elements: on this mesh linear tetrahedra read 3.35 (+6.5 %),
 //     and they only come down slowly (convergence.mjs).
 //

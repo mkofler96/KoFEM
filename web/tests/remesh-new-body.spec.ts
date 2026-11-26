@@ -32,6 +32,7 @@ async function fakeSplitMesh(page: Page): Promise<void> {
                 max: number;
                 min: number;
                 regions: Record<number, number>;
+                faces: Record<number, number>;
               },
             ): void;
           };
@@ -52,7 +53,7 @@ async function fakeSplitMesh(page: Page): Promise<void> {
           { id: 2, type: "CTETRA", nodeIds: [2, 3, 4, 5], propertyId: 2 },
         ],
         "STEP Volume Mesh",
-        { max: 1, min: 0.1, regions: {} },
+        { max: 1, min: 0.1, regions: {}, faces: {} },
       );
   });
 }

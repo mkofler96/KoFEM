@@ -179,7 +179,8 @@ function resolveOnTessellation(at, tess, where) {
  *                                        the PSHELL section of the idealised body)
  * @property {[number, number, number][]} surfaceTriangles
  * @property {number[]} surfaceFaceIds    CAD face of each surface triangle
- * @property {{maxElementSize, minElementSize, order}} meshSettings
+ * @property {{maxElementSize, minElementSize, order, localSizes}} meshSettings
+ *                                        localSizes: [{faceIds, size}], the face sizes
  * @property {object[]} materials         the store's material table
  * @property {object[]} properties        one per CAD body
  * @property {object[]} bcGroups          NamedBcGroup[]
@@ -215,10 +216,6 @@ export async function buildFromRecipe(
   if (shell && recipe.mesh.order !== 1)
     throw new Error(
       `${where}: a shell facet is linear whatever element order the mesh panel shows — give a shell recipe mesh.order 1`,
-    );
-  if (recipe.mesh.localSizes !== undefined)
-    throw new Error(
-      `${where}: mesh.localSizes — the app's mesher offers no per-face sizes, so a user could not set them`,
     );
 
   // ── Import ──────────────────────────────────────────────────────────────────
@@ -261,6 +258,20 @@ export async function buildFromRecipe(
   // ── Mesh (the worker's handleVolumeMesh) ───────────────────────────────────
   const maxElementSize = recipe.mesh.maxElementSize;
   const minElementSize = minSizeOf(recipe);
+  // Face sizes (KOF-394), picked in the Mesh step on the geometry as it is now.
+  const localSizes = (recipe.mesh.localSizes ?? []).map((local, k) => {
+    const at = `${where}: mesh.localSizes[${k}]`;
+    if (!(local.size > 0) || local.size < minElementSize)
+      throw new Error(
+        `${at}: size ${local.size} mm must be positive and at least the min element size ${minElementSize} mm`,
+      );
+    return {
+      faceIds: local.faces.map((f, j) =>
+        resolveOnTessellation(f.at, tess, `${at}.faces[${j}]`),
+      ),
+      size: local.size,
+    };
+  });
   const dto = engineCall(
     mesher,
     `${where}: Netgen could not mesh the geometry at max element size ${maxElementSize} mm (min ${minElementSize} mm)`,
@@ -269,6 +280,13 @@ export async function buildFromRecipe(
         JSON.stringify({
           max_element_size: maxElementSize,
           min_element_size: minElementSize,
+          ...(localSizes.length > 0
+            ? {
+                face_max_sizes: localSizes.flatMap(({ faceIds, size }) =>
+                  faceIds.map((face) => ({ face, max_size: size })),
+                ),
+              }
+            : {}),
           grading: 0.3,
           second_order: false,
           elementsperedge: 2.0,
@@ -510,7 +528,12 @@ export async function buildFromRecipe(
     elements,
     surfaceTriangles,
     surfaceFaceIds,
-    meshSettings: { maxElementSize, minElementSize, order: elementOrder },
+    meshSettings: {
+      maxElementSize,
+      minElementSize,
+      order: elementOrder,
+      localSizes,
+    },
     materials,
     properties,
     bcGroups,

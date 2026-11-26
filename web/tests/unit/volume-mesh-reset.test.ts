@@ -46,7 +46,7 @@ function meshRequest(worker: FakeWorker): { id: number } {
   return request;
 }
 
-const sizes: MeshSizes = { max: 3, min: 0.3, regions: {} };
+const sizes: MeshSizes = { max: 3, min: 0.3, regions: {}, faces: {} };
 const input = {
   stepBytes: new Uint8Array([1, 2, 3]),
   geometryFormat: "step" as const,

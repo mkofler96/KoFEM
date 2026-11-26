@@ -160,6 +160,9 @@ export function levelSizes(
     regions: Object.fromEntries(
       Object.entries(base.regions).map(([id, size]) => [id, size / scale]),
     ),
+    faces: Object.fromEntries(
+      Object.entries(base.faces).map(([id, size]) => [id, size / scale]),
+    ),
   };
 }
 

@@ -568,6 +568,124 @@ export const meshMessages = defineMessages({
     es: (detail: string) => `Falló el mallado de volumen: ${detail}`,
     pt: (detail: string) => `Falha na geração da malha de volume: ${detail}`,
   },
+  faceSizes: {
+    en: "Face sizes",
+    de: "Flächengrößen",
+    fr: "Tailles par face",
+    it: "Dimensioni per faccia",
+    es: "Tamaños por cara",
+    pt: "Tamanhos por face",
+  },
+  faceSizesHint: {
+    en: "Mesh picked faces finer; the mesh grades out to the body size.",
+    de: "Gewählte Flächen feiner vernetzen; das Netz wird zur Körpergröße hin gröber.",
+    fr: "Mailler plus finement les faces choisies ; le maillage s'élargit vers la taille du corps.",
+    it: "Mesh più fine sulle facce scelte; la mesh si allarga fino alla dimensione del corpo.",
+    es: "Malla más fina en las caras elegidas; la malla crece hasta el tamaño del cuerpo.",
+    pt: "Malha mais fina nas faces escolhidas; a malha cresce até o tamanho do corpo.",
+  },
+  pickFaces: {
+    en: "Pick faces",
+    de: "Flächen wählen",
+    fr: "Choisir des faces",
+    it: "Scegli facce",
+    es: "Elegir caras",
+    pt: "Escolher faces",
+  },
+  stopPickingFaces: {
+    en: "Stop picking",
+    de: "Auswahl beenden",
+    fr: "Arrêter la sélection",
+    it: "Termina selezione",
+    es: "Terminar selección",
+    pt: "Parar seleção",
+  },
+  facesPicked: {
+    en: (n: number) => (n === 1 ? "1 face picked" : `${n} faces picked`),
+    de: (n: number) => (n === 1 ? "1 Fläche gewählt" : `${n} Flächen gewählt`),
+    fr: (n: number) => (n === 1 ? "1 face choisie" : `${n} faces choisies`),
+    it: (n: number) => (n === 1 ? "1 faccia scelta" : `${n} facce scelte`),
+    es: (n: number) => (n === 1 ? "1 cara elegida" : `${n} caras elegidas`),
+    pt: (n: number) => (n === 1 ? "1 face escolhida" : `${n} faces escolhidas`),
+  },
+  clickFacesToPick: {
+    en: "Click faces in the view.",
+    de: "Flächen in der Ansicht anklicken.",
+    fr: "Cliquez sur des faces dans la vue.",
+    it: "Fai clic sulle facce nella vista.",
+    es: "Haz clic en caras de la vista.",
+    pt: "Clique em faces na vista.",
+  },
+  setFaceSize: {
+    en: "Set size",
+    de: "Größe setzen",
+    fr: "Appliquer la taille",
+    it: "Imposta dimensione",
+    es: "Aplicar tamaño",
+    pt: "Aplicar tamanho",
+  },
+  faceSizeTip: {
+    en: "Max element size on the picked faces, in mm",
+    de: "Max. Elementgröße auf den gewählten Flächen, in mm",
+    fr: "Taille max. d'élément sur les faces choisies, en mm",
+    it: "Dimensione max degli elementi sulle facce scelte, in mm",
+    es: "Tamaño máx. de elemento en las caras elegidas, en mm",
+    pt: "Tamanho máx. de elemento nas faces escolhidas, em mm",
+  },
+  faceList: {
+    en: (n: number, ids: string) => (n === 1 ? `Face ${ids}` : `Faces ${ids}`),
+    de: (n: number, ids: string) =>
+      n === 1 ? `Fläche ${ids}` : `Flächen ${ids}`,
+    fr: (n: number, ids: string) => (n === 1 ? `Face ${ids}` : `Faces ${ids}`),
+    it: (n: number, ids: string) =>
+      n === 1 ? `Faccia ${ids}` : `Facce ${ids}`,
+    es: (n: number, ids: string) => (n === 1 ? `Cara ${ids}` : `Caras ${ids}`),
+    pt: (n: number, ids: string) => (n === 1 ? `Face ${ids}` : `Faces ${ids}`),
+  },
+  removeFaceSize: {
+    en: (faces: string) => `Remove the element size of ${faces}`,
+    de: (faces: string) => `Elementgröße von ${faces} entfernen`,
+    fr: (faces: string) => `Retirer la taille d'élément de ${faces}`,
+    it: (faces: string) => `Rimuovi la dimensione degli elementi di ${faces}`,
+    es: (faces: string) => `Quitar el tamaño de elemento de ${faces}`,
+    pt: (faces: string) => `Remover o tamanho de elemento de ${faces}`,
+  },
+  noFacePicked: {
+    en: "No face picked: pick the faces to size first.",
+    de: "Keine Fläche gewählt: Wählen Sie zuerst die Flächen.",
+    fr: "Aucune face choisie : choisissez d'abord les faces.",
+    it: "Nessuna faccia scelta: scegli prima le facce.",
+    es: "Ninguna cara elegida: elige primero las caras.",
+    pt: "Nenhuma face escolhida: escolha primeiro as faces.",
+  },
+  faceSizeInvalid: {
+    en: (typed: string) =>
+      `Face size ${typed} mm: an element size must be a positive number of mm.`,
+    de: (typed: string) =>
+      `Flächengröße ${typed} mm: Eine Elementgröße muss eine positive Zahl in mm sein.`,
+    fr: (typed: string) =>
+      `Taille de face ${typed} mm : une taille d'élément doit être un nombre positif en mm.`,
+    it: (typed: string) =>
+      `Dimensione della faccia ${typed} mm: una dimensione degli elementi deve essere un numero positivo in mm.`,
+    es: (typed: string) =>
+      `Tamaño de cara ${typed} mm: un tamaño de elemento debe ser un número positivo en mm.`,
+    pt: (typed: string) =>
+      `Tamanho de face ${typed} mm: um tamanho de elemento deve ser um número positivo em mm.`,
+  },
+  minExceedsFaceSize: {
+    en: (min: number, faces: string, size: number) =>
+      `Min element size (${min} mm) must not exceed the element size of ${faces} (${size} mm).`,
+    de: (min: number, faces: string, size: number) =>
+      `Die min. Elementgröße (${min} mm) darf die Elementgröße von ${faces} (${size} mm) nicht überschreiten.`,
+    fr: (min: number, faces: string, size: number) =>
+      `La taille min. d'élément (${min} mm) ne doit pas dépasser la taille d'élément de ${faces} (${size} mm).`,
+    it: (min: number, faces: string, size: number) =>
+      `La dimensione min degli elementi (${min} mm) non deve superare la dimensione degli elementi di ${faces} (${size} mm).`,
+    es: (min: number, faces: string, size: number) =>
+      `El tamaño mín. de elemento (${min} mm) no debe superar el tamaño de elemento de ${faces} (${size} mm).`,
+    pt: (min: number, faces: string, size: number) =>
+      `O tamanho mín. de elemento (${min} mm) não deve exceder o tamanho de elemento de ${faces} (${size} mm).`,
+  },
   maxSizeInvalid: {
     en: (typed: string) =>
       `Max element size must be a positive number of mm — got "${typed}".`,
