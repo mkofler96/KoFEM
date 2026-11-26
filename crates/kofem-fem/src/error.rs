@@ -219,8 +219,8 @@ pub enum FemError {
          {relative_residual:e} after {iterations} iterations (target {target:e})"
     )]
     NewtonNotConverged {
-        increment: usize,
-        increments: usize,
+        increment: u32,
+        increments: u32,
         iterations: usize,
         relative_residual: f64,
         target: f64,
@@ -229,7 +229,7 @@ pub enum FemError {
         "Newton increment {increment}, iteration {iteration}: the tangent solve failed: {reason}"
     )]
     TangentSolve {
-        increment: usize,
+        increment: u32,
         iteration: usize,
         reason: String,
     },
@@ -237,7 +237,7 @@ pub enum FemError {
         "the Newton solve has not finished: it stands at increment {increment}, iteration \
          {iteration}"
     )]
-    NewtonUnfinished { increment: usize, iteration: usize },
+    NewtonUnfinished { increment: u32, iteration: usize },
     #[error("nonlinear solve: {reason}")]
     NonlinearInput { reason: String },
 }

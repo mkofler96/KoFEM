@@ -42,7 +42,7 @@ fn steel() -> Isotropic {
     Isotropic::new(0, 210_000.0, 0.3).expect("valid material")
 }
 
-fn settings(increments: usize) -> NewtonSettings {
+fn settings(increments: u32) -> NewtonSettings {
     NewtonSettings {
         increments,
         max_iterations: 20,
@@ -131,7 +131,7 @@ fn load_case(mesh: &TetMesh) -> LoadCase {
 fn newton(
     mesh: &TetMesh,
     case: &LoadCase,
-    increments: usize,
+    increments: u32,
     preconditioner: PreconditionerChoice,
 ) -> NewtonSolution {
     solve_newton(
@@ -170,7 +170,7 @@ fn assert_matches_linear_solve(name: &str, mesh: &TetMesh, preconditioner: Preco
     .expect("linear solve");
     for increments in [1, 3] {
         let solution = newton(mesh, &case, increments, preconditioner);
-        assert_eq!(solution.increments.len(), increments, "{name}");
+        assert_eq!(solution.increments.len(), increments as usize, "{name}");
         for (index, increment) in solution.increments.iter().enumerate() {
             assert_eq!(
                 increment.iterations,
@@ -351,7 +351,7 @@ fn start(
 /// known.
 #[test]
 fn a_nonlinear_problem_with_a_known_solution_converges_quadratically() {
-    const INCREMENTS: usize = 4;
+    const INCREMENTS: u32 = 4;
     let model = manufactured();
     let exact = model.exact.clone();
     let scale = exact
@@ -405,7 +405,10 @@ fn a_nonlinear_problem_with_a_known_solution_converges_quadratically() {
         println!("{iteration:>2}  {error:.3e}  {residual}  {ratio}");
     }
     let solution = run.into_solution().expect("converged");
-    assert_eq!(solution.increments[INCREMENTS - 1].residuals, residuals);
+    assert_eq!(
+        solution.increments[INCREMENTS as usize - 1].residuals,
+        residuals
+    );
     assert!(
         errors.len() >= 4,
         "the problem must be nonlinear enough to need several iterations: {errors:?}"

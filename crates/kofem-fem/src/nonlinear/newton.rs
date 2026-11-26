@@ -21,7 +21,7 @@ use crate::static_solve::static_constraints;
 #[derive(Debug, Clone, Copy)]
 pub struct NewtonSettings {
     /// Load increments; the load factor grows by 1/`increments` per increment.
-    pub increments: usize,
+    pub increments: u32,
     /// Newton iterations allowed per increment.
     pub max_iterations: usize,
     /// An increment has converged when ‖`r_free`‖ ≤ `tolerance` ·
@@ -38,14 +38,14 @@ pub struct NewtonSettings {
 pub enum NewtonStatus {
     /// The CG budget ran out during the correction solve of this iteration.
     Solving {
-        increment: usize,
+        increment: u32,
         iteration: usize,
         /// CG iterations spent on this correction so far.
         cg_iterations: usize,
     },
     /// This Newton iteration finished, leaving this out-of-balance force.
     Iterated {
-        increment: usize,
+        increment: u32,
         iteration: usize,
         relative_residual: f64,
     },
@@ -101,7 +101,7 @@ pub struct NewtonRun<P, S> {
     internal_force: Vec<f64>,
     /// `None` while the solver holds it.
     tangent: Option<CsrMatrix>,
-    increment: usize,
+    increment: u32,
     iteration: usize,
     relative_residual: f64,
     report: IncrementReport,
@@ -172,7 +172,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                 residuals: Vec::new(),
                 cg_iterations: 0,
             },
-            reports: Vec::with_capacity(settings.increments),
+            reports: Vec::new(),
             phase: Phase::Evaluated,
             unused_vertices: mesh.unused_vertex_count(),
         };
@@ -271,12 +271,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
     }
 
     fn load_factor(&self) -> f64 {
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "increment counts are small; n/N is exactly 1 at the last increment"
-        )]
-        let factor = self.increment as f64 / self.settings.increments as f64;
-        factor
+        f64::from(self.increment) / f64::from(self.settings.increments)
     }
 
     fn begin_increment(&mut self) {
