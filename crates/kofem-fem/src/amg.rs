@@ -18,6 +18,7 @@
 //! Gauss–Seidel sweep before and a backward sweep after the coarse correction
 //! is a symmetric positive-definite preconditioner, as CG requires.
 
+use crate::count::count_as_f64;
 use crate::error::FemError;
 use crate::sparse::CsrMatrix;
 
@@ -746,8 +747,7 @@ fn rigid_body_modes(
             .filter(|&(node, _)| !is_rotation(node))
             .map(|(_, point)| point)
     };
-    #[allow(clippy::cast_precision_loss, reason = "a node count is far below 2^52")]
-    let count = translation_nodes().count().max(1) as f64;
+    let count = count_as_f64(translation_nodes().count().max(1));
     let mut centre = [0.0; 3];
     for point in translation_nodes() {
         for axis in 0..3 {
@@ -976,12 +976,7 @@ impl SmoothedAggregation {
     #[must_use]
     pub fn operator_complexity(&self) -> f64 {
         let total: usize = self.levels().iter().map(|level| level.nonzeros).sum();
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "a ratio of entry counts for reporting"
-        )]
-        let ratio = total as f64 / self.fine.nnz() as f64;
-        ratio
+        count_as_f64(total) / count_as_f64(self.fine.nnz())
     }
 
     fn level(&self, index: usize) -> &dyn Rows {

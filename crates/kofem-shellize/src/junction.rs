@@ -10,6 +10,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use kofem_fem::count_as_f64;
+
 use crate::error::ShellizeError;
 use crate::geometry::{add, cross, dot, norm, scale, sub, Vec3};
 
@@ -274,11 +276,7 @@ impl Triangulation<'_> {
                 for &neighbour in &neighbours {
                     mean = add(mean, self.vertices[neighbour]);
                 }
-                #[allow(
-                    clippy::cast_precision_loss,
-                    reason = "a handful of neighbours, far below 2^52"
-                )]
-                let mean = scale(mean, 1.0 / neighbours.len() as f64);
+                let mean = scale(mean, 1.0 / count_as_f64(neighbours.len()));
                 // Stay in the wall's plane: drop the off-plane part.
                 let off = dot(sub(mean, self.vertices[node]), self.normal);
                 let target = sub(mean, scale(self.normal, off));

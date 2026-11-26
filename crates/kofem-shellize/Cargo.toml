@@ -7,6 +7,7 @@ license.workspace = true
 description = "Solid-to-shell idealisation for KoFEM: thin-wall detection, mid-surface extraction and shell/solid coupling"
 
 [dependencies]
+kofem-fem = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]

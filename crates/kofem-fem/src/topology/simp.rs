@@ -19,6 +19,7 @@ use crate::amg::{AmgSettings, Preconditioner, SmoothedAggregation, SymmetricGaus
 use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
 use crate::constraints::{apply_dirichlet, Dirichlet};
+use crate::count::count_as_f64;
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex8_stiffness, hex_gradients, tet4_stiffness,
 };
@@ -508,11 +509,7 @@ impl ElementCache {
 }
 
 pub(super) fn mean_point<const N: usize>(corners: &[[f64; 3]; N]) -> [f64; 3] {
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "N is 3, 4 or 8, exactly representable"
-    )]
-    let count = N as f64;
+    let count = count_as_f64(N);
     std::array::from_fn(|axis| corners.iter().map(|corner| corner[axis]).sum::<f64>() / count)
 }
 

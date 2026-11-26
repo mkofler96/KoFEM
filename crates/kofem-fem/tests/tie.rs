@@ -876,3 +876,19 @@ fn quadratic_ties_extend_only_over_one_interface() {
         );
     }
 }
+
+#[test]
+fn a_face_far_beyond_the_tie_does_not_overflow_the_ring_search() {
+    let square = |offset: f64, side: f64, first: usize| MortarFace {
+        nodes: (first..first + 4).collect(),
+        points: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+            .map(|[across, along]| [across + offset, along, 0.0])
+            .to_vec(),
+        element_centroid: [offset + 0.5, 0.5, side],
+    };
+    let masters = [square(0.0, -0.5, 0)];
+    let slaves = [square(0.0, 0.5, 4), square(4e9, 0.5, 8)];
+    let rows = mortar_weights(&slaves, &masters, 0.1).unwrap();
+    let tied: Vec<usize> = rows.iter().map(|row| row.slave).collect();
+    assert_eq!(tied, [4, 5, 6, 7]);
+}

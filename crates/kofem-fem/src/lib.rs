@@ -19,6 +19,7 @@ pub mod assembly;
 pub mod cg;
 pub mod constraints;
 pub mod convergence;
+pub mod count;
 pub mod coupled_static;
 pub mod coupling;
 pub mod element;
@@ -47,6 +48,7 @@ pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, Symme
 pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
+pub use count::count_as_f64;
 pub use coupled_static::{
     prepare_coupled_static, prepare_mixed_static, solve_coupled_static, solve_mixed_static,
     AppliedPreconditioner, CoupledReduction, CoupledSolution, MixedPreconditioner, PreparedCoupled,

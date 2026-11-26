@@ -4,6 +4,8 @@
 //! The shell↔solid seam: which shell nodes sit on the retained solid and so
 //! become references of the continuity tie.
 
+use kofem_fem::count_as_f64;
+
 use crate::error::ShellizeError;
 use crate::geometry::{triangle_extent, Vec3};
 use crate::grid::TriangleGrid;
@@ -15,10 +17,6 @@ use crate::grid::TriangleGrid;
 ///
 /// # Errors
 /// A degenerate grid size.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "a triangle count far below 2^52, used as an averaging divisor"
-)]
 pub fn seam_shell_nodes(
     point: &impl Fn(usize) -> Vec3,
     shell_nodes: &[usize],
@@ -30,7 +28,9 @@ pub fn seam_shell_nodes(
     }
     let corners: Vec<[Vec3; 3]> = solid_boundary.iter().map(|tri| tri.map(point)).collect();
     let sum_extent: f64 = corners.iter().map(|corner| triangle_extent(*corner)).sum();
-    let cell = tolerance.max(sum_extent / corners.len() as f64).max(1e-9);
+    let cell = tolerance
+        .max(sum_extent / count_as_f64(corners.len()))
+        .max(1e-9);
     let grid = TriangleGrid::new(corners, cell)?;
     let tolerance2 = tolerance * tolerance;
     Ok(shell_nodes

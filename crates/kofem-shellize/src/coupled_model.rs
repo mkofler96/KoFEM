@@ -364,7 +364,7 @@ pub struct ShellNodeLocator {
 }
 
 const LOCATOR_CELL: f64 = 15.0;
-const LOCATOR_RINGS: i64 = 6;
+const LOCATOR_RINGS: i32 = 6;
 
 impl ShellNodeLocator {
     /// # Errors
@@ -385,11 +385,10 @@ impl ShellNodeLocator {
     /// # Errors
     /// [`ShellizeError::NoShellNodeNear`] when no shell node lies within the
     /// searched rings — mapping onto an arbitrary node would misplace a BC.
-    #[allow(clippy::cast_precision_loss, reason = "a ring count of at most 6")]
     pub fn nearest(&self, point: Vec3) -> Result<usize, ShellizeError> {
         for ring in 0..=LOCATOR_RINGS {
             let mut best: Option<(usize, f64)> = None;
-            for node in self.grid.candidates(point, ring, ring) {
+            for node in self.grid.candidates(point, ring.into(), ring.into()) {
                 let distance = dist2(point, self.pool[node]);
                 if best.is_none_or(|(_, current)| distance < current) {
                     best = Some((node, distance));
@@ -400,7 +399,7 @@ impl ShellNodeLocator {
             }
         }
         Err(ShellizeError::NoShellNodeNear {
-            radius: LOCATOR_RINGS as f64 * LOCATOR_CELL,
+            radius: f64::from(LOCATOR_RINGS) * LOCATOR_CELL,
             point_x: point[0],
             point_y: point[1],
             point_z: point[2],

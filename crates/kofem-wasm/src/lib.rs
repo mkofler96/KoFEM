@@ -49,7 +49,9 @@ use kofem_fem::{
     PreconditionerChoice, PreparedCoupled, PreparedTied, ReactionSummary, ShellSurface,
     StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
 };
-use kofem_fem::{corner_stress_tensors_thermal, thermal_load, thermal_strains_at_centres};
+use kofem_fem::{
+    corner_stress_tensors_thermal, count_as_f64, thermal_load, thermal_strains_at_centres,
+};
 use wasm_bindgen::prelude::*;
 
 use stiffness::{Loan, Stiffness};
@@ -76,26 +78,16 @@ fn flatten_reactions(summary: &ReactionSummary) -> Vec<f64> {
         out.extend_from_slice(&support.force);
         out.extend_from_slice(&support.moment);
         out.extend_from_slice(&support.centroid);
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "a vertex count is far below 2^52"
-        )]
-        out.push(support.vertices as f64);
+        out.push(count_as_f64(support.vertices));
     }
     out.extend_from_slice(&summary.applied);
     out.extend_from_slice(&summary.applied_on_supports);
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "vertex counts and support indices are far below 2^52"
-    )]
-    {
-        out.push(summary.nodal.len() as f64);
-        out.reserve(NODAL_STRIDE * summary.nodal.len());
-        for node in &summary.nodal {
-            out.push(node.support as f64);
-            out.extend_from_slice(&node.position);
-            out.extend_from_slice(&node.force);
-        }
+    out.push(count_as_f64(summary.nodal.len()));
+    out.reserve(NODAL_STRIDE * summary.nodal.len());
+    for node in &summary.nodal {
+        out.push(count_as_f64(node.support));
+        out.extend_from_slice(&node.position);
+        out.extend_from_slice(&node.force);
     }
     out
 }

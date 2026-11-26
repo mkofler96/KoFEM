@@ -51,6 +51,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::count::count_as_f64;
 use crate::error::FemError;
 
 /// One element face on a tied surface: its nodes in cyclic order (3 or 4),
@@ -491,7 +492,10 @@ impl<'a> MasterSurface<'a> {
                 nearest = nearest.min(gap);
             });
             // Every master not yet scanned is at least this far away.
-            #[allow(clippy::cast_precision_loss, reason = "a ring count is far below 2^52")]
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "rings follow the surfaces' extent, not the mesh size; a search that ends scans far fewer than 2^53"
+            )]
             let scanned = ring as f64 * self.grid.cell - self.max_radius;
             if scanned > reach || scanned > nearest + 2.0 * (slave.radius + self.max_radius) {
                 break;
@@ -683,8 +687,7 @@ fn combine(points: &[[f64; 3]], weights: &[f64]) -> [f64; 3] {
 }
 
 fn average(points: &[[f64; 3]]) -> [f64; 3] {
-    #[allow(clippy::cast_precision_loss, reason = "a face has 3 or 4 points")]
-    let share = 1.0 / points.len() as f64;
+    let share = 1.0 / count_as_f64(points.len());
     combine(points, &vec![share; points.len()])
 }
 
