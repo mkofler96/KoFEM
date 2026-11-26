@@ -15,6 +15,7 @@ use crate::{to_js, ElasticSolution};
 /// picked surfaces, given by their vertices. The solve finds the boundary
 /// faces of each and makes the finer side the slave.
 #[wasm_bindgen]
+#[derive(Default)]
 pub struct ContactPairs {
     pub(crate) sides: Vec<(Vec<u32>, Vec<u32>)>,
 }
@@ -24,7 +25,7 @@ impl ContactPairs {
     #[wasm_bindgen(constructor)]
     #[must_use]
     pub fn new() -> ContactPairs {
-        ContactPairs { sides: Vec::new() }
+        ContactPairs::default()
     }
 
     /// Add the pair between the surfaces of the vertices `side_a` and
@@ -37,12 +38,6 @@ impl ContactPairs {
     #[must_use]
     pub fn count(&self) -> usize {
         self.sides.len()
-    }
-}
-
-impl Default for ContactPairs {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
