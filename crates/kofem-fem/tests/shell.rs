@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! The Kirchhoff shell (CST + DKT) against closed-form references: the same
+//! The Kirchhoff shell (OPT + DKT) against closed-form references: the same
 //! cases and tolerances as the C++ engine's `engine/tests/shell_validation.cpp`,
 //! plus membrane and bending patch tests and rigid-body motion on distorted,
 //! tilted meshes.
@@ -135,6 +135,14 @@ fn assert_within(name: &str, got: f64, reference: f64, percent: f64) {
         error <= percent,
         "{name}: got {got:e}, reference {reference:e}, error {error:.3}% (tolerance {percent}%)"
     );
+}
+
+/// The facet's own normal at every corner: the drilling axes of a facet on
+/// its own.
+fn own_axes(corners: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let normal = cross(sub(corners[1], corners[0]), sub(corners[2], corners[0]));
+    let length = norm(normal);
+    [normal.map(|value| value / length); 3]
 }
 
 fn triangle_area(corners: [[f64; 3]; 3]) -> f64 {
@@ -271,6 +279,192 @@ fn membrane_tension_matches_bar_theory() {
     assert_within("membrane tension", mean, stress / young, 0.5);
 }
 
+// ── In-plane membrane with drilling rotations (KOF-453) ──────────────────────
+//
+// The membrane is Felippa's ANDES "OPT" triangle (C. A. Felippa, "A study of
+// optimal membrane triangles with drilling freedoms", CMAME 192 (2003)
+// 2125–2168): an Allman-type triangle whose corner drilling rotations are the
+// in-plane rotations of the displacement field.
+
+/// How a grid's quadrilateral cells are cut into triangles.
+#[derive(Clone, Copy)]
+enum Cut {
+    /// Two triangles along each cell's shorter diagonal.
+    ShortestDiagonal,
+    /// Four overlaid triangles of half the thickness, along both diagonals.
+    Overlaid,
+}
+
+/// Re-cut the cells of a `Model::grid` of `cells` (node (i, j) =
+/// i·(ny + 1) + j) after its nodes have been moved.
+fn recut(model: &mut Model, cells: [usize; 2], cut: Cut) {
+    let [nx, ny] = cells;
+    let id = |i: usize, j: usize| (i * (ny + 1) + j) as u32;
+    let full = model.thickness[0];
+    let mut triangles = Vec::new();
+    let mut thickness = Vec::new();
+    for i in 0..nx {
+        for j in 0..ny {
+            let (a0, a1, a2, a3) = (id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1));
+            let at = |node: u32| model.vertices[node as usize];
+            let length = |from: u32, to: u32| norm(sub(at(from), at(to)));
+            match cut {
+                Cut::ShortestDiagonal => {
+                    if length(a0, a2) <= length(a1, a3) {
+                        triangles.extend([a0, a1, a2, a0, a2, a3]);
+                    } else {
+                        triangles.extend([a0, a1, a3, a1, a2, a3]);
+                    }
+                    thickness.extend([full; 2]);
+                }
+                Cut::Overlaid => {
+                    triangles.extend([a0, a1, a2, a0, a2, a3, a0, a1, a3, a1, a2, a3]);
+                    thickness.extend([0.5 * full; 4]);
+                }
+            }
+        }
+    }
+    model.material_of_triangle = vec![0; thickness.len()];
+    model.triangles = triangles;
+    model.thickness = thickness;
+}
+
+/// Felippa's (2003) Example 1: a cantilever 32 long and 2 deep, h = 1,
+/// E = 768, ν = 1/4, under an end moment M = 100, so the beam-theory tip
+/// deflection M·L²/(2·E·I) is 100. The mesh is `along` × 2 units of four
+/// overlaid triangles; the root holds ux and θz at its three nodes and uy at
+/// the middle one, which leaves the Poisson contraction free. The moment is
+/// the linear end traction lumped on OPT's boundary field: ±50 on the top and
+/// bottom nodes, plus the drilling moments of its corner-rotation part,
+/// 3/2·(−1/16, 1/8, −1/16)·M, 3/2 being OPT's `α_b`.
+fn end_moment_tip(along: usize) -> f64 {
+    let cells = [along, 2];
+    let mut model = Model::grid([32.0, 2.0], cells, 1.0, material(768.0, 0.25));
+    recut(&mut model, cells, Cut::Overlaid);
+    let id = |i: usize, j: usize| i * 3 + j;
+    for node in 0..model.vertices.len() {
+        model.fix(node, &[2, 3, 4]);
+    }
+    for j in 0..3 {
+        model.fix(id(0, j), &[0, 5]);
+    }
+    model.fix(id(0, 1), &[1]);
+    model.load(id(along, 0), 0, 50.0);
+    model.load(id(along, 2), 0, -50.0);
+    for (j, moment) in [(0, -9.375), (1, 18.75), (2, -9.375)] {
+        model.load(id(along, j), 5, moment);
+    }
+    let (_, solution) = model.solve().expect("cantilever solves");
+    solution.dofs[6 * id(along, 2) + 1]
+}
+
+#[test]
+fn the_membrane_bends_in_plane_exactly_at_any_aspect_ratio() {
+    // Felippa (2003), Table 4: OPT gives 99.99, 99.99, 99.99, 99.96 and
+    // 100.07 on 32, 16, 8, 4 and 2 units along (aspect ratios 1 to 16). The
+    // bending energy is exact; the last digit depends on how the end traction
+    // is lumped, which is the 0.1 % band.
+    for along in [32, 16, 8, 4, 2] {
+        assert_within(
+            &format!("end moment, {along} × 2 units"),
+            end_moment_tip(along),
+            100.0,
+            0.1,
+        );
+    }
+}
+
+/// Cook's membrane as Felippa (2003) runs it: the tapered panel
+/// (0,0)–(48,44)–(48,60)–(0,44), E = 1, ν = 1/3, h = 1, translations held on
+/// x = 0, a unit shear spread over x = 48, cells cut along their shorter
+/// diagonal. Returns the vertical displacement of C, the middle of the loaded
+/// edge (`cells` even).
+fn cooks_membrane_tip(cells: usize) -> f64 {
+    let grid = [cells, cells];
+    let mut model = Model::grid([1.0, 1.0], grid, 1.0, material(1.0, 1.0 / 3.0));
+    for vertex in &mut model.vertices {
+        let [along, across, _] = *vertex;
+        let bottom = 44.0 * along;
+        let top = 44.0 + 16.0 * along;
+        *vertex = [48.0 * along, bottom + across * (top - bottom), 0.0];
+    }
+    recut(&mut model, grid, Cut::ShortestDiagonal);
+    let id = |i: usize, j: usize| i * (cells + 1) + j;
+    for node in 0..model.vertices.len() {
+        model.fix(node, &[2, 3, 4]);
+    }
+    for j in 0..=cells {
+        model.fix(id(0, j), &[0, 1]);
+        let weight = if j == 0 || j == cells { 0.5 } else { 1.0 };
+        model.load(id(cells, j), 1, weight / cells as f64);
+    }
+    let (_, solution) = model.solve().expect("Cook's membrane solves");
+    solution.dofs[6 * id(cells, cells / 2) + 1]
+}
+
+#[test]
+fn cooks_membrane_matches_the_published_opt_results() {
+    // Felippa (2003), Table 6, OPT: 20.56, 22.45, 23.43, 23.80 on 2×2 to
+    // 16×16 meshes, converging to 23.956.
+    for (cells, published) in [(2, 20.56), (4, 22.45), (8, 23.43), (16, 23.80)] {
+        assert_within(
+            &format!("Cook's membrane, {cells}×{cells}"),
+            cooks_membrane_tip(cells),
+            published,
+            0.05,
+        );
+    }
+}
+
+/// The number of pivots above `tolerance`·max|entry| that Gaussian
+/// elimination with full pivoting finds.
+fn rank<const N: usize>(matrix: &[[f64; N]; N], tolerance: f64) -> usize {
+    let mut work = *matrix;
+    let scale = work
+        .iter()
+        .flatten()
+        .fold(0.0_f64, |acc, value| acc.max(value.abs()));
+    let mut found = 0;
+    for step in 0..N {
+        let (mut pivot_row, mut pivot_col, mut best) = (step, step, 0.0);
+        for (row, entries) in work.iter().enumerate().skip(step) {
+            for (col, value) in entries.iter().enumerate().skip(step) {
+                if value.abs() > best {
+                    (pivot_row, pivot_col, best) = (row, col, value.abs());
+                }
+            }
+        }
+        if best <= tolerance * scale {
+            break;
+        }
+        found += 1;
+        work.swap(step, pivot_row);
+        for entries in &mut work {
+            entries.swap(step, pivot_col);
+        }
+        let pivot = work[step];
+        for entries in work.iter_mut().skip(step + 1) {
+            let factor = entries[step] / pivot[step];
+            for (entry, above) in entries.iter_mut().zip(&pivot).skip(step) {
+                *entry -= factor * above;
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn a_facet_has_exactly_the_six_rigid_modes_and_no_spurious_ones() {
+    let corners = [[0.1, 0.2, 0.3], [1.3, 0.1, 0.5], [0.4, 1.1, 0.9]];
+    let stiffness = facet_stiffness(
+        &corners,
+        &own_axes(&corners),
+        0.02,
+        &material(200_000.0, 0.3),
+    );
+    assert_eq!(rank(&stiffness, 1e-12), 18 - 6);
+}
+
 // ── Patch tests and rigid-body motion on a distorted, tilted mesh ────────────
 
 /// A 4×4 grid with its interior nodes moved off the grid lines, mapped onto a
@@ -347,32 +541,22 @@ fn interior_error(
     worst / scale
 }
 
-/// The rotation DOFs of a rigid motion with spin `spin` on a facet with unit
-/// normal `normal`: the spin without its normal part. The drilling (θz)
-/// stiffness is a small spring on the absolute normal rotation, decoupled from
-/// the in-plane translations (as in the C++ element), so a rigid turn about
-/// the normal leaves θz at rest rather than at the spin.
-fn rotation_dofs(spin: [f64; 3], normal: [f64; 3]) -> [f64; 3] {
-    let along = dot(spin, normal);
-    std::array::from_fn(|k| spin[k] - along * normal[k])
-}
-
 #[test]
 fn rigid_body_motion_strains_nothing() {
-    let (mut model, boundary, axes) = distorted_tilted_patch();
-    // u = c + ω × x, θ = ω less its normal part.
+    let (mut model, boundary, _) = distorted_tilted_patch();
+    // u = c + ω × x, θ = ω: the drilling DOF is the in-plane rotation, so a
+    // rigid turn about the normal turns it too.
     let offset = [1e-3, -2e-3, 5e-4];
     let spin = [3e-4, -1e-4, 2e-4];
-    let rotation = rotation_dofs(spin, axes[2]);
     let field = |point: [f64; 3]| -> [f64; 6] {
         let turn = cross(spin, point);
         [
             offset[0] + turn[0],
             offset[1] + turn[1],
             offset[2] + turn[2],
-            rotation[0],
-            rotation[1],
-            rotation[2],
+            spin[0],
+            spin[1],
+            spin[2],
         ]
     };
     let error = interior_error(&mut model, &boundary, &field);
@@ -382,15 +566,24 @@ fn rigid_body_motion_strains_nothing() {
 #[test]
 fn membrane_patch_test_reproduces_a_linear_field() {
     let (mut model, boundary, axes) = distorted_tilted_patch();
-    let [ex, ey, _] = axes;
-    // In-plane displacement linear in the in-plane coordinates; no bending and
-    // no drilling rotation (the drilling DOF is independent of the membrane).
+    let [ex, ey, normal] = axes;
+    // In-plane displacement linear in the in-plane coordinates, no bending,
+    // and the drilling DOF at the field's in-plane rotation
+    // ω = ½(∂v/∂x − ∂u/∂y) = ½(3e-4 + 5e-4) about the normal.
+    let spin = 4e-4;
     let field = |point: [f64; 3]| -> [f64; 6] {
         let (px, py) = (dot(point, ex), dot(point, ey));
         let along_x = 1e-3 + 2e-4 * px - 5e-4 * py;
         let along_y = -2e-3 + 3e-4 * px + 1e-4 * py;
         let global: [f64; 3] = std::array::from_fn(|k| along_x * ex[k] + along_y * ey[k]);
-        [global[0], global[1], global[2], 0.0, 0.0, 0.0]
+        [
+            global[0],
+            global[1],
+            global[2],
+            spin * normal[0],
+            spin * normal[1],
+            spin * normal[2],
+        ]
     };
     let error = interior_error(&mut model, &boundary, &field);
     assert!(
@@ -447,7 +640,12 @@ fn bending_patch_test_reproduces_constant_curvature() {
 #[test]
 fn facet_stiffness_is_symmetric_with_six_rigid_modes() {
     let corners = [[0.1, 0.2, 0.3], [1.3, 0.1, 0.5], [0.4, 1.1, 0.9]];
-    let stiffness = facet_stiffness(&corners, 0.02, &material(200_000.0, 0.3));
+    let stiffness = facet_stiffness(
+        &corners,
+        &own_axes(&corners),
+        0.02,
+        &material(200_000.0, 0.3),
+    );
     let largest = stiffness
         .iter()
         .flatten()
@@ -460,11 +658,6 @@ fn facet_stiffness_is_symmetric_with_six_rigid_modes() {
             );
         }
     }
-    let normal = {
-        let raw = cross(sub(corners[1], corners[0]), sub(corners[2], corners[0]));
-        let length = norm(raw);
-        raw.map(|value| value / length)
-    };
     // Three translations and three rotations about the global axes.
     for mode in 0..6 {
         let mut motion = [0.0; 18];
@@ -476,7 +669,7 @@ fn facet_stiffness_is_symmetric_with_six_rigid_modes() {
                 spin[mode - 3] = 1.0;
                 let turn = cross(spin, *corner);
                 motion[6 * node..6 * node + 3].copy_from_slice(&turn);
-                motion[6 * node + 3..6 * node + 6].copy_from_slice(&rotation_dofs(spin, normal));
+                motion[6 * node + 3..6 * node + 6].copy_from_slice(&spin);
             }
         }
         for (i, row) in stiffness.iter().enumerate() {
@@ -839,4 +1032,100 @@ fn bimaterial_strip_in_series_bends_by_both_halves() {
     let reference = moment * 0.5 * length * (1.0 / (steel * inertia) + 1.0 / (aluminium * inertia));
     assert_within("series bending rotation", rotation.abs(), reference, 0.5);
     assert_eq!(model.triangle_count(), 32);
+}
+
+// ── Drilling axes (KOF-453) ──────────────────────────────────────────────────
+
+fn normalized(vector: [f64; 3]) -> [f64; 3] {
+    let length = norm(vector);
+    vector.map(|value| value / length)
+}
+
+fn assert_axis(name: &str, got: [f64; 3], expected: [f64; 3]) {
+    let error = norm(sub(got, expected));
+    assert!(
+        error < 1e-12,
+        "{name}: drilling axis {got:?}, expected {expected:?}"
+    );
+}
+
+#[test]
+fn drilling_axes_follow_the_smooth_surface_and_stop_at_folds() {
+    // Facets 0 and 1 meet at 10° about the x axis along edge 0–1, a smooth
+    // surface; facet 2 folds down 90° from facet 0 along edge 0–2.
+    let tilt = 10.0_f64.to_radians();
+    let vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.5, -tilt.cos(), tilt.sin()],
+        [0.0, 0.5, -1.0],
+    ];
+    let flat: Vec<f64> = vertices.iter().flatten().copied().collect();
+    let triangles = [0, 1, 2, 1, 0, 3, 2, 4, 0];
+    let mesh = ShellMesh::new(
+        &flat,
+        &triangles,
+        &[0.01; 3],
+        &[0; 3],
+        vec![material(1000.0, 0.3)],
+    )
+    .expect("valid mesh");
+    let normal = |facet: usize| {
+        let corners = mesh.corners(facet);
+        normalized(cross(
+            sub(corners[1], corners[0]),
+            sub(corners[2], corners[0]),
+        ))
+    };
+    let area = |facet: usize| triangle_area(mesh.corners(facet));
+    let axes = mesh.drilling_normals();
+    // Node 0 and node 1 joins facets 0 and 1 smoothly: their area-weighted
+    // mean normal. Facet 2 keeps its own normal everywhere.
+    let weighted: [f64; 3] =
+        std::array::from_fn(|axis| area(0) * normal(0)[axis] + area(1) * normal(1)[axis]);
+    let smooth = normalized(weighted);
+    assert_axis("facet 0, node 0", axes[0][0], smooth);
+    assert_axis("facet 0, node 1", axes[0][1], smooth);
+    assert_axis("facet 1, node 1", axes[1][0], smooth);
+    assert_axis("facet 1, node 0", axes[1][1], smooth);
+    assert_axis("facet 0, node 2 (across the fold)", axes[0][2], normal(0));
+    for &axis in &axes[2] {
+        assert_axis("folded facet 2", axis, normal(2));
+    }
+    // Facet 1's own normal at its free corner, node 3.
+    assert_axis("facet 1, node 3", axes[1][2], normal(1));
+}
+
+#[test]
+fn drilling_axes_ignore_how_each_facet_is_wound() {
+    // The same smooth pair with facet 1 wound the other way: the shared axis
+    // is the same line, turned to each facet's own side.
+    let tilt = 10.0_f64.to_radians();
+    let vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.5, -tilt.cos(), tilt.sin()],
+    ];
+    let flat: Vec<f64> = vertices.iter().flatten().copied().collect();
+    let mesh = ShellMesh::new(
+        &flat,
+        &[0, 1, 2, 0, 1, 3],
+        &[0.01; 2],
+        &[0; 2],
+        vec![material(1000.0, 0.3)],
+    )
+    .expect("valid mesh");
+    let axes = mesh.drilling_normals();
+    assert_axis(
+        "node 0, opposite windings",
+        axes[1][0],
+        axes[0][0].map(|value| -value),
+    );
+    assert_axis(
+        "node 1, opposite windings",
+        axes[1][1],
+        axes[0][1].map(|value| -value),
+    );
 }

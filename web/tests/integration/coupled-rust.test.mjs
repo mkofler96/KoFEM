@@ -27,8 +27,15 @@
 //     (prepareAutoCoupledSolve), as the worker solves both;
 //   - the crane-holder shell showcase (examples/shell-coupling): the thin
 //     holder as shells, tied to the solid pin and hook;
-//   - every preconditioner of the Rust solve on one model, and payloads both
-//     must refuse.
+//   - every preconditioner of the Rust solve on one model, against the AMG
+//     solve, and payloads both must refuse.
+//
+// The hand-mixed wall, the KOF-215 transition and the fin load their shell
+// membranes in plane. Since the OPT drilling membrane replaced the C++ CST
+// membrane (KOF-453) their fields differ from the stored C++ results by
+// design, so for them only whether both solve and the shape of their results
+// are compared; the transition's physics is still checked against the
+// all-solid model.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { fileURLToPath } from "url";
@@ -105,7 +112,8 @@ const maxDifference = (lhs, rhs) => {
 // argument set, compared. `solved` returns the { cpp, rust } pair of
 // solveBoth, which the describe around it solves in beforeAll. With
 // `fields: false` only whether both solve and the shape of their results
-// are compared, for a model whose stored C++ fields are known to be wrong.
+// are compared, for a model whose stored C++ fields are known to be wrong or
+// whose shell membrane the OPT element changed (KOF-453).
 function agreementTests(solved, { fields = true } = {}) {
   test("C++ solves the model", () => {
     expect(solved().cpp).not.toHaveProperty("error");
@@ -124,24 +132,41 @@ function agreementTests(solved, { fields = true } = {}) {
 
   if (!fields) return;
 
-  // Both stop on a 1e-10 relative force residual; the fields must agree to
-  // well within what that leaves.
-  test("displacements agree", () => {
+  fieldTests(() => {
     const { cpp, rust } = solved();
-    const displacement = maxDifference(cpp.displacements, rust.displacements);
+    return { reference: cpp, result: rust };
+  });
+}
+
+// Two solves of one model whose fields must agree: both stop on a 1e-10
+// relative force residual, so their fields agree to well within what that
+// leaves. `pair` returns { reference, result }.
+function fieldTests(pair) {
+  test("displacements agree", () => {
+    const { reference, result } = pair();
+    const displacement = maxDifference(
+      reference.displacements,
+      result.displacements,
+    );
     expect(displacement.peak).toBeGreaterThan(0);
     expect(displacement.relative).toBeLessThan(1e-6);
   });
 
   test("solid von Mises stresses agree", () => {
-    const { cpp, rust } = solved();
-    const solidStress = maxDifference(cpp.von_mises_tets, rust.von_mises_tets);
+    const { reference, result } = pair();
+    const solidStress = maxDifference(
+      reference.von_mises_tets,
+      result.von_mises_tets,
+    );
     expect(solidStress.relative).toBeLessThan(1e-5);
   });
 
   test("shell von Mises stresses agree", () => {
-    const { cpp, rust } = solved();
-    const shellStress = maxDifference(cpp.von_mises_tris, rust.von_mises_tris);
+    const { reference, result } = pair();
+    const shellStress = maxDifference(
+      reference.von_mises_tris,
+      result.von_mises_tris,
+    );
     expect(shellStress.relative).toBeLessThan(1e-5);
   });
 }
@@ -328,7 +353,7 @@ describe("Hand-mixed block + wall: two solid materials, clamp, drive, forces, mo
     both = await solveBoth(inputs);
   });
 
-  agreementTests(() => both);
+  agreementTests(() => both, { fields: false });
 
   test("the result maps onto every store node and element", () => {
     const mapped = mapMixedResult(model, inputs.model, both.rust);
@@ -400,7 +425,7 @@ describe("Hand-mixed block + wall: two solid materials, clamp, drive, forces, mo
       expect(JSON.parse(twoShellInputs.matJson).shell).toHaveLength(2);
     });
 
-    agreementTests(() => shellBoth);
+    agreementTests(() => shellBoth, { fields: false });
 
     test("per-body shell materials change the result", () => {
       const changed = maxDifference(
@@ -535,7 +560,7 @@ for (const wallStep of [3, 4]) {
         solid = solveInCpp(solidCase.args);
       });
 
-      agreementTests(() => both);
+      agreementTests(() => both, { fields: false });
 
       const measures = () => ({
         expected: junctionMeasures(
@@ -554,13 +579,20 @@ for (const wallStep of [3, 4]) {
         ),
       });
 
-      test("the Rust junction peak is within 1 % of the all-solid reference", () => {
+      // The peak sits on the wall's re-entrant base corner, a singular point:
+      // on the all-solid mesh it reads 0.72, 0.83 and 0.92 at refinements 2,
+      // 3 and 4, so it only compares models on one mesh. Away from it the
+      // linear-tetrahedron wall is stiff in its plane: refinement 2 holds the
+      // tip 1.0 to 1.9 % below its refinement-4 value, and the OPT shell sits
+      // closer to that value (KOF-453). The far wall's two discretisations
+      // differ by that much, and so may the load they bring to the corner.
+      test("the Rust junction peak is within 2 % of the all-solid reference", () => {
         const { expected, actual } = measures();
         const ratio = actual.peak / expected.peak;
         expect(
           Math.abs(ratio - 1),
           `junction peak, Rust mixed / all-solid: ${ratio}`,
-        ).toBeLessThan(0.01);
+        ).toBeLessThan(0.02);
       });
 
       test("the Rust tip displacement is within 2 % of the all-solid reference", () => {
@@ -671,7 +703,7 @@ describe("fin_two_parts.step, the fin marked Shell", () => {
       expect(mixed).not.toBeNull();
     });
 
-    agreementTests(() => both);
+    agreementTests(() => both, { fields: false });
   });
 
   // Solve time: the all-tet model with the fin marked Shell.
@@ -705,7 +737,7 @@ describe("fin_two_parts.step, the fin marked Shell", () => {
       expect(auto).not.toBeNull();
     });
 
-    agreementTests(() => both);
+    agreementTests(() => both, { fields: false });
   });
 });
 
@@ -816,19 +848,21 @@ describe("Crane holder shell showcase", () => {
 // ── 5. Every preconditioner, and refusals ────────────────────────────────────
 describe("every preconditioner of the Rust solve", () => {
   let inputs = null;
-  beforeAll(() => {
+  let amg = null;
+  beforeAll(async () => {
     inputs = buildCoupledEngineInputs(handMixedModel(), silent);
+    amg = await solveInRust(inputs);
   });
 
   describe.each(["incomplete-cholesky", "gauss-seidel"])(
-    "Hand-mixed model with %s",
+    "Hand-mixed model with %s, against AMG",
     (preconditioner) => {
-      let both = null;
+      let result = null;
       beforeAll(async () => {
-        both = await solveBoth(inputs, preconditioner);
+        result = await solveInRust(inputs, preconditioner);
       });
 
-      agreementTests(() => both);
+      fieldTests(() => ({ reference: amg, result }));
     },
   );
 });

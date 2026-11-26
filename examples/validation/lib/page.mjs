@@ -896,7 +896,7 @@ const ELEMENTS = {
     2: "quadratic 10-node tetrahedra (P2)",
   },
   CTRIA3: {
-    1: "linear 3-node shell triangles (CST membrane, DKT bending)",
+    1: "3-node shell triangles (OPT drilling membrane, DKT bending)",
   },
 };
 

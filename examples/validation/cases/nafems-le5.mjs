@@ -52,9 +52,9 @@
 // Read-out: σzz at A on the shell's mid-surface, as a probe placed there by
 // its coordinates reads it.
 //
-// Tolerance: 3 %. The flat CST + DKT triangles converge on the target from
-// below: −8.0 %, −3.0 %, −1.7 % and −0.9 % on meshes of 200, 100, 70 and
-// 50 mm. The example meshes at 70 mm.
+// Tolerance: 3 %. The flat OPT + DKT triangles read +1.1 %, +1.3 %, +1.3 %
+// and +1.3 % on meshes of 200, 100, 70 and 50 mm: converged at 100 mm, a
+// percent above the target. The example meshes at 70 mm.
 
 import { prismStep } from "../../gallery/step-prism.mjs";
 import { APP_STEEL } from "../lib/recipe.mjs";

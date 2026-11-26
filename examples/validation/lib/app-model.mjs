@@ -341,7 +341,7 @@ export function buildMeshStats(build) {
       `mesh stats: a recipe build is all tetrahedra or all shell facets, got ${[...types].join(", ")}`,
     );
   if (types.has("CTRIA3")) {
-    // A DKT/CST facet is linear whatever order the mesh panel shows.
+    // A shell facet has corner nodes only, whatever order the mesh panel shows.
     const shellNodes = build.nodes.length;
     return {
       order: 1,

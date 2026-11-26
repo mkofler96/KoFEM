@@ -46,7 +46,7 @@
               "https://kofem.org/examples/nafems-le5/nafems-le5-z-section-diagram.png",
               "https://kofem.org/examples/nafems-le5/nafems-le5-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-25",
+            "dateModified": "2026-11-26",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -905,7 +905,7 @@
           <img src="/examples/nafems-le5.png" width="1200" height="488" alt="NAFEMS LE5: Z-section cantilever: von mises stress on the deformed shape, displacements drawn 20 times enlarged" />
           <p class="viewer-hint" hidden></p>
         </div>
-        <div class="colorbar"><span data-legend="min">9.73&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">204&nbsp;MPa</span></div>
+        <div class="colorbar"><span data-legend="min">11.3&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">170&nbsp;MPa</span></div>
         <figcaption><span data-legend="name">Von Mises stress</span>, deformed shape, displacements drawn 20 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -922,8 +922,8 @@
           <tbody>
             <tr>
               <td class="num">−108.00&nbsp;MPa</td>
-              <td class="num"><strong data-testid="fe-value">−106.19&nbsp;MPa</strong></td>
-              <td class="num">−1.68&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">−109.40&nbsp;MPa</strong></td>
+              <td class="num">+1.30&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -970,10 +970,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 70 mm maximum element size: 19,270 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 70 mm maximum element size: 19,270 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
           <tr><th scope="row">Unknowns</th><td>9,838 nodes, 59,028 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-ec0c19ec8bfc); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-eb6356518f17</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-724e4e1365f1); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-32198cb04210</td></tr>
         </table>
       </div>
         <p>The beam is imported as one solid, its end face cut into web and
@@ -992,8 +992,8 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>axial stress at A, mid-surface</td></tr>
           <tr><th scope="row">Reference</th><td>NAFEMS LE5 target = −108.00&nbsp;MPa <span class="meta">(NAFEMS TNSB Rev. 3 (1990), test LE5)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>−106.19&nbsp;MPa</td></tr>
-          <tr><th scope="row">Difference</th><td>−1.68&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>−109.40&nbsp;MPa</td></tr>
+          <tr><th scope="row">Difference</th><td>+1.30&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="nafems-le5">
@@ -1003,7 +1003,7 @@
           <picture class="figure-image theme-light conv"><source srcset="/examples/nafems-le5/nafems-le5-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE5, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/nafems-le5/nafems-le5-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE5, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>The axial stress at A approaches NAFEMS' value from below as the mesh is refined, within a percent at 50 mm.</p>
+        <p>The axial stress at A settles about a percent above NAFEMS' value from the coarsest mesh on.</p>
         <p>The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.</p>
         <details>
           <summary>Data</summary>
@@ -1023,29 +1023,29 @@
                   <td>Shell (linear)</td>
                   <td>200 mm</td>
                   <td class="num">7,686</td>
-                  <td class="num">−99.350&nbsp;MPa</td>
-                  <td class="num">−8.01&nbsp;%</td>
+                  <td class="num">−109.22&nbsp;MPa</td>
+                  <td class="num">+1.13&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>100 mm</td>
                   <td class="num">28,758</td>
-                  <td class="num">−104.78&nbsp;MPa</td>
-                  <td class="num">−2.98&nbsp;%</td>
+                  <td class="num">−109.39&nbsp;MPa</td>
+                  <td class="num">+1.29&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>70 mm (this example)</td>
                   <td class="num">59,028</td>
-                  <td class="num">−106.19&nbsp;MPa</td>
-                  <td class="num">−1.68&nbsp;%</td>
+                  <td class="num">−109.40&nbsp;MPa</td>
+                  <td class="num">+1.30&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>50 mm</td>
                   <td class="num">111,648</td>
-                  <td class="num">−107.01&nbsp;MPa</td>
-                  <td class="num">−0.92&nbsp;%</td>
+                  <td class="num">−109.42&nbsp;MPa</td>
+                  <td class="num">+1.32&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1054,9 +1054,9 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM reads −1.68&nbsp;% from the NAFEMS target. The
-        convergence study shows the shell approaching it from below as the
-        mesh is refined.</p>
+        <p>KoFEM reads +1.30&nbsp;% from the NAFEMS target. The
+        convergence study shows the shell settled at that value from the
+        coarsest mesh on.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>In the app: <a href="/app/?example=nafems-le5" data-testid="reproduce-open">open the model</a>, with its supports, loads and settings.</p>

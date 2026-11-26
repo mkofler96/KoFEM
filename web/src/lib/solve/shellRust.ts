@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Pure-shell (Kirchhoff CST + DKT) static solve through the Rust
+// Pure-shell (Kirchhoff OPT + DKT) static solve through the Rust
 // finite-element module (crates/kofem-wasm ShellModel). It reads exactly the
 // payload the C++ engine's solve_shell reads — { mesh, mat_json, bcs_json },
 // built by buildShellEngineInputs or preparePureShellSolve — and returns the

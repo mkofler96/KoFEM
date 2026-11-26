@@ -61,7 +61,7 @@ export default {
       shell node’s translations and rotations. Rotations exist only on shell
       nodes and coupling reference points; a solid-only node has none. The
       app assembles the linear tetrahedral solid stiffness and the
-      <a href="/theory/shells/formulation/#stiffness">CST/DKT shells</a> in its
+      <a href="/theory/shells/formulation/#stiffness">OPT/DKT shells</a> in its
       Rust solver module and solves the reduced system there.</p>
     <p>A constraint expresses dependent coefficients as linear combinations of
       independent coefficients. Write the full vector as

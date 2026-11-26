@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Serves the analyses in examples/unvalidated/ at the URLs the app's
-// `/app/?example=<id>` loader fetches. They are regression fixtures, not
-// gallery examples, so they are not in examples/gallery/site/ and kofem.org never ships
-// them (examples/unvalidated/crane-hook/README.md).
+// `/app/?example=<id>` loader fetches, for tests of how the app restores a
+// multibody analysis. Their results are not validated, so no test compares a
+// solve against them (examples/unvalidated/crane-hook/README.md).
 
 import type { Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -13,11 +13,6 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CRANE_DIR = join(here, "../../../examples/unvalidated/crane-hook");
-
-// The coupled crane: thin holder as shells, pin and hook as solids. It carries
-// no geometry, which ?example= refuses, so a test opens it as a saved analysis
-// file instead.
-export const UNVALIDATED_CRANE_SHELL = join(CRANE_DIR, "crane-hook-shell.vtu");
 
 // id → the files the loader asks for: the .vtu, and the STEP it was saved
 // from, served as <id>.model.step (the geometry the .vtu's CAD faces refer

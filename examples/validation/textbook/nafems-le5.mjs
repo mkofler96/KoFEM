@@ -40,7 +40,7 @@ export default {
         triangles.</p>`,
   discussion: ({ row, pct }) => `
         <p>KoFEM reads ${pct(row.errPct)} from the NAFEMS target. The
-        convergence study shows the shell approaching it from below as the
-        mesh is refined.</p>`,
+        convergence study shows the shell settled at that value from the
+        coarsest mesh on.</p>`,
   references: [REF.nafems],
 };

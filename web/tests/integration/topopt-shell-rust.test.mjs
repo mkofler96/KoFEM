@@ -306,11 +306,21 @@ describe("shell topology optimization: Rust against the C++ engine", () => {
   });
 
   test("min_volume at the min_compliance optimum matches", async () => {
+    // The limit is part of the stored C++ call's inputs, so it stays the
+    // value it was recorded with: the min-compliance optimum's compliance as
+    // the Rust solve gave it then. A later element may reach the same optimum
+    // in different last bits (KOF-453), which would leave the stored call
+    // unmatched, so the optimum is checked against it instead.
     const reference = inRust("shell", plate(), PLATE_SETTINGS);
+    const complianceLimit = 58.42887254130326;
+    expect(
+      Math.abs(reference.history.at(-1).compliance - complianceLimit) /
+        complianceLimit,
+    ).toBeLessThan(1e-5);
     const settings = {
       ...PLATE_SETTINGS,
       objective: "min_volume",
-      constraints: { complianceLimit: reference.history.at(-1).compliance },
+      constraints: { complianceLimit },
       maxIterations: 60,
       passive: { solid: [0, 1, 2, 3], void: [300] },
     };

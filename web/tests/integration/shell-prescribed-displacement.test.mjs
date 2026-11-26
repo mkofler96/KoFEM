@@ -17,12 +17,13 @@
 // Setup: in-plane (membrane) extension of a flat strip [0,L]x[0,b] in the z = 0
 // plane, driven by displacement only, with no applied load. Symmetry rollers
 // Ux = 0 on x = 0 and Uy = 0 on y = 0, a NON-ZERO prescribed Ux = δ on the x = L
-// edge, and the out-of-plane DOFs (w, θx, θy) plus the stiffness-free drilling
-// DOF θz pinned everywhere so this is the pure CST membrane problem. The exact
-// solution is the linear field
+// edge, and the out-of-plane DOFs (w, θx, θy) plus the drilling DOF θz pinned
+// everywhere so this is a pure membrane problem. The exact solution is the
+// linear field
 //   ux = εx·x,  uy = −ν·εx·y,   εx = δ/L,
-// independent of E and t (a pure-displacement boundary-value problem), which the
-// constant-strain triangle reproduces exactly. The x = L edge must reach ux ≈ δ;
+// independent of E and t (a pure-displacement boundary-value problem); its
+// in-plane rotation is zero, so pinning θz is exact, and the membrane passes
+// the patch test, so it reproduces the field exactly. The x = L edge must reach ux ≈ δ;
 // a binary without shell prescribed_dofs support leaves it at zero.
 
 import { beforeAll, describe, expect, test } from "bun:test";
@@ -55,8 +56,7 @@ for (let i = 0; i < nx; i++)
 
 // Zero-Dirichlet set, unioned per vertex: the out-of-plane and drilling DOFs
 // everywhere (a flat plate loaded in its own plane has no bending action, and
-// DKT+CST carries no drilling stiffness, so those would otherwise be singular),
-// plus the two symmetry rollers.
+// the field has no in-plane rotation), plus the two symmetry rollers.
 const zeroByVertex = new Map();
 const addZero = (ids, dofs) =>
   ids.forEach((i) => {
@@ -131,7 +131,7 @@ describe("shell membrane strip driven by a prescribed displacement", () => {
     ).toBeLessThan(0.01);
   });
 
-  // The CST reproduces the linear extension field exactly, so midspan lands on
+  // The membrane reproduces the linear extension field exactly, so midspan lands on
   // δ/2: proof the whole field is driven, not just the constrained edge.
   test("midspan follows the linear extension field (ux ≈ δ/2)", () => {
     const uxMid = displacement(mid, 0);

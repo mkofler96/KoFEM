@@ -32,10 +32,10 @@
 //
 // Read-out: σzz on the mid-surface at K = (1000, 0, 0). The meridian is
 // vertical at the waist, so σzz there is the meridional stress; σyy at K is
-// the hoop stress, which reads 49.6, 49.8 and 50.0 MPa on the meshes below.
+// the hoop stress.
 //
-// Tolerance: 3 %. σzz reads −49.86, −50.10 and −50.00 MPa on meshes of 50,
-// 25 and 12.5 mm (2 000 to 29 000 triangles): within 0.3 % throughout.
+// Tolerance: 3 %. σzz reads −50.30, −50.07 and −50.03 MPa on meshes of 50,
+// 25 and 12.5 mm (2 000 to 29 000 triangles): within 0.6 % throughout.
 
 import { hyperboloidShellStep } from "../../gallery/step-revolve.mjs";
 import { APP_STEEL } from "../lib/recipe.mjs";

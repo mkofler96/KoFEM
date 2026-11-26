@@ -30,6 +30,8 @@ export const REF = {
   cmpw: "R. D. Cook, D. S. Malkus, M. E. Plesha and R. J. Witt, <cite>Concepts and Applications of Finite Element Analysis</cite>, 4th ed., Wiley, 2002.",
   batoz:
     "J.-L. Batoz, K.-J. Bathe and L.-W. Ho, “A study of three-node triangular plate bending elements”, <cite>International Journal for Numerical Methods in Engineering</cite> 15 (1980) 1771–1812.",
+  felippa2003:
+    "C. A. Felippa, “A study of optimal membrane triangles with drilling freedoms”, <cite>Computer Methods in Applied Mechanics and Engineering</cite> 192 (2003) 2125–2168.",
   schoeberl:
     "J. Schöberl, “NETGEN: An advancing front 2D/3D-mesh generator based on abstract rules”, <cite>Computing and Visualization in Science</cite> 1 (1997) 41–52.",
   bendsoe:
