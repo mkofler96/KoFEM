@@ -29,6 +29,7 @@ pub mod material;
 pub mod mesh;
 pub mod mesh_outline;
 pub mod mortar;
+pub mod nonlinear;
 pub mod reactions;
 pub mod rigid_body;
 pub mod section;

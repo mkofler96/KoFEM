@@ -214,4 +214,30 @@ pub enum FemError {
     TopologyInput { reason: String },
     #[error("mesh convergence: {reason}")]
     Convergence { reason: String },
+    #[error(
+        "Newton increment {increment} of {increments} did not converge: relative residual \
+         {relative_residual:e} after {iterations} iterations (target {target:e})"
+    )]
+    NewtonNotConverged {
+        increment: usize,
+        increments: usize,
+        iterations: usize,
+        relative_residual: f64,
+        target: f64,
+    },
+    #[error(
+        "Newton increment {increment}, iteration {iteration}: the tangent solve failed: {reason}"
+    )]
+    TangentSolve {
+        increment: usize,
+        iteration: usize,
+        reason: String,
+    },
+    #[error(
+        "the Newton solve has not finished: it stands at increment {increment}, iteration \
+         {iteration}"
+    )]
+    NewtonUnfinished { increment: usize, iteration: usize },
+    #[error("nonlinear solve: {reason}")]
+    NonlinearInput { reason: String },
 }
