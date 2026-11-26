@@ -3,7 +3,8 @@
 
 import { create } from "zustand";
 import { INTL_TAGS, pickLocale, type Locale } from "./locale";
-import type { AnyCatalog } from "./messages";
+import { inLocale, type AnyCatalog } from "./messages";
+import { loadLocale } from "./loadLocale";
 
 const LOCALE_KEY = "kofem.locale";
 
@@ -30,12 +31,22 @@ function markDocument(locale: Locale): void {
 
 interface LocaleState {
   locale: Locale;
-  setLocale: (locale: Locale) => void;
+  // Switches once the language's text has arrived; rejects, keeping the
+  // current language, when it cannot be fetched.
+  setLocale: (locale: Locale) => Promise<void>;
 }
 
+// The latest language asked for: a slower fetch of an earlier pick must not
+// switch the app after it.
+let requested: Locale | null = null;
+
+// The app's entry loads this language before it renders (main.tsx).
 export const useLocaleStore = create<LocaleState>((set) => ({
   locale: pickLocale(storedLocale(), browserLanguages()),
-  setLocale: (locale) => {
+  setLocale: async (locale) => {
+    requested = locale;
+    await loadLocale(locale);
+    if (requested !== locale) return;
     try {
       localStorage.setItem(LOCALE_KEY, locale);
     } catch {
@@ -54,13 +65,13 @@ export function useLocale(): Locale {
 
 // The catalog's messages in the current language, re-rendering on a change.
 export function useT<C extends AnyCatalog>(catalog: C): C[Locale] {
-  return catalog[useLocale()];
+  return inLocale(catalog, useLocale());
 }
 
 // The same outside React: text a store action or a library function builds
 // is in the language current when it is built.
 export function tr<C extends AnyCatalog>(catalog: C): C[Locale] {
-  return catalog[useLocaleStore.getState().locale];
+  return inLocale(catalog, useLocaleStore.getState().locale);
 }
 
 // For `toLocaleString` and `Intl` number formats in the current language.

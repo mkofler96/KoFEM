@@ -106,6 +106,7 @@ import {
 } from "../lib/solve/topOptRust.js";
 import { elementOrderOf } from "../lib/solve/messageDefaults.js";
 import { useLocaleStore } from "../i18n/useLocale";
+import { loadLocale } from "../i18n/loadLocale";
 import { inEnglish } from "../i18n/english";
 import type { Locale } from "../i18n/locale";
 
@@ -1095,7 +1096,8 @@ interface WorkerRequest {
   id: number;
   type: string;
   payload: unknown;
-  // The app's language; absent from the engine's start-up "init".
+  // The app's language; absent from a CG continuation, which goes on in the
+  // language of the solve it continues.
   locale?: Locale;
 }
 
@@ -1223,9 +1225,16 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
   });
 }
 
+// The worker translates in the language the request was sent in, once that
+// language's text has arrived (KOF-471).
+async function speak(locale: Locale | undefined): Promise<void> {
+  if (locale === undefined) return;
+  await loadLocale(locale);
+  useLocaleStore.setState({ locale });
+}
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { id, type, payload, locale } = event.data;
-  if (locale !== undefined) useLocaleStore.setState({ locale });
   // Asyncify has suspended WASM. Only its matching decision may resume it;
   // no other request may enter the engine while its C++ stack is retained.
   if (type === "cg_continue") {
@@ -1234,7 +1243,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   }
   let ownsTask = false;
   try {
-    await ensureInit();
+    // The engine loads while the request's language arrives; nothing is
+    // translated before both have settled.
+    const [engine, language] = await Promise.allSettled([
+      ensureInit(),
+      speak(locale),
+    ]);
+    if (language.status === "rejected") throw language.reason;
+    if (engine.status === "rejected") throw engine.reason;
     if (activeTask !== null)
       throw new Error("The solver worker is busy with another operation");
     activeTask = id;

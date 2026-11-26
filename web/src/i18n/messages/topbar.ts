@@ -109,6 +109,20 @@ export const topbarMessages = defineMessages({
     es: "Idioma",
     pt: "Idioma",
   },
+  languageNotLoaded: {
+    en: (language: string) =>
+      `Could not load ${language}. Check your connection and try again.`,
+    de: (language: string) =>
+      `${language} konnte nicht geladen werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.`,
+    fr: (language: string) =>
+      `Impossible de charger ${language}. Vérifiez votre connexion et réessayez.`,
+    it: (language: string) =>
+      `Impossibile caricare ${language}. Controlla la connessione e riprova.`,
+    es: (language: string) =>
+      `No se pudo cargar ${language}. Comprueba tu conexión e inténtalo de nuevo.`,
+    pt: (language: string) =>
+      `Não foi possível carregar ${language}. Verifique sua conexão e tente novamente.`,
+  },
   siteMenu: {
     en: "Site menu",
     de: "Seitenmenü",

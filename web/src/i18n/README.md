@@ -46,6 +46,18 @@ the store or a saved file holds (result type ids such as `"Von Mises stress"`,
 element types, units, `data-testid`s, analytics parameters) stay as they are,
 and are translated only where they are displayed.
 
+## Loading
+
+The app downloads only the language it speaks (KOF-471). Catalogs stay
+written as above; the app's build (`vite-locales.ts`) keeps each message's
+English in the catalog and moves every other language into one chunk per
+language (`locales/<xx>.ts`). `main.tsx` loads the visitor's language before
+the workspace renders, Settings loads a language before switching to it, and
+the solver worker loads the language each request names before it handles
+the request, so `tr()` stays synchronous. A language that fails to load is
+reported as such; the app never shows English in its place. The bun tests
+read the catalogs as written, with every language.
+
 ## Changing text
 
 `translations.lock.json` records a fingerprint of every message in every
