@@ -727,23 +727,36 @@ impl DenseCholesky {
     }
 }
 
+/// What the three unknowns of a node block of the system are.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NodeBlock {
+    /// The node's translations x, y, z.
+    Translation,
+    /// Three rotations (a coupling reference point's rotations): the block
+    /// does not move under a translation and turns by the mode's angle under
+    /// a rotation; its coordinates are not used.
+    Rotation,
+    /// The node's translation along each row of the frame, an orthonormal
+    /// basis (Wohlmuth's rotated basis of a contact node).
+    Frame([[f64; 3]; 3]),
+}
+
 /// The six rigid-body modes at every node, centred on the centroid and scaled
 /// by the RMS radius so that translations and rotations have similar size.
 /// Rows of constrained unknowns are zero: the coarse space must not move them.
-/// A node flagged in `rotation_nodes` holds three rotations instead of three
-/// translations (a coupling reference point's rotations): it does not move
-/// under a translation and turns by the mode's angle under a rotation.
+/// `blocks[n]` says what node n's unknowns are; an empty slice makes every
+/// node a [`NodeBlock::Translation`].
 fn rigid_body_modes(
     coordinates: &[[f64; 3]],
-    rotation_nodes: &[bool],
+    blocks: &[NodeBlock],
     constrained: &[bool],
 ) -> Vec<[f64; MODES]> {
-    let is_rotation = |node: usize| rotation_nodes.get(node).copied().unwrap_or(false);
+    let block_of = |node: usize| blocks.get(node).copied().unwrap_or(NodeBlock::Translation);
     let translation_nodes = || {
         coordinates
             .iter()
             .enumerate()
-            .filter(|&(node, _)| !is_rotation(node))
+            .filter(|&(node, _)| block_of(node) != NodeBlock::Rotation)
             .map(|(_, point)| point)
     };
     #[allow(clippy::cast_precision_loss, reason = "a node count is far below 2^52")]
@@ -766,19 +779,35 @@ fn rigid_body_modes(
     let scale = if radius > 0.0 { 1.0 / radius } else { 1.0 };
     let mut modes = vec![[0.0; MODES]; 3 * coordinates.len()];
     for (node, point) in coordinates.iter().enumerate() {
-        if is_rotation(node) {
-            // A rotation mode of angle `scale` about each axis (the scaled
-            // positions make the translation-node columns that rotation).
-            modes[3 * node] = [0.0, 0.0, 0.0, scale, 0.0, 0.0];
-            modes[3 * node + 1] = [0.0, 0.0, 0.0, 0.0, scale, 0.0];
-            modes[3 * node + 2] = [0.0, 0.0, 0.0, 0.0, 0.0, scale];
-            continue;
-        }
+        let frame = match block_of(node) {
+            NodeBlock::Rotation => {
+                // A rotation mode of angle `scale` about each axis (the scaled
+                // positions make the translation-node columns that rotation).
+                modes[3 * node] = [0.0, 0.0, 0.0, scale, 0.0, 0.0];
+                modes[3 * node + 1] = [0.0, 0.0, 0.0, 0.0, scale, 0.0];
+                modes[3 * node + 2] = [0.0, 0.0, 0.0, 0.0, 0.0, scale];
+                continue;
+            }
+            NodeBlock::Translation => None,
+            NodeBlock::Frame(frame) => Some(frame),
+        };
         let [px, py, pz] = [0, 1, 2].map(|axis| (point[axis] - centre[axis]) * scale);
         // Columns: translations x, y, z; rotations about x, y, z.
-        modes[3 * node] = [1.0, 0.0, 0.0, 0.0, pz, -py];
-        modes[3 * node + 1] = [0.0, 1.0, 0.0, -pz, 0.0, px];
-        modes[3 * node + 2] = [0.0, 0.0, 1.0, py, -px, 0.0];
+        let cartesian = [
+            [1.0, 0.0, 0.0, 0.0, pz, -py],
+            [0.0, 1.0, 0.0, -pz, 0.0, px],
+            [0.0, 0.0, 1.0, py, -px, 0.0],
+        ];
+        for component in 0..3 {
+            modes[3 * node + component] = match frame {
+                None => cartesian[component],
+                Some(frame) => std::array::from_fn(|mode| {
+                    (0..3)
+                        .map(|axis| frame[component][axis] * cartesian[axis][mode])
+                        .sum()
+                }),
+            };
+        }
     }
     for (row, &fixed) in constrained.iter().enumerate() {
         if fixed {
@@ -834,26 +863,25 @@ impl SmoothedAggregation {
         constrained: &[bool],
         settings: AmgSettings,
     ) -> Result<Self, FemError> {
-        Self::with_rotation_nodes(matrix, coordinates, &[], constrained, settings)
+        Self::with_node_blocks(matrix, coordinates, &[], constrained, settings)
     }
 
-    /// As [`SmoothedAggregation::new`], for a system in which some nodes
-    /// carry three rotations instead of three translations — the rotation
-    /// block of a coupling reference point. `rotation_nodes[n]` flags them
-    /// (an empty slice flags none); their coordinates are not used.
+    /// As [`SmoothedAggregation::new`], for a system whose node blocks are
+    /// not all translations: `blocks[n]` says what node n's three unknowns
+    /// are (an empty slice: translations everywhere).
     ///
     /// # Errors
     /// As [`SmoothedAggregation::new`].
-    pub fn with_rotation_nodes(
+    pub fn with_node_blocks(
         matrix: CsrMatrix,
         coordinates: &[[f64; 3]],
-        rotation_nodes: &[bool],
+        blocks: &[NodeBlock],
         constrained: &[bool],
         settings: AmgSettings,
     ) -> Result<Self, FemError> {
-        if !rotation_nodes.is_empty() && rotation_nodes.len() != coordinates.len() {
+        if !blocks.is_empty() && blocks.len() != coordinates.len() {
             return Err(FemError::AmgInput {
-                reason: "one rotation flag per node is required",
+                reason: "one block kind per node is required",
             });
         }
         if 3 * coordinates.len() != matrix.rows() {
@@ -869,7 +897,7 @@ impl SmoothedAggregation {
         let mut coarse: Vec<Csr> = Vec::new();
         let mut inverse_diagonals = Vec::new();
         let mut prolongators = Vec::new();
-        let mut modes = rigid_body_modes(coordinates, rotation_nodes, constrained);
+        let mut modes = rigid_body_modes(coordinates, blocks, constrained);
         let mut dead = constrained.to_vec();
         let mut block = 3;
         while prolongators.len() + 1 < settings.max_levels {

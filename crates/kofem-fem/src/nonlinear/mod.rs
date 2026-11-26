@@ -8,8 +8,9 @@
 //! [`TangentSolver`] seam; [`DirichletCg`] is the solid solve's elimination,
 //! preconditioner and CG.
 //!
-//! Elements, materials and (later) contact each contribute their share of
-//! force and tangent; linear elasticity, [`LinearElastic`], is the first.
+//! Elements and materials contribute their share of force and tangent;
+//! linear elasticity, [`LinearElastic`], is the first. Contact enters as
+//! constraints of the correction solve ([`crate::contact::ContactCg`]).
 
 mod newton;
 mod tangent;
@@ -17,7 +18,7 @@ mod tangent;
 pub use newton::{
     solve_newton, IncrementReport, NewtonRun, NewtonSettings, NewtonSolution, NewtonStatus,
 };
-pub use tangent::{DirichletCg, SolveProgress, TangentSolver};
+pub use tangent::{DirichletCg, Settled, SolveProgress, TangentSolver};
 
 use crate::error::FemError;
 use crate::sparse::CsrMatrix;

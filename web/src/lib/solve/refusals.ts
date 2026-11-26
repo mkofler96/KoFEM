@@ -6,6 +6,7 @@
 // than solve a different model; the panels show the same words before the run.
 
 import type { TieDefinition } from "../tie.js";
+import type { ContactDefinition } from "../contact.js";
 import type { Element, SurfaceLoad } from "../../workers/solverTypes.js";
 import { faceKey, loadableFaceKeys } from "../../store/boundaryRebuild.js";
 import { tr } from "../../i18n/useLocale.js";
@@ -20,6 +21,46 @@ function namedTies(ties: TieDefinition[]): string {
         ties.length,
         ties.map((tie) => `"${tie.name}"`).join(", "),
       );
+}
+
+// `contact "Contact1"`, or `2 contacts ("Contact1", "Lock")`.
+function namedContacts(contacts: ContactDefinition[]): string {
+  const text = tr(refusalMessages);
+  return contacts.length === 1
+    ? text.namedContact(contacts[0].name)
+    : text.namedContacts(
+        contacts.length,
+        contacts.map((contact) => `"${contact.name}"`).join(", "),
+      );
+}
+
+// Contact is solved by the solid solve on linear elements only (KOF-485): its
+// mortar integrals are taken over linear faces, and neither the shell nor the
+// coupled assembler carries its constraints. Null when the route and the
+// element order take the model's contacts.
+export function contactRefusal(
+  contacts: ContactDefinition[] | undefined,
+  path: "solid" | "shell" | "coupled" | "auto-shell",
+  elementOrder: number,
+): string | null {
+  if (!contacts || contacts.length === 0) return null;
+  const text = tr(refusalMessages);
+  if (path !== "solid")
+    return text.contactNotSolid(namedContacts(contacts), contacts.length);
+  if (elementOrder !== 1)
+    return text.contactOrder(namedContacts(contacts), elementOrder);
+  return null;
+}
+
+// The topology optimizer solves no contact.
+export function topOptContactRefusal(
+  contacts: ContactDefinition[] | undefined,
+): string | null {
+  if (!contacts || contacts.length === 0) return null;
+  return tr(refusalMessages).topOptContacts(
+    namedContacts(contacts),
+    contacts.length,
+  );
 }
 
 // The topology optimizer applies no tie in any design domain: a tied assembly

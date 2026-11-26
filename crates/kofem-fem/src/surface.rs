@@ -40,6 +40,7 @@ use crate::error::FemError;
 use crate::mesh::{
     cross, dot, local_edge, local_hex_edge, sub, ElementOrder, TetMesh, FACES_OF_HEX,
 };
+use crate::mortar::MortarFace;
 
 /// What one surface load applies.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -170,6 +171,50 @@ impl BoundaryFaces {
             triangles: unique_by_key(triangles, |face| face.key),
             quads: unique_by_key(quads, |face| face.key),
         }
+    }
+
+    /// The boundary faces whose corners all lie on a surface (`on` says
+    /// which vertices do), as mortar faces with the centroid of the element
+    /// each bounds.
+    #[must_use]
+    pub fn mortar_faces(&self, mesh: &TetMesh, on: impl Fn(u32) -> bool) -> Vec<MortarFace> {
+        let points = mesh.vertices();
+        let point = |vertex: u32| points[vertex as usize];
+        let mut faces = Vec::new();
+        for face in &self.triangles {
+            if !face.corners.iter().all(|&corner| on(corner)) {
+                continue;
+            }
+            let element = [
+                face.corners[0],
+                face.corners[1],
+                face.corners[2],
+                face.opposite,
+            ];
+            let element_centroid = [0, 1, 2].map(|axis| {
+                element
+                    .iter()
+                    .map(|&vertex| point(vertex)[axis])
+                    .sum::<f64>()
+                    / 4.0
+            });
+            faces.push(MortarFace {
+                nodes: face.corners.iter().map(|&corner| corner as usize).collect(),
+                points: face.corners.iter().map(|&corner| point(corner)).collect(),
+                element_centroid,
+            });
+        }
+        for face in &self.quads {
+            if !face.corners.iter().all(|&corner| on(corner)) {
+                continue;
+            }
+            faces.push(MortarFace {
+                nodes: face.corners.iter().map(|&corner| corner as usize).collect(),
+                points: face.corners.iter().map(|&corner| point(corner)).collect(),
+                element_centroid: face.inside,
+            });
+        }
+        faces
     }
 
     /// Boundary triangles plus boundary quadrilaterals.

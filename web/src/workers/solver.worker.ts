@@ -7,6 +7,7 @@
 import { SHELL_SURFACES, type ElementStress } from "../lib/stressFields";
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
 import {
+  ContactPairs,
   Couplings,
   ElasticModel,
   freeRigidMotions,
@@ -27,6 +28,7 @@ import type {
   KofemModule,
 } from "../wasm/pkg/kofem_wasm.js";
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
+import type { ContactResult } from "../lib/contact.js";
 import type {
   Node,
   Element,
@@ -621,11 +623,13 @@ type SolveResultFields = {
 };
 
 // Each path's reactions are summed in the solve's own numbering, before its
-// result is mapped back to the store mesh (KOF-387).
+// result is mapped back to the store mesh (KOF-387). Only the solid path
+// solves contact; the other paths have no contact result.
 function postSolveResult(
   id: number,
   result: SolveResultFields,
   reactions: ReactionSummary | null,
+  contact: ContactResult | null = null,
 ) {
   self.postMessage(
     {
@@ -635,6 +639,7 @@ function postSolveResult(
       vonMises: result.vonMises,
       stress: result.stress,
       reactions,
+      contact,
     },
     // A model without shells holds one stress array on every surface: each
     // buffer is transferred once.
@@ -643,6 +648,9 @@ function postSolveResult(
         result.displacements.buffer,
         result.vonMises.buffer,
         ...SHELL_SURFACES.map((s) => result.stress[s].buffer),
+        ...(contact
+          ? [contact.pressure.buffer, contact.gap.buffer, contact.closed.buffer]
+          : []),
       ]),
     ],
   );
@@ -867,7 +875,13 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
       : null,
   );
   const result = await solveSolidInRust(
-    { ElasticModel, SolveOptions, Ties, evaluateFieldExpression },
+    {
+      ElasticModel,
+      SolveOptions,
+      Ties,
+      ContactPairs,
+      evaluateFieldExpression,
+    },
     {
       ...payload,
       nodes: tied.solveNodes,
@@ -895,6 +909,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     id,
     { displacements, vonMises: result.vonMises, stress: result.stress },
     result.reactions,
+    result.contact,
   );
 }
 
