@@ -57,18 +57,14 @@ export function ContactOverlay({ topology, showResult }: ContactOverlayProps) {
     return out;
   }, [contactGroups, pickMode, tieDraft, boundaryMeshTopo, nodeMap]);
 
-  if (showResult) return null;
-  return (
-    <>
-      {highlights?.map((highlight) => (
-        <FaceOverlay
-          key={highlight.key}
-          positions={highlight.positions}
-          color={highlight.side === "a" ? CONTACT_COLOR_A : CONTACT_COLOR_B}
-          opacity={0.3}
-          renderOrder={1}
-        />
-      ))}
-    </>
-  );
+  if (showResult || !highlights) return null;
+  return highlights.map((highlight) => (
+    <FaceOverlay
+      key={highlight.key}
+      positions={highlight.positions}
+      color={highlight.side === "a" ? CONTACT_COLOR_A : CONTACT_COLOR_B}
+      opacity={0.3}
+      renderOrder={1}
+    />
+  ));
 }
