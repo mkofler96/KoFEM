@@ -6,6 +6,7 @@
 // builds (rebuildSurfaceLoads), so the arrows show where the solver applies the
 // load.
 
+import type { MidSurfaceLinks } from "./cadShell";
 import type { Element, Node } from "../store/geometrySlice";
 import type { CouplingGroup } from "../store/couplingSlice";
 import { referencePointIds } from "./coupling";
@@ -35,6 +36,9 @@ export interface NodalLoadInput {
   // The elements on screen; loads on hidden bodies get no glyphs.
   elements: readonly Element[];
   couplingGroups: readonly CouplingGroup[];
+  // A CAD mid-surface's links: a load on a shell's bottom face points the
+  // other way (rebuildSurfaceLoads). Absent without a CAD mid-surface.
+  midSurfaceLinks?: MidSurfaceLinks | null;
 }
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -145,6 +149,7 @@ function groupNodalForces(
     [g],
     [...input.elements],
     [...input.couplingGroups],
+    input.midSurfaceLinks,
   );
   if (surfaceLoad === undefined) return forces;
   const facets: { ids: number[]; corners: Vec3[] }[] = [];

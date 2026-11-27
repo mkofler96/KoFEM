@@ -177,6 +177,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         a.loadGroups,
         a.elements,
         a.couplingGroups,
+        a.midSurfaceLinks,
       );
       s.nextBcGroupId = a.nextBcGroupId;
       s.nextLoadGroupId = a.nextLoadGroupId;

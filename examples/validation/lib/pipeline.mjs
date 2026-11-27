@@ -182,6 +182,8 @@ function resolveOnTessellation(at, tess, where) {
  *                                        the PSHELL section of the idealised body)
  * @property {[number, number, number][]} surfaceTriangles
  * @property {number[]} surfaceFaceIds    CAD face of each surface triangle
+ * @property {object | null} midSurfaceLinks the CAD mid-surface links (lib/cadShell), or null
+ * @property {object[]} shellRoutes       one route per Shell body (KOF-498)
  * @property {{maxElementSize, minElementSize, order, localSizes}} meshSettings
  *                                        localSizes: [{faceIds, size}], the face sizes
  * @property {object[]} materials         the store's material table
@@ -520,6 +522,8 @@ export async function buildFromRecipe(
     elements,
     surfaceTriangles,
     surfaceFaceIds,
+    midSurfaceLinks: stored.midSurfaceLinks,
+    shellRoutes: stored.shellRoutes,
     meshSettings: {
       maxElementSize,
       minElementSize,

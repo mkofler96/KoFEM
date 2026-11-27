@@ -4,6 +4,7 @@
 // Coupling slice: surface-to-point couplings (see lib/coupling.ts) and the
 // lifecycle of the reference-point node each one owns.
 
+import type { MidSurfaceLinks } from "../lib/cadShell";
 import type { SliceCreator } from "./modelStore";
 import type { Element, Node } from "./geometrySlice";
 import type { CouplingDefinition, CouplingKind } from "../lib/coupling";
@@ -165,6 +166,7 @@ function removeCoupling(
     loadGroups: NamedLoadGroup[];
     nodes: Node[];
     elements: Element[];
+    midSurfaceLinks: MidSurfaceLinks | null;
     constraints: Constraint[];
     loads: Load[];
     surfaceLoads: SurfaceLoad[];
@@ -193,5 +195,6 @@ function removeCoupling(
     s.loadGroups,
     s.elements,
     s.couplingGroups,
+    s.midSurfaceLinks,
   );
 }

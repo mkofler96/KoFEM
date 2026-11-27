@@ -12,7 +12,8 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { prismStep } from "../../examples/gallery/step-prism.mjs";
 import { gotoApp } from "./fixtures/app";
-import { openTree, setElementType } from "./fixtures/tree";
+import { addBoundary, openTree, setElementType } from "./fixtures/tree";
+import { clickModelAt, lookFrom } from "./fixtures/viewport";
 
 const THICKNESS = 10; // mm
 const cos30 = Math.cos(Math.PI / 6);
@@ -114,4 +115,133 @@ test("a plate marked Shell is meshed as its CAD mid-surface, without a volume me
   expect(shell.downwardFacets).toBe(0);
   expect(logs.some((line) => line.includes("CAD mid-surface"))).toBe(true);
   expect(logs.some((line) => line.includes("step 4/4"))).toBe(false);
+});
+
+async function meshAsShell(page: Page): Promise<void> {
+  await gotoApp(page);
+  await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
+    name: "le6.step",
+    mimeType: "application/octet-stream",
+    buffer: LE6,
+  });
+  await expect(
+    page.getByRole("button", { name: /Generate mesh/ }),
+  ).toBeVisible();
+  await setElementType(page, 1, "shell");
+  await openTree(page, "mesh");
+  await page.getByRole("button", { name: /Generate mesh/ }).click();
+  await expect(page.getByTestId("mesh-summary")).toBeVisible();
+}
+
+interface PickedCad {
+  selected: { cadFaceId?: number; label: string } | null;
+  top: number;
+  bottom: number;
+  // Of the newest surface load: the z component of each facet's normal.
+  loadNormalsZ: number[];
+}
+
+function pickedCad(page: Page): Promise<PickedCad> {
+  return page.evaluate(() => {
+    type Node = { id: number; x: number; y: number; z: number };
+    const state = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            nodes: Node[];
+            selectedFace: { cadFaceId?: number; label: string } | null;
+            midSurfaceLinks: { facets: { top: number; bottom: number }[] };
+            surfaceLoads: { faces: number[][] }[];
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    const byId = new Map(state.nodes.map((n) => [n.id, n]));
+    const last = state.surfaceLoads.at(-1);
+    return {
+      selected: state.selectedFace
+        ? {
+            cadFaceId: state.selectedFace.cadFaceId,
+            label: state.selectedFace.label,
+          }
+        : null,
+      top: state.midSurfaceLinks.facets[0].top,
+      bottom: state.midSurfaceLinks.facets[0].bottom,
+      loadNormalsZ: (last?.faces ?? []).map((face) => {
+        const [a, b, c] = face.map((id) => byId.get(id) as Node);
+        return Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+      }),
+    };
+  });
+}
+
+const CENTRE: [number, number] = [(1000 * (1 + cos30)) / 2, (1000 * sin30) / 2];
+
+test("supports and loads on a CAD mid-surface are picked on its CAD faces @pipeline", async ({
+  page,
+}) => {
+  await meshAsShell(page);
+  await expect(page.getByTestId("mesh-summary")).toBeVisible();
+
+  // From above, a click on the see-through plate selects its upper face.
+  await addBoundary(page, "load");
+  await lookFrom(page, [0, 0, 1]);
+  await clickModelAt(page, [CENTRE[0], CENTRE[1], THICKNESS]);
+  const fromAbove = await pickedCad(page);
+  expect(fromAbove.selected?.cadFaceId).toBe(fromAbove.top);
+  await page.getByRole("button", { name: "Apply Load" }).click();
+  const upper = await pickedCad(page);
+  expect(upper.loadNormalsZ.length).toBeGreaterThan(0);
+  expect(upper.loadNormalsZ.every((z) => z > 0)).toBe(true);
+
+  // From below, the same spot is the lower face, whose load acts on the
+  // facets wound the other way.
+  await addBoundary(page, "load");
+  await lookFrom(page, [0, 0, -1]);
+  await clickModelAt(page, [CENTRE[0], CENTRE[1], 0]);
+  const fromBelow = await pickedCad(page);
+  expect(fromBelow.selected?.cadFaceId).toBe(fromBelow.bottom);
+  await page.getByRole("button", { name: "Apply Load" }).click();
+  const lower = await pickedCad(page);
+  expect(lower.loadNormalsZ.length).toBe(upper.loadNormalsZ.length);
+  expect(lower.loadNormalsZ.every((z) => z < 0)).toBe(true);
+
+  // In Edge mode, a click on a side face selects the rim it collapsed to.
+  await addBoundary(page, "bc");
+  await page.getByRole("button", { name: "Edge", exact: true }).click();
+  await lookFrom(page, [0, -1, 0.3]);
+  await clickModelAt(page, [500, 0, THICKNESS / 2]);
+  const side = await pickedCad(page);
+  expect(side.selected?.label.startsWith("Edge")).toBe(true);
+  expect(side.selected?.cadFaceId).toBeDefined();
+  expect([side.top, side.bottom]).not.toContain(side.selected?.cadFaceId);
+});
+
+test("an example saved with a CAD mid-surface opens with its links @pipeline", async ({
+  page,
+}) => {
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const state = (
+          window as unknown as {
+            __kofemStore: {
+              getState(): {
+                midSurfaceLinks: { facets: unknown[] } | null;
+                shellRoutes: { path: string }[];
+                elements: unknown[];
+              };
+            };
+          }
+        ).__kofemStore.getState();
+        return {
+          linked:
+            state.midSurfaceLinks?.facets.length === state.elements.length,
+          routes: state.shellRoutes.map((r) => r.path),
+        };
+      }),
+    )
+    .toEqual({ linked: true, routes: ["cad"] });
 });

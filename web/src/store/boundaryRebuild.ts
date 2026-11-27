@@ -6,6 +6,7 @@
 // group (boundarySlice, couplingSlice, geometrySlice on re-mesh) and the
 // whole-model lifecycle actions rebuild through these.
 
+import type { MidSurfaceLinks } from "../lib/cadShell";
 import type { Element, Node } from "./geometrySlice";
 import type { PickGeometry } from "../lib/facePick";
 import { referencePointIds } from "../lib/coupling";
@@ -306,9 +307,14 @@ export function rebuildSurfaceLoads(
   loadGroups: NamedLoadGroup[],
   elements: Element[],
   couplingGroups: CouplingGroup[] = [],
+  // A CAD mid-surface's links (lib/cadShell, KOF-498): a selection on a
+  // shell's bottom face loads its facets wound the other way, along that
+  // face's outward normal, so a pressure on it pushes into the plate.
+  midSurfaceLinks: MidSurfaceLinks | null = null,
 ): SurfaceLoad[] {
   const refPoints = referencePointIds(couplingGroups);
   const loadable = loadableFaceKeys(elements);
+  const bottomFaces = new Set(midSurfaceLinks?.facets.map((f) => f.bottom));
   const result: SurfaceLoad[] = [];
   for (const g of loadGroups) {
     const kind = loadKind(g);
@@ -326,13 +332,18 @@ export function rebuildSurfaceLoads(
       // would either double-apply the load or drop it without a word.
       if (isNodalFace(f, refPoints)) continue;
       selections++;
-      const spanned = loadedFaces(f, elements, loadable);
+      const reversed =
+        f.cadFaceId !== undefined && bottomFaces.has(f.cadFaceId);
+      const spanned = loadedFaces(f, elements, loadable).map((face) =>
+        reversed && face.length === 3 ? [face[0], face[2], face[1]] : face,
+      );
       // A selection that spans no face would vanish from the load, and its
       // share of a total force move to the other selections. Count it, for the
       // solve to refuse (surfaceLoadRefusal).
       if (spanned.length === 0) unmatchedSelections++;
       for (const face of spanned) {
-        const key = faceKey(face);
+        // A shell facet loaded from both sides is two loads.
+        const key = `${faceKey(face)}${reversed ? "-" : "+"}`;
         if (seen.has(key)) continue;
         seen.add(key);
         faces.push(face);

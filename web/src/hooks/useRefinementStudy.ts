@@ -38,6 +38,7 @@ import {
 import { solvePayload } from "../lib/solve/payload";
 import { carryGroupsToMesh } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
+import { shellFaceNodes } from "../lib/cadShell";
 import { computeResultRange } from "../lib/resultField";
 import { sendToWorker } from "../workers/sharedWorker";
 import { intlTag, tr, useLocale } from "../i18n/useLocale";
@@ -107,6 +108,9 @@ export function refinementRefusal(s: StudySource): string | null {
       },
       s.stepSurface,
     ).nodesByFace,
+    s.midSurfaceLinks
+      ? shellFaceNodes(s.midSurfaceLinks, s.elements)
+      : new Map(),
   );
   if (carried.dropped.length > 0)
     return tr(studiesMessages).notFaces(carried.dropped.join("; "));

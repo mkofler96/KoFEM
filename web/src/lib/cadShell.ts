@@ -119,7 +119,12 @@ export function buildCadShellModel(
   };
 }
 
-function facetNodes(model: CadShellModel, elementId: number): Triangle {
+type ShellElements = readonly { id: number; type: string; nodeIds: number[] }[];
+
+function facetNodes(
+  model: { elements: ShellElements },
+  elementId: number,
+): Triangle {
   const element = model.elements[elementId];
   if (element?.id !== elementId || element.type !== "CTRIA3")
     throw new Error(
@@ -170,6 +175,67 @@ export function cadFaceNodes(
   const ids =
     rimNodes.length > 0 ? rimNodes : cadFaceSurface(model, cadFaceId).flat();
   return [...new Set(ids)].sort((a, b) => a - b);
+}
+
+const ascending = (ids: number[]): number[] =>
+  [...new Set(ids)].sort((a, b) => a - b);
+
+// Whether a CAD face is a top or bottom face of a CAD mid-surface ("face"),
+// a side face it collapsed to the rim ("edge"), or not part of it (null).
+export function cadShellFaceKind(
+  links: MidSurfaceLinks,
+  cadFaceId: number,
+): "face" | "edge" | null {
+  if (links.facets.some((f) => f.top === cadFaceId || f.bottom === cadFaceId))
+    return "face";
+  if (links.rim.some((edge) => edge.sideFace === cadFaceId)) return "edge";
+  return null;
+}
+
+// The facet nodes of every top and bottom face, ascending. A top face and
+// its bottom face hold the same nodes: they are told apart by face id.
+export function shellFaceNodes(
+  links: MidSurfaceLinks,
+  elements: ShellElements,
+): Map<number, number[]> {
+  const nodes = new Map<number, number[]>();
+  for (const facet of links.facets) {
+    const corners = facetNodes({ elements }, facet.element);
+    for (const face of [facet.top, facet.bottom]) {
+      let list = nodes.get(face);
+      if (!list) {
+        list = [];
+        nodes.set(face, list);
+      }
+      list.push(...corners);
+    }
+  }
+  return new Map([...nodes].map(([face, ids]) => [face, ascending(ids)]));
+}
+
+// What a click on a CAD face of a shell selects: a top or bottom face, its
+// facets' nodes; a side face, the rim nodes it collapsed to. null for a face
+// that is not part of the mid-surface.
+export function cadShellPick(
+  links: MidSurfaceLinks,
+  elements: ShellElements,
+  cadFaceId: number,
+): { geometry: "face" | "edge"; nodeIds: number[] } | null {
+  const kind = cadShellFaceKind(links, cadFaceId);
+  if (kind === "edge")
+    return {
+      geometry: "edge",
+      nodeIds: ascending(
+        links.rim
+          .filter((edge) => edge.sideFace === cadFaceId)
+          .flatMap((edge) => edge.nodeIds),
+      ),
+    };
+  if (kind === null) return null;
+  const nodeIds = shellFaceNodes(links, elements).get(cadFaceId);
+  if (!nodeIds)
+    throw new Error(`CAD shell model: face ${cadFaceId} has no facets`);
+  return { geometry: "face", nodeIds };
 }
 
 // One log line per Shell body: which path meshed it, and on the CAD path its

@@ -98,11 +98,16 @@ export function carryGroupsToMesh(
   // The rim nodes of each CAD face a shell collapsed (lib/shellRim) on the new
   // mesh.
   rimNodesByFace: Map<number, number[]> = new Map(),
+  // The facet nodes of each top and bottom face of a CAD mid-surface on the
+  // new mesh (lib/cadShell shellFaceNodes). A bottom face has no surface
+  // triangles of its own: its facets are the top face's.
+  shellFaceNodesByFace: Map<number, number[]> = new Map(),
 ): CarriedGroups {
   const faceNodes =
     surfaceTriangles && surfaceFaceIds
       ? nodesByCadFace(surfaceTriangles, surfaceFaceIds, nodeIds)
       : new Map<number, number[]>();
+  for (const [face, nodes] of shellFaceNodesByFace) faceNodes.set(face, nodes);
   const text = tr(meshMessages);
   const dropped: string[] = [];
   let kept = 0;

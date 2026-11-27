@@ -25,7 +25,7 @@ import {
   suggestElementSizes,
 } from "../lib/meshSizing";
 import type { MeshOverlap, ShellRoute } from "../wasm/pkg/kofem_wasm";
-import type { MidSurfaceLinks } from "../lib/cadShell";
+import { shellFaceNodes, type MidSurfaceLinks } from "../lib/cadShell";
 import {
   detectInterfaces,
   INTERFACE_TYPES,
@@ -941,6 +941,9 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           },
           before.stepSurface,
         ).nodesByFace,
+        shell?.midSurfaceLinks
+          ? shellFaceNodes(shell.midSurfaceLinks, elements)
+          : new Map(),
       );
       // A carried coupling's reference point is a node of the new mesh too.
       const meshNodes = [...nodes, ...carried.referenceNodes];
@@ -959,6 +962,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         carried.loadGroups,
         elements,
         carried.couplingGroups,
+        s.midSurfaceLinks,
       );
       s.remeshNotice = remeshNotice(carried);
       s.result = null;
