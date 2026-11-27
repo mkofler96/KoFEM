@@ -33,7 +33,7 @@ const MATERIALS = [
   { id: 1, name: "Soft", young: 1000, poisson: 0.3, density: 1 },
 ];
 const silent = () => undefined;
-const stop = async () => 0;
+const stop = () => Promise.resolve(0);
 
 // A bar `length` long along x, `depth` square, clamped at x = 0.
 function clampedBar({ length = 10, depth = 0.4, cells = 20 } = {}) {
