@@ -569,7 +569,7 @@ fn deformed(order: ElementOrder, field: impl Fn([f64; 3]) -> [f64; 3]) -> Deform
     .with_order(order)
     .expect("fits");
     let mut displacements = vec![0.0; mesh.dof_count()];
-    let mut positions = Vec::new();
+    let mut positions: Vec<[f64; 3]> = Vec::new();
     for (node, point) in mesh.node_coordinates().iter().enumerate() {
         let motion = field(*point);
         displacements[3 * node..3 * node + 3].copy_from_slice(&motion);
