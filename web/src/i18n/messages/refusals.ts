@@ -96,6 +96,58 @@ export const refusalMessages = defineMessages({
     pt: (contacts: string, order: number) =>
       `O contato é resolvido apenas com elementos lineares, mas este modelo tem ${contacts} e a ordem de elementos ${order} está selecionada. Defina a ordem dos elementos como Linear no painel Malha.`,
   },
+  largeDeformationNotSolid: {
+    en: "Large deformation is solved on all-solid models only, without shells, bodies solved as shells or couplings. Turn off Large deformation in the solver settings, or solve every body as a solid without couplings.",
+    de: "Große Verformungen werden nur in reinen Volumenmodellen ohne Schalen, als Schale gerechnete Körper oder Kopplungen gelöst. Schalten Sie Große Verformungen in den Löser-Einstellungen aus, oder rechnen Sie alle Körper als Volumen ohne Kopplungen.",
+    fr: "Les grandes déformations ne se résolvent que sur des modèles entièrement volumiques, sans coques, corps calculés en coque ni couplages. Désactivez Grandes déformations dans les paramètres du solveur, ou calculez tous les corps en volume sans couplages.",
+    it: "Le grandi deformazioni si risolvono solo su modelli interamente solidi, senza gusci, corpi calcolati come gusci o accoppiamenti. Disattiva Grandi deformazioni nelle impostazioni del solutore, oppure calcola tutti i corpi come solidi senza accoppiamenti.",
+    es: "Las grandes deformaciones solo se resuelven en modelos totalmente sólidos, sin láminas, cuerpos calculados como lámina ni acoplamientos. Desactiva Grandes deformaciones en los ajustes del solucionador, o calcula todos los cuerpos como sólidos sin acoplamientos.",
+    pt: "Grandes deformações são resolvidas apenas em modelos totalmente sólidos, sem cascas, corpos calculados como casca ou acoplamentos. Desative Grandes deformações nas configurações do solucionador, ou calcule todos os corpos como sólidos sem acoplamentos.",
+  },
+  largeDeformationContacts: {
+    en: (contacts: string, count: number) =>
+      `Large deformation cannot be combined with contact yet, but this model has ${contacts}. Turn off Large deformation in the solver settings, or delete ${count === 1 ? "it" : "them"}.`,
+    de: (contacts: string, count: number) =>
+      `Große Verformungen lassen sich noch nicht mit Kontakt kombinieren, dieses Modell hat aber ${contacts}. Schalten Sie Große Verformungen in den Löser-Einstellungen aus, oder löschen Sie ${count === 1 ? "ihn" : "diese"}.`,
+    fr: (contacts: string, count: number) =>
+      `Les grandes déformations ne se combinent pas encore avec le contact, mais ce modèle a ${contacts}. Désactivez Grandes déformations dans les paramètres du solveur, ou supprimez-${count === 1 ? "le" : "les"}.`,
+    it: (contacts: string, count: number) =>
+      `Le grandi deformazioni non si combinano ancora con il contatto, ma questo modello ha ${contacts}. Disattiva Grandi deformazioni nelle impostazioni del solutore, oppure ${count === 1 ? "eliminalo" : "eliminali"}.`,
+    es: (contacts: string, count: number) =>
+      `Las grandes deformaciones aún no se combinan con el contacto, pero este modelo tiene ${contacts}. Desactiva Grandes deformaciones en los ajustes del solucionador, o ${count === 1 ? "elimínalo" : "elimínalos"}.`,
+    pt: (contacts: string, count: number) =>
+      `Grandes deformações ainda não se combinam com contato, mas este modelo tem ${contacts}. Desative Grandes deformações nas configurações do solucionador, ou ${count === 1 ? "exclua-o" : "exclua-os"}.`,
+  },
+  largeDeformationTies: {
+    en: (ties: string, count: number) =>
+      `Large deformation cannot be combined with constraint ties yet, but this model has ${ties}. Turn off Large deformation in the solver settings, or delete ${count === 1 ? "it" : "them"}.`,
+    de: (ties: string, count: number) =>
+      `Große Verformungen lassen sich noch nicht mit Zwangsbedingungs-Verbindungen kombinieren, dieses Modell hat aber ${ties}. Schalten Sie Große Verformungen in den Löser-Einstellungen aus, oder löschen Sie ${count === 1 ? "sie" : "diese"}.`,
+    fr: (ties: string, count: number) =>
+      `Les grandes déformations ne se combinent pas encore avec les liaisons par contrainte, mais ce modèle a ${ties}. Désactivez Grandes déformations dans les paramètres du solveur, ou supprimez-${count === 1 ? "la" : "les"}.`,
+    it: (ties: string, count: number) =>
+      `Le grandi deformazioni non si combinano ancora con i vincoli di collegamento, ma questo modello ha ${ties}. Disattiva Grandi deformazioni nelle impostazioni del solutore, oppure ${count === 1 ? "eliminalo" : "eliminali"}.`,
+    es: (ties: string, count: number) =>
+      `Las grandes deformaciones aún no se combinan con uniones por restricción, pero este modelo tiene ${ties}. Desactiva Grandes deformaciones en los ajustes del solucionador, o ${count === 1 ? "elimínala" : "elimínalas"}.`,
+    pt: (ties: string, count: number) =>
+      `Grandes deformações ainda não se combinam com ligações por restrição, mas este modelo tem ${ties}. Desative Grandes deformações nas configurações do solucionador, ou ${count === 1 ? "exclua-a" : "exclua-as"}.`,
+  },
+  largeDeformationTemperature: {
+    en: "Large deformation cannot be combined with a temperature change yet. Turn off Large deformation in the solver settings, or remove the temperature change.",
+    de: "Große Verformungen lassen sich noch nicht mit einer Temperaturänderung kombinieren. Schalten Sie Große Verformungen in den Löser-Einstellungen aus, oder entfernen Sie die Temperaturänderung.",
+    fr: "Les grandes déformations ne se combinent pas encore avec une variation de température. Désactivez Grandes déformations dans les paramètres du solveur, ou supprimez la variation de température.",
+    it: "Le grandi deformazioni non si combinano ancora con una variazione di temperatura. Disattiva Grandi deformazioni nelle impostazioni del solutore, oppure rimuovi la variazione di temperatura.",
+    es: "Las grandes deformaciones aún no se combinan con un cambio de temperatura. Desactiva Grandes deformaciones en los ajustes del solucionador, o quita el cambio de temperatura.",
+    pt: "Grandes deformações ainda não se combinam com uma variação de temperatura. Desative Grandes deformações nas configurações do solucionador, ou remova a variação de temperatura.",
+  },
+  topOptLargeDeformation: {
+    en: "Topology optimization is linear and does not take large deformation. Turn off Large deformation in the solver settings to optimize.",
+    de: "Die Topologieoptimierung ist linear und berücksichtigt keine großen Verformungen. Schalten Sie Große Verformungen in den Löser-Einstellungen aus, um zu optimieren.",
+    fr: "L'optimisation topologique est linéaire et ne prend pas en compte les grandes déformations. Désactivez Grandes déformations dans les paramètres du solveur pour optimiser.",
+    it: "L'ottimizzazione topologica è lineare e non considera le grandi deformazioni. Disattiva Grandi deformazioni nelle impostazioni del solutore per ottimizzare.",
+    es: "La optimización topológica es lineal y no admite grandes deformaciones. Desactiva Grandes deformaciones en los ajustes del solucionador para optimizar.",
+    pt: "A otimização topológica é linear e não aceita grandes deformações. Desative Grandes deformações nas configurações do solucionador para otimizar.",
+  },
   topOptContacts: {
     en: (contacts: string, count: number) =>
       `Topology optimization does not support contact yet, but this model has ${contacts}. Delete ${count === 1 ? "it" : "them"} to optimize.`,

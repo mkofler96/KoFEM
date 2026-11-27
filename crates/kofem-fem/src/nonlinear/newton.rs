@@ -10,6 +10,16 @@
 //! and of the solver's own constraints ([`TangentSolver::settle`]); an
 //! increment has converged only once those constraints are settled too.
 //!
+//! A problem whose tangent varies with the displacement can lose stability
+//! ([`NonlinearProblem::tangent_varies`]). Its converged increments are
+//! therefore checked: one CG solve with the converged tangent and a load that
+//! excites every mode, which breaks down (pᵀKp ≤ 0) exactly when the tangent
+//! is not positive definite. That catches the unstable equilibrium a
+//! symmetric model reaches without its loads ever exciting the buckling
+//! mode, as a perfectly straight column pushed past its Euler load does. A
+//! correction solve that breaks down on such a problem is the same
+//! instability, met on the way.
+//!
 //! Like [`crate::PcgRun`], the driver advances in steps: each
 //! [`NewtonRun::advance`] spends at most a CG budget and returns after every
 //! Newton iteration, so the browser can show progress and cancel.
@@ -54,6 +64,13 @@ pub enum NewtonStatus {
         /// CG iterations spent on this correction so far.
         cg_iterations: usize,
     },
+    /// The CG budget ran out during the stability check of this converged
+    /// increment.
+    Checking {
+        increment: u32,
+        /// CG iterations spent on the check so far.
+        cg_iterations: usize,
+    },
     /// This Newton iteration finished, leaving this out-of-balance force.
     Iterated {
         increment: u32,
@@ -73,7 +90,7 @@ pub struct IncrementReport {
     /// Relative residual after each iteration (see
     /// [`NewtonSettings::tolerance`]).
     pub residuals: Vec<f64>,
-    /// CG iterations over all its correction solves.
+    /// CG iterations over all its correction solves and its stability check.
     pub cg_iterations: usize,
 }
 
@@ -82,6 +99,9 @@ pub struct NewtonSolution {
     /// Displacement per node, x,y,z interleaved, as in
     /// [`crate::StaticSolution`]; unused vertices are held at zero.
     pub displacements: Vec<f64>,
+    /// The internal force at the solution, one entry per DOF: its excess
+    /// over the loads is the support reactions.
+    pub internal_force: Vec<f64>,
     pub increments: Vec<IncrementReport>,
     pub unused_vertices: usize,
 }
@@ -91,6 +111,11 @@ enum Phase {
     Evaluated,
     /// The solver holds the tangent and is solving for a correction.
     Solving {
+        cg_iterations: usize,
+    },
+    /// The solver holds a copy of the converged tangent and checks its
+    /// stability.
+    Checking {
         cg_iterations: usize,
     },
     Done,
@@ -121,6 +146,9 @@ pub struct NewtonRun<P, S> {
     /// The largest force the solver's constraints imposed in the current
     /// increment ([`super::Settled::load`]).
     constraint_load: f64,
+    /// Whether the current increment, converged, has passed its stability
+    /// check.
+    checked: bool,
     /// `None` while the solver holds it.
     tangent: Option<CsrMatrix>,
     increment: u32,
@@ -188,6 +216,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
             constraints_pending: false,
             prescribed_load: 0.0,
             constraint_load: 0.0,
+            checked: false,
             tangent: Some(tangent),
             increment: 1,
             iteration: 0,
@@ -213,8 +242,10 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
     ///
     /// # Errors
     /// A zero budget; [`FemError::NewtonNotConverged`] when an increment
-    /// reaches its iteration limit; [`FemError::TangentSolve`] when a
-    /// correction cannot be solved; the problem's own error.
+    /// reaches its iteration limit; [`FemError::TangentNotPositiveDefinite`]
+    /// when a problem whose tangent varies loses stability;
+    /// [`FemError::TangentSolve`] when a correction cannot be solved; the
+    /// problem's own error.
     pub fn advance(&mut self, cg_budget: usize) -> Result<NewtonStatus, FemError> {
         if cg_budget == 0 {
             return Err(FemError::NonlinearInput {
@@ -226,6 +257,10 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                 Phase::Done => return Ok(NewtonStatus::Converged),
                 Phase::Evaluated => {
                     if self.increment_converged() {
+                        if self.problem.tangent_varies() && !self.checked {
+                            self.start_check()?;
+                            continue;
+                        }
                         self.reports.push(self.report.clone());
                         if self.increment == self.settings.increments {
                             self.phase = Phase::Done;
@@ -245,6 +280,28 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                         });
                     }
                     self.start_correction()?;
+                }
+                Phase::Checking { cg_iterations } => {
+                    let progress = self
+                        .solver
+                        .advance(cg_budget)
+                        .map_err(|error| self.tangent_failure(error))?;
+                    let cg_iterations = cg_iterations + progress.iterations;
+                    self.report.cg_iterations += progress.iterations;
+                    if !progress.ready {
+                        self.phase = Phase::Checking { cg_iterations };
+                        return Ok(NewtonStatus::Checking {
+                            increment: self.increment,
+                            cg_iterations,
+                        });
+                    }
+                    // Only the breakdown it did not meet matters; the copy
+                    // of the tangent is spent.
+                    self.solver
+                        .finish()
+                        .map_err(|error| self.tangent_failure(error))?;
+                    self.checked = true;
+                    self.phase = Phase::Evaluated;
                 }
                 Phase::Solving { cg_iterations } => {
                     let progress = self
@@ -298,6 +355,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         }
         Ok(NewtonSolution {
             displacements: self.displacements,
+            internal_force: self.internal_force,
             increments: self.reports,
             unused_vertices: self.unused_vertices,
         })
@@ -317,6 +375,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         };
         self.prescribed_load = self.measure_prescribed_load()?;
         self.constraint_load = 0.0;
+        self.checked = false;
         self.settle()
     }
 
@@ -447,6 +506,24 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         Ok(())
     }
 
+    /// Start the stability check of the converged increment: a solve with a
+    /// copy of the tangent, the supports held, and a load on every free DOF.
+    fn start_check(&mut self) -> Result<(), FemError> {
+        let tangent = self
+            .tangent
+            .as_ref()
+            .ok_or_else(|| FemError::NonlinearInput {
+                reason: String::from("the tangent is held by an unfinished solve"),
+            })?
+            .clone();
+        let held = self.supports.with_values(|_, _| 0.0);
+        self.solver
+            .start(tangent, probe(self.displacements.len()), &held)
+            .map_err(|error| self.tangent_failure(error))?;
+        self.phase = Phase::Checking { cg_iterations: 0 };
+        Ok(())
+    }
+
     fn apply_correction(&mut self) -> Result<(), FemError> {
         let (correction, tangent) = self
             .solver
@@ -507,18 +584,53 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         Ok(())
     }
 
+    /// A tangent solve's error as the driver reports it: a tangent that is
+    /// not positive definite, on a problem whose tangent varies and away from
+    /// the undeformed state (where the tangent is the linear stiffness, and
+    /// such a tangent means the model is not held), is the stability limit.
+    /// A contact solver's verdict on the model reaches the user as it is.
     fn tangent_failure(&self, error: FemError) -> FemError {
-        match error {
-            // A verdict on the model, not a failed solve: the user acts on it
-            // as it is.
-            FemError::ContactUnheld { .. } => error,
-            _ => FemError::TangentSolve {
+        if matches!(error, FemError::ContactUnheld { .. }) {
+            return error;
+        }
+        let indefinite = matches!(
+            error,
+            FemError::NotPositiveDefinite { .. } | FemError::CoarseNotPositiveDefinite { .. }
+        );
+        let deformed = self.displacements.iter().any(|value| *value != 0.0);
+        if indefinite && deformed && self.problem.tangent_varies() {
+            return FemError::TangentNotPositiveDefinite {
                 increment: self.increment,
-                iteration: self.iteration + 1,
-                reason: error.to_string(),
-            },
+                increments: self.settings.increments,
+                load_factor: self.load_factor(),
+            };
+        }
+        FemError::TangentSolve {
+            increment: self.increment,
+            iteration: self.iteration + 1,
+            reason: error.to_string(),
         }
     }
+}
+
+/// The load of the stability check: a deterministic sequence spread over
+/// [−1, 1) with no pattern a model's modes could be orthogonal to
+/// (`SplitMix64`, Steele, Lea & Flood 2014).
+fn probe(count: usize) -> Vec<f64> {
+    let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+    (0..count)
+        .map(|_| {
+            state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut mixed = state;
+            mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            mixed ^= mixed >> 31;
+            // The top 52 bits as the mantissa of a number in [1, 2), then
+            // mapped onto [−1, 1).
+            let unit = f64::from_bits(0x3FF0_0000_0000_0000 | (mixed >> 12));
+            2.0 * unit - 3.0
+        })
+        .collect()
 }
 
 /// Run a [`NewtonRun`] to the end in one go.

@@ -169,6 +169,10 @@ test("a contact is its own kind: picked, named Contact1, and deletable", async (
   expect(groups[0].facesA[0].nodeIds).toEqual(model.facingA);
   expect(groups[0].facesB[0].nodeIds).toEqual(model.facingB);
   await expect(page.getByTestId("tree-contact-1")).toHaveText("Contact1");
+  // Before a solve the contact's view shows no summary line.
+  await page.getByTestId("tree-contact-1").click();
+  await expect(page.getByTestId("panel-title")).toHaveText("Contact1");
+  await expect(page.getByTestId("contact-summary-1")).toHaveCount(0);
 
   await page.getByTestId("tree-delete-contact-1").click();
   await page

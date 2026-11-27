@@ -367,6 +367,36 @@ export const reportMessages = defineMessages({
     es: "Cuerpos lámina idealizados al resolver, acoplados a los cuerpos sólidos (estático)",
     pt: "Corpos casca idealizados ao resolver, acoplados aos corpos sólidos (estático)",
   },
+  deformation: {
+    en: "Deformation",
+    de: "Verformung",
+    fr: "Déformation",
+    it: "Deformazione",
+    es: "Deformación",
+    pt: "Deformação",
+  },
+  smallDeformation: {
+    en: "Small deformation (linear elasticity)",
+    de: "Kleine Verformungen (lineare Elastizität)",
+    fr: "Petites déformations (élasticité linéaire)",
+    it: "Piccole deformazioni (elasticità lineare)",
+    es: "Pequeñas deformaciones (elasticidad lineal)",
+    pt: "Pequenas deformações (elasticidade linear)",
+  },
+  largeDeformation: {
+    en: (increments: number) =>
+      `Large deformation (Neo-Hookean), ${increments} load increment${increments === 1 ? "" : "s"}`,
+    de: (increments: number) =>
+      `Große Verformungen (Neo-Hooke), ${increments} Laststufe${increments === 1 ? "" : "n"}`,
+    fr: (increments: number) =>
+      `Grandes déformations (néo-hookéen), ${increments} incrément${increments === 1 ? "" : "s"} de charge`,
+    it: (increments: number) =>
+      `Grandi deformazioni (neo-hookeano), ${increments} increment${increments === 1 ? "o" : "i"} di carico`,
+    es: (increments: number) =>
+      `Grandes deformaciones (neo-hookeano), ${increments} incremento${increments === 1 ? "" : "s"} de carga`,
+    pt: (increments: number) =>
+      `Grandes deformações (neo-hookeano), ${increments} incremento${increments === 1 ? "" : "s"} de carga`,
+  },
   preconditioner: {
     en: "Preconditioner (conjugate gradients)",
     de: "Vorkonditionierer (konjugierte Gradienten)",

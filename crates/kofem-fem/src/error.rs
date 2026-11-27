@@ -243,6 +243,22 @@ pub enum FemError {
         reason: String,
     },
     #[error(
+        "Newton increment {increment} of {increments} (load factor {load_factor}): the tangent \
+         stiffness is not positive definite — the model loses stability (it buckles or snaps \
+         through) at or below this load, so a static solve cannot follow it further"
+    )]
+    TangentNotPositiveDefinite {
+        increment: u32,
+        increments: u32,
+        load_factor: f64,
+    },
+    #[error(
+        "element {element} is turned inside out (volume ratio J = {jacobian:e}): the \
+         deformation is too large for one load increment, or for the element — try more load \
+         increments"
+    )]
+    InvertedElement { element: usize, jacobian: f64 },
+    #[error(
         "the Newton solve has not finished: it stands at increment {increment}, iteration \
          {iteration}"
     )]

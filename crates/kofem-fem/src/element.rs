@@ -132,15 +132,15 @@ pub fn tet10_shape(point: [f64; 4]) -> [f64; 10] {
     values
 }
 
-/// Add `weight` × the isotropic-elasticity integrand at one point to a
-/// stiffness of `N` nodes, given that point's shape-function gradients.
-fn add_point<const N: usize, const DOFS: usize>(
+/// Add `weight` × the isotropic-elasticity integrand with Lamé constants
+/// (`lambda`, `mu`) at one point to a stiffness of `N` nodes, given that
+/// point's shape-function gradients.
+pub(crate) fn add_isotropic_point<const N: usize, const DOFS: usize>(
     stiffness: &mut [[f64; DOFS]; DOFS],
     gradients: &[[f64; 3]; N],
     weight: f64,
-    material: &Isotropic,
+    (lambda, mu): (f64, f64),
 ) {
-    let (lambda, mu) = material.lame();
     for (node_a, grad_a) in gradients.iter().enumerate() {
         for (node_b, grad_b) in gradients.iter().enumerate() {
             let shared = mu * dot(*grad_a, *grad_b);
@@ -161,7 +161,7 @@ fn add_point<const N: usize, const DOFS: usize>(
 pub fn tet4_stiffness(corners: &[[f64; 3]; 4], material: &Isotropic) -> Tet4Stiffness {
     let (grads, volume) = tet4_gradients(corners);
     let mut stiffness = [[0.0; 12]; 12];
-    add_point(&mut stiffness, &grads, volume, material);
+    add_isotropic_point(&mut stiffness, &grads, volume, material.lame());
     stiffness
 }
 
@@ -172,7 +172,7 @@ pub fn tet10_stiffness(corners: &[[f64; 3]; 4], material: &Isotropic) -> Tet10St
     let mut stiffness = [[0.0; 30]; 30];
     for point in degree_two_points() {
         let gradients = tet10_gradients(&corner_gradients, point);
-        add_point(&mut stiffness, &gradients, 0.25 * volume, material);
+        add_isotropic_point(&mut stiffness, &gradients, 0.25 * volume, material.lame());
     }
     stiffness
 }
@@ -409,7 +409,7 @@ fn hex_stiffness<const N: usize, const DOFS: usize>(
     let mut stiffness = [[0.0; DOFS]; DOFS];
     for (point, weight) in cube_rule(points_per_axis) {
         let (gradients, scale) = hex_gradients(corners, &reference_gradients(point), point);
-        add_point(&mut stiffness, &gradients, weight * scale, material);
+        add_isotropic_point(&mut stiffness, &gradients, weight * scale, material.lame());
     }
     stiffness
 }

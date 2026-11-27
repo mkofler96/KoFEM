@@ -4,7 +4,9 @@
 //! Linear-elastic finite elements for KoFEM: linear and quadratic tetrahedra
 //! and hexahedra, Kirchhoff shell facets, sparse assembly, Dirichlet elimination,
 //! surface-to-point couplings, constraint ties with dual mortar weights, a
-//! preconditioned conjugate-gradient solve and SIMP topology optimization.
+//! preconditioned conjugate-gradient solve, a Newton driver for nonlinear
+//! solves (frictionless contact, and a compressible Neo-Hookean solid for
+//! large deformation) and SIMP topology optimization.
 //! Pure Rust with no I/O or clock, so the same code runs natively under
 //! `cargo test` and in the browser through `kofem-wasm`.
 //!
@@ -28,6 +30,7 @@ pub mod error;
 pub mod extremum;
 pub mod field_expression;
 pub mod field_statistics;
+pub mod hyperelastic;
 pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
@@ -70,8 +73,9 @@ pub use mesh::{ElementOrder, ElementShape, TetMesh};
 pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
 pub use mortar::{mortar_integrals, mortar_weights, MortarFace, MortarRow, SlaveIntegrals};
 pub use reactions::{
-    fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,
-    widen_translations, NodalReaction, ReactionSummary, SupportReaction,
+    fold_onto_vertices, fold_onto_vertices_at, load_on_held_nodes, nodal_residual,
+    summarize_reactions, summarize_reactions_at, widen_translations, NodalReaction,
+    ReactionSummary, SupportReaction,
 };
 pub use report::{percentile, report_stats, ReportStats};
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};

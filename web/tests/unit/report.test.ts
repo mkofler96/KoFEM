@@ -36,6 +36,7 @@ const run = (
   path,
   preconditioner: "amg",
   elementOrder: 1,
+  largeDeformation: null,
   warnings: [],
   materials: [steel],
   properties,
@@ -227,6 +228,31 @@ describe("the report states what was solved", () => {
     });
     expect(doc.bodies[0].material.name).toBe("Steel");
     expect(doc.bodies[0].material.young).toBe(210000);
+  });
+});
+
+describe("the report states the deformation it solved", () => {
+  const html = (solveRun: SolveRun) =>
+    renderReport(
+      buildReport(
+        input(
+          [{ id: 1, materialId: 1 }],
+          [element(1, "CTETRA", 1)],
+          result(solveRun),
+        ),
+      ),
+    );
+
+  test("a linear solve is small deformation", () => {
+    expect(html(run("solid"))).toContain(
+      "Small deformation (linear elasticity)",
+    );
+  });
+
+  test("a large-deformation solve names its material model and increments", () => {
+    expect(
+      html({ ...run("solid"), largeDeformation: { increments: 12 } }),
+    ).toContain("Large deformation (Neo-Hookean), 12 load increments");
   });
 });
 
