@@ -215,7 +215,8 @@ struct MasterFace {
     nodes: Vec<usize>,
 }
 
-/// The faces used by one element only, with their nodes.
+/// The faces used by one element only, with their nodes; a hex/tet
+/// interface is inside the body ([`crate::transition`]).
 fn boundary_faces(mesh: &TetMesh) -> Vec<MasterFace> {
     let quadratic = mesh.order() == ElementOrder::Quadratic;
     let mut all: Vec<(Vec<u32>, MasterFace)> = Vec::new();
@@ -224,6 +225,12 @@ fn boundary_faces(mesh: &TetMesh) -> Vec<MasterFace> {
         for skip in 0..4 {
             let local: Vec<usize> = (0..4).filter(|&corner| corner != skip).collect();
             let corners: Vec<usize> = local.iter().map(|&corner| tet[corner] as usize).collect();
+            let key = [0, 1, 2].map(|side| tet[local[side]]);
+            let mut key = key;
+            key.sort_unstable();
+            if mesh.is_interface_triangle(key) {
+                continue;
+            }
             let mut face_nodes = corners.clone();
             if quadratic {
                 for side in 0..3 {
@@ -243,6 +250,9 @@ fn boundary_faces(mesh: &TetMesh) -> Vec<MasterFace> {
     for (index, hex) in mesh.hexes().iter().enumerate() {
         let nodes = mesh.element_nodes(mesh.tets().len() + index);
         for (face, local) in FACES_OF_HEX.iter().enumerate() {
+            if mesh.is_interface_face(index, face) {
+                continue;
+            }
             let corners: Vec<usize> = local.iter().map(|&corner| hex[corner] as usize).collect();
             let mut face_nodes = corners.clone();
             if quadratic {

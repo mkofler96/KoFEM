@@ -22,13 +22,10 @@
 //! The forces add to the mechanical load vector; stress recovery subtracts
 //! [`thermal_strain_at_centre`] from the diagonal of the strain.
 
-use crate::element::{
-    cube_rule, degree_three_points, hex27_reference_gradients, hex27_shape,
-    hex8_reference_gradients, hex8_shape, hex_gradients, tet10_gradients, tet10_shape,
-    tet4_gradients, CENTROID, HEX27_RULE_POINTS, HEX8_RULE_POINTS, HEX_CENTRE,
-};
+use crate::element::{degree_three_points, CENTROID};
 use crate::error::FemError;
 use crate::mesh::{ElementOrder, ElementShape, TetMesh};
+use crate::piece::{centre_samples, PieceGeometry, PiecePoint, PieceRef};
 
 /// Check one α per element and one ΔT per node, all finite.
 fn check_input(mesh: &TetMesh, alpha: &[f64], delta_t: &[f64]) -> Result<(), FemError> {
@@ -72,54 +69,40 @@ fn check_finite<'a>(
 }
 
 /// Call `visit(values, gradients, weight)` at every point of a rule exact for
-/// `element`'s thermal-force integrand (∇N times the interpolated ΔT), with
-/// the shape-function values and physical gradients there (in the element's
-/// node order) and the quadrature weight times the volume scale.
-fn for_each_stiffness_point(
-    mesh: &TetMesh,
-    element: usize,
-    mut visit: impl FnMut(&[f64], &[[f64; 3]], f64),
-) {
-    match (mesh.shape(element), mesh.order()) {
-        (ElementShape::Tetrahedron, ElementOrder::Linear) => {
+/// a piece's thermal-force integrand (∇N times the interpolated ΔT), with the
+/// shape-function values and physical gradients there (in the piece's node
+/// order) and the quadrature weight times the volume scale.
+fn for_each_thermal_point(piece: &PieceRef<'_>, mut visit: impl FnMut(&[f64], &[[f64; 3]], f64)) {
+    match (piece.geometry, piece.order) {
+        (PieceGeometry::Tetrahedron(_), ElementOrder::Linear) => {
             // Constant gradients: the one-point rule is exact for the linear ΔT.
-            let (gradients, volume) = tet4_gradients(&mesh.corners(element));
-            visit(&CENTROID, &gradients, volume);
+            let point = PiecePoint::Tetrahedron(CENTROID);
+            let (gradients, volume) = piece.gradients(point);
+            visit(&piece.shape_values(point), &gradients, volume);
         }
-        (ElementShape::Tetrahedron, ElementOrder::Quadratic) => {
+        (PieceGeometry::Tetrahedron(_), ElementOrder::Quadratic) => {
             // A quadratic ΔT times the linear gradient is cubic: the stiffness
             // rule (exact for quadratics) is not enough.
-            let (corner_gradients, volume) = tet4_gradients(&mesh.corners(element));
-            for (point, fraction) in degree_three_points() {
-                let gradients = tet10_gradients(&corner_gradients, point);
-                visit(&tet10_shape(point), &gradients, fraction * volume);
+            for (local, fraction) in degree_three_points() {
+                let point = PiecePoint::Tetrahedron(local);
+                let (gradients, volume) = piece.gradients(point);
+                visit(&piece.shape_values(point), &gradients, fraction * volume);
             }
         }
-        (ElementShape::Hexahedron, ElementOrder::Linear) => {
-            let corners = mesh.hex_corners(element - mesh.tets().len());
-            for (point, weight) in cube_rule(HEX8_RULE_POINTS) {
-                let (gradients, scale) =
-                    hex_gradients(&corners, &hex8_reference_gradients(point), point);
-                visit(&hex8_shape(point), &gradients, weight * scale);
-            }
-        }
-        (ElementShape::Hexahedron, ElementOrder::Quadratic) => {
-            let corners = mesh.hex_corners(element - mesh.tets().len());
-            for (point, weight) in cube_rule(HEX27_RULE_POINTS) {
-                let (gradients, scale) =
-                    hex_gradients(&corners, &hex27_reference_gradients(point), point);
-                visit(&hex27_shape(point), &gradients, weight * scale);
+        (PieceGeometry::Hexahedron(_), _) => {
+            for (point, gradients, weight) in piece.stiffness_points() {
+                visit(&piece.shape_values(point), &gradients, weight);
             }
         }
     }
 }
 
-/// ΔT interpolated with the shape-function `values` of an element on `nodes`.
-fn interpolate(values: &[f64], nodes: &[u32], delta_t: &[f64]) -> f64 {
+/// ΔT at shape-function `values` of a piece whose nodal ΔT is `local`.
+fn interpolate(values: &[f64], local: &[f64]) -> f64 {
     values
         .iter()
-        .zip(nodes)
-        .map(|(value, node)| value * delta_t[*node as usize])
+        .zip(local)
+        .map(|(value, delta)| value * delta)
         .sum()
 }
 
@@ -142,35 +125,38 @@ pub fn thermal_load(mesh: &TetMesh, alpha: &[f64], delta_t: &[f64]) -> Result<Ve
         }
         let (lambda, mu) = mesh.material(element).lame();
         let stiffness = (3.0 * lambda + 2.0 * mu) * expansion;
-        let nodes = mesh.element_nodes(element);
-        for_each_stiffness_point(mesh, element, |values, gradients, weight| {
-            let stress = stiffness * interpolate(values, nodes, delta_t) * weight;
-            for (node, gradient) in nodes.iter().zip(gradients) {
-                let base = 3 * *node as usize;
-                for (axis, component) in gradient.iter().enumerate() {
-                    forces[base + axis] += component * stress;
+        for piece in mesh.pieces(element) {
+            let local = piece.local_values(delta_t, 1);
+            let mut piece_forces = vec![0.0; 3 * piece.nodes.len()];
+            for_each_thermal_point(&piece, |values, gradients, weight| {
+                let stress = stiffness * interpolate(values, &local) * weight;
+                for (slot, gradient) in gradients.iter().enumerate() {
+                    for (axis, component) in gradient.iter().enumerate() {
+                        piece_forces[3 * slot + axis] += component * stress;
+                    }
+                }
+            });
+            piece.fold_rows(&mut piece_forces, 3);
+            for (&node, force) in piece.nodes.iter().zip(piece_forces.as_chunks::<3>().0) {
+                for (axis, component) in force.iter().enumerate() {
+                    forces[3 * node as usize + axis] += component;
                 }
             }
-        });
+        }
     }
     Ok(forces)
 }
 
-/// The thermal strain α·ΔT of one element, after the input is checked.
+/// The thermal strain α·ΔT of one element at its centre (for a transition
+/// element, the volume mean of its pieces' centres), after the input is
+/// checked.
 fn centre_strain(mesh: &TetMesh, element: usize, alpha: &[f64], delta_t: &[f64]) -> f64 {
-    let nodes = mesh.element_nodes(element);
-    let temperature = match (mesh.shape(element), mesh.order()) {
-        (ElementShape::Tetrahedron, ElementOrder::Linear) => interpolate(&CENTROID, nodes, delta_t),
-        (ElementShape::Tetrahedron, ElementOrder::Quadratic) => {
-            interpolate(&tet10_shape(CENTROID), nodes, delta_t)
-        }
-        (ElementShape::Hexahedron, ElementOrder::Linear) => {
-            interpolate(&hex8_shape(HEX_CENTRE), nodes, delta_t)
-        }
-        (ElementShape::Hexahedron, ElementOrder::Quadratic) => {
-            interpolate(&hex27_shape(HEX_CENTRE), nodes, delta_t)
-        }
-    };
+    let temperature: f64 = centre_samples(mesh, element)
+        .into_iter()
+        .map(|(piece, point, weight)| {
+            weight * interpolate(&piece.shape_values(point), &piece.local_values(delta_t, 1))
+        })
+        .sum();
     alpha[element] * temperature
 }
 
@@ -198,7 +184,7 @@ pub fn thermal_strain_at_centre(
     // Only this element's values are checked, so a caller may recover one
     // element after another without rescanning the arrays.
     check_lengths(mesh, alpha, delta_t)?;
-    let nodes = mesh.element_nodes(element);
+    let nodes = mesh.solved_nodes(element);
     check_finite(
         std::iter::once(&alpha[element]),
         nodes.iter().map(|node| &delta_t[*node as usize]),

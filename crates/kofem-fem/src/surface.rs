@@ -86,9 +86,9 @@ struct QuadFace {
 
 /// The exterior faces of a solid mesh (faces used by exactly one element),
 /// sorted by their vertices for lookup. Interfaces between bodies that share
-/// nodes are interior, exactly as in the MFEM mesh. A hex face against two
-/// tet triangles shares no face with them, so all three stay on the boundary,
-/// as in MFEM.
+/// nodes are interior. So is a hex face against two tet triangles, and both
+/// triangles: the hex is a transition element joined to the tets
+/// ([`crate::transition`]), so no load, tie or contact lands there.
 #[derive(Debug, Clone)]
 pub struct BoundaryFaces {
     triangles: Vec<TriangleFace>,
@@ -129,6 +129,9 @@ impl BoundaryFaces {
             let nodes = mesh.element_nodes(index);
             for (opposite, local) in FACES_OF_TET.iter().enumerate() {
                 let corners = local.map(|corner| tet[corner]);
+                if mesh.is_interface_triangle(sorted(corners)) {
+                    continue;
+                }
                 let loaded = match mesh.order() {
                     ElementOrder::Linear => corners,
                     ElementOrder::Quadratic => [[0, 1], [1, 2], [0, 2]]
@@ -149,6 +152,9 @@ impl BoundaryFaces {
             let inside =
                 [0, 1, 2].map(|axis| points.iter().map(|point| point[axis]).sum::<f64>() / 8.0);
             for (face, local) in FACES_OF_HEX.iter().enumerate() {
+                if mesh.is_interface_face(index, face) {
+                    continue;
+                }
                 let corners = local.map(|corner| hex[corner]);
                 let mut face_nodes = [0; 9];
                 face_nodes[..4].copy_from_slice(&corners);

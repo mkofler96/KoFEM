@@ -7,6 +7,8 @@ use crate::element::{
 };
 use crate::error::FemError;
 use crate::material::Isotropic;
+use crate::piece::{Piece, PieceGeometry, PieceRef};
+use crate::transition::{find_interface_faces, split_hexes, HexData, InterfaceFace, Split};
 
 /// Polynomial order of the displacement field on each element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +109,11 @@ pub fn local_hex_edge(first: usize, second: usize) -> usize {
 /// quadratic mesh appends one node per distinct edge, then one per distinct
 /// hex face, then one per hex centre, so the first 3·`vertex_count` entries
 /// of a displacement vector are always the vertex displacements.
+///
+/// A hex with a face that meets two tet triangles is solved as a transition
+/// element ([`crate::transition`]): its pieces ([`TetMesh::pieces`]) add a
+/// node at its centre (a quadratic hex has one) and, at order 2, nodes inside
+/// it, numbered after all the others.
 #[derive(Debug, Clone)]
 pub struct TetMesh {
     order: ElementOrder,
@@ -127,6 +134,15 @@ pub struct TetMesh {
     material_of_element: Vec<u32>,
     materials: Vec<Isotropic>,
     used: Vec<bool>,
+    /// The hex faces that meet two tet triangles, sorted by hex and face.
+    interfaces: Vec<InterfaceFace>,
+    /// Both triangles of every interface face, each sorted, the list sorted.
+    interface_triangles: Vec<[u32; 3]>,
+    /// The hexes solved as transition elements, sorted by element.
+    splits: Vec<Split>,
+    /// The first node a transition adds, and the hex each added node is in.
+    first_transition_node: usize,
+    transition_hex: Vec<usize>,
 }
 
 impl TetMesh {
@@ -221,29 +237,12 @@ impl TetMesh {
                 return Err(FemError::DegenerateTet { tet });
             }
         }
-        for (hex, ids) in hex_elements.iter().enumerate() {
-            if let Some(&vertex) = ids.iter().find(|&&vertex| vertex as usize >= points.len()) {
-                return Err(FemError::HexVertexOutOfRange {
-                    hex,
-                    vertex,
-                    count: points.len(),
-                });
-            }
-            let material = material_of_element[tet_elements.len() + hex];
-            if material as usize >= materials.len() {
-                return Err(FemError::HexMaterialOutOfRange {
-                    hex,
-                    material,
-                    count: materials.len(),
-                });
-            }
-            if !hex_is_valid(
-                &ids.map(|vertex| points[vertex as usize]),
-                ElementOrder::Linear,
-            ) {
-                return Err(FemError::DegenerateHex { hex });
-            }
-        }
+        check_hexes(
+            &points,
+            &hex_elements,
+            &material_of_element[tet_elements.len()..],
+            materials.len(),
+        )?;
 
         // Meshers can leave vertices that no element uses (Netgen does). They
         // carry no stiffness, so the solve must hold them explicitly.
@@ -251,8 +250,10 @@ impl TetMesh {
         for &vertex in tets.iter().chain(hexes) {
             used[vertex as usize] = true;
         }
+        let interfaces = find_interface_faces(&tet_elements, &hex_elements)?;
+        let interface_triangles = sorted_triangles(&interfaces, &hex_elements);
 
-        Ok(Self {
+        Self {
             order: ElementOrder::Linear,
             vertex_count: points.len(),
             nodes: points,
@@ -264,7 +265,13 @@ impl TetMesh {
             material_of_element: material_of_element.to_vec(),
             materials,
             used,
-        })
+            interfaces,
+            interface_triangles,
+            splits: Vec::new(),
+            first_transition_node: 0,
+            transition_hex: Vec::new(),
+        }
+        .with_transitions()
     }
 
     /// The same mesh with elements of `order`. Quadratic elements get one node
@@ -290,12 +297,64 @@ impl TetMesh {
             edges: Vec::new(),
             faces: Vec::new(),
             used: self.used[..self.vertex_count].to_vec(),
+            splits: Vec::new(),
+            first_transition_node: 0,
+            transition_hex: Vec::new(),
             ..self
         };
         match order {
-            ElementOrder::Linear => Ok(linear),
-            ElementOrder::Quadratic => linear.into_quadratic(),
+            ElementOrder::Linear => linear.with_transitions(),
+            ElementOrder::Quadratic => linear.into_quadratic()?.with_transitions(),
         }
+    }
+
+    /// Split the hexes with an interface face into their pieces, adding their
+    /// nodes after all the others.
+    fn with_transitions(mut self) -> Result<Self, FemError> {
+        if self.interfaces.is_empty() {
+            return Ok(self);
+        }
+        let first_node = self.nodes.len();
+        let transitions = {
+            let hex_nodes = |hex: usize| self.element_nodes(self.tets.len() + hex);
+            let edge_node = |first: u32, second: u32| -> u32 {
+                let pair = [first.min(second), first.max(second)];
+                let index = self.edges.binary_search(&pair).unwrap_or_else(|_| {
+                    unreachable!("an interface diagonal is an edge of the tets beside it")
+                });
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "the quadratic mesh checked its node count against MAX_NODES"
+                )]
+                let node = (self.vertex_count + index) as u32;
+                node
+            };
+            split_hexes(
+                &self.interfaces,
+                &HexData {
+                    order: self.order,
+                    points: &self.nodes,
+                    hexes: &self.hexes,
+                    tet_count: self.tets.len(),
+                    hex_nodes: &hex_nodes,
+                    edge_node: &edge_node,
+                },
+                first_node,
+            )
+        };
+        let node_count = first_node + transitions.added.len();
+        if node_count > MAX_NODES {
+            return Err(FemError::TooManyNodes {
+                count: node_count,
+                max: MAX_NODES,
+            });
+        }
+        self.nodes.extend(transitions.added);
+        self.used.resize(node_count, true);
+        self.splits = transitions.splits;
+        self.first_transition_node = first_node;
+        self.transition_hex = transitions.added_in;
+        Ok(self)
     }
 
     fn into_quadratic(self) -> Result<Self, FemError> {
@@ -318,18 +377,7 @@ impl TetMesh {
             .collect();
         edges.sort_unstable();
         edges.dedup();
-        let face_key = |hex: &[u32; 8], face: [usize; 4]| {
-            let mut key = face.map(|corner| hex[corner]);
-            key.sort_unstable();
-            key
-        };
-        let mut faces: Vec<[u32; 4]> = self
-            .hexes
-            .iter()
-            .flat_map(|hex| FACES_OF_HEX.map(|face| face_key(hex, face)))
-            .collect();
-        faces.sort_unstable();
-        faces.dedup();
+        let faces = self.face_node_keys();
         let first_face = self.vertex_count + edges.len();
         let first_centre = first_face + faces.len();
         let node_count = first_centre + self.hexes.len();
@@ -352,7 +400,7 @@ impl TetMesh {
         };
         let face_node = |hex: &[u32; 8], face: [usize; 4]| -> u32 {
             let index = faces
-                .binary_search(&face_key(hex, face))
+                .binary_search(&sorted_face(hex, face))
                 .unwrap_or_else(|_| unreachable!("every hex face was collected"));
             node_number(first_face + index)
         };
@@ -368,10 +416,17 @@ impl TetMesh {
             for [first, second] in EDGES_OF_HEX {
                 element_nodes.push(edge_node(hex[first], hex[second]));
             }
-            for face in FACES_OF_HEX {
-                element_nodes.push(face_node(hex, face));
+            let centre = node_number(first_centre + index);
+            for (face, local) in FACES_OF_HEX.into_iter().enumerate() {
+                // An interface face has no node: its slot repeats the centre,
+                // which the transition's pieces meet at.
+                element_nodes.push(if self.is_interface_face(index, face) {
+                    centre
+                } else {
+                    face_node(hex, local)
+                });
             }
-            element_nodes.push(node_number(first_centre + index));
+            element_nodes.push(centre);
         }
         let mean = |corners: &[u32]| mean_point(&self.nodes, corners);
         let added: Vec<[f64; 3]> = edges
@@ -395,6 +450,25 @@ impl TetMesh {
         })
     }
 
+    /// The sorted corners of every distinct hex face that gets a node at
+    /// order 2, sorted: all but the interface faces, which are split between
+    /// the tets beside them and the transition's pieces.
+    fn face_node_keys(&self) -> Vec<[u32; 4]> {
+        let mut faces: Vec<[u32; 4]> = self
+            .hexes
+            .iter()
+            .enumerate()
+            .flat_map(|(hex, corners)| {
+                (0..6)
+                    .filter(move |&face| !self.is_interface_face(hex, face))
+                    .map(move |face| sorted_face(corners, FACES_OF_HEX[face]))
+            })
+            .collect();
+        faces.sort_unstable();
+        faces.dedup();
+        faces
+    }
+
     #[must_use]
     pub fn order(&self) -> ElementOrder {
         self.order
@@ -405,7 +479,8 @@ impl TetMesh {
         self.vertex_count
     }
 
-    /// Vertices plus, for a quadratic mesh, edge, face and centre nodes.
+    /// Vertices plus, for a quadratic mesh, edge, face and centre nodes, and
+    /// the nodes transition elements add.
     #[must_use]
     pub fn node_count(&self) -> usize {
         self.nodes.len()
@@ -485,7 +560,9 @@ impl TetMesh {
 
     /// The nodes of `element`: its corners, then (quadratic) its edge nodes in
     /// [`EDGES_OF_TET`] / [`EDGES_OF_HEX`] order and, for a hex, its face
-    /// nodes in [`FACES_OF_HEX`] order and its centre node.
+    /// nodes in [`FACES_OF_HEX`] order and its centre node. An interface face
+    /// of a transition hex has no node; its slot repeats the centre. The
+    /// nodes a transition's field also uses are in [`TetMesh::solved_nodes`].
     #[must_use]
     pub fn element_nodes(&self, element: usize) -> &[u32] {
         let tet_nodes = ElementShape::Tetrahedron.node_count(self.order);
@@ -518,6 +595,174 @@ impl TetMesh {
     pub fn material(&self, element: usize) -> &Isotropic {
         &self.materials[self.material_of_element[element] as usize]
     }
+
+    /// The hex faces that meet two tet triangles, sorted by hex and face;
+    /// each such hex is solved as a transition element.
+    #[must_use]
+    pub fn interface_faces(&self) -> &[InterfaceFace] {
+        &self.interfaces
+    }
+
+    /// Whether face `face` ([`FACES_OF_HEX`] order) of hexahedron `hex` meets
+    /// two tet triangles: then it is inside the body.
+    #[must_use]
+    pub fn is_interface_face(&self, hex: usize, face: usize) -> bool {
+        self.interfaces
+            .binary_search_by_key(&(hex, face), |interface| (interface.hex, interface.face))
+            .is_ok()
+    }
+
+    /// Whether the tet triangle with the (sorted) corners `key` lies on an
+    /// interface face: then it is inside the body.
+    #[must_use]
+    pub fn is_interface_triangle(&self, key: [u32; 3]) -> bool {
+        self.interface_triangles.binary_search(&key).is_ok()
+    }
+
+    fn split_of(&self, element: usize) -> Option<&Split> {
+        self.splits
+            .binary_search_by_key(&element, |split| split.element)
+            .ok()
+            .map(|index| &self.splits[index])
+    }
+
+    /// The pieces `element` is solved as ([`crate::piece`]): the element
+    /// itself, or the pieces of a transition element.
+    #[must_use]
+    pub fn pieces(&self, element: usize) -> Pieces<'_> {
+        if let Some(split) = self.split_of(element) {
+            Pieces(PiecesOf::Split {
+                pieces: split.pieces.iter(),
+                order: self.order,
+            })
+        } else {
+            Pieces(PiecesOf::Whole {
+                mesh: self,
+                element: Some(element),
+            })
+        }
+    }
+
+    /// `element` as its own one piece.
+    fn whole_piece(&self, element: usize) -> PieceRef<'_> {
+        let geometry = match self.shape(element) {
+            ElementShape::Tetrahedron => PieceGeometry::Tetrahedron(self.corners(element)),
+            ElementShape::Hexahedron => {
+                PieceGeometry::Hexahedron(self.hex_corners(element - self.tets.len()))
+            }
+        };
+        PieceRef {
+            geometry,
+            nodes: self.element_nodes(element),
+            order: self.order,
+            blends: &[],
+        }
+    }
+
+    /// Every node the field of `element` uses: its own nodes, and those a
+    /// transition element adds.
+    #[must_use]
+    pub fn solved_nodes(&self, element: usize) -> &[u32] {
+        match self.split_of(element) {
+            Some(split) => &split.nodes,
+            None => self.element_nodes(element),
+        }
+    }
+
+    /// Every node a transition element adds, with the corners of its hex.
+    pub fn transition_nodes(&self) -> impl Iterator<Item = (usize, &[u32; 8])> + '_ {
+        self.transition_hex
+            .iter()
+            .enumerate()
+            .map(|(index, &hex)| (self.first_transition_node + index, &self.hexes[hex]))
+    }
+}
+
+/// The pieces of one element ([`TetMesh::pieces`]).
+pub struct Pieces<'a>(PiecesOf<'a>);
+
+enum PiecesOf<'a> {
+    Whole {
+        mesh: &'a TetMesh,
+        element: Option<usize>,
+    },
+    Split {
+        pieces: std::slice::Iter<'a, Piece>,
+        order: ElementOrder,
+    },
+}
+
+impl<'a> Iterator for Pieces<'a> {
+    type Item = PieceRef<'a>;
+
+    fn next(&mut self) -> Option<PieceRef<'a>> {
+        match &mut self.0 {
+            PiecesOf::Whole { mesh, element } => {
+                element.take().map(|element| mesh.whole_piece(element))
+            }
+            PiecesOf::Split { pieces, order } => pieces.next().map(|piece| PieceRef {
+                geometry: piece.geometry,
+                nodes: &piece.nodes,
+                order: *order,
+                blends: &piece.blends,
+            }),
+        }
+    }
+}
+
+/// Check that every hex names vertices and a material that exist, and has
+/// volume; `material_of_hex` holds the hexes' material indices.
+fn check_hexes(
+    points: &[[f64; 3]],
+    hex_elements: &[[u32; 8]],
+    material_of_hex: &[u32],
+    material_count: usize,
+) -> Result<(), FemError> {
+    for (hex, ids) in hex_elements.iter().enumerate() {
+        if let Some(&vertex) = ids.iter().find(|&&vertex| vertex as usize >= points.len()) {
+            return Err(FemError::HexVertexOutOfRange {
+                hex,
+                vertex,
+                count: points.len(),
+            });
+        }
+        let material = material_of_hex[hex];
+        if material as usize >= material_count {
+            return Err(FemError::HexMaterialOutOfRange {
+                hex,
+                material,
+                count: material_count,
+            });
+        }
+        if !hex_is_valid(
+            &ids.map(|vertex| points[vertex as usize]),
+            ElementOrder::Linear,
+        ) {
+            return Err(FemError::DegenerateHex { hex });
+        }
+    }
+    Ok(())
+}
+
+/// The corners `face` of `hex`, sorted.
+fn sorted_face(hex: &[u32; 8], face: [usize; 4]) -> [u32; 4] {
+    let mut key = face.map(|corner| hex[corner]);
+    key.sort_unstable();
+    key
+}
+
+/// Both triangles of every interface face, each sorted, the list sorted.
+fn sorted_triangles(interfaces: &[InterfaceFace], hexes: &[[u32; 8]]) -> Vec<[u32; 3]> {
+    let mut triangles: Vec<[u32; 3]> = interfaces
+        .iter()
+        .flat_map(|interface| interface.triangles(&hexes[interface.hex]))
+        .map(|mut triangle| {
+            triangle.sort_unstable();
+            triangle
+        })
+        .collect();
+    triangles.sort_unstable();
+    triangles
 }
 
 /// Largest node count whose DOF numbers (3·node + component) fit in `u32`,

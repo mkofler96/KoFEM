@@ -20,11 +20,10 @@ use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::count::count_as_f64;
-use crate::element::{
-    cube_rule, hex8_reference_gradients, hex8_stiffness, hex_gradients, tet4_stiffness,
-};
+use crate::element::{cube_rule, hex8_reference_gradients, hex_gradients};
 use crate::error::FemError;
 use crate::mesh::{signed_volume, ElementOrder, ElementShape, TetMesh};
+use crate::piece::element_stiffness;
 use crate::sparse::CsrMatrix;
 
 use super::stress::StressOperators;
@@ -281,7 +280,7 @@ impl SimpModel {
     /// Global DOFs of `element`, in its stiffness order.
     pub(crate) fn element_dofs(&self, element: usize) -> impl Iterator<Item = usize> + '_ {
         self.mesh
-            .element_nodes(element)
+            .solved_nodes(element)
             .iter()
             .flat_map(|&node| (0..3).map(move |component| 3 * node as usize + component))
     }
@@ -477,21 +476,18 @@ impl ElementCache {
         let tet_count = mesh.tets().len();
         for element in 0..element_count {
             cache.offsets.push(cache.stiffness.len());
-            let material = mesh.material(element);
+            // A transition element's stiffness is its pieces' (KOF-433).
+            cache
+                .stiffness
+                .extend_from_slice(&element_stiffness(mesh, element));
             match mesh.shape(element) {
                 ElementShape::Tetrahedron => {
                     let corners = mesh.corners(element);
-                    cache
-                        .stiffness
-                        .extend_from_slice(tet4_stiffness(&corners, material).as_flattened());
                     cache.volumes.push(signed_volume(&corners).abs());
                     cache.centroids.push(mean_point(&corners));
                 }
                 ElementShape::Hexahedron => {
                     let corners = mesh.hex_corners(element - tet_count);
-                    cache
-                        .stiffness
-                        .extend_from_slice(hex8_stiffness(&corners, material).as_flattened());
                     cache.volumes.push(hex_volume(&corners));
                     cache.centroids.push(mean_point(&corners));
                 }
@@ -499,7 +495,7 @@ impl ElementCache {
             push_positions(
                 pattern,
                 neighbours,
-                mesh.element_nodes(element),
+                mesh.solved_nodes(element),
                 &mut cache.positions,
             );
         }
