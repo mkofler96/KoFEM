@@ -46,7 +46,7 @@
               "https://kofem.org/examples/nafems-le2/nafems-le2-cylindrical-panel-diagram.png",
               "https://kofem.org/examples/nafems-le2/nafems-le2-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-26",
+            "dateModified": "2026-11-27",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -904,7 +904,7 @@
           <img src="/examples/nafems-le2.png" width="1200" height="900" alt="NAFEMS LE2: cylindrical shell patch: von mises stress on the deformed shape, displacements drawn 5 times enlarged" />
           <p class="viewer-hint" hidden></p>
         </div>
-        <div class="colorbar"><span data-legend="min">25.8&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">67.6&nbsp;MPa</span></div>
+        <div class="colorbar"><span data-legend="min">47.5&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">65.4&nbsp;MPa</span></div>
         <figcaption><span data-legend="name">Von Mises stress</span>, deformed shape, displacements drawn 5 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -921,8 +921,8 @@
           <tbody>
             <tr>
               <td class="num">60.000&nbsp;MPa</td>
-              <td class="num"><strong data-testid="fe-value">61.107&nbsp;MPa</strong></td>
-              <td class="num">+1.85&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">60.902&nbsp;MPa</strong></td>
+              <td class="num">+1.50&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -966,10 +966,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 1,010 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>554 nodes, 3,324 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 972 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>528 nodes, 3,168 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-724e4e1365f1); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-32198cb04210</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-e6a2c2810a06); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-2809946d993e</td></tr>
         </table>
       </div>
         <p>The panel is imported as a 10&nbsp;mm thick solid and
@@ -978,7 +978,7 @@
         the shell's top surface. The moment is entered about the panel's
         axis on its straight edge; that edge lies on the axis, so the app
         applies it as nodal moments shared along the edge by length.</p>
-        <p>1,010 flat triangles, each an
+        <p>972 flat triangles, each an
         OPT drilling membrane with a DKT plate-bending element, model the
         curved panel.</p>
 
@@ -987,8 +987,8 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>tangential stress at E, outer surface</td></tr>
           <tr><th scope="row">Reference</th><td>NAFEMS LE2 target, 6·m / t² = 60.000&nbsp;MPa <span class="meta">(NAFEMS TNSB Rev. 3 (1990), test LE2)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>61.107&nbsp;MPa</td></tr>
-          <tr><th scope="row">Difference</th><td>+1.85&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>60.902&nbsp;MPa</td></tr>
+          <tr><th scope="row">Difference</th><td>+1.50&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="nafems-le2">
@@ -1017,23 +1017,23 @@
                 <tr>
                   <td>Shell (linear)</td>
                   <td>50 mm</td>
-                  <td class="num">1,170</td>
-                  <td class="num">61.063&nbsp;MPa</td>
-                  <td class="num">+1.77&nbsp;%</td>
+                  <td class="num">792</td>
+                  <td class="num">60.825&nbsp;MPa</td>
+                  <td class="num">+1.37&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>25 mm (this example)</td>
-                  <td class="num">3,324</td>
-                  <td class="num">61.107&nbsp;MPa</td>
-                  <td class="num">+1.85&nbsp;%</td>
+                  <td class="num">3,168</td>
+                  <td class="num">60.902&nbsp;MPa</td>
+                  <td class="num">+1.50&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>12.5 mm</td>
-                  <td class="num">12,492</td>
-                  <td class="num">60.930&nbsp;MPa</td>
-                  <td class="num">+1.55&nbsp;%</td>
+                  <td class="num">12,444</td>
+                  <td class="num">60.957&nbsp;MPa</td>
+                  <td class="num">+1.59&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1042,7 +1042,7 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM reads +1.85&nbsp;% from the uniform bending stress,
+        <p>KoFEM reads +1.50&nbsp;% from the uniform bending stress,
         and the convergence study shows the difference staying put as the
         mesh is refined: what remains is the flat facets standing in for the
         curved surface, not the mesh size.</p>

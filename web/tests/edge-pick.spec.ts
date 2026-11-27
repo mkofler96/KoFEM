@@ -293,7 +293,9 @@ test("edges on a shell's collapsed side faces survive a re-mesh @pipeline", asyn
 
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("2");
-  await page.getByTestId("min-element-size").fill("0.2");
+  // The example's hole face is meshed at 0.125 mm, and the min size may not
+  // exceed a face size.
+  await page.getByTestId("min-element-size").fill("0.1");
   await page.getByTestId("mesh-generate").click();
   await expect
     .poll(async () => (await readGroups()).nodes)

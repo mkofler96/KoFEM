@@ -42,14 +42,14 @@ export default {
         its mid-surface, so there is no mid-plane to cut at. The edge
         ${tex("x = L")} is pulled with ${tex("σ b t")}, spread as a uniform
         line load ${tex("q = σ t")}.</p>
-        <p>The app builds the shell from a solid mesh: Netgen fills the
-        ${inp("t")}&nbsp;mm wall with tetrahedra, and the app replaces the
-        wall by its mid-surface. The faces through the wall, the cut edges and
+        <p>The app builds the shell from the CAD geometry: it pairs the
+        plate's two faces, ${inp("t")}&nbsp;mm apart, and meshes the surface
+        halfway between them. The faces through the wall, the cut edges and
         the hole, become the edges of the shell, so each support and the load
-        is picked as an Edge. Netgen puts at least two elements along every
-        edge, so next to the ${inp("t")}&nbsp;mm cut edge the triangle at A
-        stays about 0.6&nbsp;mm on every mesh: a smaller maximum element size
-        refines the rest of the hole but not the peak.</p>
+        is picked as an Edge. The peak sits on the hole, so the hole face gets
+        its own element size, an eighth of the plate's: the hole edge is
+        meshed at 0.125&nbsp;mm and the rest of the plate grades out to
+        1&nbsp;mm.</p>
         <p>Each of the ${row.mesh.elements.toLocaleString("en-US")} triangles
         combines Felippa's OPT membrane, whose corner rotations are the
         in-plane rotations of the field, and a DKT plate-bending element; in
@@ -59,11 +59,12 @@ export default {
         floating: an in-plane load never moves it out of its plane.</p>`,
   discussion: ({ row, rowOf, pct, pctAbs, tex, url, study }) => {
     const errs = shellErrors(study);
-    const lo = Math.min(...errs),
-      hi = Math.max(...errs);
-    if (!(lo < 0 && hi > 0))
+    const settles = errs.every(
+      (err, k) => err < 0 && (k === 0 || Math.abs(err) <= Math.abs(errs[k - 1])),
+    );
+    if (!settles)
       throw new Error(
-        "plate-with-hole-shell: the page says the study scatters on both sides of 3.14; it does not",
+        "plate-with-hole-shell: the page says the study rises towards 3.14 from below on every finer mesh; it does not",
       );
     return `
         <p>KoFEM's ${tex("K_{\\mathrm{t}}")} is ${pct(row.errPct)} from
@@ -71,22 +72,21 @@ export default {
         stress. The <a href="${url("plate-with-hole")}">solid page</a>, with
         quadratic tetrahedra, comes out
         ${pct(rowOf("plate-with-hole").errPct)}.</p>
-        <p>The difference is in the elements. A quadratic tetrahedron's stress
-        varies inside it, so it follows the steep drop away from the hole, and
-        the solid model reads the peak slightly low on every mesh. A shell
-        triangle reports one stress, at its centroid. At A only one or two
-        triangles meet, so the
-        nodal value is their stress, and it lands above or below 3.14
-        depending on how the mesher cuts that corner; on the finest meshes the
-        peak moves to the next node along the hole. Over the mesh study above
-        it ranges from ${pctAbs(lo, 1)} below to ${pctAbs(hi, 1)} above,
-        without settling, which is why the band is
-        ±${row.tolPct}&nbsp;%.</p>
-        <p>For a peak stress in a flat part loaded in its plane, use solid
-        quadratic elements, or check that the shell peak stops changing on
-        finer meshes. Shells pay off when a thin wall bends: one layer of
-        shell elements bends by construction, while solid elements need
-        several layers or quadratic elements to do the same (see the
+        <p>A shell triangle reports one stress, at its centroid, and the
+        nodal value at A averages the one or two triangles that meet there:
+        a stress a fraction of an element inside the plate, where it has
+        started to fall. So the read-out is low, by an amount set by the
+        triangles at the hole. In the mesh study above the plate and its hole
+        edge are refined together, the hole edge always at an eighth of the
+        plate's size, and ${tex("K_{\\mathrm{t}}")} rises towards 3.14 on
+        every finer mesh, from ${pctAbs(errs[0], 1)} below to
+        ${pctAbs(errs.at(-1), 2)} below. Without the face size on the hole the
+        1&nbsp;mm mesh reads about 9&nbsp;% low.</p>
+        <p>For a peak stress, refine where the stress peaks: an element size
+        on the face that carries the peak moves the reading far more than a
+        finer mesh everywhere. Shells pay off when a thin wall bends: one
+        layer of shell elements bends by construction, while solid elements
+        need several layers or quadratic elements to do the same (see the
         <a href="${url("cantilever-beam")}">cantilever</a>).</p>`;
   },
   references: [REF.kirsch, REF.howland, REF.peterson, REF.batoz, REF.felippa2003, REF.cmpw],

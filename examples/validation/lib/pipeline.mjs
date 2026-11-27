@@ -1034,3 +1034,19 @@ export function nodalVonMises(build) {
 export function withMesh(recipe, mesh) {
   return { ...recipe, mesh: { ...recipe.mesh, ...mesh } };
 }
+
+/**
+ * The recipe's face sizes at another max element size, in the same ratio to it
+ * as at the recipe's own: a convergence level that refines them with the rest.
+ */
+export function scaledLocalSizes(mesh, maxElementSize) {
+  if (!mesh.localSizes?.length)
+    throw new Error(
+      "scaledLocalSizes: the recipe's mesh has no face sizes to scale",
+    );
+  const ratio = maxElementSize / mesh.maxElementSize;
+  return mesh.localSizes.map((local) => ({
+    ...local,
+    size: local.size * ratio,
+  }));
+}

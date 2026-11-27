@@ -316,7 +316,11 @@ for (const id of ORDER as string[]) {
     const size = 2 * recipe.mesh.maxElementSize;
     await openTree(page, "mesh");
     await page.getByTestId("max-element-size").fill(String(size));
-    await page.getByTestId("min-element-size").fill(String(size / 10));
+    // The min size may not exceed a face size the example sets (mesh.localSizes).
+    const faceSizes = (recipe.mesh.localSizes ?? []).map((l) => l.size);
+    await page
+      .getByTestId("min-element-size")
+      .fill(String(Math.min(size / 10, ...faceSizes)));
     await page.getByTestId("mesh-generate").click();
     await expect
       .poll(async () => {

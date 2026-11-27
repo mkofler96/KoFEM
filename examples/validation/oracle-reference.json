@@ -75,12 +75,14 @@
     },
     {
       "id": "plate-with-hole-shell",
-      "nodes": 8843,
-      "elements": 17283,
-      "order": 1,
+      "retired": "KOF-498: the shell is now meshed as the CAD mid-surface, with the hole edge refined to 0.125 mm; the C++ solve_shell result was computed on the mesh-based mid-surface, which the example no longer has, and the C++ solvers are gone (KOF-309), so it cannot be recomputed.",
+      "retiredMesh": {
+        "nodes": 8843,
+        "elements": 17283
+      },
       "path": "Rust DKT shell",
       "oracle": "C++ solve_shell",
-      "reference": {
+      "retiredReference": {
         "fe": 3.1766020602643383,
         "maxDisplacement": 0.0741306253691673,
         "maxVonMises": 317.66020602643385
