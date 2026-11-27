@@ -95,22 +95,6 @@ export const solveMessages = defineMessages({
     es: "Grandes deformaciones",
     pt: "Grandes deformações",
   },
-  largeDeformationHint: {
-    en: "Follow large displacements and rotations. Slower than the linear solve.",
-    de: "Große Verschiebungen und Drehungen verfolgen. Langsamer als die lineare Lösung.",
-    fr: "Suivre les grands déplacements et rotations. Plus lent que le calcul linéaire.",
-    it: "Segue grandi spostamenti e rotazioni. Più lento della soluzione lineare.",
-    es: "Sigue grandes desplazamientos y rotaciones. Más lento que el cálculo lineal.",
-    pt: "Acompanha grandes deslocamentos e rotações. Mais lento que a solução linear.",
-  },
-  largeDeformationNote: {
-    en: "Materials act as Neo-Hookean with the same E and ν. Loads keep their direction. The solve stops if the part buckles.",
-    de: "Werkstoffe verhalten sich neo-hookesch mit demselben E und ν. Lasten behalten ihre Richtung. Die Lösung bricht ab, wenn das Bauteil knickt.",
-    fr: "Les matériaux se comportent en néo-hookéen avec les mêmes E et ν. Les charges gardent leur direction. Le calcul s'arrête si la pièce flambe.",
-    it: "I materiali si comportano come neo-hookeani con gli stessi E e ν. I carichi mantengono la loro direzione. La soluzione si ferma se il pezzo si instabilizza.",
-    es: "Los materiales se comportan como neo-hookeanos con los mismos E y ν. Las cargas mantienen su dirección. El cálculo se detiene si la pieza pandea.",
-    pt: "Os materiais se comportam como neo-hookeanos com os mesmos E e ν. As cargas mantêm sua direção. A solução para se a peça flambar.",
-  },
   loadIncrements: {
     en: "Load increments",
     de: "Laststufen",

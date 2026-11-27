@@ -95,7 +95,7 @@ export function SolvePanel({
             {solverNote}
           </div>
         )}
-        <label className={styles.formRow} title={text.largeDeformationHint}>
+        <label className={styles.formRow}>
           <span className={styles.formLabel}>{text.largeDeformation}</span>
           <input
             type="checkbox"
@@ -128,11 +128,14 @@ export function SolvePanel({
                 onBlur={() => setIncrementsDraft(null)}
               />
             </div>
-            <p className={styles.formNote} data-testid="large-deformation-note">
-              {incrementsValid
-                ? text.largeDeformationNote
-                : text.loadIncrementsInvalid(MAX_LOAD_INCREMENTS)}
-            </p>
+            {!incrementsValid && (
+              <p
+                className={styles.formNote}
+                data-testid="load-increments-invalid"
+              >
+                {text.loadIncrementsInvalid(MAX_LOAD_INCREMENTS)}
+              </p>
+            )}
           </>
         )}
         <div className={styles.statRow}>

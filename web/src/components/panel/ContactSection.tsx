@@ -98,13 +98,21 @@ export function ContactSection({
     endPick();
   }
 
-  function summary(group: ContactGroup): string {
-    if (contactResult === null) return text.contactUnsolved;
+  // What the last solve found at `group`; nothing before a solve.
+  function summary(group: ContactGroup) {
+    if (contactResult === null) return null;
     const { touching, total, force } = contactSummaryOf(group, contactResult);
-    return text.contactSummary(
-      touching,
-      total,
-      force.toLocaleString(intlTag, { maximumSignificantDigits: 4 }),
+    return (
+      <div
+        className={styles.contactSummary}
+        data-testid={`contact-summary-${group.id}`}
+      >
+        {text.contactSummary(
+          touching,
+          total,
+          force.toLocaleString(intlTag, { maximumSignificantDigits: 4 }),
+        )}
+      </div>
     );
   }
 
@@ -208,12 +216,7 @@ export function ContactSection({
               </div>
             </div>
 
-            <div
-              className={styles.contactSummary}
-              data-testid={`contact-summary-${group.id}`}
-            >
-              {summary(group)}
-            </div>
+            {summary(group)}
 
             {(["a", "b"] as const).map((side) => (
               <div key={side}>

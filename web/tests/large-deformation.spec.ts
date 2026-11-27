@@ -89,14 +89,14 @@ test("Large deformation solves the cantilever and agrees with the linear solve u
   await toggle.check();
   const increments = page.getByTestId("load-increments");
   await expect(increments).toHaveValue("10");
-  await expect(page.getByTestId("large-deformation-note")).toContainText(
-    "Neo-Hookean",
-  );
+  // The option carries no explanatory text; only an invalid count is
+  // answered, until it is valid again.
+  const invalid = page.getByTestId("load-increments-invalid");
+  await expect(invalid).toHaveCount(0);
   await increments.fill("0");
-  await expect(page.getByTestId("large-deformation-note")).toHaveText(
-    "Enter a whole number from 1 to 100.",
-  );
+  await expect(invalid).toHaveText("Enter a whole number from 1 to 100.");
   await increments.fill("2");
+  await expect(invalid).toHaveCount(0);
   await expect
     .poll(() =>
       page.evaluate(
