@@ -70,7 +70,8 @@ impl ContactRun {
         match self.status {
             NewtonStatus::Solving { iteration, .. } => iteration.saturating_sub(1),
             NewtonStatus::Iterated { iteration, .. } => iteration,
-            NewtonStatus::Converged => 0,
+            // Linear elasticity has no stability check to run.
+            NewtonStatus::Checking { .. } | NewtonStatus::Converged => 0,
         }
     }
 
