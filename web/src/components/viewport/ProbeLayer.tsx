@@ -17,7 +17,7 @@ import { useModelStore } from "../../store/modelStore";
 import { refinementChartVisible } from "../../store/studySlice";
 import { probeLabel } from "../../lib/resultProbe";
 import { formatHandCheckValue } from "../../lib/handCheck";
-import { resultUnit } from "../../lib/resultField";
+import { resultUnit, type ResultUnit } from "../../lib/resultField";
 import { useT } from "../../i18n/useLocale";
 import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./ProbeLayer.module.css";
@@ -39,7 +39,7 @@ interface MarkerProps {
   at: Vec3;
   displacement: Vec3;
   value: number;
-  unit: "mm" | "MPa";
+  unit: ResultUnit;
   deformScale: number;
   radius: number;
 }

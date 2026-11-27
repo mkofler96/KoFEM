@@ -959,6 +959,14 @@ label.sectionHeadAction {
   flex-shrink: 0;
 }
 
+.contactDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ea580c;
+  flex-shrink: 0;
+}
+
 /* Surface-to-point couplings — the emerald of the coupling spider in the
    viewport, so a coupling reads the same in the panel and in 3D. */
 .couplingDot {
@@ -970,6 +978,14 @@ label.sectionHeadAction {
 }
 
 /* Header of one side (A / B) of a connection's face list. */
+.contactSummary {
+  padding: 6px 8px 6px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
 .tieSideRow {
   display: flex;
   align-items: center;

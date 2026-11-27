@@ -234,6 +234,13 @@ impl ContactSolution {
             .collect()
     }
 
+    /// The area each slave vertex's pressure acts on (Dⱼⱼ).
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn area(&self) -> Vec<f64> {
+        self.state.area.clone()
+    }
+
     /// The total normal force the contact carries.
     #[wasm_bindgen(getter)]
     #[must_use]

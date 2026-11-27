@@ -71,7 +71,7 @@ pub use reactions::{
     fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,
     widen_translations, NodalReaction, ReactionSummary, SupportReaction,
 };
-pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
+pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
     assemble_shell_stiffness, prepare_shell_static, shell_corner_stress_tensors,

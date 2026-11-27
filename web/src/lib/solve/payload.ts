@@ -22,6 +22,7 @@ export type SolveSource = Pick<
   | "solverMethod"
   | "tieGroups"
   | "couplingGroups"
+  | "contactGroups"
   | "surfaceTriangles"
   | "surfaceFaceIds"
 >;
@@ -40,6 +41,7 @@ export function solvePayload(s: SolveSource): SolvePayload {
     solverMethod: s.solverMethod,
     tieGroups: s.tieGroups,
     couplings: s.couplingGroups,
+    contacts: s.contactGroups,
     // Surface mesh + CAD face ids drive auto-shell idealisation of thin
     // bodies in the worker's coupled solve.
     surfaceTriangles: s.surfaceTriangles,

@@ -17,6 +17,7 @@ import {
   solvePreconditioner,
 } from "../lib/solve/amg";
 import type { ReactionSummary } from "../lib/solve/reactions";
+import type { ContactResult } from "../lib/contact";
 import { routeOrRefusal } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import {
@@ -62,6 +63,7 @@ export function useSolver() {
   const setSolverMethod = useModelStore((s) => s.setSolverMethod);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const contactGroups = useModelStore((s) => s.contactGroups);
   // Surface mesh + CAD face ids drive auto-shell idealisation of thin bodies
   // in the worker's coupled solve.
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
@@ -120,6 +122,7 @@ export function useSolver() {
           elementOrder,
           tieGroups,
           couplings: couplingGroups,
+          contacts: contactGroups,
         }
       : null,
   );
@@ -149,6 +152,7 @@ export function useSolver() {
       elementOrder,
       tieGroups,
       couplings: couplingGroups,
+      contacts: contactGroups,
       // A body marked Shell is checked on its idealisation, found from these.
       surfaceTriangles,
       surfaceFaceIds,
@@ -173,6 +177,7 @@ export function useSolver() {
     elementOrder,
     tieGroups,
     couplingGroups,
+    contactGroups,
     surfaceTriangles,
     surfaceFaceIds,
     routeRefusal,
@@ -232,6 +237,7 @@ export function useSolver() {
       solverMethod,
       tieGroups,
       couplingGroups,
+      contactGroups,
       surfaceTriangles,
       surfaceFaceIds,
     });
@@ -242,9 +248,10 @@ export function useSolver() {
       vonMises: Float64Array;
       stress: ElementStress;
       reactions: ReactionSummary | null;
+      contact: ContactResult | null;
     }>("solve", payload)
-      .then(({ displacements, vonMises, stress, reactions }) => {
-        setResult({ displacements, vonMises, stress, reactions });
+      .then(({ displacements, vonMises, stress, reactions, contact }) => {
+        setResult({ displacements, vonMises, stress, reactions, contact });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",

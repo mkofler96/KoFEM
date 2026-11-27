@@ -111,18 +111,40 @@ export const resultFieldMessages = defineMessages({
     es: "Tensión principal mín. σ3",
     pt: "Tensão principal mín. σ3",
   },
+  "Contact pressure": {
+    en: "Contact pressure",
+    de: "Kontaktdruck",
+    fr: "Pression de contact",
+    it: "Pressione di contatto",
+    es: "Presión de contacto",
+    pt: "Pressão de contato",
+  },
+  "Contact status": {
+    en: "Contact status (1 = touching)",
+    de: "Kontaktstatus (1 = berührt)",
+    fr: "État du contact (1 = en contact)",
+    it: "Stato del contatto (1 = a contatto)",
+    es: "Estado del contacto (1 = en contacto)",
+    pt: "Estado do contato (1 = em contato)",
+  },
 });
 
 // The Results panel: adding plots, a plot's field, scale, probes and section
 // cut, and the support reactions.
 export const resultsMessages = defineMessages({
   staticSolveHint: {
-    en: (unit: string) => `Static solve · ${unit}`,
-    de: (unit: string) => `Statische Berechnung · ${unit}`,
-    fr: (unit: string) => `Calcul statique · ${unit}`,
-    it: (unit: string) => `Calcolo statico · ${unit}`,
-    es: (unit: string) => `Cálculo estático · ${unit}`,
-    pt: (unit: string) => `Cálculo estático · ${unit}`,
+    en: (unit: string) =>
+      unit === "" ? "Static solve" : `Static solve · ${unit}`,
+    de: (unit: string) =>
+      unit === "" ? "Statische Berechnung" : `Statische Berechnung · ${unit}`,
+    fr: (unit: string) =>
+      unit === "" ? "Calcul statique" : `Calcul statique · ${unit}`,
+    it: (unit: string) =>
+      unit === "" ? "Calcolo statico" : `Calcolo statico · ${unit}`,
+    es: (unit: string) =>
+      unit === "" ? "Cálculo estático" : `Cálculo estático · ${unit}`,
+    pt: (unit: string) =>
+      unit === "" ? "Cálculo estático" : `Cálculo estático · ${unit}`,
   },
   runStaticFirst: {
     en: "Run a static study first",

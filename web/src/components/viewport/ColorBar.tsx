@@ -109,7 +109,8 @@ export function ColorBar() {
           whiteSpace: "nowrap",
         }}
       >
-        {resultFieldSymbol(resultType)} [{resultUnit(resultType)}]
+        {resultFieldSymbol(resultType)}
+        {resultUnit(resultType) !== "" && ` [${resultUnit(resultType)}]`}
         <button
           data-testid="legend-edit"
           aria-label={text.editLegendRange}

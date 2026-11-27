@@ -10,6 +10,7 @@ import {
 } from "./stressFields";
 import type {
   AppMode,
+  ContactGroup,
   CouplingGroup,
   Element,
   ElementType,
@@ -91,12 +92,14 @@ export interface AnalysisState {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
+  contactGroups: ContactGroup[];
   couplingGroups: CouplingGroup[];
   // A temperature change over the model (KOF-449), or null for none.
   temperature: TemperatureLoad | null;
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId: number;
+  nextContactGroupId: number;
   nextCouplingGroupId: number;
   nextFaceEntryId: number;
   nextMatId: number;
@@ -148,6 +151,9 @@ interface KofemFieldDataV1 {
   // became a named model object — such a file simply has no ties. A tie's
   // `method` is absent in files written before the constraint tie existed.
   tieGroups?: (Omit<TieGroup, "method"> & { method?: TieMethod })[];
+  // Contacts (KOF-485). Absent in files written before contact existed —
+  // such a file simply has none.
+  contactGroups?: ContactGroup[];
   // Surface-to-point couplings. Absent in files written before couplings
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
@@ -158,6 +164,7 @@ interface KofemFieldDataV1 {
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId?: number;
+  nextContactGroupId?: number;
   nextCouplingGroupId?: number;
   nextFaceEntryId: number;
   nextMatId: number;
@@ -337,6 +344,14 @@ export function serializeAnalysis(state: AnalysisState): string {
     topOpt: state.topOpt,
     elementOrder: state.elementOrder,
     ...(state.handCheck ? { handCheck: state.handCheck } : {}),
+    // A model that never had a contact saves as it did before contact
+    // existed (KOF-485).
+    ...(state.contactGroups.length > 0 || state.nextContactGroupId > 1
+      ? {
+          contactGroups: state.contactGroups,
+          nextContactGroupId: state.nextContactGroupId,
+        }
+      : {}),
     ...(state.faceSizes.length > 0 ? { faceSizes: state.faceSizes } : {}),
     ...(state.meshSizes ? { meshSizes: state.meshSizes } : {}),
   };
@@ -613,6 +628,10 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     throw new Error(
       `Invalid analysis file: "tieGroups" must be an array, got ${typeof meta.tieGroups}`,
     );
+  if (meta.contactGroups !== undefined && !Array.isArray(meta.contactGroups))
+    throw new Error(
+      `Invalid analysis file: "contactGroups" must be an array, got ${typeof meta.contactGroups}`,
+    );
   if (meta.couplingGroups !== undefined && !Array.isArray(meta.couplingGroups))
     throw new Error(
       `Invalid analysis file: "couplingGroups" must be an array, got ${typeof meta.couplingGroups}`,
@@ -834,6 +853,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
   const nextTieGroupId =
     meta.nextTieGroupId ??
     tieGroups.reduce((highest, tie) => Math.max(highest, tie.id), 0) + 1;
+  const contactGroups = meta.contactGroups ?? [];
+  const nextContactGroupId =
+    meta.nextContactGroupId ??
+    contactGroups.reduce((highest, c) => Math.max(highest, c.id), 0) + 1;
   const couplingGroups = meta.couplingGroups ?? [];
   const nextCouplingGroupId =
     meta.nextCouplingGroupId ??
@@ -850,12 +873,14 @@ export function parseAnalysisFile(text: string): AnalysisState {
     bcGroups: meta.bcGroups,
     loadGroups: meta.loadGroups,
     tieGroups,
+    contactGroups,
     couplingGroups,
     // A file written before temperature changes existed (KOF-449) has none.
     temperature: meta.temperature ?? null,
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
     nextTieGroupId,
+    nextContactGroupId,
     nextCouplingGroupId,
     nextFaceEntryId: meta.nextFaceEntryId,
     nextMatId: meta.nextMatId,

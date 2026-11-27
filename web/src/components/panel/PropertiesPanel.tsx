@@ -27,6 +27,7 @@ function kindLabel(text: ShellText, kind: TreeItemKind): string {
     bc: text.kindSupport,
     load: text.kindLoad,
     tie: text.kindTie,
+    contact: text.kindContact,
     coupling: text.kindCoupling,
     temperature: text.kindTemperature,
     study: text.kindStudy,
@@ -47,6 +48,7 @@ function addTitle(text: ShellText, { group, target }: TreeSelection): string {
       bc: text.newSupport,
       load: text.newLoad,
       tie: text.newTie,
+      contact: text.newContact,
       coupling: text.newCoupling,
       temperature: text.newTemperature,
     }[target.kind];

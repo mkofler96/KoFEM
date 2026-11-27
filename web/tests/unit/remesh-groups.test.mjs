@@ -102,6 +102,7 @@ const groups = {
   couplingGroups: [
     { id: 1, name: "Coupling1", faces: [], point: [0, 0, 0], refNodeId: 500 },
   ],
+  contactGroups: [],
 };
 
 const carried = carryGroupsToMesh(
@@ -200,7 +201,14 @@ describe("the remesh notice", () => {
 
   test("a first mesh (no groups) has no notice", () => {
     const nothing = carryGroupsToMesh(
-      { bcGroups: [], loadGroups: [], tieGroups: [], couplingGroups: [] },
+      {
+        bcGroups: [],
+        loadGroups: [],
+        tieGroups: [],
+        contactGroups: [],
+        couplingGroups: [],
+        contactGroups: [],
+      },
       surfaceTriangles,
       surfaceFaceIds,
       nodeIds,
@@ -244,6 +252,7 @@ const rimGroups = {
     },
   ],
   tieGroups: [],
+  contactGroups: [],
   couplingGroups: [],
 };
 describe("a shell rim", () => {
@@ -301,6 +310,7 @@ const couplingGroups = {
     },
   ],
   tieGroups: [],
+  contactGroups: [],
   couplingGroups: [
     {
       id: 1,

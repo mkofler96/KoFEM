@@ -55,6 +55,7 @@ export type TreeItemKind =
   | "bc"
   | "load"
   | "tie"
+  | "contact"
   | "coupling"
   | "temperature"
   | "study"
@@ -74,7 +75,8 @@ export const MESH_ITEM_ID = 1;
 export const TEMPERATURE_ITEM_ID = 1;
 
 // The object kinds "+ Add" under Boundary conditions can create.
-export type BoundaryKind = "bc" | "load" | "tie" | "coupling" | "temperature";
+export type BoundaryKind =
+  "bc" | "load" | "tie" | "contact" | "coupling" | "temperature";
 
 export type TreeTarget =
   // created: the object was just made by its "+ Add" form, so its view opens
