@@ -25,15 +25,11 @@ import {
 import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
-  FemMesh,
   KofemModule,
-  ShellRoute,
 } from "../wasm/pkg/kofem_wasm.js";
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import type { ContactResult } from "../lib/contact.js";
 import type {
-  Node,
-  Element,
   ParseStepPayload,
   SplitGeometryPayload,
   BooleanGeometryPayload,
@@ -49,9 +45,8 @@ import {
   thinWallFindings,
   type ThinWallCheckInput,
 } from "../lib/solve/thinWall.js";
-import { dropSuppressedBodies } from "../lib/suppressBodies.js";
-import { buildCadShellModel, describeShellRoute } from "../lib/cadShell.js";
-import { shellThinWallRule } from "../lib/shellize.js";
+import { describeShellRoute } from "../lib/cadShell.js";
+import { shellMeshOptions, storedMesh } from "../lib/storedMesh.js";
 import {
   inStage,
   inStageAsync,
@@ -59,11 +54,7 @@ import {
   type FailureStage,
 } from "../lib/workerError.js";
 import { explainRustFailure } from "../lib/solve/rustFailure.js";
-import {
-  buildMeshTimeShellModel,
-  prepareAutoShellSolve,
-  requireOneShellBody,
-} from "../lib/solve/autoShell.js";
+import { prepareAutoShellSolve } from "../lib/solve/autoShell.js";
 import {
   buildCoupledEngineInputs,
   coupledSupportOwners,
@@ -480,17 +471,13 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   }
 
   // Bodies marked Shell: the engine builds each one's mid-surface from its CAD
-  // faces where they pair (KOF-498) and meshes the rest as volumes, for the
-  // mesh-based idealisation below. One Shell body per model, as the solve
-  // takes (requireOneShellBody).
+  // faces where they pair (KOF-498) and meshes the rest as volumes.
   const shellBodyIds = new Set(payload.shellBodyIds ?? []);
-  requireOneShellBody(shellBodyIds);
+  const shellOptions = shellMeshOptions(shellBodyIds);
   const opts = JSON.stringify({
     max_element_size: maxElementSize,
     min_element_size: minSize,
-    ...(shellBodyIds.size > 0
-      ? { shell_bodies: [...shellBodyIds], thin_wall: shellThinWallRule() }
-      : {}),
+    ...shellOptions,
     ...(payload.solidMaxSizes
       ? { solid_max_sizes: payload.solidMaxSizes }
       : {}),
@@ -541,135 +528,11 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   m().free_geometry_cache();
   geometryLoaded = false;
 
-  const stored = storedMesh(id, dto, payload, shellBodyIds, shellRoutes);
+  const stored = storedMesh(dto, { ...payload, shellBodyIds }, (line) =>
+    self.postMessage({ id, log: line }),
+  );
   flushCoverage();
   self.postMessage({ id, ok: true, ...stored });
-}
-
-// The model the store keeps for a mesh: the volume part as node and element
-// lists without the suppressed bodies, and the Shell body as a CAD
-// mid-surface (KOF-498) or idealised from its volume mesh (#397).
-function storedMesh(
-  id: number,
-  dto: FemMesh,
-  payload: VolumeMeshPayload,
-  shellBodyIds: Set<number>,
-  shellRoutes: ShellRoute[],
-) {
-  const nNodes = dto.vertices.length / 3;
-  const nTets = dto.tetrahedra.length / 4;
-  // The store models nodes/elements as object lists; build them here from
-  // the flat arrays (plain JS, no parsing — cheap relative to meshing).
-  const meshNodes: Node[] = new Array<Node>(nNodes);
-  for (let i = 0; i < nNodes; i++) {
-    meshNodes[i] = {
-      id: i,
-      x: dto.vertices[3 * i],
-      y: dto.vertices[3 * i + 1],
-      z: dto.vertices[3 * i + 2],
-    };
-  }
-  const meshElements: Element[] = new Array<Element>(nTets);
-  for (let i = 0; i < nTets; i++) {
-    meshElements[i] = {
-      id: i,
-      type: "CTETRA",
-      nodeIds: [
-        dto.tetrahedra[4 * i],
-        dto.tetrahedra[4 * i + 1],
-        dto.tetrahedra[4 * i + 2],
-        dto.tetrahedra[4 * i + 3],
-      ],
-      // The tet's body (1-based CAD solid index) — resolved to a material via
-      // the store's properties at solve time (#353).
-      propertyId: dto.bodyIds[i],
-    };
-  }
-
-  const suppressed = new Set(payload.suppressedBodyIds ?? []);
-  const meshed = {
-    nodes: meshNodes,
-    elements: meshElements,
-    surfaceTriangles: chunk3(dto.surfaceTriangles) as [
-      number,
-      number,
-      number,
-    ][],
-    surfaceFaceIds: Array.from(dto.surfaceFaceIds),
-  };
-  const { midSurface } = dto;
-  // On the CAD path the volume part holds only the bodies not meshed as a
-  // mid-surface: none, or only suppressed ones, leaves an empty volume part
-  // next to the shell, not an empty model.
-  const volume =
-    midSurface &&
-    meshElements.every((element) => suppressed.has(element.propertyId))
-      ? { nodes: [], elements: [], surfaceTriangles: [], surfaceFaceIds: [] }
-      : dropSuppressedBodies(meshed, suppressed);
-  const { nodes, elements, surfaceTriangles, surfaceFaceIds } = volume;
-  if (suppressed.size > 0)
-    self.postMessage({
-      id,
-      log: `Suppressed bodies ${[...suppressed].join(", ")} left out: ${nodes.length} nodes, ${elements.length} elements remain`,
-    });
-
-  // The CAD path (KOF-498): the Shell body's mid-surface came from its paired
-  // CAD faces, meshed as a surface only. The stored model is its facets next
-  // to the volume part, with the links back to the CAD faces.
-  if (midSurface) {
-    const model = inStage("shell_idealisation", () =>
-      buildCadShellModel(volume, midSurface, payload.properties ?? []),
-    );
-    self.postMessage({
-      id,
-      log: `[shell] CAD mid-surface: ${model.links.facets.length} shell facets, ${elements.length} tetrahedra`,
-    });
-    return {
-      nodes: model.nodes,
-      elements: model.elements,
-      properties: model.properties,
-      surfaceTriangles: model.surfaceTriangles,
-      surfaceFaceIds: model.surfaceFaceIds,
-      shellRoutes,
-      midSurfaceLinks: model.links,
-    };
-  }
-
-  // Auto-shell at MESH time (#397): a Shell body whose faces do not pair has
-  // its thin walls collapsed to a mid-surface shell mesh here, from its volume
-  // mesh, so the stored model is the mixed CTRIA3 + CTETRA model the user sees
-  // and solves — not an all-solid mesh whose shells only ever existed
-  // transiently inside the solve.
-  const mixed = inStage("shell_idealisation", () =>
-    buildMeshTimeShellModel(
-      nodes,
-      elements,
-      surfaceTriangles,
-      surfaceFaceIds,
-      shellBodyIds,
-      payload.properties ?? [],
-      (line: string) => self.postMessage({ id, log: line }),
-    ),
-  );
-  if (mixed)
-    return {
-      nodes: mixed.nodes,
-      elements: mixed.elements,
-      properties: mixed.properties,
-      surfaceTriangles: mixed.surfaceTriangles,
-      surfaceFaceIds: mixed.surfaceFaceIds,
-      shellRoutes,
-      midSurfaceLinks: null,
-    };
-
-  return {
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    shellRoutes,
-    midSurfaceLinks: null,
-  };
 }
 
 // ── solve ─────────────────────────────────────────────────────────────────────

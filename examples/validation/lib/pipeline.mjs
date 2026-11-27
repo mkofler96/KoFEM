@@ -70,11 +70,14 @@ import { constraintTieCount } from "../../../web/src/lib/tie.ts";
 import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
 import { anchorAtPoint, readProbes } from "../../../web/src/lib/resultProbe.ts";
-import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
+import {
+  shellMeshOptions,
+  storedMesh,
+} from "../../../web/src/lib/storedMesh.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
 import { optimizeSolidInRust } from "../../../web/src/lib/solve/topOptRust.ts";
-import { shellRimFaces } from "../../../web/src/lib/shellRim.ts";
+import { modelShellRim } from "../../../web/src/lib/shellRim.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENGINE = join(here, "../../../web/src/wasm/pkg");
@@ -272,6 +275,15 @@ export async function buildFromRecipe(
       size: local.size,
     };
   });
+  // The recipe's element type applies to every CAD body: with Shell, the
+  // engine builds the mid-surface from the CAD faces where they pair
+  // (KOF-498), and storedMesh idealises the rest, as the worker does.
+  const bodyIds = Array.from(
+    { length: Math.max(1, tess.bodyCount) },
+    (_, i) => i + 1,
+  );
+  const shellBodyIds = new Set(shell ? bodyIds : []);
+  if (shell) await rustFem(); // the thin-wall rule and idealisation run in Rust
   const dto = engineCall(
     mesher,
     `${where}: Netgen could not mesh the geometry at max element size ${maxElementSize} mm (min ${minElementSize} mm)`,
@@ -280,6 +292,7 @@ export async function buildFromRecipe(
         JSON.stringify({
           max_element_size: maxElementSize,
           min_element_size: minElementSize,
+          ...shellMeshOptions(shellBodyIds),
           ...(localSizes.length > 0
             ? {
                 face_max_sizes: localSizes.flatMap(({ faceIds, size }) =>
@@ -301,55 +314,34 @@ export async function buildFromRecipe(
       `${where}: Netgen reports ${dto.overlaps.length} surface-mesh overlaps — the app would ask the user to repair the geometry`,
     );
   mesher.free_geometry_cache();
-  let nodes = Array.from({ length: dto.vertices.length / 3 }, (_, i) => ({
-    id: i,
-    x: dto.vertices[3 * i],
-    y: dto.vertices[3 * i + 1],
-    z: dto.vertices[3 * i + 2],
-  }));
-  let elements = Array.from({ length: dto.tetrahedra.length / 4 }, (_, i) => ({
-    id: i,
-    type: "CTETRA",
-    nodeIds: Array.from(dto.tetrahedra.subarray(4 * i, 4 * i + 4)),
-    propertyId: dto.bodyIds[i],
-  }));
-  let surfaceTriangles = chunk3(Array.from(dto.surfaceTriangles));
-  let surfaceFaceIds = Array.from(dto.surfaceFaceIds);
-
-  // ── Body types and the shell idealisation (the worker's handleVolumeMesh) ──
-  // The recipe's element type applies to every CAD body; meshing idealises the
-  // Shell bodies and returns the CTRIA3 (+ CTETRA) model the store keeps.
-  const bodyIds = Array.from(
-    { length: Math.max(1, tess.bodyCount) },
-    (_, i) => i + 1,
-  );
-  let properties = bodyIds.map((bodyId) => ({
+  const bodyProperties = bodyIds.map((bodyId) => ({
     id: bodyId,
     materialId: 1,
     discretization: recipe.discretization.kind,
   }));
-  if (shell) {
-    await rustFem(); // the shell idealisation runs in the Rust module
-    const mixed = buildMeshTimeShellModel(
+  const stored = storedMesh(
+    dto,
+    { properties: bodyProperties, shellBodyIds },
+    () => {},
+  );
+  const { nodes, elements, surfaceTriangles, surfaceFaceIds } = stored;
+  if (shell && !stored.properties)
+    throw new Error(
+      `${where}: the body is marked Shell, but meshing did not idealise it`,
+    );
+  const properties = stored.properties ?? bodyProperties;
+  if (shell)
+    checkShellThickness(properties, recipe.discretization.thickness, where);
+  const nNodes = nodes.length;
+  // The faces a shell collapsed to the rim of its mid-surface (none for solids).
+  const rim = modelShellRim(
+    {
       nodes,
       elements,
       surfaceTriangles,
       surfaceFaceIds,
-      new Set(bodyIds),
-      properties,
-      () => {},
-    );
-    if (!mixed)
-      throw new Error(
-        `${where}: the body is marked Shell, but meshing did not idealise it`,
-      );
-    ({ nodes, elements, properties, surfaceTriangles, surfaceFaceIds } = mixed);
-    checkShellThickness(properties, recipe.discretization.thickness, where);
-  }
-  const nNodes = nodes.length;
-  // The faces a shell collapsed to the rim of its mid-surface (none for solids).
-  const rim = shellRimFaces(
-    { nodes, elements, surfaceTriangles, surfaceFaceIds },
+      midSurfaceLinks: stored.midSurfaceLinks,
+    },
     tess,
   );
   const meshSurface = {
