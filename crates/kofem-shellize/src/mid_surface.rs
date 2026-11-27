@@ -6,6 +6,7 @@
 //! face t/2 along the face normal; a curved wall (KOF-448) moves each node of
 //! its kept face t/2 along that node's own normal.
 
+use kofem_fem::extremum::largest;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::corner::{
@@ -85,10 +86,12 @@ pub fn shell_max_wall(mesh: &ShellizeMesh, options: &ExtractOptions) -> f64 {
             }
         }
     }
-    bounds
-        .values()
-        .map(|&(low, high)| SHELL_BODY_WALL_SHARE * norm(sub(high, low)))
-        .fold(options.max_wall, f64::max)
+    largest(
+        options.max_wall,
+        bounds
+            .values()
+            .map(|&(low, high)| SHELL_BODY_WALL_SHARE * norm(sub(high, low))),
+    )
 }
 
 /// A base wall's facets, and the junction nodes and segments to imprint there.

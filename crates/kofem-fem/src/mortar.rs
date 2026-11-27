@@ -52,6 +52,7 @@
 //! mortar contact formulation using a primal–dual active set strategy",
 //! IJNME 79 (2009).
 
+use crate::extremum::largest;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::count::count_as_f64;
@@ -167,11 +168,10 @@ fn frame_of(face: &MortarFace) -> Result<FaceFrame<'_>, FemError> {
     let edge = sub(face.points[1], face.points[0]);
     let axis_u = unit(sub(edge, scale(normal, dot(edge, normal))));
     let axis_v = cross(normal, axis_u);
-    let radius = face
-        .points
-        .iter()
-        .map(|&point| norm(sub(point, centroid)))
-        .fold(0.0, f64::max);
+    let radius = largest(
+        0.0,
+        face.points.iter().map(|&point| norm(sub(point, centroid))),
+    );
     Ok(FaceFrame {
         face,
         centroid,
@@ -461,10 +461,7 @@ impl<'a> MasterSurface<'a> {
             .iter()
             .map(frame_of)
             .collect::<Result<Vec<_>, _>>()?;
-        let max_radius = frames
-            .iter()
-            .map(|master| master.radius)
-            .fold(0.0, f64::max);
+        let max_radius = largest(0.0, frames.iter().map(|master| master.radius));
         let mut grid = FaceGrid {
             cell: (2.0 * max_radius).max(1e-9),
             buckets: HashMap::new(),

@@ -8,7 +8,10 @@
 // The density field the run produces is a transient result and is NOT
 // serialized; loading an analysis restores the settings but not a stale run.
 
-import type { TopOptHistoryEntry } from "../lib/solve/contracts.js";
+import type {
+  TopOptHistoryEntry,
+  TopOptSettings,
+} from "../lib/solve/contracts.js";
 import type { ModelState, SliceCreator } from "./modelStore";
 import {
   raisedIterationLimit,
@@ -70,6 +73,9 @@ export interface DensityResult extends TopOptConvergence {
   // Level-set runs only: φ per node, aligned with the store's `nodes` array.
   levelSet?: Float64Array;
   history: TopOptHistoryEntry[];
+  // The settings the run was made with, for the analysis report (KOF-391);
+  // the panel's fields can change after the run.
+  run?: TopOptSettings;
 }
 
 // Sensible starting point. complianceLimit has no universal default — it is in

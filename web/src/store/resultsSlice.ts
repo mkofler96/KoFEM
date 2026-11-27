@@ -12,7 +12,14 @@ import type { ReactionSummary } from "../lib/solve/reactions";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
-import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
+import {
+  DEFAULT_SOLVER_METHOD,
+  type Preconditioner,
+  type SolverMethod,
+} from "../lib/solve/amg";
+import type { SolveRoute } from "../lib/solve/route";
+import type { Material } from "./materialSlice";
+import type { Property } from "./geometrySlice";
 import {
   SHELL_SURFACES,
   STRESS_FIELDS,
@@ -39,6 +46,22 @@ export interface SolverResult {
   // The contact pressure and status of every contact's slave nodes, in store
   // node ids (KOF-485); absent without contact.
   contact?: ContactResult | null;
+  // How the solve ran, for the analysis report (KOF-391); absent on a result
+  // that did not come from a static solve here (a saved file).
+  run?: SolveRun;
+}
+
+// What a static solve was run with: its path, its preconditioner, the element
+// order, the warnings the Solve panel showed when it started, and the
+// materials and body properties it solved. A material can be edited after the
+// solve without clearing the result, so the report reads them from here.
+export interface SolveRun {
+  path: SolveRoute["path"];
+  preconditioner: Preconditioner;
+  elementOrder: number;
+  warnings: string[];
+  materials: Material[];
+  properties: Property[];
 }
 
 export const RESULT_TYPES = [

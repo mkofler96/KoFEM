@@ -8,22 +8,12 @@
 
 import { useModelStore } from "../../store/modelStore";
 import { topOptChartVisible } from "../../store/topOptSlice";
-import { densityColor } from "../../lib/densityField";
+import { DENSITY_GRADIENT } from "../../lib/legend";
 import { useDisplayedDensity } from "./useDisplayedDensity";
 import { useT } from "../../i18n/useLocale";
 import { viewportMessages } from "../../i18n/messages/viewport";
 
-const GRADIENT_STOPS = 12;
 const BAR_HEIGHT = 160;
-
-const gradient = (() => {
-  const stops: string[] = [];
-  for (let i = 0; i <= GRADIENT_STOPS; i++) {
-    const frac = i / GRADIENT_STOPS;
-    stops.push(`${densityColor(frac).getStyle()} ${frac * 100}%`);
-  }
-  return `linear-gradient(to top, ${stops.join(", ")})`;
-})();
 
 export function DensityColorBar() {
   const density = useDisplayedDensity();
@@ -65,7 +55,7 @@ export function DensityColorBar() {
             style={{
               width: "100%",
               height: "100%",
-              background: gradient,
+              background: DENSITY_GRADIENT,
               border: "1px solid #9ca3af",
               borderRadius: 3,
             }}

@@ -39,6 +39,7 @@ import {
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
 import { tr, useT } from "../i18n/useLocale";
+import type { SolveRun } from "../store/resultsSlice";
 import { solveMessages } from "../i18n/messages/solve";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
@@ -218,7 +219,55 @@ export function useSolver() {
     elementOrder,
   ]);
 
+  // Linear elements lock on a nearly incompressible material (KOF-400).
+  const incompressible = useMemo(
+    () =>
+      incompressibleFindings({ elements, properties, materials, elementOrder }),
+    [elements, properties, materials, elementOrder],
+  );
+
+  // Why the chosen solver will not take this model and what the solve uses
+  // instead (shown under the solver choice), or null. Only computed with a
+  // mesh: before one there is no model.
+  const amgModel = {
+    elements,
+    properties,
+    elementOrder,
+    couplingCount: couplingGroups.length,
+  };
+  const amgReason = route !== null ? amgUnavailableReason(amgModel) : null;
+  const solverNote =
+    route === null
+      ? null
+      : preconditionerNotice(
+          solverMethod,
+          solvePreconditioner(solverMethod, route, amgReason, elements),
+          amgReason,
+        );
+
   function solve() {
+    // What the Solve panel shows now goes with the result into the report. A
+    // model no route takes is refused by the worker, so it has no run to keep.
+    const run: SolveRun | undefined =
+      route === null
+        ? undefined
+        : {
+            path: route.path,
+            preconditioner: solvePreconditioner(
+              solverMethod,
+              route,
+              amgReason,
+              elements,
+            ),
+            elementOrder,
+            warnings: [
+              ...(solverNote === null ? [] : [solverNote]),
+              ...thinWalls.map(thinWallMessage),
+              ...incompressible.map(incompressibleMessage),
+            ],
+            materials,
+            properties,
+          };
     setRunning(true);
     clearLogs();
     const workflow = workflowParams();
@@ -251,7 +300,7 @@ export function useSolver() {
       contact: ContactResult | null;
     }>("solve", payload)
       .then(({ displacements, vonMises, stress, reactions, contact }) => {
-        setResult({ displacements, vonMises, stress, reactions, contact });
+        setResult({ displacements, vonMises, stress, reactions, contact, run });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",
@@ -279,13 +328,6 @@ export function useSolver() {
       window as Window & { __kofemTriggerSolve?: () => void }
     ).__kofemTriggerSolve = solve;
   });
-
-  // Linear elements lock on a nearly incompressible material (KOF-400).
-  const incompressible = useMemo(
-    () =>
-      incompressibleFindings({ elements, properties, materials, elementOrder }),
-    [elements, properties, materials, elementOrder],
-  );
 
   const checks: [boolean, string][] = [
     [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
@@ -326,25 +368,6 @@ export function useSolver() {
       ? []
       : [[false, routeRefusal] satisfies [boolean, string]]),
   ];
-
-  // Why the chosen solver will not take this model and what the solve uses
-  // instead (shown under the solver choice), or null. Only computed with a
-  // mesh: before one there is no model.
-  const amgModel = {
-    elements,
-    properties,
-    elementOrder,
-    couplingCount: couplingGroups.length,
-  };
-  const amgReason = route !== null ? amgUnavailableReason(amgModel) : null;
-  const solverNote =
-    route === null
-      ? null
-      : preconditionerNotice(
-          solverMethod,
-          solvePreconditioner(solverMethod, route, amgReason, elements),
-          amgReason,
-        );
 
   return {
     solve,

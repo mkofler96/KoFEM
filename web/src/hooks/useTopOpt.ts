@@ -335,7 +335,14 @@ export function useTopOpt() {
       settings: { ...settings, passive: passiveElements(elements, properties) },
     })
       .then(({ density, levelSet, history, converged, iterations }) => {
-        setDensityResult({ density, levelSet, history, converged, iterations });
+        setDensityResult({
+          density,
+          levelSet,
+          history,
+          converged,
+          iterations,
+          run: settings,
+        });
         track("solve_completed", {
           ...workflow,
           analysis_type: "topology",

@@ -35,6 +35,8 @@ import {
   resultFieldMessages,
   resultsMessages,
 } from "../../i18n/messages/results";
+import { reportMessages } from "../../i18n/messages/report";
+import { saveReport } from "../../lib/report/saveReport";
 import styles from "./Panel.module.css";
 
 // "Von Mises stress" → "von-mises-stress", "Normal stress σxx" →
@@ -480,6 +482,48 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
   );
 }
 
+// Results → Save report (KOF-391): one HTML file of the analysis, with the
+// figures of the view as it is now.
+function ReportButton() {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const text = useT(reportMessages);
+  const save = () => {
+    setSaving(true);
+    setError(null);
+    saveReport()
+      .catch((err: unknown) =>
+        setError(
+          text.reportFailed(err instanceof Error ? err.message : String(err)),
+        ),
+      )
+      .finally(() => setSaving(false));
+  };
+  return (
+    <>
+      <div className={styles.sectionLabel}>{text.title}</div>
+      <button
+        className={styles.outlineBtn}
+        data-testid="report-save"
+        disabled={saving}
+        title={text.saveReportHint}
+        onClick={save}
+      >
+        {saving ? text.savingReport : text.saveReport}
+      </button>
+      {error && (
+        <div
+          className={`${styles.formNote} ${styles.formNoteFull}`}
+          data-testid="report-error"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
+    </>
+  );
+}
+
 function Empty({ message, footer }: { message: string; footer: ReactNode }) {
   return (
     <div className={styles.panel}>
@@ -610,6 +654,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         {stats && <MinMaxSection field={resultType} />}
 
         <ProbeSection field={resultType} />
+
+        <ReportButton />
 
         {footer}
       </div>

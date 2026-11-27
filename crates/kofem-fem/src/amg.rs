@@ -20,6 +20,7 @@
 
 use crate::count::count_as_f64;
 use crate::error::FemError;
+use crate::extremum::largest;
 use crate::sparse::CsrMatrix;
 
 /// Rigid-body modes in 3D: three translations, three rotations.
@@ -475,9 +476,7 @@ fn tentative_prolongator(
                 .iter()
                 .flat_map(|&node| block * node..block * (node + 1)),
         );
-        let scale = (0..MODES)
-            .map(|mode| column_norm(&rows, modes, mode))
-            .fold(0.0, f64::max);
+        let scale = largest(0.0, (0..MODES).map(|mode| column_norm(&rows, modes, mode)));
         let mut upper = [[0.0; MODES]; MODES];
         for mode in 0..MODES {
             for &row in &rows {

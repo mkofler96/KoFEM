@@ -62,6 +62,8 @@ pub enum FemError {
     },
     #[error("support reactions: {reason}")]
     ReactionInput { reason: String },
+    #[error("report: {reason}")]
+    ReportField { reason: String },
     #[error(
         "a coupled, tied or mixed solve works on a reduction of the stiffness matrix, \
          so it has no assembled matrix to give back"
@@ -112,6 +114,11 @@ pub enum FemError {
          force cannot be spread over them"
     )]
     SurfaceLoadArea { load: usize, area: f64 },
+    #[error(
+        "triangle {triangle}: the recovered stress is {value}, not a finite number — the \
+         displacements it was recovered from are not finite or overflow"
+    )]
+    NonFiniteStress { triangle: usize, value: f64 },
     #[error("displacement vector has {len} entries, but the model has {count} degrees of freedom")]
     DisplacementLength { len: usize, count: usize },
     #[error("multigrid setup input is invalid: {reason}")]

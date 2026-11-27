@@ -5,29 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { LegendRangeControls } from "../panel/LegendRangeControls";
 import panelStyles from "../panel/Panel.module.css";
+import { resultUnit } from "../../lib/resultField";
 import {
-  computeResultRange,
-  resultColor,
-  resultFieldSymbol,
-  resultUnit,
-} from "../../lib/resultField";
-import { reactionRange } from "../../lib/reactionArrows";
+  fieldLegend,
+  LEGEND_GRADIENT,
+  legendTicks,
+  reactionLegend,
+  type Legend,
+} from "../../lib/legend";
 import { useT } from "../../i18n/useLocale";
 import { viewportMessages } from "../../i18n/messages/viewport";
-
-const GRADIENT_STOPS = 12;
-const TICKS = 5;
-
-// CSS gradient sampled from the same color map as the mesh, blue at the bottom
-// (min) to red at the top (max).
-const gradient = (() => {
-  const stops: string[] = [];
-  for (let i = 0; i <= GRADIENT_STOPS; i++) {
-    const frac = i / GRADIENT_STOPS;
-    stops.push(`${resultColor(frac).getStyle()} ${frac * 100}%`);
-  }
-  return `linear-gradient(to top, ${stops.join(", ")})`;
-})();
 
 export function ColorBar() {
   const result = useModelStore((s) => s.result);
@@ -69,28 +56,20 @@ export function ColorBar() {
   const showDensity = activeResult === "density" && !!densityResult;
   if (mode !== "results" || !result || showDensity) return null;
   if (reactionsShown) {
-    const field = result.reactions
-      ? reactionRange(result.reactions, reactionsDisplay)
-      : null;
-    return field ? (
-      <LegendBox title="|F| [N]" min={field.min} max={field.max} />
-    ) : null;
+    const legend = reactionLegend(result, reactionsDisplay);
+    return legend ? <LegendBox legend={legend} /> : null;
   }
 
-  const fieldRange = computeResultRange(
+  const shown = fieldLegend(
     result,
     resultType,
     nodes,
     elements,
     shellSurface,
+    legendRange,
   );
-  if (!fieldRange) return null;
-
-  const { min, max } = legendRange ?? fieldRange;
-  // Manual limits clamp the colouring, so the end ticks stand for "everything
-  // at or beyond this value" rather than for the extremes of the field.
-  const clampsAbove = max < fieldRange.max;
-  const clampsBelow = min > fieldRange.min;
+  if (!shown) return null;
+  const { legend, fieldRange } = shown;
 
   return (
     <div
@@ -109,8 +88,7 @@ export function ColorBar() {
           whiteSpace: "nowrap",
         }}
       >
-        {resultFieldSymbol(resultType)}
-        {resultUnit(resultType) !== "" && ` [${resultUnit(resultType)}]`}
+        {legend.title}
         <button
           data-testid="legend-edit"
           aria-label={text.editLegendRange}
@@ -162,34 +140,20 @@ export function ColorBar() {
           {text.manualRange}
         </div>
       )}
-      <Bar
-        min={min}
-        max={max}
-        clampsAbove={clampsAbove}
-        clampsBelow={clampsBelow}
-      />
+      <Bar legend={legend} />
     </div>
   );
 }
 
-// The reactions view's legend (KOF-387): the reaction force of the arrows on
-// view, per node or per support, from the smallest to the largest. Fixed to
-// that range, so it has no editor.
-function LegendBox({
-  title,
-  min,
-  max,
-}: {
-  title: string;
-  min: number;
-  max: number;
-}) {
+// The reactions view's legend (KOF-387), fixed to the arrows' range, so it
+// has no editor.
+function LegendBox({ legend }: { legend: Legend }) {
   return (
     <div data-testid="colorbar" style={BOX_STYLE}>
       <div style={{ marginBottom: 6, fontWeight: 600, whiteSpace: "nowrap" }}>
-        {title}
+        {legend.title}
       </div>
-      <Bar min={min} max={max} clampsAbove={false} clampsBelow={false} />
+      <Bar legend={legend} />
     </div>
   );
 }
@@ -211,31 +175,15 @@ const BOX_STYLE = {
   userSelect: "none",
 } as const;
 
-// The gradient and its ticks from max (top) to min. Each tick keeps its
-// position on the bar, which is what identifies it across renders — the value
-// changes whenever the range does. A clamped end reads "≥" or "≤".
-function Bar({
-  min,
-  max,
-  clampsAbove,
-  clampsBelow,
-}: {
-  min: number;
-  max: number;
-  clampsAbove: boolean;
-  clampsBelow: boolean;
-}) {
-  const ticks = Array.from({ length: TICKS }, (_, i) => {
-    const frac = 1 - i / (TICKS - 1);
-    return { frac, value: min + frac * (max - min) };
-  });
+// The gradient and its ticks from max (top) to min.
+function Bar({ legend }: { legend: Legend }) {
   return (
     <div style={{ display: "flex", gap: 6 }}>
       <div
         style={{
           width: 16,
           height: 160,
-          background: gradient,
+          background: LEGEND_GRADIENT,
           border: "1px solid #9ca3af",
           borderRadius: 3,
         }}
@@ -249,15 +197,13 @@ function Bar({
           fontVariantNumeric: "tabular-nums",
         }}
       >
-        {ticks.map(({ frac, value }, i) => (
+        {legendTicks(legend).map(({ frac, label }, i) => (
           <span
             key={frac}
             data-testid={`colorbar-tick-${i}`}
             style={{ whiteSpace: "nowrap", lineHeight: 1 }}
           >
-            {frac === 1 && clampsAbove ? "≥ " : ""}
-            {frac === 0 && clampsBelow ? "≤ " : ""}
-            {value.toExponential(2)}
+            {label}
           </span>
         ))}
       </div>

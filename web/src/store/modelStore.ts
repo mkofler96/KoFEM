@@ -79,6 +79,7 @@ export type {
   VolMesh,
   GeometryVersion,
   SplitMode,
+  MeshSizes,
 } from "./geometrySlice";
 export type { Material } from "./materialSlice";
 export type {
@@ -101,6 +102,7 @@ export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
 export { ALL_DOFS, referencePointOptions } from "../lib/coupling";
 export type {
   SolverResult,
+  SolveRun,
   ResultType,
   AppMode,
   LegendRange,

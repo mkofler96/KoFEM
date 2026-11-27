@@ -29,6 +29,7 @@
 //! * Tie: a solid node follows the surface it is tied to,
 //!   `u = Σ wᵢ uᵢ` with Σ wᵢ = 1, in its translations (see [`crate::tie`]).
 
+use crate::extremum::largest;
 use std::collections::BTreeMap;
 
 use crate::error::FemError;
@@ -357,11 +358,13 @@ impl CouplingConstraints {
         }
         let mut weights = patch_weights(coupling, "shell-to-solid MPC", fail)?;
         let origin = points[coupling.reference];
-        let radius = coupling
-            .nodes
-            .iter()
-            .map(|&node| norm(sub(points[node], origin)))
-            .fold(0.0, f64::max);
+        let radius = largest(
+            0.0,
+            coupling
+                .nodes
+                .iter()
+                .map(|&node| norm(sub(points[node], origin))),
+        );
         if radius <= 0.0 {
             return Err(fail(format!(
                 "every coupled node sits on the reference point {}, so the patch has no extent \
