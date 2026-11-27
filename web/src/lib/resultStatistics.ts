@@ -5,7 +5,11 @@
 // Rust computation (crates/kofem-fem/src/field_statistics.rs, called as
 // nodalPercentiles). The Rust module must be loaded first (loadFemModule).
 
-import { fieldPeak, nodalPercentiles } from "../wasm/fem/kofem_wasm.js";
+import {
+  fieldPeak,
+  nodalPercentiles,
+  PeakConditions,
+} from "../wasm/fem/kofem_wasm.js";
 import type { Element, Node, Property } from "../store/modelStore";
 import type { PickGeometry } from "./facePick";
 import { tr } from "../i18n/useLocale";
@@ -96,6 +100,7 @@ export interface PeakLoad {
 
 /** A coupling, as fieldPeakLocation reads it. */
 export interface PeakCoupling {
+  name: string;
   refNodeId: number;
   faces: readonly PeakSelection[];
 }
@@ -109,27 +114,16 @@ export interface PeakLocation {
   on: { kind: "support" | "load"; name: string }[];
 }
 
-// Ux, Uy, Uz.
-const TRANSLATIONS = [0, 1, 2];
-
 /**
  * Where `values` (one per node, in node order) is largest, and the idealised
- * supports and loads on that node (KOF-495), around the Rust computation
- * (crates/kofem-fem/src/field_peak.rs, called as fieldPeak).
- *
- * Idealised are a support that holds every translation, which pins the
- * surface in its own plane, and a support or load on a point or on an edge of
- * a solid, which concentrates it on a line. A symmetry or roller support on a
- * face, a load spread over a face, and either on a shell's edge (the
- * boundary of the plate) load the part as it is loaded, so a peak there is a
- * real stress: the hole edge of a plate on its symmetry line, the bore of a
- * pressurised cylinder. A support on a coupling's reference point holds the
- * coupled surface; a load there is spread over it.
+ * supports and loads on that node (KOF-495). Rust decides which groups are
+ * idealised (crates/kofem-fem/src/field_peak.rs, called as fieldPeak); this
+ * maps node ids to indices and hands it the groups as they are.
  */
 export function fieldPeakLocation(
   values: Float64Array,
   nodes: readonly Node[],
-  elements: readonly Pick<Element, "type" | "nodeIds">[],
+  elements: readonly Pick<Element, "id" | "type" | "nodeIds">[],
   supports: readonly PeakSupport[],
   loads: readonly PeakLoad[],
   couplings: readonly PeakCoupling[],
@@ -143,83 +137,60 @@ export function fieldPeakLocation(
     points[3 * i + 1] = node.y;
     points[3 * i + 2] = node.z;
   });
-  const shellNodes = new Set(
-    elements.flatMap((element) =>
-      element.type === "CTRIA3" ? element.nodeIds : [],
-    ),
-  );
-  const concentrated = (selection: PeakSelection) =>
-    selection.geometry === "point" ||
-    (selection.geometry === "edge" &&
-      !selection.nodeIds.every((id) => shellNodes.has(id)));
-  const surfaceOf = new Map(
-    couplings.map((coupling) => [
-      coupling.refNodeId,
-      coupling.faces.flatMap((face) => face.nodeIds),
-    ]),
+  const indices = (owner: string, ids: readonly number[]) =>
+    Uint32Array.from(ids, (id) => {
+      const i = index.get(id);
+      if (i === undefined) throw new Error(text.peakUnknownNode(owner, id));
+      return i;
+    });
+  const shellTriangles = elements.flatMap((element) =>
+    element.type === "CTRIA3"
+      ? Array.from(indices(text.peakElement(element.id), element.nodeIds))
+      : [],
   );
   const groups = [
-    ...supports.flatMap((group) => {
-      const held = TRANSLATIONS.every((dof) => group.dofs.includes(dof))
-        ? group.faces
-        : group.faces.filter(concentrated);
-      const ids = held.flatMap((face) => face.nodeIds);
-      return held.length === 0
-        ? []
-        : [
-            {
-              kind: "support" as const,
-              name: group.name,
-              nodeIds: [
-                ...ids,
-                ...ids.flatMap((id) => surfaceOf.get(id) ?? []),
-              ],
-            },
-          ];
-    }),
-    ...loads.flatMap((group) => {
-      const held = group.faces.filter(concentrated);
-      return held.length === 0
-        ? []
-        : [
-            {
-              kind: "load" as const,
-              name: group.name,
-              nodeIds: held.flatMap((face) => face.nodeIds),
-            },
-          ];
-    }),
+    ...supports.map((group) => ({ kind: "support" as const, group })),
+    ...loads.map((group) => ({ kind: "load" as const, group })),
   ];
-  const offsets = [0];
-  const members: number[] = [];
-  for (const group of groups) {
-    for (const id of group.nodeIds) {
-      const i = index.get(id);
-      if (i === undefined)
-        throw new Error(text.peakUnknownNode(group.name, id));
-      members.push(i);
-    }
-    offsets.push(members.length);
-  }
-  const peak = fieldPeak(
-    points,
-    values,
-    Uint32Array.from(offsets),
-    Uint32Array.from(members),
-  );
+  const conditions = new PeakConditions();
   try {
-    const node = nodes[peak.node];
-    const [x, y, z] = peak.at;
-    return {
-      nodeId: node.id,
-      at: [x, y, z],
-      value: peak.value,
-      on: Array.from(peak.selections, (k) => ({
-        kind: groups[k].kind,
-        name: groups[k].name,
-      })),
-    };
+    for (const { kind, group } of groups) {
+      if (kind === "support") conditions.support(Uint32Array.from(group.dofs));
+      else conditions.load();
+      for (const face of group.faces)
+        conditions.select(face.geometry, indices(group.name, face.nodeIds));
+    }
+    for (const coupling of couplings) {
+      const [reference] = indices(coupling.name, [coupling.refNodeId]);
+      conditions.coupling(
+        reference,
+        indices(
+          coupling.name,
+          coupling.faces.flatMap((face) => face.nodeIds),
+        ),
+      );
+    }
+    const peak = fieldPeak(
+      points,
+      values,
+      Uint32Array.from(shellTriangles),
+      conditions,
+    );
+    try {
+      const [x, y, z] = peak.at;
+      return {
+        nodeId: nodes[peak.node].id,
+        at: [x, y, z],
+        value: peak.value,
+        on: Array.from(peak.idealised, (k) => ({
+          kind: groups[k].kind,
+          name: groups[k].group.name,
+        })),
+      };
+    } finally {
+      peak.free();
+    }
   } finally {
-    peak.free();
+    conditions.free();
   }
 }

@@ -67,7 +67,10 @@ pub use coupled_static::{
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;
 pub use field_expression::{FieldExpression, FieldExpressionError};
-pub use field_peak::{field_peak, FieldPeak, PeakInput};
+pub use field_peak::{
+    field_peak, BoundaryGroup, Condition, CouplingSurface, FieldPeak, PeakInput, PickGeometry,
+    Selection,
+};
 pub use field_statistics::{nodal_percentiles, StatisticsMesh};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;

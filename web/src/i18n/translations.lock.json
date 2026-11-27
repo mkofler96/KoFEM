@@ -6063,6 +6063,14 @@
     "es": "c0c569234f3c",
     "pt": "b0f5f82e60bc"
   },
+  "results.ts:resultsMessages.peakElement": {
+    "en": "68e50fd4fb98",
+    "de": "7b9014f3281d",
+    "fr": "9812afc42fc6",
+    "it": "cf02a76b6a0a",
+    "es": "e04eeab36f1e",
+    "pt": "943ac2e3d856"
+  },
   "results.ts:resultsMessages.peakLoad": {
     "en": "bc7b279c2d25",
     "de": "877dba04eb5e",
@@ -6072,20 +6080,12 @@
     "pt": "cfadb6d0910a"
   },
   "results.ts:resultsMessages.peakOnBoundary": {
-    "en": "60855cd49279",
-    "de": "dfef642d906a",
-    "fr": "36f0bbbabf7b",
-    "it": "def63964cfcb",
-    "es": "48f52edb4a60",
-    "pt": "a89833b24af6"
-  },
-  "results.ts:resultsMessages.peakShowHint": {
-    "en": "924172cffea4",
-    "de": "9485812d9a6d",
-    "fr": "5b40f3575f71",
-    "it": "5544ac41556c",
-    "es": "3e9bf781e43b",
-    "pt": "2c054d5b3c0f"
+    "en": "048c67fe08e5",
+    "de": "78ea53fa8c74",
+    "fr": "6702402487b5",
+    "it": "0ab99d4a3d32",
+    "es": "50fb0b9ac27f",
+    "pt": "a4a36bd50de2"
   },
   "results.ts:resultsMessages.peakSupport": {
     "en": "456e7b5e5726",
@@ -6096,12 +6096,12 @@
     "pt": "f96f07b38988"
   },
   "results.ts:resultsMessages.peakUnknownNode": {
-    "en": "7e4d78a0724f",
-    "de": "55738f807eed",
-    "fr": "308c9da339e5",
-    "it": "9c01666de945",
-    "es": "4e04ce9460c4",
-    "pt": "fd00eb85e8fc"
+    "en": "760898e5d0df",
+    "de": "c2b58b95c2b2",
+    "fr": "47afcd596e56",
+    "it": "e33fde6d50de",
+    "es": "3c57f7a6311b",
+    "pt": "c6530b3d70d2"
   },
   "results.ts:resultsMessages.peakUnreadable": {
     "en": "cf418a4649b6",

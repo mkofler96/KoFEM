@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect, useRef } from "react";
-import { useThree } from "@react-three/fiber";
+import { useThree, type RootState } from "@react-three/fiber";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useModelStore } from "../../store/modelStore";
-import { fitViewBox, nodeFrame } from "../../lib/fitView";
+import { boundingSphere, fitViewBox, nodeFrame } from "../../lib/fitView";
 import { WORLD_UP } from "../../lib/orbitPivot";
 import {
   fitDistance,
@@ -22,11 +23,35 @@ export interface DrawnResult {
   scale: number;
 }
 
+// Put the camera on `direction` from `center`, at the distance where a sphere
+// of `radius` fills the view, and orbit about `center`. The canvas renders on
+// demand: a move that only changes near/far fires no controls change event,
+// so it asks for the frame explicitly.
+function frameSphere(
+  orbit: OrbitControlsImpl,
+  state: RootState,
+  center: THREE.Vector3,
+  direction: THREE.Vector3,
+  radius: number,
+): void {
+  const { camera, size, invalidate } = state;
+  placeCamera(
+    camera as ProjectionCamera,
+    center,
+    direction,
+    fitDistance(radius, size),
+    size,
+  );
+  orbit.target.copy(center);
+  orbit.update();
+  invalidate();
+}
+
 // Fit view frames what the scene draws (KOF-385), so MeshScene mounts it and
 // passes the deformed result as drawn: null when no result is shown deformed.
-// It also serves Results → Show (KOF-495), which frames one node as drawn.
 export function FitCamera({ result }: { result: DrawnResult | null }) {
-  const { controls, invalidate, get } = useThree();
+  const { controls, get } = useThree();
+  const orbit = controls as unknown as OrbitControlsImpl | null;
   const fitViewTrigger = useModelStore((s) => s.fitViewTrigger);
   const frameNodeTrigger = useModelStore((s) => s.frameNodeTrigger);
   // Read at fit time: a new result or scale does not refit by itself.
@@ -45,7 +70,7 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
   useEffect(() => {
     // Controls may not be registered yet on the initial mount — skip and wait
     // for the effect to re-fire once OrbitControls registers via makeDefault.
-    if (!controls || fitted.current === fitViewTrigger) return;
+    if (!orbit || fitted.current === fitViewTrigger) return;
 
     const { nodes, stepSurface, showUndeformedOverlay } =
       useModelStore.getState();
@@ -56,42 +81,17 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
       deformed: drawn && { ...drawn, showUndeformed: showUndeformedOverlay },
     });
     if (box === null) return;
-    const [minX, minY, minZ] = box.min;
-    const [maxX, maxY, maxZ] = box.max;
-
-    const center = new THREE.Vector3(
-      (minX + maxX) / 2,
-      (minY + maxY) / 2,
-      (minZ + maxZ) / 2,
-    );
-    const diagonal = Math.sqrt(
-      (maxX - minX) ** 2 + (maxY - minY) ** 2 + (maxZ - minZ) ** 2,
-    );
-    const radius = Math.max(diagonal / 2, 1e-6);
-
-    const { camera, size } = get();
+    const { center, radius } = boundingSphere(box);
+    const state = get();
     // Upright, also after a drag turned the view upside down.
-    camera.up.copy(WORLD_UP);
-    placeCamera(
-      camera as ProjectionCamera,
-      center,
-      ISO_DIR,
-      fitDistance(radius, size),
-      size,
-    );
+    state.camera.up.copy(WORLD_UP);
+    frameSphere(orbit, state, new THREE.Vector3(...center), ISO_DIR, radius);
     fitted.current = fitViewTrigger;
-
-    const oc = controls as unknown as { target: THREE.Vector3; update(): void };
-    oc.target.copy(center);
-    oc.update();
-    // The canvas renders on demand: a fit that only changes near/far fires no
-    // controls change event, so ask for the frame explicitly.
-    invalidate();
-  }, [fitViewTrigger, controls, invalidate, get]); // deps intentionally omit scene state — refit only on trigger
+  }, [fitViewTrigger, orbit, get]); // deps intentionally omit scene state — refit only on trigger
 
   // Show keeps the direction the user looks from and moves in on the node.
   useEffect(() => {
-    if (!controls || framed.current === frameNodeTrigger) return;
+    if (!orbit || framed.current === frameNodeTrigger) return;
     framed.current = frameNodeTrigger;
     const { nodes, stepSurface, showUndeformedOverlay, frameNodeId } =
       useModelStore.getState();
@@ -107,21 +107,13 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
       },
       index,
     );
-    const target = new THREE.Vector3(...center);
-    const { camera, size } = get();
-    const oc = controls as unknown as { target: THREE.Vector3; update(): void };
-    const direction = camera.position.clone().sub(oc.target).normalize();
-    placeCamera(
-      camera as ProjectionCamera,
-      target,
-      direction,
-      fitDistance(radius, size),
-      size,
-    );
-    oc.target.copy(target);
-    oc.update();
-    invalidate();
-  }, [frameNodeTrigger, controls, invalidate, get]);
+    const state = get();
+    const direction = state.camera.position
+      .clone()
+      .sub(orbit.target)
+      .normalize();
+    frameSphere(orbit, state, new THREE.Vector3(...center), direction, radius);
+  }, [frameNodeTrigger, orbit, get]);
 
   return null;
 }

@@ -1100,14 +1100,6 @@ export const resultsMessages = defineMessages({
     es: "Mostrar",
     pt: "Mostrar",
   },
-  peakShowHint: {
-    en: "Zoom the view to the max",
-    de: "Ansicht auf das Maximum zoomen",
-    fr: "Zoomer la vue sur le max.",
-    it: "Ingrandisci la vista sul max",
-    es: "Acercar la vista al máx.",
-    pt: "Aproximar a vista ao máx.",
-  },
   peakSupport: {
     en: (name: string) => `support “${name}”`,
     de: (name: string) => `der Lagerung „${name}“`,
@@ -1126,17 +1118,17 @@ export const resultsMessages = defineMessages({
   },
   peakOnBoundary: {
     en: (places: string, p99: string | undefined) =>
-      `The max is on ${places}: likely a singularity there, which grows with mesh refinement. Judge the part by P99${p99 ? ` = ${p99}` : ""}.`,
+      `On ${places}: likely a singularity. Use P99${p99 ? ` = ${p99}` : ""}.`,
     de: (places: string, p99: string | undefined) =>
-      `Das Maximum liegt an ${places}: wahrscheinlich eine Singularität, die bei Netzverfeinerung wächst. Beurteilen Sie das Bauteil nach P99${p99 ? ` = ${p99}` : ""}.`,
+      `An ${places}: wahrscheinlich eine Singularität. P99${p99 ? ` = ${p99}` : ""} verwenden.`,
     fr: (places: string, p99: string | undefined) =>
-      `Le max. est sur ${places} : probablement une singularité, qui croît quand le maillage est raffiné. Jugez la pièce sur P99${p99 ? ` = ${p99}` : ""}.`,
+      `Sur ${places} : singularité probable. Utilisez P99${p99 ? ` = ${p99}` : ""}.`,
     it: (places: string, p99: string | undefined) =>
-      `Il max si trova presso ${places}: probabilmente una singolarità, che cresce raffinando la mesh. Valuta il pezzo con P99${p99 ? ` = ${p99}` : ""}.`,
+      `Presso ${places}: probabile singolarità. Usa P99${p99 ? ` = ${p99}` : ""}.`,
     es: (places: string, p99: string | undefined) =>
-      `El máx. está en ${places}: probablemente una singularidad, que crece al refinar la malla. Juzgue la pieza por P99${p99 ? ` = ${p99}` : ""}.`,
+      `En ${places}: probable singularidad. Use P99${p99 ? ` = ${p99}` : ""}.`,
     pt: (places: string, p99: string | undefined) =>
-      `O máx. está sobre ${places}: provavelmente uma singularidade, que cresce ao refinar a malha. Avalie a peça por P99${p99 ? ` = ${p99}` : ""}.`,
+      `Sobre ${places}: provável singularidade. Use P99${p99 ? ` = ${p99}` : ""}.`,
   },
   peakUnreadable: {
     en: (reason: string) => `The location of the max cannot be read. ${reason}`,
@@ -1149,18 +1141,26 @@ export const resultsMessages = defineMessages({
     pt: (reason: string) => `Não é possível ler a posição do máx. ${reason}`,
   },
   peakUnknownNode: {
-    en: (group: string, node: number) =>
-      `${group} is applied to node ${node}, which the mesh does not have`,
-    de: (group: string, node: number) =>
-      `${group} wirkt auf Knoten ${node}, den das Netz nicht hat`,
-    fr: (group: string, node: number) =>
-      `${group} est appliqué au nœud ${node}, absent du maillage`,
-    it: (group: string, node: number) =>
-      `${group} è applicato al nodo ${node}, che la mesh non ha`,
-    es: (group: string, node: number) =>
-      `${group} se aplica al nodo ${node}, que la malla no tiene`,
-    pt: (group: string, node: number) =>
-      `${group} está aplicado ao nó ${node}, que a malha não tem`,
+    en: (owner: string, node: number) =>
+      `${owner} refers to node ${node}, which the mesh does not have`,
+    de: (owner: string, node: number) =>
+      `${owner} verweist auf Knoten ${node}, den das Netz nicht hat`,
+    fr: (owner: string, node: number) =>
+      `${owner} référence le nœud ${node}, absent du maillage`,
+    it: (owner: string, node: number) =>
+      `${owner} fa riferimento al nodo ${node}, che la mesh non ha`,
+    es: (owner: string, node: number) =>
+      `${owner} hace referencia al nodo ${node}, que la malla no tiene`,
+    pt: (owner: string, node: number) =>
+      `${owner} referencia o nó ${node}, que a malha não tem`,
+  },
+  peakElement: {
+    en: (element: number) => `Shell element ${element}`,
+    de: (element: number) => `Schalenelement ${element}`,
+    fr: (element: number) => `L'élément coque ${element}`,
+    it: (element: number) => `L'elemento guscio ${element}`,
+    es: (element: number) => `El elemento lámina ${element}`,
+    pt: (element: number) => `O elemento de casca ${element}`,
   },
   sectionNoNodes: {
     en: "the model has no nodes to cut",

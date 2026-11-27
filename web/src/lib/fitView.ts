@@ -67,15 +67,37 @@ export function fitViewBox({
   return empty ? null : { min, max };
 }
 
+/**
+ * The sphere around `box`: its centre and half its diagonal. A box without
+ * extent (every point in one place) has nothing to frame.
+ */
+export function boundingSphere(box: Box): { center: Vec3; radius: number } {
+  const { min, max } = box;
+  const radius =
+    Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2;
+  if (!(radius > 0))
+    throw new Error(
+      `The view has nothing to frame: the model has no extent at (${min.join(", ")})`,
+    );
+  return {
+    center: [
+      (min[0] + max[0]) / 2,
+      (min[1] + max[1]) / 2,
+      (min[2] + max[2]) / 2,
+    ],
+    radius,
+  };
+}
+
 // Results → Show (KOF-495) frames a sphere of this share of the model's
-// half-diagonal around the node: close enough to see the elements at the
+// bounding sphere around the node: close enough to see the elements at the
 // node, wide enough to see where on the part it lies.
 export const NODE_FRAME_SHARE = 0.3;
 
 /**
  * The sphere Results → Show frames around node `index`: centred where the
- * viewport draws the node (on the deformed shape at the drawn scale), with a
- * radius of NODE_FRAME_SHARE of the half-diagonal of what Fit view frames.
+ * viewport draws the node (on the deformed shape at the drawn scale), with
+ * NODE_FRAME_SHARE of the radius of what Fit view frames.
  */
 export function nodeFrame(
   input: FitViewInput,
@@ -97,11 +119,5 @@ export function nodeFrame(
           node.y + deformed.displacements[3 * index + 1] * deformed.scale,
           node.z + deformed.displacements[3 * index + 2] * deformed.scale,
         ];
-  const halfDiagonal =
-    Math.hypot(
-      box.max[0] - box.min[0],
-      box.max[1] - box.min[1],
-      box.max[2] - box.min[2],
-    ) / 2;
-  return { center, radius: Math.max(NODE_FRAME_SHARE * halfDiagonal, 1e-6) };
+  return { center, radius: NODE_FRAME_SHARE * boundingSphere(box).radius };
 }

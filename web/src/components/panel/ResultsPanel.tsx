@@ -393,9 +393,6 @@ function PercentileRows({
   ));
 }
 
-// Where the von Mises max sits, with Show to frame it (KOF-495). On a support
-// or load the max is usually the idealisation's singularity, so the note
-// names it and points to the P99 row.
 function PeakLocationRow({
   percentiles,
   unit,
@@ -445,7 +442,6 @@ function PeakLocationRow({
         <button
           className={styles.peakShow}
           data-testid="peak-show"
-          title={text.peakShowHint}
           onClick={show}
         >
           {text.show}

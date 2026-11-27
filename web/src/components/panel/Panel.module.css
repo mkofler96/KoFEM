@@ -1353,8 +1353,6 @@ label.sectionHeadAction {
   display: block;
 }
 
-/* Where the von Mises max sits (KOF-495): the coordinates and Show on one
-   line, wrapping under the label on a narrow panel. */
 .peakRow {
   display: flex;
   flex-wrap: wrap;
