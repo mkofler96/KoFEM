@@ -23,6 +23,7 @@ import {
 import { isStressField, type ShellSurface } from "../../lib/stressFields";
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
+import { useFieldPercentiles } from "../../hooks/useFieldPercentiles";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
@@ -336,8 +337,42 @@ function MinMaxSection({ field }: { field: ResultType }) {
             reading={{ kind: "value", ...extremes[end] }}
           />
         ))}
+      <PercentileRows symbol={symbol} unit={unit} />
     </>
   );
+}
+
+// The von Mises percentiles by volume (KOF-477), under the max: the number a
+// part is judged on when the max sits at a singularity.
+function PercentileRows({ symbol, unit }: { symbol: string; unit: string }) {
+  const percentiles = useFieldPercentiles();
+  const text = useT(resultsMessages);
+  if (percentiles === null) return null;
+  if (percentiles.kind === "unreadable")
+    return (
+      <div className={styles.formNote}>
+        {text.percentileUnreadable(percentiles.reason)}
+      </div>
+    );
+  return percentiles.values.map(({ percent, value }) => (
+    <div
+      key={percent}
+      className={styles.statRow}
+      data-testid={`percentile-row-${percent}`}
+      title={text.percentileHint(percent)}
+    >
+      <span className={styles.statKey}>
+        {text.percentile(percent)} {symbol}
+      </span>
+      <span
+        className={styles.statVal}
+        data-testid={`percentile-value-${percent}`}
+        data-value={String(value)}
+      >
+        {value.toExponential(3)} {unit}
+      </span>
+    </div>
+  ));
 }
 
 // Result probes (KOF-389): the tool that places probes by clicking the model,

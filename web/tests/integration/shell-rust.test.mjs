@@ -17,6 +17,10 @@
 //     auto-shell path does;
 //   - the plate-with-hole shell example (examples/gallery), as its generator
 //     loads it;
+//   (the bracket and the plate load their membranes in plane, so since the
+//   OPT drilling membrane replaced the C++ CST membrane (KOF-453) their
+//   answers differ from the stored C++ results by design: they are checked
+//   in Rust alone, on what the comparison also guaranteed);
 //   - the shell cases of examples/validation and engine/tests/shell_validation:
 //     the simply supported plate and the prescribed-displacement strip;
 //   - payloads both must refuse;
@@ -59,6 +63,27 @@ const neverContinue = () => {
   throw new Error("the CG budget ran out — no continuation in this test");
 };
 
+// Solve one payload in Rust: the result, or the error (null where the solve
+// succeeded).
+async function solveRust(inputs) {
+  let rust = null;
+  let rustError = null;
+  try {
+    rust = await solveShellInRust(
+      { ShellModel },
+      inputs,
+      undefined,
+      neverContinue,
+      () => {
+        /* solve log lines; the tests check results only */
+      },
+    );
+  } catch (error) {
+    rustError = String(error);
+  }
+  return { rust, rustError };
+}
+
 // Solve one payload with both solvers. Returns the two results, or the two
 // errors (null where a solver succeeded).
 async function solveBoth(inputs) {
@@ -74,22 +99,7 @@ async function solveBoth(inputs) {
         : String(thrown);
     cpp = { error: message };
   }
-  let rust = null;
-  let rustError = null;
-  try {
-    rust = await solveShellInRust(
-      { ShellModel },
-      inputs,
-      undefined,
-      neverContinue,
-      () => {
-        /* solve log lines; the comparison checks results only */
-      },
-    );
-  } catch (error) {
-    rustError = String(error);
-  }
-  return { cpp, rust, rustError };
+  return { cpp, ...(await solveRust(inputs)) };
 }
 
 function maxAbs(values) {
@@ -148,6 +158,25 @@ function agreementTests(getResult) {
       difference,
       `max σ ${maxAbs(cpp.von_mises).toExponential(3)}, Rust − C++ ${difference.toExponential(2)} relative`,
     ).toBeLessThan(AGREE);
+  });
+}
+
+// Registers the tests of a model whose answer the OPT membrane changed: the
+// Rust solve succeeds and returns one displacement triple per vertex and one
+// stress per facet of `inputs`.
+function rustSolveTests(getResult, getInputs) {
+  test("the Rust solver solves it", () => {
+    const { rust, rustError } = getResult();
+    expect(rust, rustError).not.toBeNull();
+  });
+
+  test("one displacement per vertex and one stress per facet", () => {
+    const { rust } = getResult();
+    const { mesh } = getInputs();
+    expect(rust.displacements).toHaveLength(mesh.vertices.length);
+    expect(rust.von_mises).toHaveLength(mesh.triangles.length / 3);
+    for (const value of [...rust.displacements, ...rust.von_mises])
+      expect(Number.isFinite(value)).toBe(true);
   });
 }
 
@@ -311,11 +340,32 @@ function gridPlate(sizeX, sizeY, cellsX, cellsY) {
 }
 
 describe("folded bracket (app builder)", () => {
+  let inputs = null;
   let result = null;
   beforeAll(async () => {
-    result = await solveBoth(buildShellEngineInputs(foldedBracket()));
+    inputs = buildShellEngineInputs(foldedBracket());
+    result = await solveRust(inputs);
   });
-  agreementTests(() => result);
+  rustSolveTests(
+    () => result,
+    () => inputs,
+  );
+
+  test("the builder's prescribed translation reaches the solve", () => {
+    const vertices = inputs.mesh.vertices;
+    let vertex = -1;
+    for (let i = 0; i < vertices.length / 3; i++)
+      if (
+        Math.hypot(
+          vertices[3 * i] - 30,
+          vertices[3 * i + 1] - 40,
+          vertices[3 * i + 2],
+        ) < 1e-9
+      )
+        vertex = i;
+    expect(vertex).toBeGreaterThanOrEqual(0);
+    expect(result.rust.displacements[3 * vertex + 2]).toBeCloseTo(0.05, 12);
+  });
 });
 
 describe("single fin (auto-shell)", () => {
@@ -426,7 +476,7 @@ describe("plate with a hole (gallery example)", () => {
       forceAt.set(right[k], forceAt.get(right[k]) + share);
       forceAt.set(right[k + 1], forceAt.get(right[k + 1]) + share);
     }
-    result = await solveBoth({
+    result = await solveRust({
       mesh: {
         vertices: Float64Array.from(plate.vertices.flat()),
         triangles: Int32Array.from(plate.triangles.flat()),
@@ -447,7 +497,15 @@ describe("plate with a hole (gallery example)", () => {
     });
   });
 
-  agreementTests(() => result);
+  rustSolveTests(
+    () => result,
+    () => ({
+      mesh: {
+        vertices: plate.vertices.flat(),
+        triangles: plate.triangles.flat(),
+      },
+    }),
+  );
 
   test("Rust Kt is near Kirsch's 3", () => {
     let peak = 0;

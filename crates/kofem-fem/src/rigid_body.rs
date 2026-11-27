@@ -33,6 +33,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::count::count_as_f64;
 use crate::error::FemError;
 
 /// Six rigid-body modes: three translations, three rotations.
@@ -264,8 +265,7 @@ impl Components {
             .iter()
             .zip(&sizes)
             .map(|(sum, &size)| {
-                #[allow(clippy::cast_precision_loss, reason = "a node count is far below 2^52")]
-                let size = size as f64;
+                let size = count_as_f64(size);
                 [sum[0] / size, sum[1] / size, sum[2] / size]
             })
             .collect();

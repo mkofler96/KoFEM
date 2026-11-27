@@ -16,6 +16,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use kofem_fem::count_as_f64;
+
 use crate::geometry::{
     add, cross, dot, norm, scale, sub, tet_face, triangle_key, ShellizeMesh, Vec3, TET_FACES,
 };
@@ -115,13 +117,12 @@ fn triangle_normal(corners: [Vec3; 3]) -> Option<Vec3> {
 
 /// Value at quantile `share` of sorted `values`.
 #[allow(
-    clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "an index into a short, non-empty list"
 )]
 fn quantile(values: &[f64], share: f64) -> f64 {
-    values[((values.len() - 1) as f64 * share).round() as usize]
+    values[(count_as_f64(values.len() - 1) * share).round() as usize]
 }
 
 /// One ray into the material: the surface triangle it starts from, its origin
@@ -286,8 +287,7 @@ fn measure(
     let (partner, mut distances) = hits
         .into_iter()
         .max_by(|left, right| left.1.len().cmp(&right.1.len()).then(right.0.cmp(&left.0)))?;
-    #[allow(clippy::cast_precision_loss, reason = "ray counts are small")]
-    let agreement = distances.len() as f64 / cast.len() as f64;
+    let agreement = count_as_f64(distances.len()) / count_as_f64(cast.len());
     if agreement < MIN_AGREEMENT {
         return None;
     }

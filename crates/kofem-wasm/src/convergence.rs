@@ -112,11 +112,7 @@ pub fn extrapolate_to_zero_size(
 /// No levels, a level without elements, or a dimension other than 1, 2 or 3.
 #[wasm_bindgen(js_name = relativeElementSizes)]
 pub fn relative_element_sizes(element_counts: &[u32], dimension: u32) -> Result<Vec<f64>, JsError> {
-    let counts: Vec<u64> = element_counts
-        .iter()
-        .map(|count| u64::from(*count))
-        .collect();
-    kofem_fem::convergence::relative_sizes(&counts, dimension).map_err(|error| to_js(&error))
+    kofem_fem::convergence::relative_sizes(element_counts, dimension).map_err(|error| to_js(&error))
 }
 
 /// The singular exponent λ of a clamped face meeting a free face at the

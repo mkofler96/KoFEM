@@ -125,6 +125,8 @@ pub enum FemError {
     CoarseNotPositiveDefinite { unknowns: usize },
     #[error("section cut: {reason}")]
     SectionInput { reason: String },
+    #[error("field statistics: {reason}")]
+    StatisticsInput { reason: String },
     #[error("coupling {coupling}: {reason}")]
     Coupling { coupling: usize, reason: String },
     #[error("coupling input is invalid: {reason}")]
@@ -216,4 +218,32 @@ pub enum FemError {
     TopologyInput { reason: String },
     #[error("mesh convergence: {reason}")]
     Convergence { reason: String },
+    #[error(
+        "Newton increment {increment} of {increments} did not converge: relative residual \
+         {relative_residual:e} after {iterations} iterations (target {target:e})"
+    )]
+    NewtonNotConverged {
+        increment: u32,
+        increments: u32,
+        iterations: usize,
+        relative_residual: f64,
+        target: f64,
+    },
+    #[error(
+        "Newton increment {increment}, iteration {iteration}: the tangent solve failed: {reason}"
+    )]
+    TangentSolve {
+        increment: u32,
+        iteration: usize,
+        reason: String,
+    },
+    #[error(
+        "the Newton solve has not finished: it stands at increment {increment}, iteration \
+         {iteration}"
+    )]
+    NewtonUnfinished { increment: u32, iteration: usize },
+    #[error("nonlinear solve: {reason}")]
+    NonlinearInput { reason: String },
+    #[error("contact: {reason}")]
+    Contact { reason: String },
 }

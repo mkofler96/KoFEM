@@ -45,6 +45,7 @@ export function MeshScene() {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const highlightBodyId = useModelStore((s) => s.highlightBodyId);
+  const faceSizePicking = useModelStore((s) => s.faceSizePicking);
   const properties = useModelStore((s) => s.properties);
   const probing = useModelStore((s) => s.probing);
   const addProbe = useModelStore((s) => s.addProbe);
@@ -176,8 +177,12 @@ export function MeshScene() {
     properties,
     stepSurface,
   );
+  // Face sizes are picked on CAD faces, which only the tessellation shows.
   const repr =
-    (highlightBody !== null || highlightInterface !== null) && !showResult
+    (highlightBody !== null ||
+      highlightInterface !== null ||
+      faceSizePicking) &&
+    !showResult
       ? "geometry"
       : viewRepr;
 

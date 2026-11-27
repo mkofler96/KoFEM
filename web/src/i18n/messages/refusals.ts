@@ -52,6 +52,64 @@ export const refusalMessages = defineMessages({
     pt: (ties: string, count: number) =>
       `O solucionador de cascas ainda não aceita ligações, mas este modelo tem ${ties}. ${count === 1 ? "Exclua-a" : "Exclua-as"} para resolver este modelo de cascas.`,
   },
+  namedContact: {
+    en: (name: string) => `contact "${name}"`,
+    de: (name: string) => `den Kontakt „${name}“`,
+    fr: (name: string) => `le contact « ${name} »`,
+    it: (name: string) => `il contatto "${name}"`,
+    es: (name: string) => `el contacto "${name}"`,
+    pt: (name: string) => `o contato "${name}"`,
+  },
+  namedContacts: {
+    en: (count: number, names: string) => `${count} contacts (${names})`,
+    de: (count: number, names: string) => `${count} Kontakte (${names})`,
+    fr: (count: number, names: string) => `${count} contacts (${names})`,
+    it: (count: number, names: string) => `${count} contatti (${names})`,
+    es: (count: number, names: string) => `${count} contactos (${names})`,
+    pt: (count: number, names: string) => `${count} contatos (${names})`,
+  },
+  contactNotSolid: {
+    en: (contacts: string, count: number) =>
+      `Contact is solved on all-solid models only, without shells, bodies solved as shells or couplings, but this model has ${contacts}. Delete ${count === 1 ? "it" : "them"}, or solve every body as a solid without couplings.`,
+    de: (contacts: string, count: number) =>
+      `Kontakt wird nur in reinen Volumenmodellen ohne Schalen, als Schale gerechnete Körper oder Kopplungen gelöst, dieses Modell hat aber ${contacts}. Löschen Sie ${count === 1 ? "ihn" : "diese"}, oder rechnen Sie alle Körper als Volumen ohne Kopplungen.`,
+    fr: (contacts: string, count: number) =>
+      `Le contact n'est résolu que sur des modèles entièrement volumiques, sans coques, corps calculés en coque ni couplages, mais ce modèle a ${contacts}. Supprimez-${count === 1 ? "le" : "les"}, ou calculez tous les corps en volume sans couplages.`,
+    it: (contacts: string, count: number) =>
+      `Il contatto si risolve solo su modelli interamente solidi, senza gusci, corpi calcolati come gusci o accoppiamenti, ma questo modello ha ${contacts}. ${count === 1 ? "Eliminalo" : "Eliminali"}, oppure calcola tutti i corpi come solidi senza accoppiamenti.`,
+    es: (contacts: string, count: number) =>
+      `El contacto solo se resuelve en modelos totalmente sólidos, sin láminas, cuerpos calculados como lámina ni acoplamientos, pero este modelo tiene ${contacts}. ${count === 1 ? "Elimínalo" : "Elimínalos"}, o calcula todos los cuerpos como sólidos sin acoplamientos.`,
+    pt: (contacts: string, count: number) =>
+      `O contato só é resolvido em modelos totalmente sólidos, sem cascas, corpos calculados como casca ou acoplamentos, mas este modelo tem ${contacts}. ${count === 1 ? "Exclua-o" : "Exclua-os"}, ou calcule todos os corpos como sólidos sem acoplamentos.`,
+  },
+  contactOrder: {
+    en: (contacts: string, order: number) =>
+      `Contact is solved with linear elements only, but this model has ${contacts} and element order ${order} is selected. Set Element order to Linear in the Mesh panel.`,
+    de: (contacts: string, order: number) =>
+      `Kontakt wird nur mit linearen Elementen gelöst, dieses Modell hat aber ${contacts}, und gewählt ist Elementordnung ${order}. Stellen Sie im Netz-Bereich die Elementordnung auf Linear.`,
+    fr: (contacts: string, order: number) =>
+      `Le contact se résout uniquement avec des éléments linéaires, mais ce modèle a ${contacts} et l'ordre d'éléments ${order} est sélectionné. Réglez l'ordre des éléments sur Linéaire dans le panneau Maillage.`,
+    it: (contacts: string, order: number) =>
+      `Il contatto si risolve solo con elementi lineari, ma questo modello ha ${contacts} ed è selezionato l'ordine degli elementi ${order}. Imposta l'ordine degli elementi su Lineare nel pannello Mesh.`,
+    es: (contacts: string, order: number) =>
+      `El contacto se resuelve solo con elementos lineales, pero este modelo tiene ${contacts} y está seleccionado el orden de elementos ${order}. Ajusta el orden de los elementos a Lineal en el panel Malla.`,
+    pt: (contacts: string, order: number) =>
+      `O contato é resolvido apenas com elementos lineares, mas este modelo tem ${contacts} e a ordem de elementos ${order} está selecionada. Defina a ordem dos elementos como Linear no painel Malha.`,
+  },
+  topOptContacts: {
+    en: (contacts: string, count: number) =>
+      `Topology optimization does not support contact yet, but this model has ${contacts}. Delete ${count === 1 ? "it" : "them"} to optimize.`,
+    de: (contacts: string, count: number) =>
+      `Die Topologieoptimierung unterstützt noch keinen Kontakt, dieses Modell hat aber ${contacts}. Löschen Sie ${count === 1 ? "ihn" : "diese"}, um zu optimieren.`,
+    fr: (contacts: string, count: number) =>
+      `L'optimisation topologique ne prend pas encore en charge le contact, mais ce modèle a ${contacts}. Supprimez-${count === 1 ? "le" : "les"} pour optimiser.`,
+    it: (contacts: string, count: number) =>
+      `L'ottimizzazione topologica non supporta ancora il contatto, ma questo modello ha ${contacts}. ${count === 1 ? "Eliminalo" : "Eliminali"} per ottimizzare.`,
+    es: (contacts: string, count: number) =>
+      `La optimización topológica aún no admite el contacto, pero este modelo tiene ${contacts}. ${count === 1 ? "Elimínalo" : "Elimínalos"} para optimizar.`,
+    pt: (contacts: string, count: number) =>
+      `A otimização topológica ainda não aceita contato, mas este modelo tem ${contacts}. ${count === 1 ? "Exclua-o" : "Exclua-os"} para otimizar.`,
+  },
   shellOrder: {
     en: (order: number) =>
       `Shell and mixed shell/solid models solve with linear elements only, but element order ${order} is selected. Set Element order to Linear in the Mesh panel.`,

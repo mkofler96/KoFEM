@@ -679,6 +679,10 @@ function byHand(e) {
           `Set the body to Shell. Meshing measures the ${trim(d.thickness)} mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.`,
         ]
       : []),
+    ...(r.mesh.localSizes ?? []).map(
+      (local) =>
+        `Under Face sizes in the mesh settings, give ${faces(local.faces)} a ${trim(local.size)} mm element size.`,
+    ),
     `Mesh with a ${trim(r.mesh.maxElementSize)} mm maximum element size${r.mesh.minElementSize === undefined ? "" : ` and a ${trim(r.mesh.minElementSize)} mm minimum`}, ${r.mesh.order === 2 ? "quadratic" : "linear"} elements.`,
     `Material ${esc(m.name)}: E = ${trim(m.young)} MPa, ν = ${trim(m.poisson)}.`,
     ...r.supports.map(
@@ -892,7 +896,7 @@ const ELEMENTS = {
     2: "quadratic 10-node tetrahedra (P2)",
   },
   CTRIA3: {
-    1: "linear 3-node shell triangles (CST membrane, DKT bending)",
+    1: "3-node shell triangles (OPT drilling membrane, DKT bending)",
   },
 };
 

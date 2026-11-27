@@ -9,11 +9,13 @@
             <text class="tick" x="424.0" y="227" text-anchor="middle">100k</text>
             <line class="grid" x1="44" x2="424" y1="212.0" y2="212.0"/>
             <text class="tick" x="38" y="215.5" text-anchor="end">1</text>
+            <line class="grid" x1="44" x2="424" y1="118.0" y2="118.0"/>
+            <text class="tick" x="38" y="121.5" text-anchor="end">10</text>
             <line class="grid" x1="44" x2="424" y1="24.0" y2="24.0"/>
-            <text class="tick" x="38" y="27.5" text-anchor="end">10</text>
+            <text class="tick" x="38" y="27.5" text-anchor="end">100</text>
             <line class="axis" x1="44" x2="424" y1="212" y2="212"/>
             <line class="axis" x1="44" x2="44" y1="24" y2="212"/>
-            <line class="tol" x1="44" x2="424" y1="24.0" y2="24.0"/><text class="tol-label" x="420" y="19.0" text-anchor="end">tolerance ±10 %</text>
-            <path class="line s1" d="M152.3 33.7 L244.3 45.3 L316.0 40.6 L377.9 41.3"/><g><title>Shell (linear), 10 mm: 19,278 DOFs, difference −8.88 %</title><circle class="hit" cx="152.3" cy="33.7" r="10"/><circle class="mark s1 under" cx="152.3" cy="33.7" r="4.5"/></g><g><title>Shell (linear), 7.5 mm: 33,666 DOFs, difference −7.70 % (the example's mesh)</title><circle class="hit" cx="244.3" cy="45.3" r="10"/><circle class="mark s1 under" cx="244.3" cy="45.3" r="4.5"/><circle class="ci-ring" cx="244.3" cy="45.3" r="9"/></g><g><title>Shell (linear), 6 mm: 51,984 DOFs, difference −8.16 %</title><circle class="hit" cx="316.0" cy="40.6" r="10"/><circle class="mark s1 under" cx="316.0" cy="40.6" r="4.5"/></g><g><title>Shell (linear), 5 mm: 75,624 DOFs, difference −8.09 %</title><circle class="hit" cx="377.9" cy="41.3" r="10"/><circle class="mark s1 under" cx="377.9" cy="41.3" r="4.5"/></g>
+            <line class="tol" x1="44" x2="424" y1="118.0" y2="118.0"/><text class="tol-label" x="420" y="113.0" text-anchor="end">tolerance ±10 %</text>
+            <path class="line s1" d="M152.3 109.3 L244.3 121.2 L316.0 119.5 L377.9 121.0"/><g><title>Shell (linear), 10 mm: 19,278 DOFs, difference −12.37 %</title><circle class="hit" cx="152.3" cy="109.3" r="10"/><circle class="mark s1 under" cx="152.3" cy="109.3" r="4.5"/></g><g><title>Shell (linear), 7.5 mm: 33,666 DOFs, difference −9.25 % (the example's mesh)</title><circle class="hit" cx="244.3" cy="121.2" r="10"/><circle class="mark s1 under" cx="244.3" cy="121.2" r="4.5"/><circle class="ci-ring" cx="244.3" cy="121.2" r="9"/></g><g><title>Shell (linear), 6 mm: 51,984 DOFs, difference −9.64 %</title><circle class="hit" cx="316.0" cy="119.5" r="10"/><circle class="mark s1 under" cx="316.0" cy="119.5" r="4.5"/></g><g><title>Shell (linear), 5 mm: 75,624 DOFs, difference −9.29 %</title><circle class="hit" cx="377.9" cy="121.0" r="10"/><circle class="mark s1 under" cx="377.9" cy="121.0" r="4.5"/></g>
             <text class="axis-title" x="424" y="245" text-anchor="end">degrees of freedom</text>
 </svg>

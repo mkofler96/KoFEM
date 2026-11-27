@@ -7,6 +7,7 @@
 import { SHELL_SURFACES, type ElementStress } from "../lib/stressFields";
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
 import {
+  ContactPairs,
   Couplings,
   ElasticModel,
   freeRigidMotions,
@@ -27,6 +28,7 @@ import type {
   KofemModule,
 } from "../wasm/pkg/kofem_wasm.js";
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
+import type { ContactResult } from "../lib/contact.js";
 import type {
   Node,
   Element,
@@ -106,6 +108,7 @@ import {
 } from "../lib/solve/topOptRust.js";
 import { elementOrderOf } from "../lib/solve/messageDefaults.js";
 import { useLocaleStore } from "../i18n/useLocale";
+import { loadLocale } from "../i18n/loadLocale";
 import { inEnglish } from "../i18n/english";
 import type { Locale } from "../i18n/locale";
 
@@ -477,6 +480,9 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     ...(payload.solidMaxSizes
       ? { solid_max_sizes: payload.solidMaxSizes }
       : {}),
+    ...(payload.faceMaxSizes && payload.faceMaxSizes.length > 0
+      ? { face_max_sizes: payload.faceMaxSizes }
+      : {}),
     grading: 0.3,
     second_order: false,
     elementsperedge: 2.0,
@@ -617,11 +623,13 @@ type SolveResultFields = {
 };
 
 // Each path's reactions are summed in the solve's own numbering, before its
-// result is mapped back to the store mesh (KOF-387).
+// result is mapped back to the store mesh (KOF-387). Only the solid path
+// solves contact; the other paths have no contact result.
 function postSolveResult(
   id: number,
   result: SolveResultFields,
   reactions: ReactionSummary | null,
+  contact: ContactResult | null = null,
 ) {
   self.postMessage(
     {
@@ -631,6 +639,7 @@ function postSolveResult(
       vonMises: result.vonMises,
       stress: result.stress,
       reactions,
+      contact,
     },
     // A model without shells holds one stress array on every surface: each
     // buffer is transferred once.
@@ -639,6 +648,9 @@ function postSolveResult(
         result.displacements.buffer,
         result.vonMises.buffer,
         ...SHELL_SURFACES.map((s) => result.stress[s].buffer),
+        ...(contact
+          ? [contact.pressure.buffer, contact.gap.buffer, contact.closed.buffer]
+          : []),
       ]),
     ],
   );
@@ -863,7 +875,13 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
       : null,
   );
   const result = await solveSolidInRust(
-    { ElasticModel, SolveOptions, Ties, evaluateFieldExpression },
+    {
+      ElasticModel,
+      SolveOptions,
+      Ties,
+      ContactPairs,
+      evaluateFieldExpression,
+    },
     {
       ...payload,
       nodes: tied.solveNodes,
@@ -891,6 +909,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     id,
     { displacements, vonMises: result.vonMises, stress: result.stress },
     result.reactions,
+    result.contact,
   );
 }
 
@@ -1092,7 +1111,8 @@ interface WorkerRequest {
   id: number;
   type: string;
   payload: unknown;
-  // The app's language; absent from the engine's start-up "init".
+  // The app's language; absent from a CG continuation, which goes on in the
+  // language of the solve it continues.
   locale?: Locale;
 }
 
@@ -1220,9 +1240,16 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
   });
 }
 
+// The worker translates in the language the request was sent in, once that
+// language's text has arrived (KOF-471).
+async function speak(locale: Locale | undefined): Promise<void> {
+  if (locale === undefined) return;
+  await loadLocale(locale);
+  useLocaleStore.setState({ locale });
+}
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { id, type, payload, locale } = event.data;
-  if (locale !== undefined) useLocaleStore.setState({ locale });
   // Asyncify has suspended WASM. Only its matching decision may resume it;
   // no other request may enter the engine while its C++ stack is retained.
   if (type === "cg_continue") {
@@ -1231,7 +1258,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   }
   let ownsTask = false;
   try {
-    await ensureInit();
+    // The engine loads while the request's language arrives; nothing is
+    // translated before both have settled.
+    const [engine, language] = await Promise.allSettled([
+      ensureInit(),
+      speak(locale),
+    ]);
+    if (language.status === "rejected") throw language.reason;
+    if (engine.status === "rejected") throw engine.reason;
     if (activeTask !== null)
       throw new Error("The solver worker is busy with another operation");
     activeTask = id;

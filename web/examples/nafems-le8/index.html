@@ -46,7 +46,7 @@
               "https://kofem.org/examples/nafems-le8/nafems-le8-knuckle-shell-diagram.png",
               "https://kofem.org/examples/nafems-le8/nafems-le8-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-23",
+            "dateModified": "2026-11-26",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -904,7 +904,7 @@
           <img src="/examples/nafems-le8.png" width="1200" height="785" alt="NAFEMS LE8: axisymmetric shell under pressure: von mises stress on the deformed shape, displacements drawn 100 times enlarged" />
           <p class="viewer-hint" hidden></p>
         </div>
-        <div class="colorbar"><span data-legend="min">17.5&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">144&nbsp;MPa</span></div>
+        <div class="colorbar"><span data-legend="min">17.6&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">143&nbsp;MPa</span></div>
         <figcaption><span data-legend="name">Von Mises stress</span>, deformed shape, displacements drawn 100 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -921,8 +921,8 @@
           <tbody>
             <tr>
               <td class="num">94.500&nbsp;MPa</td>
-              <td class="num"><strong data-testid="fe-value">87.222&nbsp;MPa</strong></td>
-              <td class="num">−7.70&nbsp;%<br /><span class="band pass">within ±10&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">85.757&nbsp;MPa</strong></td>
+              <td class="num">−9.25&nbsp;%<br /><span class="band pass">within ±10&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -968,10 +968,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 7.5 mm maximum element size: 10,950 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 7.5 mm maximum element size: 10,950 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,611 nodes, 33,666 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-fe1376d90a4d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-724e4e1365f1); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-32198cb04210</td></tr>
         </table>
       </div>
         <p>NAFEMS gives the dimensions in a figure: the cylinder radius, the
@@ -991,8 +991,8 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>hoop stress at D, outer surface</td></tr>
           <tr><th scope="row">Reference</th><td>NAFEMS LE8 target = 94.500&nbsp;MPa <span class="meta">(NAFEMS TNSB Rev. 3 (1990), test LE8)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>87.222&nbsp;MPa</td></tr>
-          <tr><th scope="row">Difference</th><td>−7.70&nbsp;% <span class="band pass">within ±10&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>85.757&nbsp;MPa</td></tr>
+          <tr><th scope="row">Difference</th><td>−9.25&nbsp;% <span class="band pass">within ±10&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="nafems-le8">
@@ -1002,7 +1002,7 @@
           <picture class="figure-image theme-light conv"><source srcset="/examples/nafems-le8/nafems-le8-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/nafems-le8/nafems-le8-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE8, curved shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/nafems-le8/nafems-le8-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/nafems-le8/nafems-le8-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE8, curved shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>Settled within a percent from 7.5 mm down, close to an axisymmetric thin-shell solution of the same geometry and below the NAFEMS target.</p>
+        <p>Rising slowly towards an axisymmetric thin-shell solution of the same geometry (2.6 % below it at 7.5 mm, 1.7 % at 3 mm), which itself lies below the NAFEMS target.</p>
         <p>The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.</p>
         <details>
           <summary>Data</summary>
@@ -1022,29 +1022,29 @@
                   <td>Shell (linear)</td>
                   <td>10 mm</td>
                   <td class="num">19,278</td>
-                  <td class="num">86.108&nbsp;MPa</td>
-                  <td class="num">−8.88&nbsp;%</td>
+                  <td class="num">82.810&nbsp;MPa</td>
+                  <td class="num">−12.37&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>7.5 mm (this example)</td>
                   <td class="num">33,666</td>
-                  <td class="num">87.222&nbsp;MPa</td>
-                  <td class="num">−7.70&nbsp;%</td>
+                  <td class="num">85.757&nbsp;MPa</td>
+                  <td class="num">−9.25&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>6 mm</td>
                   <td class="num">51,984</td>
-                  <td class="num">86.784&nbsp;MPa</td>
-                  <td class="num">−8.16&nbsp;%</td>
+                  <td class="num">85.389&nbsp;MPa</td>
+                  <td class="num">−9.64&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>5 mm</td>
                   <td class="num">75,624</td>
-                  <td class="num">86.851&nbsp;MPa</td>
-                  <td class="num">−8.09&nbsp;%</td>
+                  <td class="num">85.722&nbsp;MPa</td>
+                  <td class="num">−9.29&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1053,15 +1053,17 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM reads −7.70&nbsp;% from the NAFEMS target, the widest
+        <p>KoFEM reads −9.25&nbsp;% from the NAFEMS target, the widest
         difference of the NAFEMS pages, and the band is wide to match. Thin
         shell theory does not reach the target either: an axisymmetric
         Kirchhoff shell solution of this geometry converges about 7&nbsp;%
         below it, and Abaqus' own axisymmetric shell elements read about
-        4&nbsp;% below. KoFEM's curved shells agree with that thin-shell
-        solution to within 1.5&nbsp;%, and the convergence study shows them
-        settled. The difference from the target most likely lies in the
-        geometry, which NAFEMS gives only as a figure.</p>
+        4&nbsp;% below. KoFEM's flat facets approach that thin-shell solution
+        from below as the mesh is refined: 2.6&nbsp;% below it on this mesh,
+        1.7&nbsp;% on 3&nbsp;mm facets. The tight knuckle, only six
+        thicknesses in radius, is what they converge slowly on. The
+        difference from the target most likely lies in the geometry, which
+        NAFEMS gives only as a figure.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>In the app: <a href="/app/?example=nafems-le8" data-testid="reproduce-open">open the model</a>, with its supports, loads and settings.</p>

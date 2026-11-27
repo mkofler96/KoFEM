@@ -30,20 +30,21 @@
 //     never moves the plate out of its plane, so this only stops it floating.
 //
 // Tolerance: 8 %. The read-out is the largest NODAL von Mises stress: each
-// triangle has one constant stress, and the app averages them to the nodes.
+// triangle reports one stress, at its centroid, and the app averages them to
+// the nodes.
 // At A, where the peak is, only one or two triangles meet, so the read-out is
 // their stress, and it lands a few percent above or below 3.14 depending on
 // how the mesher cuts that corner — not on the element size. Netgen puts at
 // least two elements along every edge, so next to the 1 mm cut edge the
 // triangle at A stays about 0.6 mm on every mesh from 6 mm down, while the
 // rest of the hole follows the maximum size: refining does not refine the
-// peak, and the value does not settle (convergence.mjs; a sweep from 8 to
-// 0.5 mm read −5.6 % to +7.7 %, the worst at 6 and 2.5 mm; on the finest
-// meshes the peak moves to the next node along the hole and reads low). The
-// CI mesh, 1 mm, reads +1.2 %; 8 % covers every level swept, so a user who
+// peak, and the value does not settle (convergence.mjs; the study from 4 to
+// 0.5 mm reads −5.9 % to +2.8 %; on the finest meshes the peak moves to the
+// next node along the hole and reads low). The CI mesh, 1 mm, reads −1.0 %;
+// 8 % covers every level swept, so a user who
 // re-meshes at another size still sees the hand check agree. It is a band for
-// the scatter of constant-stress triangles at a peak, not a mesh picked for
-// luck. The solid case's quadratic tetrahedra keep 3 %.
+// the scatter of one-stress-per-triangle read-outs at a peak, not a mesh
+// picked for luck. The solid case's quadratic tetrahedra keep 3 %.
 //
 // References: Kirsch (1898); Howland, Phil. Trans. R. Soc. A 229 (1930) 49–86;
 // Pilkey & Pilkey, Peterson's Stress Concentration Factors, chart 4.1.

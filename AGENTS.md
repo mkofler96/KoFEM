@@ -36,6 +36,9 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
   and explicit errors for invalid or missing required data. No silent fallbacks.
   See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed conventions.
+- Choose the proper solution, never a quick fix. Fix the cause with the
+  correct method, even when it is the larger change. Do not tune a
+  constant, add a special case or work around the defect instead.
 - Agents copy what they find, so a comment or lint exemption becomes a
   template. Comments say why the code does something it cannot say itself;
   they never narrate removed code. Keep `KOF-nn` tags. A repeated exemption

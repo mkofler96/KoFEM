@@ -21,6 +21,7 @@ import {
   analyticsSnippet,
   injectAnalytics,
 } from "./vite-analytics";
+import { localeChunks } from "./vite-locales";
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -245,6 +246,7 @@ export default defineConfig(({ mode }) => {
           handler: (html, context) => injectSiteLayout(html, context.path),
         },
       },
+      localeChunks(),
       react(),
       copyStaticPages(gaSnippet),
       serveGallery(),
@@ -253,7 +255,7 @@ export default defineConfig(({ mode }) => {
     ],
     worker: {
       format: "es",
-      plugins: () => [...coveragePlugins],
+      plugins: () => [localeChunks(), ...coveragePlugins],
     },
     build: {
       target: "esnext",

@@ -82,6 +82,14 @@
   font-weight: 500;
 }
 
+.error {
+  margin: 0;
+  padding: 0 8px 8px;
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .field select {
   padding: 6px 8px;
   border: 1px solid #d0d7de;

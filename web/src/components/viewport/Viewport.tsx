@@ -52,6 +52,7 @@ function FemModuleNotice() {
 export function Viewport() {
   const pickMode = useModelStore((s) => s.pickMode);
   const splitPicking = useModelStore((s) => s.splitPicking);
+  const faceSizePicking = useModelStore((s) => s.faceSizePicking);
   const triggerFitView = useModelStore((s) => s.triggerFitView);
   const text = useT(viewportMessages);
 
@@ -110,7 +111,10 @@ export function Viewport() {
         }}
         style={{
           background: "#f0f2f5",
-          cursor: pickMode || splitPicking ? "crosshair" : "default",
+          cursor:
+            pickMode || splitPicking || faceSizePicking
+              ? "crosshair"
+              : "default",
         }}
       >
         <ambientLight intensity={0.7} />

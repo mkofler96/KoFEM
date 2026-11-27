@@ -12,9 +12,12 @@ type ShellNodalLoad = {
 
 // Work-equivalent nodal loads of one surface load on a shell mesh. The shell
 // solver takes only nodal loads, so the traction integral f_i = ∫ N_i·t dS the
-// solid engine evaluates over boundary elements must be computed here. With
-// linear (CST/DKT) shape functions a uniform traction contributes t·A/3 to
-// each node of a facet, and a uniform line load q·L/2 to each end of an edge:
+// solid engine evaluates over boundary elements must be computed here, with
+// the linear translation shape functions of the facet's corners: a uniform
+// traction contributes t·A/3 to each node of a facet, and a uniform line load
+// q·L/2 to each end of an edge. The drilling part of the OPT membrane's
+// boundary field would add small corner moments; Felippa (2003, Table 4)
+// shows that lumping without them changes results in the fourth digit:
 //   force on facets — uniform traction t = F/ΣA over the loaded region
 //   force on edges  — uniform line load q = F/ΣL along the loaded edge
 //   pressure        — -p·n̂·A/3 per facet node, n̂ the facet winding normal

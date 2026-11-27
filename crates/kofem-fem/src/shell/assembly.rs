@@ -39,9 +39,11 @@ pub fn shell_node_neighbours(mesh: &ShellMesh) -> Vec<Vec<u32>> {
 pub fn assemble_shell_stiffness(mesh: &ShellMesh) -> CsrMatrix {
     let neighbours = shell_node_neighbours(mesh);
     let mut matrix = CsrMatrix::from_node_blocks(&neighbours, SHELL_NODE_DOFS);
+    let drilling_axes = mesh.drilling_normals();
     for (triangle, nodes) in mesh.triangles().iter().enumerate() {
         let element = facet_stiffness(
             &mesh.corners(triangle),
+            &drilling_axes[triangle],
             mesh.thickness(triangle),
             mesh.material(triangle),
         );

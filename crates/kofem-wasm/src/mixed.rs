@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// A validated mixed model: linear tets and, when there are any, Kirchhoff
-/// shell facets (CST membrane + DKT bending) over the same vertices.
+/// shell facets (OPT drilling membrane + DKT bending) over the same vertices.
 #[wasm_bindgen]
 pub struct MixedModel {
     pub(crate) solid: TetMesh,

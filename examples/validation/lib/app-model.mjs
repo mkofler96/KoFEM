@@ -200,6 +200,17 @@ export function buildAnalysisSetup(build, title) {
     surfaceTriangles: build.surfaceTriangles,
     surfaceFaceIds: build.surfaceFaceIds,
     elementOrder: build.meshSettings.order,
+    // The Mesh step's face sizes (KOF-394), as the store holds them, so a
+    // re-mesh of the opened example keeps them. Only written when there are
+    // some, as the app writes them.
+    ...(build.meshSettings.localSizes.length > 0
+      ? {
+          faceSizes: build.meshSettings.localSizes.map(({ faceIds, size }) => ({
+            faceIds,
+            size: String(size),
+          })),
+        }
+      : {}),
     ...(build.optimization
       ? optimizeSetup(build.optimization.settings)
       : { handCheck: build.handCheck }),
@@ -330,7 +341,7 @@ export function buildMeshStats(build) {
       `mesh stats: a recipe build is all tetrahedra or all shell facets, got ${[...types].join(", ")}`,
     );
   if (types.has("CTRIA3")) {
-    // A DKT/CST facet is linear whatever order the mesh panel shows.
+    // A shell facet has corner nodes only, whatever order the mesh panel shows.
     const shellNodes = build.nodes.length;
     return {
       order: 1,

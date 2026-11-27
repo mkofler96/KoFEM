@@ -33,12 +33,12 @@ export default {
         their plane carries no force, and it stands in for NAFEMS' point
         supports against rigid motion. A probe reads the largest principal
         stress on the bottom surface at E.</p>
-        <p>${row.mesh.elements.toLocaleString("en-US")} triangles, each a CST
-        membrane with a DKT plate-bending element.</p>`,
+        <p>${row.mesh.elements.toLocaleString("en-US")} triangles, each an OPT
+        drilling membrane with a DKT plate-bending element.</p>`,
   discussion: ({ row, pct }) => `
         <p>KoFEM reads ${pct(row.errPct)} from the NAFEMS target, and the
         convergence study shows it settling about half a percent above it.
         The DKT element is free of the skew sensitivity some plate elements
         show.</p>`,
-  references: [REF.nafems, REF.batoz],
+  references: [REF.nafems, REF.batoz, REF.felippa2003],
 };

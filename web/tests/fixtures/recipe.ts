@@ -400,7 +400,7 @@ function snapshotRim(snap: Snapshot): ShellRim {
 
 // ── Picking a face by clicking it ─────────────────────────────────────────────
 
-type PickTarget = "split" | "boundary";
+type PickTarget = "split" | "boundary" | "faceSize";
 
 function pickedFaceIds(page: Page, target: PickTarget): Promise<number[]> {
   return page.evaluate((tgt) => {
@@ -409,6 +409,7 @@ function pickedFaceIds(page: Page, target: PickTarget): Promise<number[]> {
         __kofemStore: {
           getState(): {
             splitFaceIds: number[];
+            faceSizePickIds: number[];
             pendingFaces: { cadFaceId?: number }[];
             selectedFace: { cadFaceId?: number } | null;
           };
@@ -416,6 +417,7 @@ function pickedFaceIds(page: Page, target: PickTarget): Promise<number[]> {
       }
     ).__kofemStore.getState();
     if (tgt === "split") return [...st.splitFaceIds];
+    if (tgt === "faceSize") return [...st.faceSizePickIds];
     const faces = st.selectedFace
       ? [...st.pendingFaces, st.selectedFace]
       : st.pendingFaces;
@@ -541,10 +543,12 @@ async function clickFace(
     if (after.join() !== before.join()) {
       // Take the wrong face back out with its × in the pick list (a second
       // click on the same pixel is not reliably a toggle).
-      if (target === "split")
+      if (target === "split" || target === "faceSize")
         for (const id of got)
           await page
-            .getByTestId(`split-face-${id}`)
+            .getByTestId(
+              target === "split" ? `split-face-${id}` : `face-size-pick-${id}`,
+            )
             .getByTitle("Remove face")
             .click();
       // The new pick is the list's last row; in a new-group pick the list is
@@ -744,12 +748,14 @@ const minElementSizeOf = (mesh: MeshStep): number =>
   mesh.minElementSize ?? mesh.maxElementSize / 10;
 
 async function meshIt(page: Page, mesh: MeshStep): Promise<void> {
-  if (mesh.localSizes && mesh.localSizes.length > 0)
-    throw new MissingUiCapability(
-      "set a per-face element size",
-      "the mesh controls offer one global max/min element size only",
-    );
   await openTree(page, "mesh");
+  // Face sizes (KOF-394): pick the faces, type the size, Set size.
+  for (const local of mesh.localSizes ?? []) {
+    await page.getByTestId("face-size-pick").click();
+    for (const face of local.faces) await clickFace(page, face.at, "faceSize");
+    await page.getByTestId("face-size-input").fill(String(local.size));
+    await page.getByTestId("face-size-add").click();
+  }
   await page.getByTestId("max-element-size").fill(String(mesh.maxElementSize));
   // The import suggests its own minimum, so the recipe's is typed like the max.
   await page

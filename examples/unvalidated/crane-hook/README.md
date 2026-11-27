@@ -18,11 +18,11 @@ found. Nothing here is served on kofem.org. It moves back to
 | `full-crane-hook.vtu`      | The older all-solid, unsolved setup of the same assembly (#360). **No generator** — it was saved from the app.                                      |
 | `crane-load-case.png`      | The reference load-case drawing.                                                                                                                    |
 
-The two `.vtu` files are still regression fixtures: `web/tests/example-load.spec.ts`
-and `web/tests/crane-hook-example.spec.ts` serve them from this folder to the app's
-`/app/?example=<id>` loader, because they exercise the coupled shell/solid solve and
-the multibody restore. A fixture passing says the app reproduces the file, not
-that the file is right.
+No test compares a solve against these results: they are not validated, so a
+change that moves them is not checked against them. `full-crane-hook.vtu`
+still serves the multibody-restore tests (`web/tests/crane-hook-example.spec.ts`,
+`web/tests/curved-face-deselect.spec.ts`), which check what the app restores,
+not what it solves.
 
 `generate-crane-shell.mjs` is not run by CI:
 
@@ -47,9 +47,9 @@ Boundary conditions, matching the reference drawing:
   six DOF.
 - **Loaded**: 1000 N in −Y on **each** end disc of the cylinder — CAD faces 66
   (x = +75) and 67 (x = −125), 472 mm² each. **2 kN in total.** `LOAD_FACES` in
-  the generator holds the PER-FACE vector, and so does the `.vtu` load group's
-  `totalForce` field, because `rebuildSurfaceLoads` applies a group's components
-  once per face entry.
+  the generator holds the per-face vector; the `.vtu` load group stores the
+  2 kN total, which the app spreads as one uniform traction over both faces
+  (`rebuildSurfaceLoads`), and the generator loads its own solve the same way.
 
 ![Crane hook load case](crane-load-case.png)
 

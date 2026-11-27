@@ -8,6 +8,7 @@ import type {
 } from "../wasm/pkg/kofem_wasm.js";
 import type { TopOptSettings } from "../lib/solve/contracts.js";
 import type { TieDefinition } from "../lib/tie.js";
+import type { ContactDefinition } from "../lib/contact.js";
 import type { CouplingDefinition } from "../lib/coupling.js";
 import type { SolverMethod } from "../lib/solve/amg.js";
 
@@ -132,6 +133,9 @@ export interface VolumeMeshPayload {
   // Per-region sizes (KOF-257): entry k is the max element size of CAD solid
   // k+1. Absent: every solid meshes at maxElementSize.
   solidMaxSizes?: number[];
+  // Element sizes on CAD faces (KOF-394), face a 1-based CAD face index.
+  // Absent or empty: no face is meshed finer than its solid.
+  faceMaxSizes?: { face: number; max_size: number }[];
   // Bodies marked Shell (Property.discretization === "shell") and the current
   // property table. With these, meshing idealises those bodies' thin walls to a
   // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
@@ -166,6 +170,10 @@ export interface SolveModel {
   // carrying any of these solves through the COUPLED assembler, whether or not
   // it has shells. Absent/empty = no couplings, and the routing is unchanged.
   couplings?: CouplingDefinition[];
+  // Frictionless contacts between picked surfaces (KOF-485): solved on the
+  // all-solid path with linear elements only (routeSolve refuses the rest).
+  // Absent/empty = no contact.
+  contacts?: ContactDefinition[];
   // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
@@ -197,6 +205,8 @@ export interface TopOptPayload {
   surfaceLoads?: SurfaceLoad[];
   tieGroups?: TieDefinition[];
   couplings?: CouplingDefinition[];
+  // Contacts; the optimizer refuses them.
+  contacts?: ContactDefinition[];
   // A temperature change; the optimizer refuses one.
   temperature?: TemperatureLoad | null;
   settings: TopOptSettings;

@@ -10,7 +10,7 @@ import { resultViewer } from "../viewers/index.mjs";
 export default {
   slug: "shells/formulation",
   description:
-    "Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, CST membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits.",
+    "Understand KoFEM’s flat triangular Kirchhoff shell: mid-surface kinematics, a drilling membrane and DKT bending, thickness, surface stress, verified plate response and current modelling limits.",
   sections: [
     ["shell-or-solid", "Choose the physical idealisation"],
     ["kinematics", "Mid-surface motion and local axes"],
@@ -24,8 +24,9 @@ export default {
     <p class="lede">How does a flat triangular shell represent membrane and bending response?</p>
     <p>A shell replaces a thin wall’s volume with a mid-surface and a thickness.
       Its assumptions describe how material moves through that thickness.
-      KoFEM combines a constant-strain triangle (CST) for in-plane stretching
-      with a discrete Kirchhoff triangle (DKT) for bending.</p>
+      KoFEM combines Felippa’s optimal membrane triangle (OPT), whose corner
+      rotations are true in-plane rotations, for stretching with a discrete
+      Kirchhoff triangle (DKT) for bending.</p>
 
     <h2 id="shell-or-solid">Choose the physical idealisation</h2>
     <p>Use a shell when thickness is small relative to the lengths over which
@@ -73,11 +74,15 @@ export default {
       rather than a classical smooth plate approximation with continuous first
       derivatives. Rotations are independent algebraic unknowns, so they are
       not obtained by simply differentiating a linear triangle’s displacement.</p>
-    <p>The rotation ${tex("θ_z")} about the facet normal is the <em>drilling</em>
-      rotation. The physical CST/DKT blocks do not supply its stiffness.
-      KoFEM adds a small diagonal stabilization, ${tex("10^{-4}")} times the
-      mean bending diagonal per facet. This removes a numerical singularity;
-      it is not a physical torsional constitutive law.</p>
+    <p>The rotation ${tex("θ_z")} about the surface normal is the <em>drilling</em>
+      rotation: the in-plane rotation ${tex("½(∂v_0/∂x-∂u_0/∂y)")} of the
+      membrane, which carries real membrane stiffness. On a curved surface the
+      rotation about one facet’s own normal also holds part of its neighbours’
+      bending rotation, so facets that form one smooth surface around a node
+      share its mean normal as their drilling axis; across a fold sharper than
+      20° each side keeps its own normal, where one wall’s in-plane rotation
+      is the other wall’s bending rotation. A rigid-body projector keeps every
+      rigid motion strain-free with those axes.</p>
 
     <h2 id="stiffness">Membrane and bending stiffness</h2>
     <p>Use the shared <a href="/theory/notation/#engineering-shear">engineering-shear convention</a>.
@@ -85,7 +90,10 @@ export default {
       the in-plane engineering shear. The curvature vector ${tex("κ")} has units
       of inverse length and includes the doubled twisting curvature:</p>
     ${equation("ε_m=(∂u_0/∂x,∂v_0/∂y,∂u_0/∂y+∂v_0/∂x)^T,\\quad κ=(∂θ_y/∂x,-∂θ_x/∂y,∂θ_y/∂y-∂θ_x/∂x)^T.", "Membrane strain comes from in-plane displacement derivatives; bending curvature comes from derivatives of the two tangential rotations")}
-    <p>The CST membrane strain is constant on a facet. DKT curvature varies
+    <p>The OPT membrane strain is a constant part plus a linear part driven
+      by the corner rotations that averages to zero over the facet, so it
+      passes the patch test and bends in plane with the exact energy on
+      rectangular mesh units of any aspect ratio. DKT curvature varies
       across it. With <a href="/theory/notation/#young-modulus">Young’s modulus</a>
       ${tex("E")} and <a href="/theory/notation/#poisson-ratio">Poisson ratio</a>
       ${tex("ν")}, the plane-stress matrix is:</p>
@@ -100,10 +108,13 @@ export default {
     )}
     <p>Write ${tex("ε_m=\\mathbf{B}_m\\mathbf{d}_m")} and
       ${tex("κ=\\mathbf{B}_b\\mathbf{d}_b")}, where the local coefficient
-      vectors contain respectively the six in-plane and nine bending unknowns.
-      On facet area ${tex("A_e")}, the two stiffness contributions are:</p>
+      vectors contain respectively the nine in-plane (two translations and
+      the drilling rotation per corner) and nine bending unknowns. On facet
+      area ${tex("A_e")}, the two stiffness contributions are:</p>
     ${equation("\\mathbf{K}_m=\\int_{A_e}\\mathbf{B}_m^T(t\\mathbf{C}_p)\\mathbf{B}_m\\,dA,\\quad \\mathbf{K}_b=\\int_{A_e}\\mathbf{B}_b^T\\left(\\frac{t^3}{12}\\mathbf{C}_p\\right)\\mathbf{B}_b\\,dA.", "Membrane stiffness integrates thickness times the plane-stress law; bending stiffness integrates thickness cubed over twelve times that law")}
-    <p>The membrane integral is constant times area. Bending uses three
+    <p>The membrane stiffness is Felippa’s closed form: a basic part from the
+      constant strain and a higher-order part integrated at the mid-sides.
+      Bending uses three
       mid-edge points of equal weight ${tex("A_e/3")}. The flat, centred,
       homogeneous section has no membrane–bending material coupling term.
       Facets in different orientations still interact through shared global
@@ -188,7 +199,7 @@ export default {
       ${tex("w_c")} is centre deflection; ${tex("M_c")}
       is either centre bending moment resultant for the simply supported square:</p>
     ${equation("w_c^{\\mathrm{SS}}=0.00406\\frac{qa^4}{D},\\quad w_c^{\\mathrm{clamped}}=0.00126\\frac{qa^4}{D},\\quad M_c^{\\mathrm{SS}}=0.0479qa^2.", "Square-plate references: simply supported and clamped centre deflections, and the simply supported centre moment at Poisson ratio 0.3")}
-    <p>The mesh has 32 × 32 cells, two DKT/CST triangles per cell, and
+    <p>The mesh has 32 × 32 cells, two OPT/DKT triangles per cell, and
       ${tex("6×33^2=6534")} coefficients before constraints. Clamped edges
       fix all six components. Simply supported edges fix normal translation
       and leave tangential bending rotations free; the test fixes in-plane
@@ -230,17 +241,21 @@ export default {
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Batoz, Bathe and Ho (1980), <cite>A study of three-node triangular plate bending elements</cite>, International Journal for Numerical Methods in Engineering 15, 1771–1812. This is the DKT reference, not a validation of KoFEM’s complete shell workflow.</li>
+      <li>Felippa (2003), <cite>A study of optimal membrane triangles with drilling freedoms</cite>, Computer Methods in Applied Mechanics and Engineering 192, 2125–2168: the OPT membrane. The Rust tests reproduce its Cook’s membrane and end-moment cantilever tables.</li>
+      <li>Felippa and Haugen (2005), <cite>A unified formulation of small-strain corotational finite elements: I. Theory</cite>, Computer Methods in Applied Mechanics and Engineering 194, 2285–2335: the rigid-body projector.</li>
       <li>Timoshenko and Woinowsky-Krieger, <cite>Theory of Plates and Shells</cite>, 2nd ed. (1959), uniformly loaded square plates.</li>
-      <li>${codeSource("crates/kofem-fem/src/shell/element.rs", 113, "CST membrane")},
-        ${codeSource("crates/kofem-fem/src/shell/element.rs", 223, "DKT interpolation and stiffness")},
-        ${codeSource("crates/kofem-fem/src/shell/element.rs", 24, "local basis and drilling stabilization")},
-        ${codeSource("crates/kofem-fem/src/shell/stress.rs", 20, "surface stress recovery")} and
+      <li>${codeSource("crates/kofem-fem/src/shell/membrane.rs", 43, "OPT membrane")},
+        ${codeSource("crates/kofem-fem/src/shell/element.rs", 145, "DKT interpolation and stiffness")},
+        ${codeSource("crates/kofem-fem/src/shell/element.rs", 24, "local basis")},
+        ${codeSource("crates/kofem-fem/src/shell/normals.rs", 33, "drilling axes")},
+        ${codeSource("crates/kofem-fem/src/shell/element.rs", 292, "rigid-body projector")},
+        ${codeSource("crates/kofem-fem/src/shell/stress.rs", 23, "surface stress recovery")} and
         ${codeSource("web/src/lib/solve/shellRust.ts", 50, "the app’s shell solve")}.</li>
       <li>${source("web/src/lib/solve/autoShell.ts", 72, "one-Shell-body guard")},
         ${source("web/src/lib/solve/shell.ts", 25, "shell material and thickness resolution")},
         ${source("crates/kofem-shellize/src/walls.rs", 98, "wall pairing")},
         ${source("crates/kofem-shellize/src/mid_surface.rs", 58, "mid-surface construction")},
         ${source("web/src/lib/solveLoads.ts", 20, "load distribution")} and
-        ${codeSource("crates/kofem-fem/tests/shell.rs", 172, "the plate cases")}.</li>
+        ${codeSource("crates/kofem-fem/tests/shell.rs", 180, "the plate cases")}.</li>
     </ol>`,
 };

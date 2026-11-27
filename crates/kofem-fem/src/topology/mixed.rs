@@ -16,6 +16,7 @@
 
 use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
+use crate::count::count_as_f64;
 use crate::coupled_static::{prepare_mixed_static, MixedPreconditioner, ShellPart};
 use crate::coupling::{Coupling, DOFS_PER_NODE};
 use crate::element::tet4_stiffness;
@@ -59,12 +60,11 @@ impl Default for MixedSolver {
 /// The CG budget of one solve: as the static shell solve sizes it.
 fn cg_budget(dofs: usize) -> usize {
     #[allow(
-        clippy::cast_precision_loss,
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         reason = "a positive iteration count far below 2^52"
     )]
-    let scaled = (400.0 * (dofs as f64).cbrt()) as usize;
+    let scaled = (400.0 * count_as_f64(dofs).cbrt()) as usize;
     scaled.max(20_000)
 }
 
@@ -180,11 +180,18 @@ impl MixedSimpModel {
         let neighbours = shell_node_neighbours(mesh);
         let pattern = CsrMatrix::from_node_blocks(&neighbours, SHELL_NODE_DOFS);
         let mut positions = Vec::new();
+        let drilling_axes = mesh.drilling_normals();
         for (facet, nodes) in mesh.triangles().iter().enumerate() {
             let corners = mesh.corners(facet);
             let thickness = mesh.thickness(facet);
             self.stiffness.extend_from_slice(
-                facet_stiffness(&corners, thickness, mesh.material(facet)).as_flattened(),
+                facet_stiffness(
+                    &corners,
+                    &drilling_axes[facet],
+                    thickness,
+                    mesh.material(facet),
+                )
+                .as_flattened(),
             );
             self.dofs.extend(nodes.iter().flat_map(|&node| {
                 (0..SHELL_NODE_DOFS)

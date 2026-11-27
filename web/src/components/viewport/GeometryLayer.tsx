@@ -9,9 +9,10 @@
 // being assigned, or hidden entirely via the eye control in the Bodies panel.
 //
 // The CAD face boundaries are drawn over it, so the faces — and every line the
-// split tool adds — are visible. While the split tool is picking, a click
-// toggles the CAD face under the cursor; the picked faces and the cutting plane
-// are drawn on top.
+// split tool adds — are visible. While the split tool or the Mesh step's face
+// sizes are picking, a click toggles the CAD face under the cursor; the picked
+// faces (and the cutting plane, or the faces that already have a size) are
+// drawn on top.
 
 import { useMemo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
@@ -53,6 +54,8 @@ const SPLIT_PICK_COLOR = "#e05533";
 const SPLIT_PLANE_COLOR = "#2563eb";
 // An interface's shared faces — the interface marker colour of the model tree.
 const INTERFACE_COLOR = "#0891b2";
+// Faces that already have an element size of their own, while picking more.
+const FACE_SIZE_COLOR = "#7c3aed";
 
 function outlineColor(bodyColor: string): string {
   const hsl = { h: 0, s: 0, l: 0 };
@@ -153,6 +156,10 @@ export function GeometryLayer({
   const splitFaceIds = useModelStore((s) => s.splitFaceIds);
   const toggleSplitFace = useModelStore((s) => s.toggleSplitFace);
   const splitDraft = useModelStore((s) => s.splitDraft);
+  const faceSizePicking = useModelStore((s) => s.faceSizePicking);
+  const faceSizePickIds = useModelStore((s) => s.faceSizePickIds);
+  const toggleFaceSizePick = useModelStore((s) => s.toggleFaceSizePick);
+  const faceSizes = useModelStore((s) => s.faceSizes);
 
   // A tessellation saved before CAD face ids existed has none: it draws, but
   // has no faces to outline or pick.
@@ -167,13 +174,17 @@ export function GeometryLayer({
         : null,
     [stepSurface],
   );
+  const pickedIds = faceSizePicking ? faceSizePickIds : splitFaceIds;
   const pickedFaces = useMemo(
     () =>
-      faced && splitFaceIds.length > 0
-        ? cadFaceTriangles(faced, splitFaceIds)
-        : null,
-    [faced, splitFaceIds],
+      faced && pickedIds.length > 0 ? cadFaceTriangles(faced, pickedIds) : null,
+    [faced, pickedIds],
   );
+  const sizedFaces = useMemo(() => {
+    if (!faced || !faceSizePicking) return null;
+    const ids = faceSizes.flatMap((e) => e.faceIds);
+    return ids.length > 0 ? cadFaceTriangles(faced, ids) : null;
+  }, [faced, faceSizePicking, faceSizes]);
   const interfaceFaces = useMemo(
     () =>
       faced && highlightInterface
@@ -193,14 +204,16 @@ export function GeometryLayer({
     [bounds, splitDraft],
   );
 
-  // Split-tool picking: the clicked triangle's CAD face joins (or leaves) the
-  // faces the next split cuts.
+  // Picking: the clicked triangle's CAD face joins (or leaves) the faces the
+  // next split cuts, or the faces the next face size applies to.
+  const picking = faceSizePicking || splitPicking;
   const pickFace = (triIndices: number[]) => (e: ThreeEvent<MouseEvent>) => {
     if (e.faceIndex == null || !faced) return;
     e.stopPropagation();
     const tri = triIndices[e.faceIndex];
     if (tri === undefined) return;
-    toggleSplitFace(faced.faceIds[tri]);
+    if (faceSizePicking) toggleFaceSizePick(faced.faceIds[tri]);
+    else toggleSplitFace(faced.faceIds[tri]);
   };
 
   // body id → its assigned material's colour (via the body's property).
@@ -236,9 +249,7 @@ export function GeometryLayer({
           return (
             <group key={bodyId}>
               <mesh
-                onClick={
-                  splitPicking && faced ? pickFace(triIndices) : undefined
-                }
+                onClick={picking && faced ? pickFace(triIndices) : undefined}
               >
                 <bufferGeometry>
                   <bufferAttribute
@@ -299,6 +310,14 @@ export function GeometryLayer({
             side={THREE.DoubleSide}
           />
         </mesh>
+      )}
+      {sizedFaces && (
+        <FaceOverlay
+          positions={sizedFaces}
+          color={FACE_SIZE_COLOR}
+          opacity={0.35}
+          renderOrder={1}
+        />
       )}
       {interfaceFaces && (
         <FaceOverlay

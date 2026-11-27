@@ -51,9 +51,9 @@ export default {
         stays about 0.6&nbsp;mm on every mesh: a smaller maximum element size
         refines the rest of the hole but not the peak.</p>
         <p>Each of the ${row.mesh.elements.toLocaleString("en-US")} triangles
-        combines a CST membrane, with one constant strain and stress per
-        triangle, and a DKT plate-bending element; in this load case only the
-        membrane part works. Shell nodes carry six degrees of freedom. The
+        combines Felippa's OPT membrane, whose corner rotations are the
+        in-plane rotations of the field, and a DKT plate-bending element; in
+        this load case only the membrane part works. Shell nodes carry six degrees of freedom. The
         symmetry edges fix the displacement across the cut and the rotations a
         mirror plane forbids, plus ${tex("u_{z}")}, which only stops the plate
         floating: an in-plane load never moves it out of its plane.</p>`,
@@ -73,8 +73,9 @@ export default {
         ${pct(rowOf("plate-with-hole").errPct)}.</p>
         <p>The difference is in the elements. A quadratic tetrahedron's stress
         varies inside it, so it follows the steep drop away from the hole, and
-        the solid model reads the peak slightly low on every mesh. A linear
-        triangle has one stress. At A only one or two triangles meet, so the
+        the solid model reads the peak slightly low on every mesh. A shell
+        triangle reports one stress, at its centroid. At A only one or two
+        triangles meet, so the
         nodal value is their stress, and it lands above or below 3.14
         depending on how the mesher cuts that corner; on the finest meshes the
         peak moves to the next node along the hole. Over the mesh study above
@@ -88,5 +89,5 @@ export default {
         several layers or quadratic elements to do the same (see the
         <a href="${url("cantilever-beam")}">cantilever</a>).</p>`;
   },
-  references: [REF.kirsch, REF.howland, REF.peterson, REF.batoz, REF.cmpw],
+  references: [REF.kirsch, REF.howland, REF.peterson, REF.batoz, REF.felippa2003, REF.cmpw],
 };

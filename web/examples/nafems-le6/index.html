@@ -46,7 +46,7 @@
               "https://kofem.org/examples/nafems-le6/nafems-le6-skew-plate-diagram.png",
               "https://kofem.org/examples/nafems-le6/nafems-le6-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-23",
+            "dateModified": "2026-11-26",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -967,10 +967,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 12.5 mm maximum element size: 7,517 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 12.5 mm maximum element size: 7,517 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
           <tr><th scope="row">Unknowns</th><td>3,922 nodes, 23,532 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-fe1376d90a4d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-724e4e1365f1); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-32198cb04210</td></tr>
         </table>
       </div>
         <p>The plate is imported as a 10&nbsp;mm thick solid and marked Shell;
@@ -980,8 +980,8 @@
         their plane carries no force, and it stands in for NAFEMS' point
         supports against rigid motion. A probe reads the largest principal
         stress on the bottom surface at E.</p>
-        <p>7,517 triangles, each a CST
-        membrane with a DKT plate-bending element.</p>
+        <p>7,517 triangles, each an OPT
+        drilling membrane with a DKT plate-bending element.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
@@ -1065,6 +1065,7 @@
       <ol class="refs">
         <li>NAFEMS, <cite>The Standard NAFEMS Benchmarks</cite>, publication TNSB, Rev. 3, National Agency for Finite Element Methods and Standards, 1990: linear elastic tests LE1–LE11.</li>
         <li>J.-L. Batoz, K.-J. Bathe and L.-W. Ho, “A study of three-node triangular plate bending elements”, <cite>International Journal for Numerical Methods in Engineering</cite> 15 (1980) 1771–1812.</li>
+        <li>C. A. Felippa, “A study of optimal membrane triangles with drilling freedoms”, <cite>Computer Methods in Applied Mechanics and Engineering</cite> 192 (2003) 2125–2168.</li>
       </ol>
       <p class="note" data-testid="disclaimer">
         KoFEM is research software and is not certified for safety-critical

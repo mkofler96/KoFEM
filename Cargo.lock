@@ -50,6 +50,7 @@ dependencies = [
 name = "kofem-shellize"
 version = "0.7.0"
 dependencies = [
+ "kofem-fem",
  "thiserror",
 ]
 

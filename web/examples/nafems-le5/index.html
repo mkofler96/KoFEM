@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>NAFEMS LE5 Z-section cantilever benchmark | KoFEM</title>
-    <meta name="description" content="NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's quadratic tetrahedra." />
+    <meta name="description" content="NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's shell triangles." />
     <link rel="canonical" href="https://kofem.org/examples/nafems-le5/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="NAFEMS LE5 Z-section cantilever benchmark | KoFEM" />
-    <meta property="og:description" content="NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's quadratic tetrahedra." />
+    <meta property="og:description" content="NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's shell triangles." />
     <meta property="og:url" content="https://kofem.org/examples/nafems-le5/" />
     <meta property="og:image" content="https://kofem.org/examples/nafems-le5.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="NAFEMS LE5 Z-section cantilever benchmark | KoFEM" />
-    <meta name="twitter:description" content="NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's quadratic tetrahedra." />
+    <meta name="twitter:description" content="NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's shell triangles." />
     <meta name="twitter:image" content="https://kofem.org/examples/nafems-le5.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -39,14 +39,14 @@
           {
             "@type": "TechArticle",
             "headline": "NAFEMS LE5: Z-section cantilever",
-            "description": "NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's quadratic tetrahedra.",
+            "description": "NAFEMS benchmark LE5: a Z-section cantilever under torque, the warping stress the clamped root raises, against KoFEM's shell triangles.",
             "url": "https://kofem.org/examples/nafems-le5/",
             "image": [
               "https://kofem.org/examples/nafems-le5.png",
               "https://kofem.org/examples/nafems-le5/nafems-le5-z-section-diagram.png",
               "https://kofem.org/examples/nafems-le5/nafems-le5-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-23",
+            "dateModified": "2026-11-26",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -900,12 +900,12 @@
         edge of the lower flange, 2.5&nbsp;m from the root.</p>
       </div>
       
-      <figure class="result result-viewer" data-viewer="/examples/nafems-le5.result.json" data-aspect="1200 / 493">
+      <figure class="result result-viewer" data-viewer="/examples/nafems-le5.result.json" data-aspect="1200 / 488">
         <div class="viewer-stage">
-          <img src="/examples/nafems-le5.png" width="1200" height="493" alt="NAFEMS LE5: Z-section cantilever: von mises stress on the deformed shape, displacements drawn 20 times enlarged" />
+          <img src="/examples/nafems-le5.png" width="1200" height="488" alt="NAFEMS LE5: Z-section cantilever: von mises stress on the deformed shape, displacements drawn 20 times enlarged" />
           <p class="viewer-hint" hidden></p>
         </div>
-        <div class="colorbar"><span data-legend="min">5.42&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">189&nbsp;MPa</span></div>
+        <div class="colorbar"><span data-legend="min">11.3&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">170&nbsp;MPa</span></div>
         <figcaption><span data-legend="name">Von Mises stress</span>, deformed shape, displacements drawn 20 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -922,8 +922,8 @@
           <tbody>
             <tr>
               <td class="num">−108.00&nbsp;MPa</td>
-              <td class="num"><strong data-testid="fe-value">−109.32&nbsp;MPa</strong></td>
-              <td class="num">+1.22&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">−109.40&nbsp;MPa</strong></td>
+              <td class="num">+1.30&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -933,7 +933,7 @@
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         <picture class="figure-image theme-light fig half"><source srcset="/examples/nafems-le5/nafems-le5-z-section-diagram.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-z-section-diagram.png" width="330" height="240" alt="The Z cross-section: a horizontal web and two flanges running to opposite sides, each end flange loaded by a shear S; A sits on the free edge of the lower flange" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/nafems-le5/nafems-le5-z-section-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-z-section-diagram.png" width="330" height="240" alt="The Z cross-section: a horizontal web and two flanges running to opposite sides, each end flange loaded by a shear S; A sits on the free edge of the lower flange" loading="lazy" decoding="async" /></picture>
-        <figcaption>The Z-section beam as a solid of quadratic tetrahedra; the beam axis is z. Sketch, not to scale.</figcaption>
+        <figcaption>The Z-section beam as shells of linear triangles, web and flanges welded at the corners; the beam axis is z. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -952,7 +952,7 @@
         <table class="spec">
           <tr><th scope="row">Supports</th><td>Root face z = 0 clamped.</td></tr>
           <tr><th scope="row">Load</th><td>T as two shears T/d on the flange end faces at z = L, +y on the flange x = +d/2, −y on the flange x = −d/2.</td></tr>
-          <tr><th scope="row">Measured</th><td>Axial stress σzz (NAFEMS' σxx) at A on the flange's outer face, read with a probe.</td></tr>
+          <tr><th scope="row">Measured</th><td>Axial stress σzz (NAFEMS' σxx) at A on the flange's mid-surface, read with a probe.</td></tr>
         </table>
       </div>
 
@@ -970,10 +970,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 100 mm maximum element size: 26,977 quadratic 10-node tetrahedra (P2)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>54,792 nodes, 164,376 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 70 mm maximum element size: 19,270 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>9,838 nodes, 59,028 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-fe1376d90a4d); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-44314641a642</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-724e4e1365f1); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-32198cb04210</td></tr>
         </table>
       </div>
         <p>The beam is imported as one solid, its end face cut into web and
@@ -981,29 +981,30 @@
         is the couple of the two shears, <i>T</i>&nbsp;=&nbsp;1.2&nbsp;MN·m.
         The beam runs along the app's <i>z</i> axis, so NAFEMS'
         <i>σxx</i> is the app's <i>σzz</i>.</p>
-        <p>NAFEMS meant the walls for shells. KoFEM's shell idealisation welds
-        walls where one stands on another (a T-junction) but not yet at the
-        L-corners of a Z, so the beam is solid:
-        26,977 quadratic tetrahedra.</p>
+        <p>The body is marked Shell, as NAFEMS meant it: each wall collapses
+        to its mid-surface, and web and flanges are welded where their
+        mid-planes cross at the corners.
+        19,270 linear shell
+        triangles.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>axial stress at A, mid-surface</td></tr>
           <tr><th scope="row">Reference</th><td>NAFEMS LE5 target = −108.00&nbsp;MPa <span class="meta">(NAFEMS TNSB Rev. 3 (1990), test LE5)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>−109.32&nbsp;MPa</td></tr>
-          <tr><th scope="row">Difference</th><td>+1.22&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>−109.40&nbsp;MPa</td></tr>
+          <tr><th scope="row">Difference</th><td>+1.30&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="nafems-le5">
-        <h3>Mesh convergence: NAFEMS LE5, quadratic tetrahedra</h3>
+        <h3>Mesh convergence: NAFEMS LE5, shell triangles</h3>
         <figure class="chart">
-          <div class="legend"><span class="key"><span class="swatch s1"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
-          <picture class="figure-image theme-light conv"><source srcset="/examples/nafems-le5/nafems-le5-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE5, quadratic tetrahedra: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/nafems-le5/nafems-le5-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE5, quadratic tetrahedra: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <div class="legend"><span class="key"><span class="swatch s1"></span>Shell (linear)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/nafems-le5/nafems-le5-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE5, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/nafems-le5/nafems-le5-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/nafems-le5/nafems-le5-mesh-convergence.png" width="440" height="250" alt="NAFEMS LE5, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>The solid settles about 1.5 % beyond NAFEMS' thin-shell value: the walls are a tenth of a flange wide.</p>
-        <p>The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only.</p>
+        <p>The axial stress at A settles about a percent above NAFEMS' value from the coarsest mesh on.</p>
+        <p>The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">
@@ -1019,25 +1020,32 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>P2 (quadratic)</td>
+                  <td>Shell (linear)</td>
                   <td>200 mm</td>
-                  <td class="num">42,786</td>
-                  <td class="num">−108.93&nbsp;MPa</td>
-                  <td class="num">+0.86&nbsp;%</td>
+                  <td class="num">7,686</td>
+                  <td class="num">−109.22&nbsp;MPa</td>
+                  <td class="num">+1.13&nbsp;%</td>
                 </tr>
                 <tr>
-                  <td>P2 (quadratic)</td>
-                  <td>100 mm (this example)</td>
-                  <td class="num">164,376</td>
-                  <td class="num">−109.32&nbsp;MPa</td>
-                  <td class="num">+1.22&nbsp;%</td>
+                  <td>Shell (linear)</td>
+                  <td>100 mm</td>
+                  <td class="num">28,758</td>
+                  <td class="num">−109.39&nbsp;MPa</td>
+                  <td class="num">+1.29&nbsp;%</td>
                 </tr>
                 <tr>
-                  <td>P2 (quadratic)</td>
-                  <td>70 mm</td>
-                  <td class="num">343,488</td>
-                  <td class="num">−109.50&nbsp;MPa</td>
-                  <td class="num">+1.39&nbsp;%</td>
+                  <td>Shell (linear)</td>
+                  <td>70 mm (this example)</td>
+                  <td class="num">59,028</td>
+                  <td class="num">−109.40&nbsp;MPa</td>
+                  <td class="num">+1.30&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>Shell (linear)</td>
+                  <td>50 mm</td>
+                  <td class="num">111,648</td>
+                  <td class="num">−109.42&nbsp;MPa</td>
+                  <td class="num">+1.32&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1046,23 +1054,23 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM reads +1.22&nbsp;% from the NAFEMS target. The
-        convergence study shows the solid settling slightly beyond the thin-shell
-        value: walls 0.1&nbsp;m thick on a section 2&nbsp;m deep are not quite
-        thin.</p>
+        <p>KoFEM reads +1.30&nbsp;% from the NAFEMS target. The
+        convergence study shows the shell settled at that value from the
+        coarsest mesh on.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>In the app: <a href="/app/?example=nafems-le5" data-testid="reproduce-open">open the model</a>, with its supports, loads and settings.</p>
       <p>Or build it yourself, as this page's number was built:</p>
       <ol class="steps">
         <li>Import <a href="/examples/nafems-le5.step" download>nafems-le5.step</a>.</li>
-        <li>Split the face through (0, 0, 10000) with the plane x = 950 mm.</li>
-        <li>Split the face through (0, 0, 10000) with the plane x = −950 mm.</li>
-        <li>Mesh with a 100 mm maximum element size, quadratic elements.</li>
+        <li>Split the edge through (0, 0, 10000) with the plane x = 950 mm.</li>
+        <li>Split the edge through (0, 0, 10000) with the plane x = −950 mm.</li>
+        <li>Set the body to Shell. Meshing measures the 100 mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.</li>
+        <li>Mesh with a 70 mm maximum element size, linear elements.</li>
         <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
-        <li>Support “Clamped root”: Ux, Uy, Uz = 0 on the face through (0, 0, 0).</li>
-        <li>Load “Shear, flange x = +d/2”: force (0, 600000, 0) N on the face through (1000, 500, 10000).</li>
-        <li>Load “Shear, flange x = −d/2”: force (0, −600000, 0) N on the face through (−1000, −500, 10000).</li>
+        <li>Support “Clamped root”: Ux, Uy, Uz = 0 on the edge through (0, 0, 0).</li>
+        <li>Load “Shear, flange x = +d/2”: force (0, 600000, 0) N on the edge through (1000, 500, 10000).</li>
+        <li>Load “Shear, flange x = −d/2”: force (0, −600000, 0) N on the edge through (−1000, −500, 10000).</li>
         <li>Run the static study. The Results panel compares axial stress at a with NAFEMS LE5 target.</li>
       </ol>
 

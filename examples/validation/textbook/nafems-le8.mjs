@@ -57,9 +57,11 @@ export default {
         shell theory does not reach the target either: an axisymmetric
         Kirchhoff shell solution of this geometry converges about 7&nbsp;%
         below it, and Abaqus' own axisymmetric shell elements read about
-        4&nbsp;% below. KoFEM's curved shells agree with that thin-shell
-        solution to within 1.5&nbsp;%, and the convergence study shows them
-        settled. The difference from the target most likely lies in the
-        geometry, which NAFEMS gives only as a figure.</p>`,
+        4&nbsp;% below. KoFEM's flat facets approach that thin-shell solution
+        from below as the mesh is refined: 2.6&nbsp;% below it on this mesh,
+        1.7&nbsp;% on 3&nbsp;mm facets. The tight knuckle, only six
+        thicknesses in radius, is what they converge slowly on. The
+        difference from the target most likely lies in the geometry, which
+        NAFEMS gives only as a figure.</p>`,
   references: [REF.nafems, REF.timoshenkoGoodier],
 };

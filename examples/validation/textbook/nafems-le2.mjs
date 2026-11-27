@@ -31,13 +31,13 @@ export default {
         the shell's top surface. The moment is entered about the panel's
         axis on its straight edge; that edge lies on the axis, so the app
         applies it as nodal moments shared along the edge by length.</p>
-        <p>${row.mesh.elements.toLocaleString("en-US")} flat triangles, each a
-        CST membrane with a DKT plate-bending element, model the curved
-        panel.</p>`,
+        <p>${row.mesh.elements.toLocaleString("en-US")} flat triangles, each an
+        OPT drilling membrane with a DKT plate-bending element, model the
+        curved panel.</p>`,
   discussion: ({ row, pct }) => `
         <p>KoFEM reads ${pct(row.errPct)} from the uniform bending stress,
         and the convergence study shows the difference staying put as the
         mesh is refined: what remains is the flat facets standing in for the
         curved surface, not the mesh size.</p>`,
-  references: [REF.nafems, REF.batoz],
+  references: [REF.nafems, REF.batoz, REF.felippa2003],
 };

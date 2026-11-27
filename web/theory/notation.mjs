@@ -248,7 +248,7 @@ export default {
       [
         "shell-rotation",
         tex("θ"),
-        `Small rotation vector, with three coefficients per shell node. Local ${tex("θ_x,θ_y")} describe bending; ${tex("θ_z")} is the numerically stabilized drilling rotation about the facet normal. Rotation components and force moments use the right-hand rule.`,
+        `Small rotation vector, with three coefficients per shell node. Local ${tex("θ_x,θ_y")} describe bending; ${tex("θ_z")} is the drilling rotation, the membrane's in-plane rotation about the surface normal. Rotation components and force moments use the right-hand rule.`,
         "rad (1)",
       ],
       [

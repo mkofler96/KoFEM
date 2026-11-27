@@ -50,7 +50,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::amg::{Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
+use crate::amg::{NodeBlock, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::coupling::{Coupling, CouplingConstraints, CouplingKind, DOFS_PER_NODE};
@@ -66,26 +66,87 @@ use crate::LevelInfo;
 /// "No reduced unknown" in [`CoupledReduction`]'s slot table.
 const NO_SLOT: u32 = u32::MAX;
 
+/// A node whose displacement along a unit `normal` follows other nodes with
+/// an offset, and is free in the tangent plane:
+///
+/// ```text
+/// n · u_node = Σₖ wₖ n · u_k + offset .
+/// ```
+///
+/// The reduction gives the node Wohlmuth's rotated basis: its block holds
+/// the displacement along n (held, and given by the equation) and along two
+/// tangents (free unknowns). A support on the node may act only along a
+/// coordinate axis orthogonal to n; it then holds that tangent. An active
+/// contact node is such a constraint ([`crate::contact`]), its offset the
+/// gap still open.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalConstraint {
+    pub node: usize,
+    pub normal: [f64; 3],
+    pub masters: Vec<usize>,
+    pub weights: Vec<f64>,
+    pub offset: f64,
+}
+
+/// One translation DOF of a node under a [`NormalConstraint`] in reduced
+/// unknowns: Σ coefficient · u\[slot\] + offset.
+#[derive(Debug, Clone)]
+struct OffsetRow {
+    terms: Vec<(usize, f64)>,
+    offset: f64,
+}
+
 /// How the full 6-per-node DOFs map onto the reduced system: the reduced
-/// unknown of each independent DOF, and the coupling equations that give
-/// every dependent DOF.
+/// unknown of each independent DOF, the coupling equations that give
+/// every dependent DOF, and the rows of the nodes under a
+/// [`NormalConstraint`] (`u = T·u_r + c`, c the offsets).
 #[derive(Debug, Clone)]
 pub struct CoupledReduction {
     constraints: CouplingConstraints,
     /// Reduced unknown of each full DOF's block position, or `NO_SLOT` for a
     /// rotation of a node that has none. A dependent DOF inside a kept block
-    /// has a slot too, held at zero in the solve.
+    /// has a slot too, held at zero in the solve. The block of a node under a
+    /// normal constraint holds the components along its frame instead.
     slot_of: Vec<u32>,
     /// The full DOF of each reduced unknown.
     dof_of_slot: Vec<usize>,
+    /// The translation DOFs of the nodes under a normal constraint.
+    offset_rows: BTreeMap<usize, OffsetRow>,
+    /// The frame of each node under a normal constraint: its block's
+    /// components.
+    frames: BTreeMap<usize, Frame>,
+}
+
+/// Wohlmuth's rotated basis at a node under a normal constraint: the unit
+/// normal and two tangents, and for each tangent the coordinate axis it is,
+/// with its sign, where a support holds that axis.
+#[derive(Debug, Clone, Copy)]
+struct Frame {
+    axes: [[f64; 3]; 3],
+    supported_tangents: [Option<(usize, f64)>; 2],
+}
+
+/// What a support on a translation of a node under a normal constraint
+/// holds.
+enum FramedSupport {
+    /// The node has no normal constraint.
+    Unframed,
+    /// The tangent in this reduced unknown, which is ±the support's axis.
+    Tangent { slot: usize, sign: f64 },
+    /// Nothing: the support's axis has a normal component.
+    AcrossNormal,
 }
 
 impl CoupledReduction {
     /// Calls `visit(slot, coefficient)` for each term of a full DOF in reduced
-    /// unknowns: itself, or its coupling equation; nothing for a rotation of a
-    /// node that has none.
+    /// unknowns: itself, its coupling equation, or its normal constraint's
+    /// row; nothing for a rotation of a node that has none.
     fn for_each_term(&self, dof: usize, mut visit: impl FnMut(usize, f64)) {
-        if let Some(row) = self.constraints.row(dof) {
+        if let Some(row) = self.offset_rows.get(&dof) {
+            for &(slot, coefficient) in &row.terms {
+                visit(slot, coefficient);
+            }
+        } else if let Some(row) = self.constraints.row(dof) {
             for &(independent, coefficient) in row {
                 visit(self.slot_of[independent] as usize, coefficient);
             }
@@ -100,17 +161,71 @@ impl CoupledReduction {
         self.dof_of_slot.len()
     }
 
+    /// The offset c of a full DOF in `u = T·u_r + c`: zero but on a node
+    /// under a normal constraint.
+    fn offset(&self, dof: usize) -> f64 {
+        self.offset_rows.get(&dof).map_or(0.0, |row| row.offset)
+    }
+
     /// All 6·node DOFs from a reduced solution: independent DOFs directly,
-    /// dependent ones through their coupling, absent rotations zero.
+    /// dependent ones through their coupling or normal constraint, absent
+    /// rotations zero.
     #[must_use]
     pub fn expand(&self, reduced: &[f64]) -> Vec<f64> {
         let mut full = vec![0.0; self.slot_of.len()];
         for (dof, value) in full.iter_mut().enumerate() {
-            let mut sum = 0.0;
+            let mut sum = self.offset(dof);
             self.for_each_term(dof, |slot, coefficient| sum += coefficient * reduced[slot]);
             *value = sum;
         }
         full
+    }
+
+    /// The generalised residual Tᵀr of a full residual `residual` (6 per
+    /// node), one entry per reduced unknown.
+    ///
+    /// # Errors
+    /// A residual of the wrong length.
+    pub fn reduce(&self, residual: &[f64]) -> Result<Vec<f64>, FemError> {
+        if residual.len() != self.slot_of.len() {
+            return Err(FemError::ForceLength {
+                len: residual.len(),
+                count: self.slot_of.len(),
+            });
+        }
+        let mut reduced = vec![0.0; self.reduced_count()];
+        for (dof, &value) in residual.iter().enumerate() {
+            if value != 0.0 {
+                self.for_each_term(dof, |slot, coefficient| {
+                    reduced[slot] += coefficient * value;
+                });
+            }
+        }
+        Ok(reduced)
+    }
+
+    /// Reduced unknowns back on the full DOFs they stand for (6 per node):
+    /// an independent DOF's own value; on a node under a normal constraint,
+    /// its tangential components turned back into x, y, z (the normal one is
+    /// held); zero on a dependent DOF.
+    #[must_use]
+    pub fn place(&self, reduced: &[f64]) -> Vec<f64> {
+        let mut out = vec![0.0; self.slot_of.len()];
+        for (slot, &dof) in self.dof_of_slot.iter().enumerate() {
+            if !self.constraints.is_dependent(dof) && !self.offset_rows.contains_key(&dof) {
+                out[dof] = reduced[slot];
+            }
+        }
+        for (&node, frame) in &self.frames {
+            let first = DOFS_PER_NODE * node;
+            for tangent in 1..3 {
+                let value = reduced[self.slot_of[first + tangent] as usize];
+                for axis in 0..3 {
+                    out[first + axis] += frame.axes[tangent][axis] * value;
+                }
+            }
+        }
+        out
     }
 
     /// Generalised reaction at every independent DOF, Tᵀ(K·u − f), from the
@@ -188,22 +303,13 @@ impl CoupledReduction {
                 *total += value;
             }
         }
-        let mut reduced = vec![0.0; self.reduced_count()];
-        for (dof, (&own, &force)) in internal.iter().zip(forces).enumerate() {
-            let residual = own - force;
-            if residual != 0.0 {
-                self.for_each_term(dof, |slot, coefficient| {
-                    reduced[slot] += coefficient * residual;
-                });
-            }
-        }
-        let mut out = vec![0.0; count];
-        for (slot, &dof) in self.dof_of_slot.iter().enumerate() {
-            if !self.constraints.is_dependent(dof) {
-                out[dof] = reduced[slot];
-            }
-        }
-        Ok(out)
+        let residual: Vec<f64> = internal
+            .iter()
+            .zip(forces)
+            .map(|(own, force)| own - force)
+            .collect();
+        let reduced = self.reduce(&residual)?;
+        Ok(self.place(&reduced))
     }
 }
 
@@ -294,18 +400,7 @@ pub fn prepare_coupled_static(
     forces: &[f64],
     preconditioner: PreconditionerChoice,
 ) -> Result<PreparedCoupled, FemError> {
-    // The relaxed MPC and the shell footprint tie a shell to a solid.
-    if let Some(index) = couplings.iter().position(|coupling| {
-        matches!(
-            coupling.kind,
-            CouplingKind::RelaxedMpc { .. } | CouplingKind::ShellFootprint
-        )
-    }) {
-        return Err(FemError::Coupling {
-            coupling: index,
-            reason: "it ties a shell to a solid, but the model has no shell elements".into(),
-        });
-    }
+    refuse_shell_couplings(couplings)?;
     let PreparedMixed {
         prepared,
         reduction,
@@ -324,6 +419,23 @@ pub fn prepare_coupled_static(
         prepared,
         reduction,
     })
+}
+
+/// The relaxed MPC and the shell footprint tie a shell to a solid: a model
+/// without shell elements cannot have them.
+fn refuse_shell_couplings(couplings: &[Coupling]) -> Result<(), FemError> {
+    if let Some(index) = couplings.iter().position(|coupling| {
+        matches!(
+            coupling.kind,
+            CouplingKind::RelaxedMpc { .. } | CouplingKind::ShellFootprint
+        )
+    }) {
+        return Err(FemError::Coupling {
+            coupling: index,
+            reason: "it ties a shell to a solid, but the model has no shell elements".into(),
+        });
+    }
+    Ok(())
 }
 
 /// The shell facets of a mixed model and their assembled stiffness
@@ -447,6 +559,75 @@ pub fn prepare_mixed_static(
     forces: &[f64],
     preconditioner: MixedPreconditioner,
 ) -> Result<PreparedMixed, FemError> {
+    prepare_reduced(
+        mesh,
+        stiffness,
+        shell,
+        couplings,
+        &[],
+        fixed_dofs,
+        fixed_values,
+        forces,
+        preconditioner,
+    )
+}
+
+/// Check one solid load case with normal constraints ([`NormalConstraint`],
+/// with offsets) and set up its reduced system for CG: the reduction of
+/// [`prepare_coupled_static`], in which each constrained node also follows
+/// its masters along its normal. The right-hand side is `Tᵀ(f − K·c)`, c the
+/// offsets, so [`CoupledReduction::expand`] of the solution satisfies every
+/// constraint exactly.
+///
+/// # Errors
+/// As [`prepare_coupled_static`], plus a normal constraint on a node a
+/// coupling makes dependent, constrained twice, with a zero normal, or
+/// following a node that is constrained itself, and a support along a
+/// constrained node's normal ([`FemError::ConstraintOnCoupledDof`]).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the coupled load case's parts plus the normal constraints"
+)]
+pub fn prepare_constrained_static(
+    mesh: &TetMesh,
+    stiffness: &CsrMatrix,
+    couplings: &[Coupling],
+    normal_constraints: &[NormalConstraint],
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+    preconditioner: PreconditionerChoice,
+) -> Result<PreparedMixed, FemError> {
+    refuse_shell_couplings(couplings)?;
+    prepare_reduced(
+        mesh,
+        stiffness,
+        None,
+        couplings,
+        normal_constraints,
+        fixed_dofs,
+        fixed_values,
+        forces,
+        MixedPreconditioner::Choice(preconditioner),
+    )
+}
+
+/// [`prepare_mixed_static`] with normal constraints.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the mixed load case's parts plus the normal constraints"
+)]
+fn prepare_reduced(
+    mesh: &TetMesh,
+    stiffness: &CsrMatrix,
+    shell: Option<ShellPart<'_>>,
+    couplings: &[Coupling],
+    normal_constraints: &[NormalConstraint],
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+    preconditioner: MixedPreconditioner,
+) -> Result<PreparedMixed, FemError> {
     check_load_case(mesh, stiffness, fixed_dofs, fixed_values, forces)?;
     if let Some(part) = shell {
         if mesh.order() != ElementOrder::Linear {
@@ -455,39 +636,21 @@ pub fn prepare_mixed_static(
         check_shell_part(mesh, part)?;
     }
     let couplings = &surface_couplings(mesh, shell, couplings)?;
-    let solid_used: Vec<bool> = (0..mesh.node_count())
-        .map(|node| mesh.is_used(node))
-        .collect();
-    // With shells the mesh is linear, so its nodes are the shell's vertices.
-    let shell_used: Vec<bool> = shell.map_or_else(Vec::new, |part| {
-        (0..part.mesh.vertex_count())
-            .map(|node| part.mesh.is_used(node))
-            .collect()
-    });
-    let mut has_rotation = shell_used.clone();
-    has_rotation.resize(mesh.node_count(), false);
-    for coupling in couplings {
-        // A footprint's and a tie's reference is a solid node.
-        if matches!(
-            coupling.kind,
-            CouplingKind::ShellFootprint | CouplingKind::Tie { .. }
-        ) {
-            continue;
-        }
-        // So is a gap tie's distributing reference: a node of the other face,
-        // which only its translation joins. A free point, which no element
-        // uses, carries rotations a moment can load.
-        if coupling.kind == CouplingKind::Distributing
-            && solid_used.get(coupling.reference).copied().unwrap_or(false)
-            && !shell_used.get(coupling.reference).copied().unwrap_or(false)
-        {
-            continue;
-        }
-        if let Some(flag) = has_rotation.get_mut(coupling.reference) {
-            *flag = true;
-        }
-    }
-    let (reduction, blocks) = CoupledReduction::new(mesh, &has_rotation, couplings)?;
+    let ReductionSetup {
+        reduction,
+        blocks,
+        solid_used,
+        shell_used,
+        fixed_dofs,
+        fixed_values,
+    } = ReductionSetup::new(
+        mesh,
+        shell,
+        couplings,
+        normal_constraints,
+        fixed_dofs,
+        fixed_values,
+    )?;
     let mut parts = vec![StiffnessPart {
         matrix: stiffness,
         node_dofs: 3,
@@ -501,8 +664,11 @@ pub fn prepare_mixed_static(
         });
     }
     let mut matrix = reduced_stiffness(&reduction, &parts, blocks.points.len())?;
-    let mut rhs = reduced_load(&reduction, forces)?;
-    let (fixed_dofs, fixed_values) = supports_with_boundary_nodes(mesh, fixed_dofs, fixed_values);
+    let mut rhs = if reduction.offset_rows.is_empty() {
+        reduced_load(&reduction, forces)?
+    } else {
+        reduced_load(&reduction, &offset_load(&reduction, &parts, forces))?
+    };
     let mut prescribed = reduced_constraints(&reduction, &fixed_dofs, &fixed_values)?;
     let held_nodes = hold_unstiffened(&reduction, &blocks, &matrix, &rhs, &mut prescribed)?;
     let (dofs, values): (Vec<u32>, Vec<f64>) = prescribed
@@ -529,6 +695,118 @@ pub fn prepare_mixed_static(
     })
 }
 
+/// The reduction of a mixed load case and what building it needed: which
+/// nodes the solid and shell parts use, and the supports extended to the
+/// boundary nodes.
+struct ReductionSetup {
+    reduction: CoupledReduction,
+    blocks: Blocks,
+    solid_used: Vec<bool>,
+    shell_used: Vec<bool>,
+    fixed_dofs: Vec<u32>,
+    fixed_values: Vec<f64>,
+}
+
+impl ReductionSetup {
+    /// `couplings` with their surface couplings resolved
+    /// ([`surface_couplings`]).
+    fn new(
+        mesh: &TetMesh,
+        shell: Option<ShellPart<'_>>,
+        couplings: &[Coupling],
+        normal_constraints: &[NormalConstraint],
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+    ) -> Result<Self, FemError> {
+        let solid_used: Vec<bool> = (0..mesh.node_count())
+            .map(|node| mesh.is_used(node))
+            .collect();
+        // With shells the mesh is linear, so its nodes are the shell's vertices.
+        let shell_used: Vec<bool> = shell.map_or_else(Vec::new, |part| {
+            (0..part.mesh.vertex_count())
+                .map(|node| part.mesh.is_used(node))
+                .collect()
+        });
+        let mut has_rotation = shell_used.clone();
+        has_rotation.resize(mesh.node_count(), false);
+        for coupling in couplings {
+            // A footprint's and a tie's reference is a solid node.
+            if matches!(
+                coupling.kind,
+                CouplingKind::ShellFootprint | CouplingKind::Tie { .. }
+            ) {
+                continue;
+            }
+            // So is a gap tie's distributing reference: a node of the other
+            // face, which only its translation joins. A free point, which no
+            // element uses, carries rotations a moment can load.
+            if coupling.kind == CouplingKind::Distributing
+                && solid_used.get(coupling.reference).copied().unwrap_or(false)
+                && !shell_used.get(coupling.reference).copied().unwrap_or(false)
+            {
+                continue;
+            }
+            if let Some(flag) = has_rotation.get_mut(coupling.reference) {
+                *flag = true;
+            }
+        }
+        let (fixed_dofs, fixed_values) =
+            supports_with_boundary_nodes(mesh, fixed_dofs, fixed_values);
+        let mut supported = vec![false; DOFS_PER_NODE * mesh.node_count()];
+        for &dof in &fixed_dofs {
+            if let Some(flag) = supported.get_mut(dof as usize) {
+                *flag = true;
+            }
+        }
+        let (reduction, blocks) = CoupledReduction::new(
+            mesh,
+            &has_rotation,
+            couplings,
+            normal_constraints,
+            &supported,
+        )?;
+        Ok(Self {
+            reduction,
+            blocks,
+            solid_used,
+            shell_used,
+            fixed_dofs,
+            fixed_values,
+        })
+    }
+}
+
+/// The reduction of [`prepare_constrained_static`] without its system, and
+/// which reduced unknowns the supports and the normal constraints hold —
+/// to measure a residual against the constraints (Tᵀr off the held
+/// unknowns) between solves.
+///
+/// # Errors
+/// As [`prepare_constrained_static`], for the parts it checks.
+pub fn constrained_reduction(
+    mesh: &TetMesh,
+    couplings: &[Coupling],
+    normal_constraints: &[NormalConstraint],
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+) -> Result<(CoupledReduction, Vec<bool>), FemError> {
+    refuse_shell_couplings(couplings)?;
+    let couplings = &surface_couplings(mesh, None, couplings)?;
+    let setup = ReductionSetup::new(
+        mesh,
+        None,
+        couplings,
+        normal_constraints,
+        fixed_dofs,
+        fixed_values,
+    )?;
+    let held = reduced_constraints(&setup.reduction, &setup.fixed_dofs, &setup.fixed_values)?
+        .iter()
+        .map(Option::is_some)
+        .collect();
+    Ok((setup.reduction, held))
+}
+
 /// A preconditioner over the reduced system, its multigrid levels (empty
 /// unless multigrid) and what it ended up as.
 type BuiltPreconditioner = (
@@ -552,10 +830,10 @@ fn mixed_preconditioner(
             AppliedPreconditioner::SymmetricGaussSeidel,
         ),
         MixedPreconditioner::Choice(PreconditionerChoice::SmoothedAggregation(amg_settings)) => {
-            let amg = SmoothedAggregation::with_rotation_nodes(
+            let amg = SmoothedAggregation::with_node_blocks(
                 matrix,
                 &blocks.points,
-                &blocks.rotation,
+                &blocks.kinds,
                 constrained,
                 amg_settings,
             )?;
@@ -675,6 +953,8 @@ struct Blocks {
     points: Vec<[f64; 3]>,
     /// Whether a block holds a reference point's rotations.
     rotation: Vec<bool>,
+    /// What each block's unknowns are, for multigrid.
+    kinds: Vec<NodeBlock>,
 }
 
 impl CoupledReduction {
@@ -683,10 +963,16 @@ impl CoupledReduction {
     /// with rotations (`has_rotation`, one flag per node) likewise. On a
     /// quadratic mesh the couplings reach the edge nodes first (see the
     /// module notes).
+    ///
+    /// Each node under a normal constraint keeps its translation block, in
+    /// the frame of [`frame_of`] (`supported` flags the full DOFs a support
+    /// holds), and follows its masters through their own terms.
     fn new(
         mesh: &TetMesh,
         has_rotation: &[bool],
         couplings: &[Coupling],
+        normal_constraints: &[NormalConstraint],
+        supported: &[bool],
     ) -> Result<(Self, Blocks), FemError> {
         let points = mesh.node_coordinates();
         let nodes = points.len();
@@ -703,7 +989,9 @@ impl CoupledReduction {
         let mut blocks = Blocks {
             points: Vec::new(),
             rotation: Vec::new(),
+            kinds: Vec::new(),
         };
+        let frames = constraint_frames(&constraints, normal_constraints, supported)?;
         for (node, (&point, &rotates)) in points.iter().zip(has_rotation).enumerate() {
             for rotation in [false, true] {
                 if rotation && !rotates {
@@ -719,6 +1007,11 @@ impl CoupledReduction {
                 }
                 blocks.points.push(point);
                 blocks.rotation.push(rotation);
+                blocks.kinds.push(match (rotation, frames.get(&node)) {
+                    (true, _) => NodeBlock::Rotation,
+                    (false, Some(frame)) => NodeBlock::Frame(frame.axes),
+                    (false, None) => NodeBlock::Translation,
+                });
             }
         }
         for dof in 0..slot_of.len() {
@@ -741,15 +1034,194 @@ impl CoupledReduction {
                 });
             }
         }
-        Ok((
-            Self {
-                constraints,
-                slot_of,
-                dof_of_slot,
-            },
-            blocks,
-        ))
+        let mut reduction = Self {
+            constraints,
+            slot_of,
+            dof_of_slot,
+            offset_rows: BTreeMap::new(),
+            frames,
+        };
+        reduction.offset_rows = reduction.normal_rows(normal_constraints)?;
+        Ok((reduction, blocks))
     }
+
+    /// The rows of the translation DOFs of every node under a normal
+    /// constraint, in the reduced unknowns of its own frame and its masters'
+    /// terms:
+    ///
+    /// ```text
+    /// u = t₁·u[t₁] + t₂·u[t₂] + n · (Σₖ wₖ n · u_k + offset).
+    /// ```
+    fn normal_rows(
+        &self,
+        normal_constraints: &[NormalConstraint],
+    ) -> Result<BTreeMap<usize, OffsetRow>, FemError> {
+        let mut rows = BTreeMap::new();
+        for constraint in normal_constraints {
+            let fail = |reason: String| FemError::CouplingInput { reason };
+            let node = constraint.node;
+            let frame = self.frames[&node].axes;
+            let normal = frame[0];
+            if constraint.masters.len() != constraint.weights.len() {
+                return Err(fail(format!(
+                    "the normal constraint of node {node} has {} masters but {} weights",
+                    constraint.masters.len(),
+                    constraint.weights.len()
+                )));
+            }
+            if !constraint.offset.is_finite()
+                || constraint.weights.iter().any(|weight| !weight.is_finite())
+            {
+                return Err(fail(format!(
+                    "the normal constraint of node {node} has a non-finite weight or offset"
+                )));
+            }
+            // n · u_k in reduced unknowns, over every master k.
+            let mut along_normal: BTreeMap<usize, f64> = BTreeMap::new();
+            for (&master, &weight) in constraint.masters.iter().zip(&constraint.weights) {
+                if master == node || self.frames.contains_key(&master) {
+                    return Err(fail(format!(
+                        "node {node} follows node {master} along its normal, but node {master} \
+                         follows a normal itself — a node is either side of a normal constraint, \
+                         not both"
+                    )));
+                }
+                if master >= self.slot_of.len() / DOFS_PER_NODE {
+                    return Err(fail(format!(
+                        "node {node} follows node {master} along its normal, which is out of range"
+                    )));
+                }
+                for (axis, &component) in normal.iter().enumerate() {
+                    self.for_each_term(DOFS_PER_NODE * master + axis, |slot, coefficient| {
+                        *along_normal.entry(slot).or_default() += weight * component * coefficient;
+                    });
+                }
+            }
+            let first = DOFS_PER_NODE * node;
+            let [_, tangent_slot, bitangent_slot] =
+                [0, 1, 2].map(|position| self.slot_of[first + position] as usize);
+            for axis in 0..3 {
+                let mut terms: BTreeMap<usize, f64> = BTreeMap::new();
+                for (&slot, &value) in &along_normal {
+                    *terms.entry(slot).or_default() += normal[axis] * value;
+                }
+                *terms.entry(tangent_slot).or_default() += frame[1][axis];
+                *terms.entry(bitangent_slot).or_default() += frame[2][axis];
+                rows.insert(
+                    first + axis,
+                    OffsetRow {
+                        terms: terms
+                            .into_iter()
+                            .filter(|&(_, coefficient)| coefficient != 0.0)
+                            .collect(),
+                        offset: normal[axis] * constraint.offset,
+                    },
+                );
+            }
+        }
+        Ok(rows)
+    }
+
+    /// What a support on full DOF `dof` holds if the DOF is a translation of
+    /// a node under a normal constraint.
+    fn framed_support(&self, dof: usize) -> FramedSupport {
+        let (node, axis) = (dof / DOFS_PER_NODE, dof % DOFS_PER_NODE);
+        let Some(frame) = self.frames.get(&node) else {
+            return FramedSupport::Unframed;
+        };
+        if axis >= 3 {
+            return FramedSupport::Unframed;
+        }
+        frame
+            .supported_tangents
+            .iter()
+            .zip(1..)
+            .find_map(|(held, tangent)| match *held {
+                Some((held_axis, sign)) if held_axis == axis => Some(FramedSupport::Tangent {
+                    slot: self.slot_of[DOFS_PER_NODE * node + tangent] as usize,
+                    sign,
+                }),
+                _ => None,
+            })
+            .unwrap_or(FramedSupport::AcrossNormal)
+    }
+}
+
+/// The frame (n, t₁, t₂) of each node under a normal constraint: n the unit
+/// normal; t₁ the first coordinate axis a support holds that is orthogonal to
+/// n, else the axis least aligned with n made orthogonal to it; t₂ = n × t₁,
+/// which is ±the second such axis where a support holds two (n is then the
+/// third axis). A support along an axis with a normal component gets no
+/// tangent: [`reduced_constraints`] refuses it.
+///
+/// # Errors
+/// A node constrained twice, outside the mesh, with a zero or non-finite
+/// normal, or one a coupling makes dependent.
+fn constraint_frames(
+    constraints: &CouplingConstraints,
+    normal_constraints: &[NormalConstraint],
+    supported: &[bool],
+) -> Result<BTreeMap<usize, Frame>, FemError> {
+    let nodes = supported.len() / DOFS_PER_NODE;
+    let mut frames = BTreeMap::new();
+    for constraint in normal_constraints {
+        let node = constraint.node;
+        let fail = |reason: String| FemError::CouplingInput { reason };
+        if node >= nodes {
+            return Err(fail(format!(
+                "node {node} of a normal constraint is out of range (the model has {nodes} nodes)"
+            )));
+        }
+        if (0..3).any(|axis| constraints.is_dependent(DOFS_PER_NODE * node + axis)) {
+            return Err(fail(format!(
+                "node {node} follows a normal and a coupling or tie at once — a node can follow \
+                 one of them only"
+            )));
+        }
+        let length = dot(constraint.normal, constraint.normal).sqrt();
+        if !(length.is_finite() && length > 0.0) {
+            return Err(fail(format!(
+                "the normal of node {node} is {:?}, not a direction",
+                constraint.normal
+            )));
+        }
+        let normal = constraint.normal.map(|component| component / length);
+        let axis_vector = |axis: usize| {
+            let mut vector = [0.0; 3];
+            vector[axis] = 1.0;
+            vector
+        };
+        let held: Vec<usize> = (0..3)
+            .filter(|&axis| supported[DOFS_PER_NODE * node + axis] && normal[axis] == 0.0)
+            .collect();
+        let tangent = if let Some(&axis) = held.first() {
+            axis_vector(axis)
+        } else {
+            let axis = (0..3)
+                .min_by(|&first, &second| normal[first].abs().total_cmp(&normal[second].abs()))
+                .unwrap_or(0);
+            let raw = axis_vector(axis);
+            let along = dot(raw, normal);
+            let projected = sub(raw, normal.map(|component| along * component));
+            let size = dot(projected, projected).sqrt();
+            projected.map(|component| component / size)
+        };
+        let bitangent = cross(normal, tangent);
+        let supported_tangents = [
+            held.first().map(|&axis| (axis, 1.0)),
+            held.get(1).map(|&axis| (axis, bitangent[axis].signum())),
+        ];
+        let frame = Frame {
+            axes: [normal, tangent, bitangent],
+            supported_tangents,
+        };
+        if frames.insert(node, frame).is_some() {
+            return Err(fail(format!(
+                "node {node} has two normal constraints — it can follow one surface only"
+            )));
+        }
+    }
+    Ok(frames)
 }
 
 /// `f_r = Tᵀf`. A moment on a node without rotations has nowhere to act.
@@ -769,6 +1241,28 @@ fn reduced_load(reduction: &CoupledReduction, forces: &[f64]) -> Result<Vec<f64>
         reduction.for_each_term(dof, |slot, coefficient| rhs[slot] += coefficient * force);
     }
     Ok(rhs)
+}
+
+/// `f − K·c`: the loads less the force of the offsets c over every stiffness
+/// part, so that the reduced system solves for `u − c`.
+fn offset_load(
+    reduction: &CoupledReduction,
+    parts: &[StiffnessPart<'_>],
+    forces: &[f64],
+) -> Vec<f64> {
+    let mut out = forces.to_vec();
+    for part in parts {
+        let size = part.matrix.rows();
+        let offsets: Vec<f64> = (0..size)
+            .map(|index| reduction.offset(part.full_dof(index)))
+            .collect();
+        let mut force = vec![0.0; size];
+        part.matrix.mul_vec(&offsets, &mut force);
+        for (index, value) in force.into_iter().enumerate() {
+            out[part.full_dof(index)] -= value;
+        }
+    }
+    out
 }
 
 /// The prescribed value of each reduced unknown: the caller's conditions,
@@ -796,14 +1290,25 @@ fn reduced_constraints(
             });
         }
         let (node, component) = (index / DOFS_PER_NODE, index % DOFS_PER_NODE);
+        let what = if value == 0.0 { "fixed" } else { "prescribed" };
+        let (slot, value) = match reduction.framed_support(index) {
+            FramedSupport::Tangent { slot, sign } => (to_u32(slot), sign * value),
+            FramedSupport::AcrossNormal => {
+                return Err(FemError::ConstraintOnCoupledDof {
+                    node,
+                    component,
+                    what,
+                });
+            }
+            FramedSupport::Unframed => (reduction.slot_of[index], value),
+        };
         if reduction.constraints.is_dependent(index) {
             return Err(FemError::ConstraintOnCoupledDof {
                 node,
                 component,
-                what: if value == 0.0 { "fixed" } else { "prescribed" },
+                what,
             });
         }
-        let slot = reduction.slot_of[index];
         if slot == NO_SLOT {
             // A rotation of a node without rotations is held at zero anyway.
             if value != 0.0 {
@@ -835,6 +1340,11 @@ fn reduced_constraints(
         if reduction.constraints.is_dependent(dof) {
             prescribed[slot] = Some(0.0);
         }
+    }
+    // The normal component of a node under a normal constraint is its
+    // equation's.
+    for &node in reduction.frames.keys() {
+        prescribed[reduction.slot_of[DOFS_PER_NODE * node] as usize] = Some(0.0);
     }
     Ok(prescribed)
 }

@@ -17,6 +17,7 @@
 //! it sums the applied loads, so the caller can check that the reactions
 //! balance them.
 
+use crate::count::count_as_f64;
 use crate::coupling::DOFS_PER_NODE;
 use crate::error::FemError;
 use crate::mesh::{cross, sub, ElementOrder, TetMesh};
@@ -124,11 +125,7 @@ pub fn fold_onto_vertices(mesh: &TetMesh, values: &[f64]) -> Result<Vec<f64>, Fe
     let vertex_count = mesh.vertex_count();
     let mut folded = values[..DOFS_PER_NODE * vertex_count].to_vec();
     let mut spread = |node: usize, corners: &[u32]| {
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "an added node splits among at most eight corners"
-        )]
-        let share = 1.0 / corners.len() as f64;
+        let share = 1.0 / count_as_f64(corners.len());
         for &corner in corners {
             for component in 0..DOFS_PER_NODE {
                 folded[DOFS_PER_NODE * corner as usize + component] +=
@@ -266,14 +263,10 @@ pub fn summarize_reactions(
         .iter()
         .zip(&counts)
         .map(|(sum, &count)| {
-            #[allow(
-                clippy::cast_precision_loss,
-                reason = "a vertex count is far below 2^52"
-            )]
             let centroid = if count == 0 {
                 [0.0; 3]
             } else {
-                sum.map(|value| value / count as f64)
+                sum.map(|value| value / count_as_f64(count))
             };
             SupportReaction {
                 force: [0.0; 3],

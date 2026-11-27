@@ -17,6 +17,8 @@ import type { Property } from "../../store/modelStore";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
 import { MeshOverlapCard } from "./MeshOverlapCard";
+import { FaceSizeSection } from "./FaceSizeSection";
+import { faceListLabel } from "../../lib/faceSizes";
 import { useIntlTag, useT } from "../../i18n/useLocale";
 import { meshMessages } from "../../i18n/messages/mesh";
 import styles from "./Panel.module.css";
@@ -216,6 +218,21 @@ function MeshSummary() {
               </div>
             );
           })}
+      {meshSizes &&
+        Object.entries(meshSizes.faces).map(([key, size]) => {
+          const id = Number(key);
+          return (
+            <div key={`face-${id}`} className={styles.statRow}>
+              <span className={styles.statKey}>{faceListLabel([id])}</span>
+              <span
+                className={styles.statVal}
+                data-testid={`mesh-face-size-${id}`}
+              >
+                {text.maxSize(String(size))}
+              </span>
+            </div>
+          );
+        })}
     </div>
   );
 }
@@ -241,6 +258,7 @@ function MeshSettings({
   const meshSizes = useModelStore((s) => s.meshSizes);
   const properties = useModelStore((s) => s.properties);
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
+  const faceSizes = useModelStore((s) => s.faceSizes);
   const clearRegionMaxElementSizes = useModelStore(
     (s) => s.clearRegionMaxElementSizes,
   );
@@ -259,7 +277,13 @@ function MeshSettings({
 
   const sizesChanged =
     hasMesh &&
-    meshSizesChanged(meshSizes, maxElementSize, minElementSize, properties);
+    meshSizesChanged(
+      meshSizes,
+      maxElementSize,
+      minElementSize,
+      properties,
+      faceSizes,
+    );
   const bodies = suppressionMismatch(properties, meshSuppressedIds, hasMesh);
   const bodiesChanged =
     bodies.stillMeshed.length > 0 || bodies.missing.length > 0;
@@ -339,6 +363,7 @@ function MeshSettings({
           <option value={2}>{text.quadratic}</option>
         </select>
       </div>
+      <FaceSizeSection disabled={isMeshing} />
       {sizesChanged && meshSizes && (
         <p className={styles.formNote} data-testid="mesh-sizes-changed">
           {text.sizesChanged(formatSizes(meshSizes, text))}
