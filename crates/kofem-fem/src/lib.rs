@@ -73,8 +73,9 @@ pub use mesh::{ElementOrder, ElementShape, TetMesh};
 pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
 pub use mortar::{mortar_integrals, mortar_weights, MortarFace, MortarRow, SlaveIntegrals};
 pub use reactions::{
-    fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,
-    widen_translations, NodalReaction, ReactionSummary, SupportReaction,
+    fold_onto_vertices, fold_onto_vertices_at, load_on_held_nodes, nodal_residual,
+    summarize_reactions, summarize_reactions_at, widen_translations, NodalReaction,
+    ReactionSummary, SupportReaction,
 };
 pub use report::{percentile, report_stats, ReportStats};
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};

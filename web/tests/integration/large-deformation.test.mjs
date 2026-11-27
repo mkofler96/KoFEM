@@ -234,6 +234,53 @@ test("two bodies of different stiffness stretched side by side carry their own s
   expect(Math.abs(pulled - expected) / expected).toBeLessThan(1e-5);
 });
 
+test("the reactions balance in moment where the forces act, in the deformed configuration", async () => {
+  // One tetrahedron, every vertex moved to u_x = 0.5·X + 0.4·Y by support 0:
+  // its reactions are its internal forces, which balance in moment about any
+  // point of the deformed shape. Taken about the undeformed vertices, their
+  // moment would be about −19 N·mm about z.
+  const corners = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  const nodes = corners.map(([x, y, z], i) => ({ id: i + 1, x, y, z }));
+  const constraints = nodes.flatMap((node) => [
+    {
+      nodeId: node.id,
+      dof: 0,
+      group: 0,
+      prescribedValue: 0.5 * node.x + 0.4 * node.y,
+    },
+    { nodeId: node.id, dof: 1, group: 0, prescribedValue: 0 },
+    { nodeId: node.id, dof: 2, group: 0, prescribedValue: 0 },
+  ]);
+  const { result } = await solve(
+    {
+      nodes,
+      elements: [
+        { id: 1, type: "CTETRA", nodeIds: [1, 2, 3, 4], propertyId: 1 },
+      ],
+      materials,
+      properties: [{ id: 1, materialId: 1 }],
+      constraints,
+    },
+    { order: 1, method: "gauss-seidel", increments: 2 },
+  );
+  const [support] = result.reactions.supports;
+  const scale = Math.max(
+    ...result.reactions.nodal.flatMap((node) => node.force.map(Math.abs)),
+  );
+  expect(scale).toBeGreaterThan(10);
+  for (let axis = 0; axis < 3; axis++) {
+    expect(Math.abs(support.force[axis])).toBeLessThan(1e-9 * scale);
+    expect(Math.abs(support.moment[axis])).toBeLessThan(1e-9 * scale);
+  }
+  // The arrows stay where the support's nodes are drawn, undeformed.
+  expect(support.centroid).toEqual([0.25, 0.25, 0.25]);
+});
+
 test("a column pushed past its Euler load is refused as unstable", async () => {
   // 10 long, 0.4 square, clamped at x = 0, pushed along −x at x = 10 with
   // twice Euler's load π²·E·I/(4·L²).

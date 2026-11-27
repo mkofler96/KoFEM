@@ -50,12 +50,13 @@ pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 use kofem_fem::contact::{ContactCg, ContactInterface, ContactPair};
 use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonSettings, NewtonStatus};
 use kofem_fem::{
-    assemble_stiffness, corner_stress_tensors, fold_onto_vertices, load_on_held_nodes,
-    nodal_residual, prepare_coupled_static, prepare_static, prepare_tied_static, solve_pcg_with,
-    summarize_reactions, von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings,
-    CoupledReduction, Coupling, CouplingKind, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
-    PreconditionerChoice, PreparedCoupled, PreparedTied, ReactionSummary, ShellSurface,
-    StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
+    assemble_stiffness, corner_stress_tensors, fold_onto_vertices, fold_onto_vertices_at,
+    load_on_held_nodes, nodal_residual, prepare_coupled_static, prepare_static,
+    prepare_tied_static, solve_pcg_with, summarize_reactions, summarize_reactions_at, von_mises,
+    widen_translations, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling,
+    CouplingKind, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice,
+    PreparedCoupled, PreparedTied, ReactionSummary, ShellSurface, StoppingRule, SurfaceLoadKind,
+    TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
 };
 use kofem_fem::{
     corner_stress_tensors_thermal, count_as_f64, thermal_load, thermal_strains_at_centres,
@@ -381,7 +382,9 @@ impl ElasticModel {
     /// support, then the applied force and the applied force on supported
     /// DOFs (`kofem_fem::reactions`). A coupled or tied solve's reactions go
     /// through its reduction, a large-deformation solve's from its internal
-    /// force; a quadratic model's edge, face and centre nodes
+    /// force, with its moments taken where the forces act, in the deformed
+    /// configuration (the centroids and nodal positions stay undeformed, for
+    /// drawing); a quadratic model's edge, face and centre nodes
     /// fold onto the vertices.
     ///
     /// # Errors
@@ -429,16 +432,49 @@ impl ElasticModel {
                     })?
             }
         };
-        let reactions = fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
         let loads = fold_onto_vertices(&self.mesh, &wide_forces).map_err(|error| to_js(&error))?;
-        let mut summary =
-            summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
+        let mut summary = if solution.internal_force.is_some() {
+            // A large deformation balances its forces where they act.
+            let deformed = self.deformed_nodes(&solution.full_dofs)?;
+            let reactions = fold_onto_vertices_at(&self.mesh, &residual, &deformed)
                 .map_err(|error| to_js(&error))?;
+            summarize_reactions_at(
+                self.mesh.vertices(),
+                &deformed[..self.mesh.vertex_count()],
+                &reactions,
+                &loads,
+                owners,
+                supports,
+            )
+        } else {
+            let reactions =
+                fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
+            summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
+        }
+        .map_err(|error| to_js(&error))?;
         // Counted before folding: a free edge node's load is not on a support
         // because one of its ends is.
         summary.applied_on_supports =
             load_on_held_nodes(&self.mesh, &wide_forces, owners).map_err(|error| to_js(&error))?;
         Ok(flatten_reactions(&summary))
+    }
+
+    /// Where every node is once moved by `displacements` (3 per node).
+    fn deformed_nodes(&self, displacements: &[f64]) -> Result<Vec<[f64; 3]>, JsError> {
+        if displacements.len() != self.mesh.dof_count() {
+            return Err(JsError::new(&format!(
+                "support reactions: {} displacements for {} DOFs",
+                displacements.len(),
+                self.mesh.dof_count()
+            )));
+        }
+        Ok(self
+            .mesh
+            .node_coordinates()
+            .iter()
+            .zip(displacements.as_chunks::<3>().0)
+            .map(|(point, motion)| std::array::from_fn(|axis| point[axis] + motion[axis]))
+            .collect())
     }
 
     /// Assemble the global stiffness matrix; returns its non-zero count.
