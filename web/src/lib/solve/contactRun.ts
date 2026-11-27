@@ -111,6 +111,7 @@ export function readContact(
     pressure: solution.pressure,
     gap: solution.gap,
     closed: solution.closed,
+    area: solution.area,
     force: solution.force,
     iterations: solution.iterations,
   };

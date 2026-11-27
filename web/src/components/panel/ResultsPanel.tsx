@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useMemo, useState, type ReactNode } from "react";
-import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
+import { useModelStore } from "../../store/modelStore";
 import type {
   ResultPlot,
   ResultType,
@@ -13,6 +13,7 @@ import { plotLabel } from "../../store/studySlice";
 import {
   computeResultRange,
   resultFieldSymbol,
+  resultTypesOf,
   resultUnit,
 } from "../../lib/resultField";
 import {
@@ -53,7 +54,10 @@ function fieldSlug(field: ResultType): string {
 // the optimization's density. A result its study has not produced yet cannot
 // be picked.
 function AddResultPlot() {
-  const hasStatic = useModelStore((s) => s.result !== null);
+  const result = useModelStore((s) => s.result);
+  const hasStatic = result !== null;
+  // The contact fields only once a solve found a contact.
+  const staticFields = resultTypesOf(result);
   const hasDensity = useModelStore((s) => s.densityResult !== null);
   const hasRefinement = useModelStore(
     (s) => s.refinementStudy?.status === "done",
@@ -70,7 +74,7 @@ function AddResultPlot() {
   const fields = useT(resultFieldMessages);
   return (
     <div className={styles.addChooser}>
-      {RESULT_TYPES.map((field) => (
+      {staticFields.map((field) => (
         <button
           key={field}
           className={styles.addChoice}
@@ -613,7 +617,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           value={resultType}
           onChange={(e) => setPlotField(plot.id, e.target.value as ResultType)}
         >
-          {RESULT_TYPES.map((type) => (
+          {resultTypesOf(result).map((type) => (
             <option key={type} value={type}>
               {fields[type]}
             </option>

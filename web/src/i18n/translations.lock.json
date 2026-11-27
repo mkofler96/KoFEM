@@ -7,6 +7,14 @@
     "es": "0ebcb662b93e",
     "pt": "59dec9d227bf"
   },
+  "boundary.ts:boundaryMessages.addContact": {
+    "en": "77a3ba8eb21e",
+    "de": "83e09925ccef",
+    "fr": "1f0db5955390",
+    "it": "44e5d18dd52e",
+    "es": "d8e482e057b4",
+    "pt": "0ecf0f6616f5"
+  },
   "boundary.ts:boundaryMessages.addCoupling": {
     "en": "73ba00b1b8c8",
     "de": "3f08430e7a7b",
@@ -70,6 +78,14 @@
     "it": "a5ce9962bab9",
     "es": "7dceb15265c9",
     "pt": "91bc6bd729dd"
+  },
+  "boundary.ts:boundaryMessages.applyContact": {
+    "en": "5d2f501b30d3",
+    "de": "ccab827dc206",
+    "fr": "b1481823b058",
+    "it": "f8c07e19f9bd",
+    "es": "41e11529ad35",
+    "pt": "2081c18f2a62"
   },
   "boundary.ts:boundaryMessages.applyCoupling": {
     "en": "b086722c8065",
@@ -135,6 +151,46 @@
     "es": "3139b568c101",
     "pt": "8838b7cc20e6"
   },
+  "boundary.ts:boundaryMessages.contactMeta": {
+    "en": "af0f7f30d4a6",
+    "de": "d8c88b74a9d9",
+    "fr": "af0f7f30d4a6",
+    "it": "cfbd3fd054a6",
+    "es": "6a6d7ae100b5",
+    "pt": "af0f7f30d4a6"
+  },
+  "boundary.ts:boundaryMessages.contactNeedsBothSurfaces": {
+    "en": "1d3b9a5df890",
+    "de": "2f69a3570599",
+    "fr": "1ef001115458",
+    "it": "c0aa9743ea38",
+    "es": "73e6db58501b",
+    "pt": "cdea02b15f46"
+  },
+  "boundary.ts:boundaryMessages.contactSummary": {
+    "en": "64639778b411",
+    "de": "1b062da4a0d4",
+    "fr": "0b773901a4ea",
+    "it": "5bb3c0cd9f63",
+    "es": "4025f8f7133f",
+    "pt": "e30d1694eac7"
+  },
+  "boundary.ts:boundaryMessages.contactSurface": {
+    "en": "8747cc5630c2",
+    "de": "010fda913380",
+    "fr": "a87dec673d09",
+    "it": "c9e1eaaac833",
+    "es": "1ee62d7b8b49",
+    "pt": "5368a88ad53c"
+  },
+  "boundary.ts:boundaryMessages.contactUnsolved": {
+    "en": "a2fdc2b9b177",
+    "de": "2728d698b585",
+    "fr": "6b4e3e6bb858",
+    "it": "7fabc5b8d903",
+    "es": "1952e1883339",
+    "pt": "47b29905a1f8"
+  },
   "boundary.ts:boundaryMessages.couplingMetaDistributing": {
     "en": "246ff0091f7d",
     "de": "c90cc47f7482",
@@ -182,6 +238,14 @@
     "it": "dc0787d26f45",
     "es": "0d14ea24bbb9",
     "pt": "71babe5d1fe1"
+  },
+  "boundary.ts:boundaryMessages.deleteContact": {
+    "en": "a71773c813fc",
+    "de": "82b5e3bb0fb9",
+    "fr": "ddbb17e91c09",
+    "it": "f88c63b24771",
+    "es": "81a8d5c8b1d2",
+    "pt": "402889588704"
   },
   "boundary.ts:boundaryMessages.deleteCoupling": {
     "en": "b55a777f9043",
@@ -350,6 +414,22 @@
     "it": "ac6ee98d506c",
     "es": "ac6ee98d506c",
     "pt": "ac6ee98d506c"
+  },
+  "boundary.ts:boundaryMessages.kindContact": {
+    "en": "e349bf04f7ac",
+    "de": "3fd09af4325b",
+    "fr": "e349bf04f7ac",
+    "it": "58e96193ad44",
+    "es": "824edd4371ae",
+    "pt": "647daca068aa"
+  },
+  "boundary.ts:boundaryMessages.kindContactHint": {
+    "en": "a070c8456f79",
+    "de": "e93ad920da09",
+    "fr": "3bfef6268906",
+    "it": "a171751ed7b9",
+    "es": "332a39fea9b1",
+    "pt": "acb3a89bc304"
   },
   "boundary.ts:boundaryMessages.kindCoupling": {
     "en": "9264beed21ad",
@@ -543,6 +623,14 @@
     "es": "8bd4a0c7b89f",
     "pt": "6465c6015345"
   },
+  "boundary.ts:boundaryMessages.newContactForm": {
+    "en": "8855e89f2714",
+    "de": "184b1e5b3aaa",
+    "fr": "881e963d4849",
+    "it": "fac177b67b02",
+    "es": "610d5c1fdb66",
+    "pt": "2168c3358f75"
+  },
   "boundary.ts:boundaryMessages.newCoupling": {
     "en": "f5f2bcc8aaec",
     "de": "c89f425dd814",
@@ -574,6 +662,22 @@
     "it": "729be38148e3",
     "es": "ffdd0d32a39e",
     "pt": "b014bd5dba07"
+  },
+  "boundary.ts:boundaryMessages.noteContact": {
+    "en": "8d69b1ea8ddc",
+    "de": "aa5c426de387",
+    "fr": "34fc1092f654",
+    "it": "60e6348a0fb9",
+    "es": "4444f27a0ad8",
+    "pt": "a899fede2801"
+  },
+  "boundary.ts:boundaryMessages.noteContactScope": {
+    "en": "ddbbf4c6b85e",
+    "de": "b62a21c897be",
+    "fr": "dc2bdfe89f3e",
+    "it": "b2afb9161f1c",
+    "es": "d4dca4e6858e",
+    "pt": "8e672fa370e9"
   },
   "boundary.ts:boundaryMessages.noteForceEdge": {
     "en": "91dd2a2064a3",
@@ -2854,6 +2958,14 @@
     "it": "3720decce591",
     "es": "7eb1104d4c55",
     "pt": "9c6763ec8caf"
+  },
+  "mesh.ts:meshMessages.nothingToTouch": {
+    "en": "8fe86e3a067b",
+    "de": "d0b1e2ab24d7",
+    "fr": "e3fbf812851c",
+    "it": "5a79682d799d",
+    "es": "bdc9ef5d568b",
+    "pt": "04357321ebb4"
   },
   "mesh.ts:meshMessages.ok": {
     "en": "53239f516c8e",
@@ -5247,6 +5359,22 @@
     "es": "9d1419b73002",
     "pt": "21179d3ab2d6"
   },
+  "results.ts:resultFieldMessages.Contact pressure": {
+    "en": "969d346b2794",
+    "de": "9aff9901b656",
+    "fr": "a01794611785",
+    "it": "5c5d96403ca4",
+    "es": "7545286c5ae2",
+    "pt": "eb66867ec925"
+  },
+  "results.ts:resultFieldMessages.Contact status": {
+    "en": "d9a969709f95",
+    "de": "a10341afc3f9",
+    "fr": "7bfb35333fa7",
+    "it": "e4cfd7ae9ef3",
+    "es": "3079473af57d",
+    "pt": "ed9aeecaabac"
+  },
   "results.ts:resultFieldMessages.Displacement (magnitude)": {
     "en": "86e114d6ff61",
     "de": "ec485bed6395",
@@ -6168,12 +6296,12 @@
     "pt": "6d00dfd6b2bd"
   },
   "results.ts:resultsMessages.staticSolveHint": {
-    "en": "e50062729985",
-    "de": "f69a22eb8acf",
-    "fr": "7bb0f11ddc28",
-    "it": "5222e9dfb551",
-    "es": "0bf190d0b0e8",
-    "pt": "0bf190d0b0e8"
+    "en": "a0889bc7627d",
+    "de": "97e3b5ea1eac",
+    "fr": "d3fe83c307d2",
+    "it": "ff85d630eab5",
+    "es": "21671d0aff22",
+    "pt": "21671d0aff22"
   },
   "results.ts:resultsMessages.stopPlacingProbes": {
     "en": "d7b36af75641",
@@ -6383,6 +6511,14 @@
     "es": "acc19211be62",
     "pt": "14969bd222ea"
   },
+  "shell.ts:shellMessages.kindContact": {
+    "en": "e349bf04f7ac",
+    "de": "3fd09af4325b",
+    "fr": "e349bf04f7ac",
+    "it": "58e96193ad44",
+    "es": "824edd4371ae",
+    "pt": "647daca068aa"
+  },
   "shell.ts:shellMessages.kindCoupling": {
     "en": "9264beed21ad",
     "de": "7a0c35f00c64",
@@ -6510,6 +6646,14 @@
     "it": "a7f758ef1a11",
     "es": "6416259a0a12",
     "pt": "e8199fe30bd1"
+  },
+  "shell.ts:shellMessages.newContact": {
+    "en": "beb5e423068b",
+    "de": "184b1e5b3aaa",
+    "fr": "881e963d4849",
+    "it": "fac177b67b02",
+    "es": "610d5c1fdb66",
+    "pt": "2168c3358f75"
   },
   "shell.ts:shellMessages.newCoupling": {
     "en": "649fc6df3682",
@@ -6902,6 +7046,14 @@
     "it": "66661112fa53",
     "es": "19d800556c03",
     "pt": "98591ef8ffbb"
+  },
+  "shell.ts:statusMessages.purposeContact": {
+    "en": "2f621f0871c6",
+    "de": "3fd09af4325b",
+    "fr": "2f621f0871c6",
+    "it": "b42bf9ff5d6f",
+    "es": "55ad71fdd628",
+    "pt": "01153e0fab8e"
   },
   "shell.ts:statusMessages.purposeCoupling": {
     "en": "11e807647ade",

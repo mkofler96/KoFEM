@@ -105,7 +105,7 @@ export function fieldLegend(
   return {
     fieldRange,
     legend: {
-      title: `${resultFieldSymbol(resultType)} [${resultUnit(resultType)}]`,
+      title: legendTitle(resultType),
       min,
       max,
       clampsAbove: max < fieldRange.max,
@@ -132,4 +132,12 @@ export function reactionLegend(
         clampsBelow: false,
       }
     : null;
+}
+
+// "σ_vm [MPa]"; a field without a unit (the contact status) shows its symbol
+// alone.
+function legendTitle(resultType: ResultType): string {
+  const unit = resultUnit(resultType);
+  const symbol = resultFieldSymbol(resultType);
+  return unit === "" ? symbol : `${symbol} [${unit}]`;
 }

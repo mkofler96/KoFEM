@@ -74,7 +74,7 @@ pub use reactions::{
     widen_translations, NodalReaction, ReactionSummary, SupportReaction,
 };
 pub use report::{percentile, report_stats, ReportStats};
-pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
+pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
     assemble_shell_stiffness, prepare_shell_static, shell_corner_stress_tensors,

@@ -44,6 +44,7 @@ const KIND_DOT: Partial<Record<TreeItemKind, string>> = {
   bc: styles.kindBc,
   load: styles.kindLoad,
   tie: styles.kindTie,
+  contact: styles.kindContact,
   coupling: styles.kindCoupling,
   interface: styles.kindInterface,
 };
@@ -54,8 +55,14 @@ const SINGLE_ITEM_GROUPS: TreeGroup[] = ["mesh"];
 
 // Boundary objects the user made, so the tree offers to delete them on hover
 // (KOF-423). Interfaces come from the geometry and stay.
-type DeletableKind = "bc" | "load" | "tie" | "coupling";
-const DELETABLE_KINDS: TreeItemKind[] = ["bc", "load", "tie", "coupling"];
+type DeletableKind = "bc" | "load" | "tie" | "contact" | "coupling";
+const DELETABLE_KINDS: TreeItemKind[] = [
+  "bc",
+  "load",
+  "tie",
+  "contact",
+  "coupling",
+];
 const isDeletable = (kind: TreeItemKind): kind is DeletableKind =>
   DELETABLE_KINDS.includes(kind);
 
@@ -140,6 +147,7 @@ export function ModelTree() {
   const deleteBcGroup = useModelStore((s) => s.deleteBcGroup);
   const deleteLoadGroup = useModelStore((s) => s.deleteLoadGroup);
   const deleteTieGroup = useModelStore((s) => s.deleteTieGroup);
+  const deleteContactGroup = useModelStore((s) => s.deleteContactGroup);
   const deleteCouplingGroup = useModelStore((s) => s.deleteCouplingGroup);
   const items = useTreeItems();
   const text = useT(shellMessages);
@@ -166,6 +174,7 @@ export function ModelTree() {
       bc: deleteBcGroup,
       load: deleteLoadGroup,
       tie: deleteTieGroup,
+      contact: deleteContactGroup,
       coupling: deleteCouplingGroup,
     }[kind];
     remove(itemId);

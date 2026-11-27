@@ -4,6 +4,7 @@
 // Results slice: solver output, solve settings, and the app's stage
 // transitions (mode navigation).
 
+import { CONTACT_FIELDS, type ContactResult } from "../lib/contact";
 import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
 import { anchorAtPoint, type ResultProbe } from "../lib/resultProbe";
@@ -42,6 +43,9 @@ export interface SolverResult {
   // Each support's reaction and the applied load (KOF-387); absent on a
   // result that did not come from a static solve here (a saved file).
   reactions?: ReactionSummary | null;
+  // The contact pressure and status of every contact's slave nodes, in store
+  // node ids (KOF-485); absent without contact.
+  contact?: ContactResult | null;
   // How the solve ran, for the analysis report (KOF-391); absent on a result
   // that did not come from a static solve here (a saved file).
   run?: SolveRun;
@@ -67,6 +71,7 @@ export const RESULT_TYPES = [
   "Uz",
   "Von Mises stress",
   ...STRESS_FIELDS,
+  ...CONTACT_FIELDS,
 ] as const;
 export type ResultType = (typeof RESULT_TYPES)[number];
 

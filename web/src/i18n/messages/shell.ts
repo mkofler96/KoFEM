@@ -294,6 +294,14 @@ export const shellMessages = defineMessages({
     es: "Carga",
     pt: "Carga",
   },
+  kindContact: {
+    en: "Contact",
+    de: "Kontakt",
+    fr: "Contact",
+    it: "Contatto",
+    es: "Contacto",
+    pt: "Contato",
+  },
   kindTie: {
     en: "Tie",
     de: "Verbindung",
@@ -405,6 +413,14 @@ export const shellMessages = defineMessages({
     it: "Nuovo carico",
     es: "Nueva carga",
     pt: "Nova carga",
+  },
+  newContact: {
+    en: "New contact",
+    de: "Neuer Kontakt",
+    fr: "Nouveau contact",
+    it: "Nuovo contatto",
+    es: "Nuevo contacto",
+    pt: "Novo contato",
   },
   newTie: {
     en: "New tie",
@@ -521,6 +537,14 @@ export const statusMessages = defineMessages({
     it: "collegamento tie",
     es: "unión",
     pt: "ligação",
+  },
+  purposeContact: {
+    en: "contact",
+    de: "Kontakt",
+    fr: "contact",
+    it: "contatto",
+    es: "contacto",
+    pt: "contato",
   },
   purposeCoupling: {
     en: "surface-to-point coupling",

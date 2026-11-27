@@ -649,7 +649,12 @@ function postSolveResult(
         result.vonMises.buffer,
         ...SHELL_SURFACES.map((s) => result.stress[s].buffer),
         ...(contact
-          ? [contact.pressure.buffer, contact.gap.buffer, contact.closed.buffer]
+          ? [
+              contact.pressure.buffer,
+              contact.gap.buffer,
+              contact.closed.buffer,
+              contact.area.buffer,
+            ]
           : []),
       ]),
     ],

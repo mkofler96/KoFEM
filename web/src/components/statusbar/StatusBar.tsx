@@ -22,6 +22,7 @@ function pickPurpose(text: StatusText, mode: PickMode): string {
     bc: text.purposeBc,
     load: text.purposeLoad,
     tie: text.purposeTie,
+    contact: text.purposeContact,
     coupling: text.purposeCoupling,
   }[mode];
 }

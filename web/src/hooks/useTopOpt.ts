@@ -37,7 +37,7 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { passiveElements, roleOf } from "../lib/regions";
-import { topOptTieRefusal } from "../lib/solve/refusals";
+import { topOptContactRefusal, topOptTieRefusal } from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
 import { tr, useT } from "../i18n/useLocale";
 import { optimizeMessages } from "../i18n/messages/optimize";
@@ -203,6 +203,8 @@ export function useTopOpt() {
   // a tie yet, so a tied model is refused (KOF-353).
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  // No optimizer solves contact either (KOF-485).
+  const contactGroups = useModelStore((s) => s.contactGroups);
   const isOptimizing = useModelStore((s) => s.isOptimizing);
   const setOptimizing = useModelStore((s) => s.setOptimizing);
   const setDensityResult = useModelStore((s) => s.setDensityResult);
@@ -274,8 +276,10 @@ export function useTopOpt() {
   // No optimizer applies a tie: the worker refuses a tied model (routeTopOpt)
   // with the same words, so say so before the run.
   const tieRefusal = topOptTieRefusal(tieGroups);
+  const contactRefusal = topOptContactRefusal(contactGroups);
   const allOk =
     tieRefusal === null &&
+    contactRefusal === null &&
     !noDesignRegion &&
     !levelSetShellBlock &&
     !levelSetCouplingBlock &&
@@ -327,6 +331,7 @@ export function useTopOpt() {
       temperature,
       tieGroups,
       couplings: couplingGroups,
+      contacts: contactGroups,
       settings: { ...settings, passive: passiveElements(elements, properties) },
     })
       .then(({ density, levelSet, history, converged, iterations }) => {
@@ -467,6 +472,7 @@ export function useTopOpt() {
   // the familiar five-row checklist rather than always carrying two green rows
   // for constraints most models never hit.
   if (tieRefusal !== null) checks.push([false, tieRefusal]);
+  if (contactRefusal !== null) checks.push([false, contactRefusal]);
   if (noDesignRegion) checks.push([false, text.noDesignRegion]);
   if (levelSetShellBlock) checks.push([false, text.levelSetShells]);
   if (levelSetCouplingBlock) checks.push([false, text.levelSetCouplings]);

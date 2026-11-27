@@ -8,6 +8,7 @@ import { BcSection } from "./BcSection";
 import { LoadSection } from "./LoadSection";
 import { TemperatureSection } from "./TemperatureSection";
 import { TieSection } from "./TieSection";
+import { ContactSection } from "./ContactSection";
 import { CouplingSection } from "./CouplingSection";
 import { InterfaceSection } from "./InterfaceSection";
 import type { SectionFocus } from "./sectionFocus";
@@ -23,6 +24,11 @@ export const BOUNDARY_KINDS: {
   { kind: "bc", label: "Support", hint: "Fixed or prescribed displacement" },
   { kind: "load", label: "Load", hint: "Force, moment or pressure" },
   { kind: "tie", label: "Tie", hint: "Bond two surfaces together" },
+  {
+    kind: "contact",
+    label: "Contact",
+    hint: "Surfaces that press where they touch and can separate",
+  },
   {
     kind: "coupling",
     label: "Coupling",
@@ -56,6 +62,7 @@ export function useBoundaryKinds(): typeof BOUNDARY_KINDS {
     bc: { label: text.kindSupport, hint: text.kindSupportHint },
     load: { label: text.kindLoad, hint: text.kindLoadHint },
     tie: { label: text.kindTie, hint: text.kindTieHint },
+    contact: { label: text.kindContact, hint: text.kindContactHint },
     coupling: { label: text.kindCoupling, hint: text.kindCouplingHint },
     temperature: {
       label: text.kindTemperature,
@@ -96,6 +103,7 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
   const bc = focusFor(target, "bc");
   const load = focusFor(target, "load");
   const tie = focusFor(target, "tie");
+  const contact = focusFor(target, "contact");
   const coupling = focusFor(target, "coupling");
   // Interfaces come from the geometry, so they open with or without a mesh.
   const interfaceId =
@@ -124,6 +132,9 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
               <LoadSection onError={setError} focus={load} />
             )}
             {tie !== undefined && <TieSection onError={setError} focus={tie} />}
+            {contact !== undefined && (
+              <ContactSection onError={setError} focus={contact} />
+            )}
             {coupling !== undefined && (
               <CouplingSection onError={setError} focus={coupling} />
             )}
