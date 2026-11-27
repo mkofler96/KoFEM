@@ -66,3 +66,42 @@ export function fitViewBox({
 
   return empty ? null : { min, max };
 }
+
+// Results → Show (KOF-495) frames a sphere of this share of the model's
+// half-diagonal around the node: close enough to see the elements at the
+// node, wide enough to see where on the part it lies.
+export const NODE_FRAME_SHARE = 0.3;
+
+/**
+ * The sphere Results → Show frames around node `index`: centred where the
+ * viewport draws the node (on the deformed shape at the drawn scale), with a
+ * radius of NODE_FRAME_SHARE of the half-diagonal of what Fit view frames.
+ */
+export function nodeFrame(
+  input: FitViewInput,
+  index: number,
+): { center: Vec3; radius: number } {
+  const node = input.nodes[index];
+  if (!Number.isInteger(index) || node === undefined)
+    throw new Error(
+      `Show: node ${index} is not one of the model's ${input.nodes.length} nodes`,
+    );
+  const box = fitViewBox(input);
+  if (box === null) throw new Error("Show: the model draws nothing");
+  const { deformed } = input;
+  const center: Vec3 =
+    deformed === null || deformed.scale === 0
+      ? [node.x, node.y, node.z]
+      : [
+          node.x + deformed.displacements[3 * index] * deformed.scale,
+          node.y + deformed.displacements[3 * index + 1] * deformed.scale,
+          node.z + deformed.displacements[3 * index + 2] * deformed.scale,
+        ];
+  const halfDiagonal =
+    Math.hypot(
+      box.max[0] - box.min[0],
+      box.max[1] - box.min[1],
+      box.max[2] - box.min[2],
+    ) / 2;
+  return { center, radius: Math.max(NODE_FRAME_SHARE * halfDiagonal, 1e-6) };
+}

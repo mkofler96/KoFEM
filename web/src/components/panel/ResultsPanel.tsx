@@ -8,7 +8,8 @@ import type {
   ResultType,
   SolverResult,
 } from "../../store/modelStore";
-import type { TreeTarget } from "../../store/viewSlice";
+import { SMALL_SCREEN_QUERY, type TreeTarget } from "../../store/viewSlice";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { plotLabel } from "../../store/studySlice";
 import {
   computeResultRange,
@@ -24,13 +25,17 @@ import {
 import { isStressField, type ShellSurface } from "../../lib/stressFields";
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
-import { useFieldPercentiles } from "../../hooks/useFieldPercentiles";
+import {
+  useFieldPercentiles,
+  type PercentileReadings,
+} from "../../hooks/useFieldPercentiles";
+import { usePeakLocation } from "../../hooks/usePeakLocation";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
 import { TopOptResult } from "./TopOptResult";
 import { SupportReactions } from "./SupportReactions";
-import { useT } from "../../i18n/useLocale";
+import { useLocale, useT } from "../../i18n/useLocale";
 import {
   resultFieldMessages,
   resultsMessages,
@@ -308,6 +313,7 @@ function MinMaxSection({ field }: { field: ResultType }) {
   const showExtremes = useModelStore((s) => s.showExtremeProbes);
   const setShowExtremes = useModelStore((s) => s.setShowExtremeProbes);
   const { extremes } = useProbeReadings();
+  const percentiles = useFieldPercentiles();
   const unit = resultUnit(field);
   const symbol = resultFieldSymbol(field);
   const text = useT(resultsMessages);
@@ -341,15 +347,23 @@ function MinMaxSection({ field }: { field: ResultType }) {
             reading={{ kind: "value", ...extremes[end] }}
           />
         ))}
-      <PercentileRows symbol={symbol} unit={unit} />
+      <PercentileRows percentiles={percentiles} symbol={symbol} unit={unit} />
+      <PeakLocationRow percentiles={percentiles} unit={unit} />
     </>
   );
 }
 
 // The von Mises percentiles by volume (KOF-477), under the max: the number a
 // part is judged on when the max sits at a singularity.
-function PercentileRows({ symbol, unit }: { symbol: string; unit: string }) {
-  const percentiles = useFieldPercentiles();
+function PercentileRows({
+  percentiles,
+  symbol,
+  unit,
+}: {
+  percentiles: PercentileReadings | null;
+  symbol: string;
+  unit: string;
+}) {
   const text = useT(resultsMessages);
   if (percentiles === null) return null;
   if (percentiles.kind === "unreadable")
@@ -377,6 +391,82 @@ function PercentileRows({ symbol, unit }: { symbol: string; unit: string }) {
       </span>
     </div>
   ));
+}
+
+// Where the von Mises max sits, with Show to frame it (KOF-495). On a support
+// or load the max is usually the idealisation's singularity, so the note
+// names it and points to the P99 row.
+function PeakLocationRow({
+  percentiles,
+  unit,
+}: {
+  percentiles: PercentileReadings | null;
+  unit: string;
+}) {
+  const peak = usePeakLocation();
+  const frameNode = useModelStore((s) => s.frameNode);
+  const setShowExtremes = useModelStore((s) => s.setShowExtremeProbes);
+  const setSidebarOpen = useModelStore((s) => s.setSidebarOpen);
+  const small = useMediaQuery(SMALL_SCREEN_QUERY);
+  const text = useT(resultsMessages);
+  const locale = useLocale();
+  if (peak === null) return null;
+  if (peak.kind === "unreadable")
+    return (
+      <div className={`${styles.formNote} ${styles.formNoteFull}`}>
+        {text.peakUnreadable(peak.reason)}
+      </div>
+    );
+  const p99 =
+    percentiles?.kind === "value"
+      ? percentiles.values.find(({ percent }) => percent === 99)
+      : undefined;
+  // On a phone the panel covers the view, so Show closes it.
+  const show = () => {
+    setShowExtremes(true);
+    frameNode(peak.nodeId);
+    if (small) setSidebarOpen(false);
+  };
+  return (
+    <>
+      <div
+        className={styles.peakRow}
+        data-testid="peak-location"
+        data-node-id={peak.nodeId}
+      >
+        <span className={styles.statKey}>{text.peakAt}</span>
+        <span
+          className={styles.statVal}
+          data-testid="peak-location-at"
+          data-at={peak.at.join(",")}
+        >
+          {formatVector(peak.at)}
+        </span>
+        <button
+          className={styles.peakShow}
+          data-testid="peak-show"
+          title={text.peakShowHint}
+          onClick={show}
+        >
+          {text.show}
+        </button>
+      </div>
+      {peak.on.length > 0 && (
+        <p className={styles.peakNote} data-testid="peak-note" role="note">
+          {text.peakOnBoundary(
+            new Intl.ListFormat(locale).format(
+              peak.on.map(({ kind, name }) =>
+                kind === "support"
+                  ? text.peakSupport(name)
+                  : text.peakLoad(name),
+              ),
+            ),
+            p99 && `${p99.value.toExponential(3)} ${unit}`,
+          )}
+        </p>
+      )}
+    </>
+  );
 }
 
 // Result probes (KOF-389): the tool that places probes by clicking the model,

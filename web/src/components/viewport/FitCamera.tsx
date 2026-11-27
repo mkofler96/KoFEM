@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useModelStore } from "../../store/modelStore";
-import { fitViewBox } from "../../lib/fitView";
+import { fitViewBox, nodeFrame } from "../../lib/fitView";
 import { WORLD_UP } from "../../lib/orbitPivot";
 import {
   fitDistance,
@@ -24,9 +24,11 @@ export interface DrawnResult {
 
 // Fit view frames what the scene draws (KOF-385), so MeshScene mounts it and
 // passes the deformed result as drawn: null when no result is shown deformed.
+// It also serves Results → Show (KOF-495), which frames one node as drawn.
 export function FitCamera({ result }: { result: DrawnResult | null }) {
   const { controls, invalidate, get } = useThree();
   const fitViewTrigger = useModelStore((s) => s.fitViewTrigger);
+  const frameNodeTrigger = useModelStore((s) => s.frameNodeTrigger);
   // Read at fit time: a new result or scale does not refit by itself.
   const resultRef = useRef(result);
   useEffect(() => {
@@ -36,6 +38,9 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
   // The trigger last fitted. Switching the projection (ProjectionSwitch)
   // mounts new controls; that keeps the view and must not fit it again.
   const fitted = useRef<number | null>(null);
+  // The Show request last served. A request made before this camera mounted
+  // was for the view it replaced, so it starts as served.
+  const framed = useRef(useModelStore.getState().frameNodeTrigger);
 
   useEffect(() => {
     // Controls may not be registered yet on the initial mount — skip and wait
@@ -83,6 +88,40 @@ export function FitCamera({ result }: { result: DrawnResult | null }) {
     // controls change event, so ask for the frame explicitly.
     invalidate();
   }, [fitViewTrigger, controls, invalidate, get]); // deps intentionally omit scene state — refit only on trigger
+
+  // Show keeps the direction the user looks from and moves in on the node.
+  useEffect(() => {
+    if (!controls || framed.current === frameNodeTrigger) return;
+    framed.current = frameNodeTrigger;
+    const { nodes, stepSurface, showUndeformedOverlay, frameNodeId } =
+      useModelStore.getState();
+    const index = nodes.findIndex((n) => n.id === frameNodeId);
+    if (index < 0)
+      throw new Error(`Show: node ${frameNodeId} is not in the mesh`);
+    const drawn = resultRef.current;
+    const { center, radius } = nodeFrame(
+      {
+        nodes,
+        stepSurface,
+        deformed: drawn && { ...drawn, showUndeformed: showUndeformedOverlay },
+      },
+      index,
+    );
+    const target = new THREE.Vector3(...center);
+    const { camera, size } = get();
+    const oc = controls as unknown as { target: THREE.Vector3; update(): void };
+    const direction = camera.position.clone().sub(oc.target).normalize();
+    placeCamera(
+      camera as ProjectionCamera,
+      target,
+      direction,
+      fitDistance(radius, size),
+      size,
+    );
+    oc.target.copy(target);
+    oc.update();
+    invalidate();
+  }, [frameNodeTrigger, controls, invalidate, get]);
 
   return null;
 }

@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Browser binding for the volume-weighted percentiles of a nodal field
-//! (`kofem_fem::field_statistics`): the Results panel lists them next to the
-//! field's min and max.
+//! Browser bindings for the statistics of a nodal field the Results panel
+//! lists next to its min and max: the volume-weighted percentiles
+//! (`kofem_fem::field_statistics`) and where the field peaks, with the
+//! support and load selections on that node (`kofem_fem::field_peak`).
 
-use kofem_fem::StatisticsMesh;
+use kofem_fem::{PeakInput, StatisticsMesh};
 use wasm_bindgen::prelude::*;
 
 use crate::to_js;
@@ -44,5 +45,64 @@ pub fn nodal_percentiles(
         },
         quantiles,
     )
+    .map_err(|error| to_js(&error))
+}
+
+/// Where a nodal field peaks (from `fieldPeak`).
+#[wasm_bindgen]
+pub struct FieldPeak {
+    peak: kofem_fem::FieldPeak,
+}
+
+#[wasm_bindgen]
+impl FieldPeak {
+    /// The node's index in the field; the first such node on a tie.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn node(&self) -> usize {
+        self.peak.node
+    }
+
+    /// The node's coordinates, x, y, z.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn at(&self) -> Vec<f64> {
+        self.peak.at.to_vec()
+    }
+
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn value(&self) -> f64 {
+        self.peak.value
+    }
+
+    /// The selections that hold the node, in ascending order.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn selections(&self) -> Vec<usize> {
+        self.peak.selections.clone()
+    }
+}
+
+/// Where `values` (one per node at `points`, x, y, z each) is largest, and
+/// which selections hold that node: selection `k` holds the node indices
+/// `selection_nodes[selection_offsets[k]..selection_offsets[k + 1]]`.
+///
+/// # Errors
+/// The checks of [`kofem_fem::field_peak`].
+#[wasm_bindgen(js_name = fieldPeak)]
+pub fn field_peak(
+    points: &[f64],
+    values: &[f64],
+    selection_offsets: &[u32],
+    selection_nodes: &[u32],
+) -> Result<FieldPeak, JsError> {
+    kofem_fem::field_peak(&PeakInput {
+        points,
+        values,
+        selection_offsets,
+        selection_nodes,
+    })
+    .map(|peak| FieldPeak { peak })
     .map_err(|error| to_js(&error))
 }

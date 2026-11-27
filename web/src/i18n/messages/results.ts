@@ -1084,6 +1084,84 @@ export const resultsMessages = defineMessages({
     pt: (element: number) =>
       `o elemento de casca ${element} não tem espessura, logo o seu volume é desconhecido`,
   },
+  peakAt: {
+    en: "Max at",
+    de: "Max. bei",
+    fr: "Max. en",
+    it: "Max in",
+    es: "Máx. en",
+    pt: "Máx. em",
+  },
+  show: {
+    en: "Show",
+    de: "Zeigen",
+    fr: "Afficher",
+    it: "Mostra",
+    es: "Mostrar",
+    pt: "Mostrar",
+  },
+  peakShowHint: {
+    en: "Zoom the view to the max",
+    de: "Ansicht auf das Maximum zoomen",
+    fr: "Zoomer la vue sur le max.",
+    it: "Ingrandisci la vista sul max",
+    es: "Acercar la vista al máx.",
+    pt: "Aproximar a vista ao máx.",
+  },
+  peakSupport: {
+    en: (name: string) => `support “${name}”`,
+    de: (name: string) => `der Lagerung „${name}“`,
+    fr: (name: string) => `l'appui « ${name} »`,
+    it: (name: string) => `il vincolo «${name}»`,
+    es: (name: string) => `el apoyo «${name}»`,
+    pt: (name: string) => `o apoio «${name}»`,
+  },
+  peakLoad: {
+    en: (name: string) => `load “${name}”`,
+    de: (name: string) => `der Last „${name}“`,
+    fr: (name: string) => `la charge « ${name} »`,
+    it: (name: string) => `il carico «${name}»`,
+    es: (name: string) => `la carga «${name}»`,
+    pt: (name: string) => `a carga «${name}»`,
+  },
+  peakOnBoundary: {
+    en: (places: string, p99: string | undefined) =>
+      `The max is on ${places}: likely a singularity there, which grows with mesh refinement. Judge the part by P99${p99 ? ` = ${p99}` : ""}.`,
+    de: (places: string, p99: string | undefined) =>
+      `Das Maximum liegt an ${places}: wahrscheinlich eine Singularität, die bei Netzverfeinerung wächst. Beurteilen Sie das Bauteil nach P99${p99 ? ` = ${p99}` : ""}.`,
+    fr: (places: string, p99: string | undefined) =>
+      `Le max. est sur ${places} : probablement une singularité, qui croît quand le maillage est raffiné. Jugez la pièce sur P99${p99 ? ` = ${p99}` : ""}.`,
+    it: (places: string, p99: string | undefined) =>
+      `Il max si trova presso ${places}: probabilmente una singolarità, che cresce raffinando la mesh. Valuta il pezzo con P99${p99 ? ` = ${p99}` : ""}.`,
+    es: (places: string, p99: string | undefined) =>
+      `El máx. está en ${places}: probablemente una singularidad, que crece al refinar la malla. Juzgue la pieza por P99${p99 ? ` = ${p99}` : ""}.`,
+    pt: (places: string, p99: string | undefined) =>
+      `O máx. está sobre ${places}: provavelmente uma singularidade, que cresce ao refinar a malha. Avalie a peça por P99${p99 ? ` = ${p99}` : ""}.`,
+  },
+  peakUnreadable: {
+    en: (reason: string) => `The location of the max cannot be read. ${reason}`,
+    de: (reason: string) =>
+      `Der Ort des Maximums lässt sich nicht ablesen. ${reason}`,
+    fr: (reason: string) => `Impossible de lire la position du max. ${reason}`,
+    it: (reason: string) =>
+      `Impossibile leggere la posizione del max. ${reason}`,
+    es: (reason: string) => `No se puede leer la posición del máx. ${reason}`,
+    pt: (reason: string) => `Não é possível ler a posição do máx. ${reason}`,
+  },
+  peakUnknownNode: {
+    en: (group: string, node: number) =>
+      `${group} is applied to node ${node}, which the mesh does not have`,
+    de: (group: string, node: number) =>
+      `${group} wirkt auf Knoten ${node}, den das Netz nicht hat`,
+    fr: (group: string, node: number) =>
+      `${group} est appliqué au nœud ${node}, absent du maillage`,
+    it: (group: string, node: number) =>
+      `${group} è applicato al nodo ${node}, che la mesh non ha`,
+    es: (group: string, node: number) =>
+      `${group} se aplica al nodo ${node}, que la malla no tiene`,
+    pt: (group: string, node: number) =>
+      `${group} está aplicado ao nó ${node}, que a malha não tem`,
+  },
   sectionNoNodes: {
     en: "the model has no nodes to cut",
     de: "das Modell hat keine Knoten zum Schneiden",
