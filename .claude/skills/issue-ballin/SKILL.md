@@ -49,8 +49,11 @@ Take an issue only if all of these hold:
   solve plumbing or cross-cutting cleanups conflict with everything. Name
   them in the report as candidates to run alone.
 
-Prefer `agent:ready` issues, bugs with a repro, tests-only work and isolated
-subsystems.
+Rank by Linear priority, which is the order of work (ADR-0004): fill the
+batch from Urgent down through High, Medium, Low and no priority. Within one
+priority, prefer `agent:ready` issues, bugs with a repro, tests-only work and
+isolated subsystems. Never pass over an eligible higher-priority issue for a
+lower one unless their areas overlap.
 
 ## 3. Brief
 
@@ -114,7 +117,10 @@ first, per AGENTS.md.
 
 A table with one row per session: issue, area it touches, why it was picked,
 what done looks like. Then one line per notable issue left out and why
-(overlap, open decision, chain, broad refactor). Name any remaining conflict
+(overlap, open decision, chain, broad refactor). List every Urgent or High
+issue left out for an open decision or missing scope first, with the question
+the maintainer has to answer: those are what holds the release up. Name any
+remaining conflict
 risk between picks. Say the sessions have only just started and give the
 batch tag to find them; never describe their progress without checking with
 `get_session` or `list_events`.
