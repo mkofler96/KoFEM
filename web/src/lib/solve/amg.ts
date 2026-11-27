@@ -229,6 +229,13 @@ export interface AmgSolidModel {
 // cap). AMG converges in tens to a few hundred iterations, so reaching it is
 // rare; when it happens the user is asked whether to go on.
 const DEFAULT_ITERATION_LIMIT = 5000;
+
+// The CG budget of a solve whose request names `iterationLimit` or none. The
+// solve entries call this once and hand the number down.
+function cgBudget(iterationLimit: number | undefined): number {
+  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
+  return iterationLimit ?? DEFAULT_ITERATION_LIMIT;
+}
 // Progress is logged every this many iterations.
 const LOG_EVERY = 10;
 // Stop on the force residual ‖f − K·u‖ / ‖f‖, which means the same accuracy
@@ -366,7 +373,7 @@ export async function solveSolidInRust(
         { fixedDofs, fixedValues, forces },
         largeDeformation.increments,
         method,
-        iterationLimit,
+        cgBudget(iterationLimit),
         started,
         log,
         (solution) => {
@@ -391,7 +398,7 @@ export async function solveSolidInRust(
         refVid,
         { fixedDofs, fixedValues, forces },
         method,
-        iterationLimit,
+        cgBudget(iterationLimit),
         started,
         log,
         readSolution,
@@ -432,7 +439,7 @@ export async function solveSolidInRust(
     return await runRustSolve(
       fem,
       method,
-      iterationLimit,
+      cgBudget(iterationLimit),
       start,
       started,
       askToContinue,
@@ -460,7 +467,7 @@ async function solveWithContact<T>(
     forces: Float64Array;
   },
   method: SolverMethod,
-  iterationLimit: number | undefined,
+  budget: number,
   started: number,
   log: (line: string) => void,
   read: (solution: ElasticSolution) => T,
@@ -476,8 +483,7 @@ async function solveWithContact<T>(
   const pairs = contactPairs(fem, contacts, refVid);
   const options = new fem.SolveOptions(
     RELATIVE_TOLERANCE,
-    // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
-    iterationLimit ?? DEFAULT_ITERATION_LIMIT,
+    budget,
     method,
     "residual",
   );
@@ -540,15 +546,14 @@ async function solveLargeDeformation<T>(
   },
   increments: number,
   method: SolverMethod,
-  iterationLimit: number | undefined,
+  budget: number,
   started: number,
   log: (line: string) => void,
   read: (solution: ElasticSolution) => T,
 ): Promise<T> {
   const options = new fem.SolveOptions(
     RELATIVE_TOLERANCE,
-    // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
-    iterationLimit ?? DEFAULT_ITERATION_LIMIT,
+    budget,
     method,
     "residual",
   );
@@ -811,7 +816,7 @@ export async function solveCoupledSolidInRust(
       return await runRustSolve(
         fem,
         method,
-        iterationLimit,
+        cgBudget(iterationLimit),
         (options) =>
           elastic.startCoupledSolve(
             couplings,
@@ -853,15 +858,13 @@ export async function solveCoupledSolidInRust(
 async function runRustSolve<T>(
   fem: FemModule,
   method: SolverMethod,
-  iterationLimit: number | undefined,
+  budget: number,
   start: (options: SolveOptions) => SolveRun,
   started: number,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
   read: (solution: ElasticSolution) => T,
 ): Promise<T> {
-  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
-  const budget = iterationLimit ?? DEFAULT_ITERATION_LIMIT;
   const options = new fem.SolveOptions(
     RELATIVE_TOLERANCE,
     budget,
