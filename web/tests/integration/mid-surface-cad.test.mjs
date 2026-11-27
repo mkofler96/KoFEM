@@ -218,12 +218,14 @@ describe("a flat plate takes the CAD path (NAFEMS LE6)", () => {
     ).toEqual(sides);
     // Side face i joins rhombus corners i and i + 1: a rim node on it lies on
     // the line through them.
+    // The display tessellation is Float32: a few ulps of the plate's size.
+    const displayTolerance = 4e-6 * LE6_SIDE * 2;
     const lineOfSide = new Map(
       LE6_RHOMBUS.map((start, i) => {
         const end = LE6_RHOMBUS[(i + 1) % 4];
         const face = faceWhere(
           tessellation,
-          (x, y) => distanceFromLine(start, end, x, y) < 1e-6,
+          (x, y) => distanceFromLine(start, end, x, y) < displayTolerance,
         );
         return [face, [start, end]];
       }),

@@ -52,7 +52,7 @@ const RHOMBUS = [
   [SIDE * (1 + cos30), SIDE * sin30],
   [SIDE * cos30, SIDE * sin30],
 ];
-const CENTRE = [(SIDE * (2 + cos30)) / 2, (SIDE * sin30) / 2]; // E = (A + C) / 2
+const CENTRE = [(SIDE * (1 + cos30)) / 2, (SIDE * sin30) / 2]; // E = (A + C) / 2
 
 const neverContinue = async () => false;
 
@@ -85,11 +85,9 @@ beforeAll(async () => {
       optsteps_3d: 3,
     }),
   );
-  model = buildCadShellModel(
-    dto,
-    [{ id: 1, materialId: STEEL.id, discretization: "shell" }],
-    1,
-  );
+  model = buildCadShellModel(dto, [
+    { id: 1, materialId: STEEL.id, discretization: "shell" },
+  ]);
   ({ ShellModel } = await loadFem());
 });
 
