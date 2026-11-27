@@ -1,16 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Mesh-time auto-shell idealisation (#397): meshing a STEP whose thin body is
+// Mesh-time shell idealisation (#397): meshing a STEP whose thin body is
 // marked Shell must STORE the mixed CTRIA3 + CTETRA model, not an all-solid mesh
 // whose shells exist only transiently inside the solve.
 //
 // fin_two_parts.step is a 2 mm fin (body 2, walls at y = 49 and y = 51) attached
-// to a solid base block (body 1). After meshing the model must contain:
+// to a solid base block (body 1). The fin's faces pair, so it takes the CAD
+// mid-surface path (KOF-498): the whole fin becomes shell, with no solid left
+// at its root. After meshing the model must contain:
 //   - CTRIA3 facets on the fin MID-SURFACE (y = 50, i.e. t/2 inside each wall),
-//   - CTETRA tets for the base that stays solid,
+//   - CTETRA tets for the base that stays solid, and none of the fin,
 //   - one PSHELL property per distinct wall thickness, carrying that thickness,
-// and the mixed model must then solve through the coupled shell/solid path.
+// and the mixed model must then solve through the coupled shell/solid path,
+// which ties the fin's rim to the base.
 
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -103,7 +106,7 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh @pipel
     }[];
     return {
       nTets: els.filter((e) => e.type === "CTETRA").length,
-      transitionTets: els.filter(
+      finTets: els.filter(
         (entry) => entry.type === "CTETRA" && entry.propertyId === 2,
       ).length,
       nShells: shellEls.length,
@@ -115,10 +118,11 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh @pipel
     };
   });
 
-  // Both element families are present — a genuinely mixed model.
+  // Both element families are present — a genuinely mixed model — and the
+  // fin is shell from end to end.
   expect(meshed.nShells).toBeGreaterThan(0);
   expect(meshed.nTets).toBeGreaterThan(0);
-  expect(meshed.transitionTets).toBeGreaterThan(0);
+  expect(meshed.finTets).toBe(0);
 
   // The shell facets sit on the mid-surface, not on either original wall face.
   expect(meshed.shellYMin).toBeCloseTo(MID_SURFACE_Y, 3);
@@ -129,11 +133,9 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh @pipel
   for (const p of meshed.shellProps)
     expect(p.thickness).toBeCloseTo(WALL_THICKNESS, 1);
 
-  expect(
-    logs.some(
-      (l) => l.includes("[auto-shell]") && l.includes("thickness section"),
-    ),
-  ).toBe(true);
+  expect(logs.some((l) => l.includes("[shell] body 2: CAD mid-surface"))).toBe(
+    true,
+  );
 
   // The stored mixed model solves through the coupled shell/solid path.
   const solved = await page.evaluate(async () => {

@@ -8,7 +8,7 @@
 // CAD faces it came from. The CAD faces stay the ground truth: supports and
 // loads are picked on them and resolved through these links on every mesh.
 
-import type { FemMesh } from "../wasm/pkg/kofem_wasm.js";
+import type { MidSurfaceMesh, ShellRoute } from "../wasm/pkg/kofem_wasm.js";
 import type { Element, Node, Property } from "../workers/solverTypes.js";
 import { shellSections } from "./shellSections.js";
 
@@ -32,51 +32,52 @@ export interface CadShellModel {
 
 type Triangle = [number, number, number];
 
-// Nodes are numbered from 0: the volume mesh's vertices, then the
-// mid-surface's. Elements likewise: the tetrahedra, then the facets.
+// The bodies meshed as volumes, as the store holds them: node and element ids
+// equal to their index (the worker builds them that way, dropSuppressedBodies
+// keeps it). Empty when every body is a shell.
+export interface VolumeParts {
+  nodes: Node[];
+  elements: Element[];
+  surfaceTriangles: Triangle[];
+  surfaceFaceIds: number[];
+}
+
+function requireIndexIds(items: { id: number }[], what: string): void {
+  items.forEach((item, index) => {
+    if (item.id !== index)
+      throw new Error(
+        `CAD shell model: ${what} ${item.id} is at index ${index}; the volume mesh must be numbered from 0`,
+      );
+  });
+}
+
+// Nodes and elements continue the volume part's numbering: its nodes, then
+// the mid-surface's; its tetrahedra, then the facets.
 export function buildCadShellModel(
-  dto: FemMesh,
+  volume: VolumeParts,
+  mid: MidSurfaceMesh,
   properties: Property[],
 ): CadShellModel {
-  const mid = dto.midSurface;
-  if (!mid)
+  requireIndexIds(volume.nodes, "node");
+  requireIndexIds(volume.elements, "element");
+  if (volume.surfaceTriangles.length !== volume.surfaceFaceIds.length)
     throw new Error(
-      "CAD shell model: the mesh has no mid-surface — no Shell body took the CAD path",
+      `CAD shell model: ${volume.surfaceTriangles.length} surface triangles but ${volume.surfaceFaceIds.length} face ids`,
     );
-  const solidCount = dto.vertices.length / 3;
-  const nodes: Node[] = [];
-  const pushNodes = (vertices: Float64Array) => {
-    for (let i = 0; i < vertices.length / 3; i++)
-      nodes.push({
-        id: nodes.length,
-        x: vertices[3 * i],
-        y: vertices[3 * i + 1],
-        z: vertices[3 * i + 2],
-      });
-  };
-  pushNodes(dto.vertices);
-  pushNodes(mid.vertices);
-
-  const elements: Element[] = [];
-  for (let t = 0; t < dto.tetrahedra.length / 4; t++)
-    elements.push({
-      id: elements.length,
-      type: "CTETRA",
-      nodeIds: Array.from(dto.tetrahedra.subarray(4 * t, 4 * t + 4)),
-      // The tet's body (1-based CAD solid index), resolved to a material via
-      // the properties at solve time (#353).
-      propertyId: dto.bodyIds[t],
+  const solidCount = volume.nodes.length;
+  const nodes: Node[] = [...volume.nodes];
+  for (let i = 0; i < mid.vertices.length / 3; i++)
+    nodes.push({
+      id: nodes.length,
+      x: mid.vertices[3 * i],
+      y: mid.vertices[3 * i + 1],
+      z: mid.vertices[3 * i + 2],
     });
+  const elements: Element[] = [...volume.elements];
 
   const sections = shellSections(properties, mid.faces);
-  const surfaceTriangles: Triangle[] = [];
-  const surfaceFaceIds: number[] = [];
-  for (let t = 0; t < dto.surfaceFaceIds.length; t++) {
-    surfaceTriangles.push(
-      Array.from(dto.surfaceTriangles.subarray(3 * t, 3 * t + 3)) as Triangle,
-    );
-    surfaceFaceIds.push(dto.surfaceFaceIds[t]);
-  }
+  const surfaceTriangles: Triangle[] = [...volume.surfaceTriangles];
+  const surfaceFaceIds: number[] = [...volume.surfaceFaceIds];
   const facets: MidSurfaceLinks["facets"] = [];
   for (let t = 0; t < mid.midFace.length; t++) {
     const face = mid.faces[mid.midFace[t]];
@@ -169,4 +170,20 @@ export function cadFaceNodes(
   const ids =
     rimNodes.length > 0 ? rimNodes : cadFaceSurface(model, cadFaceId).flat();
   return [...new Set(ids)].sort((a, b) => a - b);
+}
+
+// One log line per Shell body: which path meshed it, and on the CAD path its
+// walls, or on the mesh-based path the face that did not pair and why.
+export function describeShellRoute(route: ShellRoute): string {
+  if (route.path === "mesh")
+    return `[shell] body ${route.body}: mesh-based mid-surface, face ${route.face} (${route.reason})`;
+  const kinds = [...new Set(route.walls.map((w) => w.kind))].join("/");
+  const thicknesses = route.walls.map((w) => `${w.thickness} mm`).join(", ");
+  const top = route.walls.flatMap((w) => w.top).join(", ");
+  const bottom = route.walls.flatMap((w) => w.bottom).join(", ");
+  const count = route.walls.length;
+  return (
+    `[shell] body ${route.body}: CAD mid-surface, ${count} ${kinds} wall${count === 1 ? "" : "s"} ` +
+    `(${thicknesses}), top faces ${top}, bottom faces ${bottom}`
+  );
 }

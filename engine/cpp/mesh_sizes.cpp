@@ -127,10 +127,13 @@ std::vector<KofemShapeMaxSize> mid_surface_mesh_sizes(const ShellBodyAnalysis& a
                 owners.Add(it.Value());
             if (owners.Extent() != 1)
                 continue;
+            // Two points inside the edge, so neither is a corner shared with
+            // the next side face.
             const BRepAdaptor_Curve curve(edge);
-            const gp_Pnt middle =
-                curve.Value(0.5 * (curve.FirstParameter() + curve.LastParameter()));
-            const int side = rim_side_face(analysis, k, middle);
+            const double first = curve.FirstParameter();
+            const double span = curve.LastParameter() - first;
+            const int side = rim_side_face(analysis, k, curve.Value(first + span / 3.0),
+                                           curve.Value(first + 2.0 * span / 3.0));
             if (side == 0)
                 throw std::runtime_error("mid-surface: a rim edge of body " +
                                          std::to_string(analysis.body) +

@@ -25,6 +25,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import {
   annulusStep,
   prismStep,
+  quarterStripWithHoleStep,
 } from "../../../examples/gallery/step-prism.mjs";
 import { loadEngine } from "../support/wasm.mjs";
 import { TESSELLATION_OPTIONS } from "../support/step-parts.mjs";
@@ -311,6 +312,38 @@ describe("a tube gets a cylindrical mid-surface at the mean radius", () => {
     expect(
       [...new Set(rim.map((e) => e.sideFace))].sort((a, b) => a - b),
     ).toEqual(ends);
+  });
+});
+
+// ── A curved rim: the hole of the plate-with-hole example ────────────────────
+
+const HOLE_RADIUS = 10; // mm
+
+describe("a plate with a hole keeps its curved rim on the hole face", () => {
+  let hole = 0;
+  let dto = null;
+
+  beforeAll(async () => {
+    const { engine, tessellation } = await engineWith(
+      quarterStripWithHoleStep(HOLE_RADIUS, 50, 150, 1, "Plate with a hole"),
+    );
+    hole = faceWhere(
+      tessellation,
+      (x, y) => Math.abs(Math.hypot(x, y) - HOLE_RADIUS) < 1e-3,
+    );
+    // 2 mm chords on a 10 mm arc stand 0.05 mm off it at their middle.
+    dto = meshOf(engine, 2);
+  });
+
+  test("every hole rim node lies on the hole", () => {
+    const { midSurface } = dto;
+    const onHole = rimEdgesOf(midSurface).filter((e) => e.sideFace === hole);
+    expect(onHole.length).toBeGreaterThan(5);
+    for (const edge of onHole)
+      for (const node of [edge.a, edge.b]) {
+        const [x, y] = point(midSurface.vertices, node);
+        expect(Math.abs(Math.hypot(x, y) - HOLE_RADIUS)).toBeLessThan(1e-6);
+      }
   });
 });
 

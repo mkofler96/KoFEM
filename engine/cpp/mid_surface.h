@@ -89,12 +89,14 @@ std::vector<int> shell_body_ids(const emscripten::val& opts, const TopoDS_Shape&
 ShellBodyAnalysis analyse_shell_body(const TopoDS_Shape& shape, int body,
                                      const ThinWallRule& rule);
 
-// The side face (1-based id) a point on the rim of mid face `mid_face` came
-// from: the point is moved onto the top face's surface, where it lies on a
-// boundary edge of that face, and that edge's other face is the side face.
-// 0 when the point is on no side face, for example on an edge shared by two
-// mid faces.
-int rim_side_face(const ShellBodyAnalysis& analysis, std::size_t mid_face, const gp_Pnt& point);
+// The side face (1-based id) a rim edge of mid face `mid_face` came from,
+// given two points ON the edge — the end nodes of a mesh edge, never the
+// midpoint of its chord, which misses a curved rim by the chord's height.
+// Each point is moved onto the top face's surface, where it lies on boundary
+// edges of that face; the side face is the one both points share. 0 when they
+// share none, for example on an edge between two mid faces.
+int rim_side_face(const ShellBodyAnalysis& analysis, std::size_t mid_face, const gp_Pnt& start,
+                  const gp_Pnt& end);
 
 // The outward normal of mid face `mid_face`'s top source face at the point of
 // that face nearest `point`: the direction a shell facet there must face.

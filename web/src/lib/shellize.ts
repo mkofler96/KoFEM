@@ -21,6 +21,7 @@ import {
   detectPlanarWalls as rustPlanarWalls,
   extractThinWallShells as rustExtractShells,
   shellBodyTets as rustShellBodyTets,
+  shellThinWallRule as rustShellThinWallRule,
   ShellSet,
   shellWallTets as rustShellWallTets,
   ShellizeInput,
@@ -331,6 +332,17 @@ function pairMap(keys: Uint32Array, values: Uint32Array): Map<number, number> {
 }
 
 // ── Stages ────────────────────────────────────────────────────────────────────
+
+// The thin-wall rule for bodies marked Shell, in the engine's thin_wall form:
+// the thickest wall that is thin is max(max_wall, body_share × the body's
+// bounding-box diagonal). The engine's CAD mid-surface (KOF-498) applies the
+// same rule as the Rust extraction, from these numbers.
+export function shellThinWallRule(): { max_wall: number; body_share: number } {
+  return using(rustShellThinWallRule(), (rule) => ({
+    max_wall: rule.maxWall,
+    body_share: rule.bodyShare,
+  }));
+}
 
 // Detect thin walls (opposite planar CAD-face pairs, and curved walls of steady
 // thickness) and collapse each to mid-surface facets with its wall thickness,

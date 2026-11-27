@@ -25,6 +25,7 @@
 // an angle to the wall) or on several alike has no CAD face; it is still picked
 // as a polyline (facePick pickEdgeNodeIds), without a face to remember.
 
+import type { MidSurfaceLinks } from "./cadShell";
 import type { Point3 } from "./spatialGrid";
 import { TriangleGrid } from "./spatialGrid";
 
@@ -45,6 +46,9 @@ export interface ShellRimModel {
   // The mesh's surface triangles (node ids) and the CAD face of each.
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
+  // The links of a CAD mid-surface (lib/cadShell, KOF-498): its rim edges
+  // name their side faces exactly. Absent or null on the mesh-based path.
+  midSurfaceLinks?: MidSurfaceLinks | null;
 }
 
 export interface FacedGeometry {
@@ -201,8 +205,32 @@ export function shellRimFaces(
 }
 
 /**
- * The shell rim of a stored model: its mesh against the CAD geometry it was
- * meshed from (the store's stepSurface). Empty when there is no geometry with
+ * The rim of a CAD mid-surface, straight from its links: each rim edge came
+ * from the side face the engine found for it on the B-rep.
+ */
+export function linkedShellRim(links: MidSurfaceLinks): ShellRim {
+  const faceOfEdge = new Map<string, number>();
+  const nodeSets = new Map<number, Set<number>>();
+  for (const { nodeIds, sideFace } of links.rim) {
+    faceOfEdge.set(rimEdgeKey(nodeIds[0], nodeIds[1]), sideFace);
+    const set = nodeSets.get(sideFace) ?? new Set<number>();
+    set.add(nodeIds[0]);
+    set.add(nodeIds[1]);
+    nodeSets.set(sideFace, set);
+  }
+  const nodesByFace = new Map<number, number[]>();
+  for (const [face, set] of nodeSets)
+    nodesByFace.set(
+      face,
+      [...set].sort((x, y) => x - y),
+    );
+  return { faceOfEdge, nodesByFace };
+}
+
+/**
+ * The shell rim of a stored model. A CAD mid-surface's comes from its links;
+ * a mesh-based one's from its mesh against the CAD geometry it was meshed
+ * from (the store's stepSurface), and is empty when there is no geometry with
  * CAD face ids (a model built without a STEP import) or no shell facet.
  */
 export function modelShellRim(
@@ -213,6 +241,7 @@ export function modelShellRim(
     faceIds?: number[];
   } | null,
 ): ShellRim {
+  if (model.midSurfaceLinks) return linkedShellRim(model.midSurfaceLinks);
   if (!geometry?.faceIds) return EMPTY;
   return shellRimFaces(model, {
     points: geometry.points,

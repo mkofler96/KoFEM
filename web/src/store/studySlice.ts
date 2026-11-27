@@ -146,6 +146,8 @@ export type RefinementLevelSnapshot = Pick<
   | "properties"
   | "surfaceTriangles"
   | "surfaceFaceIds"
+  | "midSurfaceLinks"
+  | "shellRoutes"
   | "meshSizes"
   | "meshSuppressedIds"
   | "bcGroups"

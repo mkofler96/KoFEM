@@ -545,7 +545,12 @@ ShellBodyAnalysis analyse_shell_body(const TopoDS_Shape& shape, int body,
     return analysis;
 }
 
-int rim_side_face(const ShellBodyAnalysis& analysis, std::size_t mid_face, const gp_Pnt& point) {
+namespace {
+
+// The side faces whose boundary edge with the top face of mid face `mid_face`
+// holds `point`, moved onto that top face: one inside an edge, two at a corner.
+std::vector<int> side_faces_at(const ShellBodyAnalysis& analysis, std::size_t mid_face,
+                               const gp_Pnt& point) {
     const MidFace& mid = analysis.mid_faces.at(mid_face);
     const Wall& wall = analysis.walls.at(mid.wall);
     const Handle(Geom_Surface) surface = BRep_Tool::Surface(mid.top_face);
@@ -554,6 +559,7 @@ int rim_side_face(const ShellBodyAnalysis& analysis, std::size_t mid_face, const
         throw std::runtime_error("mid-surface: a rim point does not project onto top face " +
                                  std::to_string(mid.top));
     const TopoDS_Vertex foot = BRepBuilderAPI_MakeVertex(projection.NearestPoint()).Vertex();
+    std::vector<int> sides;
     for (TopExp_Explorer e(mid.top_face, TopAbs_EDGE); e.More(); e.Next()) {
         BRepExtrema_DistShapeShape distance(foot, e.Current());
         if (!distance.IsDone() || distance.Value() >= analysis.tolerance)
@@ -561,11 +567,30 @@ int rim_side_face(const ShellBodyAnalysis& analysis, std::size_t mid_face, const
         const TopTools_ListOfShape& owners = analysis.edge_faces.FindFromKey(e.Current());
         for (TopTools_ListOfShape::Iterator it(owners); it.More(); it.Next()) {
             const int id = analysis.shape_faces.FindIndex(it.Value());
-            if (std::binary_search(wall.sides.begin(), wall.sides.end(), id))
-                return id;
+            if (std::binary_search(wall.sides.begin(), wall.sides.end(), id) &&
+                std::find(sides.begin(), sides.end(), id) == sides.end())
+                sides.push_back(id);
         }
     }
-    return 0;
+    return sides;
+}
+
+}  // namespace
+
+int rim_side_face(const ShellBodyAnalysis& analysis, std::size_t mid_face, const gp_Pnt& start,
+                  const gp_Pnt& end) {
+    const std::vector<int> at_start = side_faces_at(analysis, mid_face, start);
+    const std::vector<int> at_end = side_faces_at(analysis, mid_face, end);
+    int found = 0;
+    for (const int side : at_start)
+        if (std::find(at_end.begin(), at_end.end(), side) != at_end.end()) {
+            if (found != 0)
+                throw std::runtime_error("mid-surface: a rim edge lies on side faces " +
+                                         std::to_string(found) + " and " +
+                                         std::to_string(side) + " at once");
+            found = side;
+        }
+    return found;
 }
 
 gp_Dir top_side_normal(const ShellBodyAnalysis& analysis, std::size_t mid_face,

@@ -51,6 +51,7 @@ type StudySource = Pick<
   | "elements"
   | "surfaceTriangles"
   | "surfaceFaceIds"
+  | "midSurfaceLinks"
   | "bcGroups"
   | "loadGroups"
   | "tieGroups"
@@ -102,6 +103,7 @@ export function refinementRefusal(s: StudySource): string | null {
         elements: s.elements,
         surfaceTriangles: s.surfaceTriangles,
         surfaceFaceIds: s.surfaceFaceIds,
+        midSurfaceLinks: s.midSurfaceLinks,
       },
       s.stepSurface,
     ).nodesByFace,
@@ -152,6 +154,8 @@ function levelSnapshot(s: ModelState): RefinementLevelSnapshot {
     properties: s.properties,
     surfaceTriangles: s.surfaceTriangles,
     surfaceFaceIds: s.surfaceFaceIds,
+    midSurfaceLinks: s.midSurfaceLinks,
+    shellRoutes: s.shellRoutes,
     meshSizes: s.meshSizes,
     meshSuppressedIds: s.meshSuppressedIds,
     bcGroups: s.bcGroups,
@@ -201,6 +205,7 @@ export function useRefinementStudy() {
   const elements = useModelStore((s) => s.elements);
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
+  const midSurfaceLinks = useModelStore((s) => s.midSurfaceLinks);
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
@@ -220,6 +225,7 @@ export function useRefinementStudy() {
       elements,
       surfaceTriangles,
       surfaceFaceIds,
+      midSurfaceLinks,
       bcGroups,
       loadGroups,
       tieGroups,
@@ -237,6 +243,7 @@ export function useRefinementStudy() {
       elements,
       surfaceTriangles,
       surfaceFaceIds,
+      midSurfaceLinks,
       bcGroups,
       loadGroups,
       tieGroups,

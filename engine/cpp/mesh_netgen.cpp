@@ -742,8 +742,8 @@ val mesh_mid_surfaces(const TopoDS_Shape& shape,
         if (use.first == 2)
             continue;
         const MidRef& ref = refs[use.second];
-        const gp_Pnt middle((point(ends.first).XYZ() + point(ends.second).XYZ()) / 2.0);
-        const int side = rim_side_face(*ref.body, ref.index, middle);
+        const int side =
+            rim_side_face(*ref.body, ref.index, point(ends.first), point(ends.second));
         if (side == 0)
             throw std::runtime_error(
                 "generate_fem_mesh: the mid-surface mesh is open inside top face " +

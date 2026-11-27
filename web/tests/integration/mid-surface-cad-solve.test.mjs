@@ -85,9 +85,12 @@ beforeAll(async () => {
       optsteps_3d: 3,
     }),
   );
-  model = buildCadShellModel(dto, [
-    { id: 1, materialId: STEEL.id, discretization: "shell" },
-  ]);
+  expect(dto.tetrahedra.length).toBe(0);
+  model = buildCadShellModel(
+    { nodes: [], elements: [], surfaceTriangles: [], surfaceFaceIds: [] },
+    dto.midSurface,
+    [{ id: 1, materialId: STEEL.id, discretization: "shell" }],
+  );
   ({ ShellModel } = await loadFem());
 });
 
