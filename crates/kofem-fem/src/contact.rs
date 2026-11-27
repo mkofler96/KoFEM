@@ -1213,11 +1213,12 @@ fn merged(first: &SlaveNode, second: &SlaveNode) -> SlaveNode {
             *weights.entry(master).or_default() += weight * share.area / area;
         }
     }
+    let weighted: [f64; 3] = std::array::from_fn(|axis| {
+        first.area * first.normal[axis] + second.area * second.normal[axis]
+    });
     SlaveNode {
         node: first.node,
-        normal: snapped_to_unit(std::array::from_fn(|axis| {
-            first.area * first.normal[axis] + second.area * second.normal[axis]
-        })),
+        normal: unit(weighted),
         masters: weights.keys().copied().collect(),
         weights: weights.values().copied().collect(),
         area,
@@ -1225,7 +1226,7 @@ fn merged(first: &SlaveNode, second: &SlaveNode) -> SlaveNode {
 }
 
 /// `vector` scaled to unit length.
-fn snapped_to_unit(vector: [f64; 3]) -> [f64; 3] {
+fn unit(vector: [f64; 3]) -> [f64; 3] {
     let length = dot(vector, vector).sqrt();
     vector.map(|component| component / length)
 }
