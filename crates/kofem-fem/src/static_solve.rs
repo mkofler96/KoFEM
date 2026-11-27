@@ -8,6 +8,7 @@ use crate::amg::{
 };
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{eliminate_dirichlet, Dirichlet, EliminatedEntries};
+use crate::count::count_as_f64;
 use crate::error::FemError;
 use crate::mesh::{ElementOrder, TetMesh};
 use crate::sparse::CsrMatrix;
@@ -290,11 +291,7 @@ pub(crate) fn extend_to_boundary_nodes(
                 continue;
             }
             let sum: f64 = between.iter().filter_map(held).sum();
-            #[allow(
-                clippy::cast_precision_loss,
-                reason = "an edge has two ends and a face four corners"
-            )]
-            let value = sum / between.len() as f64;
+            let value = sum / count_as_f64(between.len());
             prescribed[node][component] = Some(value);
             #[allow(
                 clippy::cast_possible_truncation,

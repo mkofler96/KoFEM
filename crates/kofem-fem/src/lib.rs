@@ -20,11 +20,13 @@ pub mod cg;
 pub mod constraints;
 pub mod contact;
 pub mod convergence;
+pub mod count;
 pub mod coupled_static;
 pub mod coupling;
 pub mod element;
 pub mod error;
 pub mod field_expression;
+pub mod field_statistics;
 pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
@@ -49,6 +51,7 @@ pub use amg::{
 pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
+pub use count::count_as_f64;
 pub use coupled_static::{
     constrained_reduction, prepare_constrained_static, prepare_coupled_static,
     prepare_mixed_static, solve_coupled_static, solve_mixed_static, AppliedPreconditioner,
@@ -58,6 +61,7 @@ pub use coupled_static::{
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;
 pub use field_expression::{FieldExpression, FieldExpressionError};
+pub use field_statistics::{nodal_percentiles, StatisticsMesh};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};

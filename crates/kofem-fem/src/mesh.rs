@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::count::count_as_f64;
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex_jacobian, HEX27_RULE_POINTS, HEX8_RULE_POINTS,
 };
@@ -554,11 +555,7 @@ fn mean_point(points: &[[f64; 3]], corners: &[u32]) -> [f64; 3] {
             *total += points[vertex as usize][axis];
         }
     }
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "an entity has at most eight corners"
-    )]
-    let count = corners.len() as f64;
+    let count = count_as_f64(corners.len());
     sum.map(|total| total / count)
 }
 

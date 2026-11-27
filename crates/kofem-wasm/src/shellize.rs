@@ -9,6 +9,7 @@
 
 use std::collections::BTreeSet;
 
+use kofem_fem::count_as_f64;
 use kofem_shellize::coupled_model::{CoupledModel, ExplicitCoupledModel};
 use kofem_shellize::geometry::Vec3;
 use kofem_shellize::{
@@ -517,10 +518,6 @@ struct TieReports {
     problems: Vec<String>,
 }
 
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "a reference count far below 2^52, carried as a float in a mixed array"
-)]
 fn drop_wire(drop: Option<TieCouplingDrop>) -> (&'static str, &'static str, [f64; 3]) {
     match drop {
         None => ("", "", [0.0; 3]),
@@ -540,7 +537,7 @@ fn drop_wire(drop: Option<TieCouplingDrop>) -> (&'static str, &'static str, [f64
             ("beyond-search-distance", "", [gap, reach, 0.0])
         }
         Some(TieCouplingDrop::TooFewPartners { refs, radius }) => {
-            ("too-few-partners", "", [refs as f64, radius, 0.0])
+            ("too-few-partners", "", [count_as_f64(refs), radius, 0.0])
         }
     }
 }

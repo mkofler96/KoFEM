@@ -35,6 +35,7 @@
 use crate::amg::SymmetricGaussSeidel;
 use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
+use crate::count::count_as_f64;
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex_gradients, tet4_gradients, HEX_CORNERS,
 };
@@ -420,11 +421,7 @@ impl LevelSetOptimizer {
         let mut forcing = vec![0.0; self.phi.len()];
         for (element, &element_energy) in energy.iter().enumerate() {
             let nodes = mesh.element_nodes(element);
-            #[allow(
-                clippy::cast_precision_loss,
-                reason = "4 or 8 nodes, exactly representable"
-            )]
-            let share = element_energy / mean_density / nodes.len() as f64;
+            let share = element_energy / mean_density / count_as_f64(nodes.len());
             for &node in nodes {
                 forcing[node as usize] += share;
             }

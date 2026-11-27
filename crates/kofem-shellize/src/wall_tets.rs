@@ -5,20 +5,14 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use kofem_fem::count_as_f64;
+
 use crate::error::ShellizeError;
 use crate::geometry::{
     add, cross, dot, max_of, norm, scale, sub, triangle_extent, ShellizeMesh, Vec3,
 };
 use crate::grid::TriangleGrid;
 use crate::mid_surface::ShellExtraction;
-
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "a facet count far below 2^52, used as an averaging divisor"
-)]
-fn mean(sum: f64, count: usize) -> f64 {
-    sum / count as f64
-}
 
 /// The tets of the shelled body that lie inside a detected thin wall: those
 /// whose centroid is within `margin` × half that wall's thickness of its
@@ -50,7 +44,7 @@ pub fn shell_wall_tets(
     // Cell ≥ the largest query radius (half the thickest wall) and ≥ the facet
     // extent, so a facet spans only a few cells.
     let cell = (max_thickness * margin)
-        .max(mean(sum_extent, corners.len()))
+        .max(sum_extent / count_as_f64(corners.len()))
         .max(1e-9);
     let grid = TriangleGrid::new(corners, cell)?;
     for (element, tet) in mesh.tets.iter().enumerate() {
