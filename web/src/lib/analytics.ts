@@ -33,8 +33,12 @@ export type ErrorCategory =
   // The engine's import failed in a way no rule above recognises.
   | "import_failure"
   | "resource_limit"
+  // The solver ran but could not produce a result; numerical_reason says how
+  // (KOF-490).
   | "numerical_failure"
   | "geometry_defect"
+  // The mesh holds an element with no volume or area (KOF-490).
+  | "degenerate_element"
   // Netgen gave up on the shape (KOF-311).
   | "mesher_failure"
   // OCCT could not triangulate the shape.
@@ -49,12 +53,43 @@ export type ErrorCategory =
   | "solver_failure"
   // A WASM trap or abort: a code bug in the engine, not the visitor's model.
   | "engine_crash"
-  // The worker itself died or answered nothing usable.
+  // The worker itself died, refused the task or answered nothing usable.
   | "worker_failure"
   | "engine_unavailable"
+  // A part of the app other than the engine, such as a language's text,
+  // could not be fetched (KOF-490).
+  | "app_load_failure"
   // The visitor ended the task, e.g. New model while meshing.
   | "cancelled"
   | "unknown";
+// How a numerical failure happened, from the error kinds the Rust solver
+// raises (FemError, KOF-490). Each reason has advice of its own for the user
+// (lib/solve/failureAdvice.ts).
+export const NUMERICAL_REASONS = [
+  // The linear stiffness matrix is not positive definite: CG broke down, or
+  // AMG's coarsest level could not be factored. Past the rigid-body check
+  // this is a mechanism, a part joined only along an edge or at a point.
+  "singular_matrix",
+  // An iterative linear solve did not reach its tolerance.
+  "not_converged",
+  // A large-deformation load increment ran out of Newton iterations.
+  "newton_not_converged",
+  // The large-deformation tangent stiffness lost positive definiteness: the
+  // structure buckles or snaps through.
+  "unstable_tangent",
+  // A large-deformation increment turned an element inside out.
+  "inverted_element",
+  // The solve produced a stress or force that is not a finite number.
+  "non_finite_result",
+] as const;
+export type NumericalReason = (typeof NUMERICAL_REASONS)[number];
+// The category a failure is sent with; a numerical failure always carries its
+// reason.
+export type FailureClass =
+  | { error_category: PlainCategory }
+  | { error_category: "numerical_failure"; numerical_reason: NumericalReason };
+// A category with no reason to carry: every one but numerical_failure.
+type PlainCategory = Exclude<ErrorCategory, "numerical_failure">;
 export type DurationBucket =
   "lt_1s" | "1_5s" | "5_15s" | "15_60s" | "1_5min" | "gt_5min";
 export type ModelType = "solid" | "shell" | "mixed";
@@ -103,8 +138,7 @@ export interface AnalyticsEvents {
   solve_failed: WorkflowParams & {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
-    error_category: ErrorCategory;
-  };
+  } & FailureClass;
   results_viewed: WorkflowParams;
   // Results → Save report (KOF-391): that a report was saved, never what it
   // says.
@@ -257,10 +291,11 @@ export function startTimer(): () => DurationBucket {
 
 // Ordered: the first matching rule wins. Matched against the worker's error
 // text, which is never sent — only the category is.
-const ERROR_RULES: [ErrorCategory, RegExp][] = [
+const ERROR_RULES: [PlainCategory, RegExp][] = [
   [
     "resource_limit",
-    /out of memory|Aborted\(OOM\)|Cannot enlarge memory|memory allocation|Array buffer allocation failed|bad_alloc|exceeds the limit|too many elements/i,
+    // The last alternative: FemError::TooManyNodes.
+    /out of memory|Aborted\(OOM\)|Cannot enlarge memory|memory allocation|Array buffer allocation failed|bad_alloc|exceeds the limit|too many elements|nodes; at most \d+ are supported/i,
   ],
   [
     "file_unreadable",
@@ -276,8 +311,10 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
   ],
   [
     "worker_failure",
-    /Worker crashed|Worker error|worker .*terminated|WASM module not initialised/i,
+    /Worker crashed|Worker error|worker .*terminated|WASM module not initialised|worker is busy/i,
   ],
+  // A language's text is fetched on demand (i18n/loadLocale.ts).
+  ["app_load_failure", /text of KoFEM (could not be loaded|is incomplete)/i],
   ["unsupported_format", /unsupported|not a (STEP|IGES)/i],
   ["parse_error", /invalid (STEP|IGES) file|ReadFile failed|ISO-10303/i],
   // Before geometry_defect: an IGES file of free surfaces names the closed
@@ -301,23 +338,47 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
   // lib/solve/refusals.ts, amg.ts, route.ts and autoShell.ts (KOF-418).
   [
     "unsupported_model",
-    /does not support|cannot solve this model|solve with linear elements only|supports solid models only|the shell solver cannot apply|can be idealised as shells today|works on tetrahedral meshes only/i,
+    /does not support|cannot solve this model|solve with linear elements only|supports solid models only|the shell solver cannot apply|can be idealised as shells today|works on tetrahedral meshes only|supported on linear tetrahedra only/i,
   ],
   ["shell_idealisation_failure", /Shell idealisation failed/i],
   // Before numerical_failure: the rigid-body check (lib/solve/rigidBody.ts).
   ["unheld_body", /can still (move along|rotate about)/i],
-  [
-    "numerical_failure",
-    /did not converge|diverg|singular|NaN|ill-conditioned|zero pivot|not positive definite|rigid[- ]body|unconstrained/i,
-  ],
+  // The Rust module's checks of the elements it integrates (FemError
+  // DegenerateTet, DegenerateHex, DegenerateTriangle).
+  ["degenerate_element", /has zero volume|has zero area|is flat or folded/i],
   [
     "invalid_input",
-    /No geometry|must be|must not|no (solid|shell) element|no property|no material|degenerate|zero total|carries no|cannot be|missing|invalid|cannot fill/i,
+    // FemError ConflictingConstraint, the unused-vertex, surface-load and
+    // coupling checks, and a non-finite value given as input. Before the
+    // numerical rules, which take a non-finite value in the result.
+    /constrained twice|but no element uses it|no element or coupling stiffens it|eliminated by two couplings|couplings form a cycle|has no rotational degree of freedom|must lie in|are not on the mesh boundary|was given for (?!an internal force)|Error: (coupling \d+|tie constraints|contact): /i,
   ],
 ];
 
+// The numerical failures, ordered like ERROR_RULES and tried after it: the
+// first match is the reason, and a failure is numerical_failure only with a
+// reason.
+const NUMERICAL_RULES: [NumericalReason, RegExp][] = [
+  // Before singular_matrix: it is also "not positive definite".
+  ["unstable_tangent", /tangent stiffness is not positive definite/i],
+  ["singular_matrix", /not positive definite|singular|zero pivot/i],
+  ["inverted_element", /is turned inside out/i],
+  // Before not_converged: it also "did not converge".
+  ["newton_not_converged", /Newton increment \d+ of \d+ did not converge/i],
+  ["not_converged", /did not converge|diverg|the tangent solve failed/i],
+  [
+    "non_finite_result",
+    /not a finite number|was given for an internal force component/i,
+  ],
+];
+
+// Matched after the numerical rules: a "missing" or "invalid" in the text of
+// a numerical failure does not make it the visitor's input.
+const INPUT_RULE =
+  /No geometry|must be|must not|no (solid|shell) element|no property|no material|degenerate|zero total|carries no|cannot be|missing|invalid|cannot fill|has no elements|has no triangles/i;
+
 // What a failure in each step is when its text matches no rule above.
-const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
+const STAGE_CATEGORY: Record<FailureStage, PlainCategory> = {
   geometry_reload: "tessellation_failure",
   meshing: "mesher_failure",
   shell_idealisation: "shell_idealisation_failure",
@@ -325,18 +386,31 @@ const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
   solving: "solver_failure",
 };
 
-/** Map an error to a fixed category. The message itself stays in the browser. */
-export function categorizeError(err: unknown): ErrorCategory {
+/**
+ * Map an error to a fixed category, and a numerical failure to its reason.
+ * The message itself stays in the browser.
+ */
+export function classifyFailure(err: unknown): FailureClass {
   const text =
     err instanceof WorkerTaskError
       ? `${err.name}: ${err.english}`
       : inEnglish(
           err instanceof Error ? `${err.name}: ${err.message}` : String(err),
         );
-  for (const [category, re] of ERROR_RULES) if (re.test(text)) return category;
+  for (const [category, re] of ERROR_RULES)
+    if (re.test(text)) return { error_category: category };
+  for (const [reason, re] of NUMERICAL_RULES)
+    if (re.test(text))
+      return { error_category: "numerical_failure", numerical_reason: reason };
+  if (INPUT_RULE.test(text)) return { error_category: "invalid_input" };
   if (err instanceof WorkerTaskError && err.stage !== null)
-    return STAGE_CATEGORY[err.stage];
-  return "unknown";
+    return { error_category: STAGE_CATEGORY[err.stage] };
+  return { error_category: "unknown" };
+}
+
+/** `classifyFailure`'s category alone, for events without a reason. */
+export function categorizeError(err: unknown): ErrorCategory {
+  return classifyFailure(err).error_category;
 }
 
 /** Solid, shell or mixed, from the element types of a mesh. */

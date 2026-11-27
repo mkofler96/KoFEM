@@ -27,7 +27,7 @@ import {
 } from "../lib/solve/incompressible";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
-  categorizeError,
+  classifyFailure,
   startTimer,
   track,
   workflowParams,
@@ -39,6 +39,7 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { withAdvice } from "../lib/solve/failureAdvice";
 import { tr, useT } from "../i18n/useLocale";
 import type { SolveRun } from "../store/resultsSlice";
 import { solveMessages } from "../i18n/messages/solve";
@@ -324,12 +325,15 @@ export function useSolver() {
       })
       .catch((err) => {
         console.error("[solve] solver failed:", err.message);
-        setError(tr(solveMessages).solverError(err.message));
+        const failure = classifyFailure(err);
+        setError(
+          withAdvice(failure, tr(solveMessages).solverError(err.message)),
+        );
         track("solve_failed", {
           ...workflow,
           analysis_type: "static",
           duration_bucket: elapsed(),
-          error_category: categorizeError(err),
+          ...failure,
         });
       })
       .finally(() => setRunning(false));

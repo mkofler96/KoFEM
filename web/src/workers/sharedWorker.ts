@@ -85,6 +85,19 @@ export class WorkerResetError extends Error {
   }
 }
 
+/**
+ * What a request in flight rejects with when the worker dies without
+ * answering it. The browser's text of the uncaught error alone matches no
+ * analytics rule; this message makes it a worker failure (KOF-490).
+ */
+export class WorkerCrashError extends Error {
+  constructor(detail: string | undefined) {
+    super(
+      detail ? `Worker crashed: ${detail}` : "Worker crashed without a message",
+    );
+  }
+}
+
 function createWorker(): Worker {
   const worker = new Worker(new URL("./solver.worker.ts", import.meta.url), {
     type: "module",
@@ -196,8 +209,7 @@ function createWorker(): Worker {
     dismissCgContinuation();
     _cgTaskId = null;
     console.error("[worker] crashed:", e.message, e);
-    // A worker that died without a message still needs a text.
-    const err = new Error(e.message ?? "Worker crashed");
+    const err = new WorkerCrashError(e.message);
     for (const p of _pending.values()) p.reject(err);
     _pending.clear();
     // An uncaught error does not end a worker by itself; end it, so the

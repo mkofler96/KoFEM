@@ -116,7 +116,7 @@ export function OptimizePanel({
       <div className={styles.tabContent}>
         {header}
         {error && (
-          <div className={styles.errorBanner}>
+          <div className={styles.errorBanner} data-testid="optimize-error">
             <span>{error}</span>
             <button onClick={() => setError(null)}>×</button>
           </div>

@@ -369,6 +369,56 @@ export const solveMessages = defineMessages({
     pt: (residual: string, iterations: number, target: string) =>
       `O CG não convergiu: resíduo relativo ${residual} após ${iterations} iterações (meta ${target}) e não melhora mais. O resultado parcial foi descartado — verifique se o modelo está totalmente vinculado, ou refine a malha.`,
   },
+  // What to change after a numerical failure, one per reason of
+  // lib/analytics.ts NUMERICAL_REASONS (KOF-490).
+  adviceSingularMatrix: {
+    en: "Part of the model can still move freely, so the solve has no unique answer. Look for a part joined to the rest only along an edge or at a point: support it, or join it to the rest over a face.",
+    de: "Ein Teil des Modells kann sich noch frei bewegen, daher hat die Berechnung keine eindeutige Lösung. Suchen Sie ein Teil, das nur über eine Kante oder einen Punkt mit dem Rest verbunden ist: lagern Sie es, oder verbinden Sie es über eine Fläche mit dem Rest.",
+    fr: "Une partie du modèle peut encore bouger librement, le calcul n'a donc pas de solution unique. Cherchez une partie reliée au reste seulement par une arête ou un point : maintenez-la, ou reliez-la au reste par une face.",
+    it: "Una parte del modello può ancora muoversi liberamente, quindi l'analisi non ha una soluzione unica. Cerca una parte unita al resto solo lungo uno spigolo o in un punto: vincolala, oppure uniscila al resto su una faccia.",
+    es: "Una parte del modelo aún puede moverse libremente, así que el cálculo no tiene una solución única. Busca una parte unida al resto solo por una arista o un punto: sujétala, o únela al resto por una cara.",
+    pt: "Uma parte do modelo ainda pode se mover livremente, então a análise não tem solução única. Procure uma parte ligada ao resto apenas por uma aresta ou um ponto: apoie-a, ou ligue-a ao resto por uma face.",
+  },
+  adviceNotConverged: {
+    en: "The solver did not reach the required accuracy. Switch the static study to the other solver, check that the model is held, or remesh with better-shaped elements.",
+    de: "Der Löser hat die geforderte Genauigkeit nicht erreicht. Stellen Sie die statische Studie auf den anderen Löser um, prüfen Sie die Lagerung des Modells, oder vernetzen Sie mit besser geformten Elementen neu.",
+    fr: "Le solveur n'a pas atteint la précision requise. Passez l'étude statique à l'autre solveur, vérifiez que le modèle est maintenu, ou remaillez avec des éléments mieux formés.",
+    it: "Il solutore non ha raggiunto la precisione richiesta. Passa lo studio statico all'altro solutore, verifica che il modello sia vincolato, o rifai la mesh con elementi di forma migliore.",
+    es: "El solucionador no alcanzó la precisión requerida. Cambia el estudio estático al otro solucionador, comprueba que el modelo esté sujeto, o vuelve a mallar con elementos mejor formados.",
+    pt: "O solucionador não atingiu a precisão exigida. Mude o estudo estático para o outro solucionador, verifique se o modelo está apoiado, ou refaça a malha com elementos de forma melhor.",
+  },
+  adviceNewtonNotConverged: {
+    en: "A load increment did not converge. Use more load increments, or a smaller load.",
+    de: "Ein Laststeigerungsschritt ist nicht konvergiert. Verwenden Sie mehr Laststeigerungsschritte oder eine kleinere Last.",
+    fr: "Un incrément de charge n'a pas convergé. Utilisez plus d'incréments de charge, ou une charge plus faible.",
+    it: "Un incremento di carico non è andato a convergenza. Usa più incrementi di carico, o un carico minore.",
+    es: "Un incremento de carga no convergió. Usa más incrementos de carga, o una carga menor.",
+    pt: "Um incremento de carga não convergiu. Use mais incrementos de carga, ou uma carga menor.",
+  },
+  adviceUnstableTangent: {
+    en: "The part buckles or snaps through under this load, so a static solve cannot follow it. Lower the load, or stiffen the part.",
+    de: "Das Bauteil knickt oder schlägt unter dieser Last durch, daher kann eine statische Berechnung ihm nicht folgen. Verringern Sie die Last oder versteifen Sie das Bauteil.",
+    fr: "La pièce flambe ou claque sous cette charge, un calcul statique ne peut donc pas la suivre. Réduisez la charge, ou rigidifiez la pièce.",
+    it: "Il pezzo si instabilizza o scatta sotto questo carico, quindi un'analisi statica non può seguirlo. Riduci il carico, o irrigidisci il pezzo.",
+    es: "La pieza pandea o salta bajo esta carga, así que un cálculo estático no puede seguirla. Reduce la carga, o rigidiza la pieza.",
+    pt: "A peça flamba ou salta sob esta carga, então uma análise estática não consegue acompanhá-la. Reduza a carga, ou enrijeça a peça.",
+  },
+  adviceInvertedElement: {
+    en: "The deformation turned an element inside out. Use more load increments, or a finer mesh where the part deforms most.",
+    de: "Die Verformung hat ein Element umgestülpt. Verwenden Sie mehr Laststeigerungsschritte oder ein feineres Netz, wo sich das Bauteil am stärksten verformt.",
+    fr: "La déformation a retourné un élément. Utilisez plus d'incréments de charge, ou un maillage plus fin là où la pièce se déforme le plus.",
+    it: "La deformazione ha rovesciato un elemento. Usa più incrementi di carico, o una mesh più fine dove il pezzo si deforma di più.",
+    es: "La deformación invirtió un elemento. Usa más incrementos de carga, o una malla más fina donde la pieza se deforma más.",
+    pt: "A deformação inverteu um elemento. Use mais incrementos de carga, ou uma malha mais fina onde a peça mais se deforma.",
+  },
+  adviceNonFiniteResult: {
+    en: "The solve produced values that are not numbers. Check the material values and load magnitudes for typos and consistent units.",
+    de: "Die Berechnung hat Werte ergeben, die keine Zahlen sind. Prüfen Sie Werkstoffwerte und Lastgrößen auf Tippfehler und einheitliche Einheiten.",
+    fr: "Le calcul a produit des valeurs qui ne sont pas des nombres. Vérifiez les valeurs des matériaux et l'intensité des charges : fautes de frappe, unités cohérentes.",
+    it: "L'analisi ha prodotto valori che non sono numeri. Controlla i valori dei materiali e l'entità dei carichi per errori di battitura e unità coerenti.",
+    es: "El cálculo produjo valores que no son números. Revisa los valores de los materiales y la magnitud de las cargas: errores de escritura y unidades coherentes.",
+    pt: "A análise produziu valores que não são números. Verifique os valores dos materiais e a intensidade das cargas: erros de digitação e unidades coerentes.",
+  },
   stoppedByUser: {
     en: "Solve stopped by user. The partial result was discarded.",
     de: "Berechnung vom Benutzer abgebrochen. Das Teilergebnis wurde verworfen.",

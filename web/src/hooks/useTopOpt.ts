@@ -24,7 +24,7 @@ import {
 } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
-  categorizeError,
+  classifyFailure,
   startTimer,
   track,
   workflowParams,
@@ -43,6 +43,7 @@ import {
   topOptTieRefusal,
 } from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { withAdvice } from "../lib/solve/failureAdvice";
 import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import { tr, useT } from "../i18n/useLocale";
 import { optimizeMessages } from "../i18n/messages/optimize";
@@ -368,12 +369,18 @@ export function useTopOpt() {
         // A cancel terminated the worker; the resulting rejection is expected.
         if (cancelled) return;
         console.error("[topopt] optimization failed:", err.message);
-        setError(tr(optimizeMessages).optimizationError(err.message));
+        const failure = classifyFailure(err);
+        setError(
+          withAdvice(
+            failure,
+            tr(optimizeMessages).optimizationError(err.message),
+          ),
+        );
         track("solve_failed", {
           ...workflow,
           analysis_type: "topology",
           duration_bucket: elapsed(),
-          error_category: categorizeError(err),
+          ...failure,
         });
       })
       .finally(() => {
