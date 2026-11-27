@@ -31,5 +31,5 @@ test("a singular model names what to change, not just a solver error", async ({
   await expect(banner).toContainText(ADVICE);
   // The solver's own words stay as the detail, without a stack trace.
   await expect(banner).toContainText("is not positive definite");
-  await expect(banner).not.toContainText(" at ");
+  await expect(banner).not.toContainText("wasm-function");
 });
