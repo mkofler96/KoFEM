@@ -518,9 +518,9 @@ fn a_uniaxial_stretch_matches_the_closed_form_neo_hookean_answer() {
                 );
             }
         }
-        // The pulling force: σxx on the current area lateral² of the face.
-        let mut problem = NeoHookean::new(mesh);
-        let (force, _) = evaluate(&mut problem, &solution.displacements);
+        // The pulling force, the reaction of the pulled face: σxx on its
+        // current area lateral².
+        let force = &solution.internal_force;
         let pull: f64 = mesh
             .node_coordinates()
             .iter()

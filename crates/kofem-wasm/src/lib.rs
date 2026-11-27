@@ -14,6 +14,7 @@ mod contact;
 mod convergence;
 mod failure;
 mod field;
+mod large_deformation;
 mod mixed;
 mod outline;
 mod report;
@@ -33,6 +34,7 @@ pub use convergence::{
 };
 pub use failure::{record_panics, take_panic_message};
 pub use field::{check_field_expression, evaluate_field_expression};
+pub use large_deformation::{LargeDeformationRun, LargeDeformationSolution};
 pub use mixed::MixedModel;
 pub use outline::{outer_faces, unique_edges, MeshOuterFaces};
 pub use report::report_stats;
@@ -378,7 +380,8 @@ impl ElasticModel {
     /// or −1. The layout of the result is `REACTION_STRIDE` values per
     /// support, then the applied force and the applied force on supported
     /// DOFs (`kofem_fem::reactions`). A coupled or tied solve's reactions go
-    /// through its reduction; a quadratic model's edge, face and centre nodes
+    /// through its reduction, a large-deformation solve's from its internal
+    /// force; a quadratic model's edge, face and centre nodes
     /// fold onto the vertices.
     ///
     /// # Errors
@@ -396,17 +399,36 @@ impl ElasticModel {
         } else {
             forces.to_vec()
         };
-        let residual =
-            self.stiffness
-                .with("supportReactions", |stiffness| match &solution.reduction {
-                    Some(reduction) => reduction
-                        .reactions(stiffness, &solution.full_dofs, &wide_forces)
-                        .map_err(|error| to_js(&error)),
-                    None => Ok(widen_translations(
-                        &nodal_residual(stiffness, &solution.full_dofs, forces)
-                            .map_err(|error| to_js(&error))?,
-                    )),
-                })?;
+        let residual = match &solution.internal_force {
+            Some(internal_force) => {
+                if internal_force.len() != forces.len() {
+                    return Err(JsError::new(&format!(
+                        "support reactions: {} forces for a large-deformation solve of {} DOFs",
+                        forces.len(),
+                        internal_force.len()
+                    )));
+                }
+                widen_translations(
+                    &internal_force
+                        .iter()
+                        .zip(forces)
+                        .map(|(internal, force)| internal - force)
+                        .collect::<Vec<_>>(),
+                )
+            }
+            None => {
+                self.stiffness
+                    .with("supportReactions", |stiffness| match &solution.reduction {
+                        Some(reduction) => reduction
+                            .reactions(stiffness, &solution.full_dofs, &wide_forces)
+                            .map_err(|error| to_js(&error)),
+                        None => Ok(widen_translations(
+                            &nodal_residual(stiffness, &solution.full_dofs, forces)
+                                .map_err(|error| to_js(&error))?,
+                        )),
+                    })?
+            }
+        };
         let reactions = fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
         let loads = fold_onto_vertices(&self.mesh, &wide_forces).map_err(|error| to_js(&error))?;
         let mut summary =
@@ -454,6 +476,7 @@ impl ElasticModel {
             unused_vertices: prepared.unused_vertices,
             level_sizes: prepared.levels.iter().map(|level| level.unknowns).collect(),
             reduction: None,
+            internal_force: None,
         })
     }
 
@@ -986,6 +1009,7 @@ impl SolveRun {
             level_sizes,
             full_dofs,
             reduction: self.reduction,
+            internal_force: None,
         })
     }
 }
@@ -1056,6 +1080,9 @@ pub struct ElasticSolution {
     pub(crate) full_dofs: Vec<f64>,
     /// A coupled, tied or mixed solve's reduction, for its reactions.
     pub(crate) reduction: Option<CoupledReduction>,
+    /// A large-deformation solve's internal force at the solution, for its
+    /// reactions: the stiffness times the displacements is not that force.
+    pub(crate) internal_force: Option<Vec<f64>>,
 }
 
 #[wasm_bindgen]

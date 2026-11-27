@@ -11,6 +11,7 @@ import {
 } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
+import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import {
   amgUnavailableReason,
   preconditionerNotice,
@@ -65,6 +66,14 @@ export function useSolver() {
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const contactGroups = useModelStore((s) => s.contactGroups);
+  const largeDeformation = useModelStore((s) => s.largeDeformation);
+  const setLargeDeformation = useModelStore((s) => s.setLargeDeformation);
+  const loadIncrements = useModelStore((s) => s.loadIncrements);
+  const setLoadIncrements = useModelStore((s) => s.setLoadIncrements);
+  const largeDeformationRun = largeDeformationSetting(
+    largeDeformation,
+    loadIncrements,
+  );
   // Surface mesh + CAD face ids drive auto-shell idealisation of thin bodies
   // in the worker's coupled solve.
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
@@ -120,10 +129,12 @@ export function useSolver() {
           constraints,
           loads,
           surfaceLoads,
+          temperature,
           elementOrder,
           tieGroups,
           couplings: couplingGroups,
           contacts: contactGroups,
+          largeDeformation: largeDeformationRun,
         }
       : null,
   );
@@ -260,6 +271,7 @@ export function useSolver() {
               elements,
             ),
             elementOrder,
+            largeDeformation: largeDeformationRun,
             warnings: [
               ...(solverNote === null ? [] : [solverNote]),
               ...thinWalls.map(thinWallMessage),
@@ -289,6 +301,8 @@ export function useSolver() {
       contactGroups,
       surfaceTriangles,
       surfaceFaceIds,
+      largeDeformation,
+      loadIncrements,
     });
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
@@ -379,6 +393,10 @@ export function useSolver() {
     elementOrder,
     solverMethod,
     setSolverMethod,
+    largeDeformation,
+    setLargeDeformation,
+    loadIncrements,
+    setLoadIncrements,
     solverNote,
     logs,
   };

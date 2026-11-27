@@ -468,6 +468,14 @@ function meshSolverSection(doc: ReportDocument, numbering: Numbering): string {
         ` data-testid="report-solver-path" data-path="${run.path}"`,
       ],
       [
+        text.deformation,
+        escapeHtml(
+          run.largeDeformation === null
+            ? text.smallDeformation
+            : text.largeDeformation(run.largeDeformation.increments),
+        ),
+      ],
+      [
         text.preconditioner,
         escapeHtml(preconditionerLabel(run.preconditioner)),
       ],

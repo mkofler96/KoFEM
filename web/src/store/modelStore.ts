@@ -54,6 +54,7 @@ import { createContactSlice, type ContactSlice } from "./contactSlice";
 import { createCouplingSlice, type CouplingSlice } from "./couplingSlice";
 import { createPickSlice, type PickSlice } from "./pickSlice";
 import { createResultsSlice, type ResultsSlice } from "./resultsSlice";
+import { DEFAULT_LOAD_INCREMENTS } from "../lib/solve/largeDeformation";
 import {
   createTopOptSlice,
   DEFAULT_TOPOPT_SETTINGS,
@@ -224,6 +225,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.result = a.result;
       s.resultType = a.resultType;
       s.elementOrder = a.elementOrder;
+      s.largeDeformation = a.largeDeformation;
+      s.loadIncrements = a.loadIncrements;
       s.handCheck = a.handCheck;
       s.legendRange = null;
       s.probes = [];
@@ -340,6 +343,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.deformScale = AUTO_DEFORM_SCALE;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
+      s.largeDeformation = false;
+      s.loadIncrements = DEFAULT_LOAD_INCREMENTS;
       s.handCheck = null;
       s.probes = [];
       s.nextProbeId = 1;

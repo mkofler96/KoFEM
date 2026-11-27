@@ -24,6 +24,7 @@
 import type {
   Constraint,
   Element,
+  LargeDeformation,
   Load,
   Material,
   Node,
@@ -69,6 +70,7 @@ import {
   runContactSolve,
   type ContactFemModule,
 } from "./contactRun.js";
+import { runLargeDeformationSolve } from "./largeDeformation.js";
 import { tr } from "../../i18n/useLocale.js";
 import { solveMessages } from "../../i18n/messages/solve.js";
 
@@ -219,6 +221,8 @@ export interface AmgSolidModel {
   constraintTies?: TieConstraint[];
   // Frictionless contacts; absent or empty when it has none.
   contacts?: ContactDefinition[];
+  // Large deformation; absent or null: the linear solve.
+  largeDeformation?: LargeDeformation | null;
 }
 
 // The CG budget when the solve request names none (the former MFEM path's
@@ -244,6 +248,9 @@ const RELATIVE_TOLERANCE = 1e-6;
 // on quadratic elements their tied surface's edge and face nodes come along.
 // Contacts (`model.contacts`, linear elements) make it a contact solve, which
 // also returns the contact pressure and status of every slave node.
+// `model.largeDeformation` makes it a Neo-Hookean solve over load increments,
+// whose stresses are Cauchy stresses; routeSolve has refused it with a
+// contact, a constraint tie or a temperature change.
 export async function solveSolidInRust(
   fem: SolidFemModule,
   model: AmgSolidModel,
@@ -282,11 +289,29 @@ export async function solveSolidInRust(
         `The AMG solver received ${elastic.vertexCount} vertices for ${model.nodes.length} nodes`,
       );
     const started = performance.now();
-    const nonzeros = elastic.assemble();
-    log(
-      `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
-        `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
-    );
+    const largeDeformation = model.largeDeformation ?? null;
+    if (largeDeformation !== null) {
+      const unsupported = [
+        ...((model.contacts ?? []).length > 0 ? ["contact"] : []),
+        ...((model.constraintTies ?? []).length > 0 ? ["constraint ties"] : []),
+        ...(model.temperature ? ["a temperature change"] : []),
+      ];
+      if (unsupported.length > 0)
+        throw new Error(
+          `The large-deformation solve does not take ${unsupported.join(", ")}.`,
+        );
+      // The Newton solve assembles its own tangent each iteration.
+      log(
+        `${METHOD_LABEL[method]} large-deformation solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
+          `${elastic.dofCount} unknowns, Neo-Hookean solids over ${largeDeformation.increments} load increments`,
+      );
+    } else {
+      const nonzeros = elastic.assemble();
+      log(
+        `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
+          `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
+      );
+    }
     const { fixedDofs, fixedValues, forces } = rustSolidBoundaryConditions(
       elastic,
       model,
@@ -334,6 +359,27 @@ export async function solveSolidInRust(
         reactions: readReactions(elastic, solution, forces, supports),
       };
     };
+    if (largeDeformation !== null)
+      return await solveLargeDeformation(
+        fem,
+        elastic,
+        { fixedDofs, fixedValues, forces },
+        largeDeformation.increments,
+        method,
+        iterationLimit,
+        started,
+        log,
+        (solution) => {
+          const nodal = solution.displacements;
+          return {
+            displacements: nodal.slice(0, 3 * elastic.vertexCount),
+            vonMises: elastic.cauchyVonMises(nodal),
+            stress: uniformStress(elastic.cauchyStressTensors(nodal)),
+            reactions: readReactions(elastic, solution, forces, supports),
+            contact: null,
+          };
+        },
+      );
     const contacts = model.contacts ?? [];
     if (contacts.length > 0)
       return await solveWithContact(
@@ -478,6 +524,62 @@ async function solveWithContact<T>(
     release(options);
     release(pairs);
     release(ties);
+  }
+}
+
+// The large-deformation solve of a solid model (see solveSolidInRust): each
+// Newton correction solved by CG with `method` to the solid solve's
+// tolerance, which also bounds the out-of-balance force.
+async function solveLargeDeformation<T>(
+  fem: FemModule,
+  elastic: ElasticModel,
+  conditions: {
+    fixedDofs: Uint32Array;
+    fixedValues: Float64Array;
+    forces: Float64Array;
+  },
+  increments: number,
+  method: SolverMethod,
+  iterationLimit: number | undefined,
+  started: number,
+  log: (line: string) => void,
+  read: (solution: ElasticSolution) => T,
+): Promise<T> {
+  const options = new fem.SolveOptions(
+    RELATIVE_TOLERANCE,
+    // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
+    iterationLimit ?? DEFAULT_ITERATION_LIMIT,
+    method,
+    "residual",
+  );
+  try {
+    const solution = await runLargeDeformationSolve(
+      elastic,
+      conditions.fixedDofs,
+      conditions.fixedValues,
+      conditions.forces,
+      options,
+      increments,
+      log,
+    );
+    try {
+      const elasticSolution = solution.elastic;
+      try {
+        const result = read(elasticSolution);
+        const seconds = (performance.now() - started) / 1000;
+        log(
+          `Large deformation converged: ${increments} load increments, ${solution.iterations} Newton iterations, ` +
+            `${elasticSolution.iterations} CG iterations, each increment checked stable, ${seconds.toFixed(2)} s`,
+        );
+        return result;
+      } finally {
+        release(elasticSolution);
+      }
+    } finally {
+      release(solution);
+    }
+  } finally {
+    release(options);
   }
 }
 

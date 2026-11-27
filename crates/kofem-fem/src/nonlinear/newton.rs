@@ -99,6 +99,9 @@ pub struct NewtonSolution {
     /// Displacement per node, x,y,z interleaved, as in
     /// [`crate::StaticSolution`]; unused vertices are held at zero.
     pub displacements: Vec<f64>,
+    /// The internal force at the solution, one entry per DOF: its excess
+    /// over the loads is the support reactions.
+    pub internal_force: Vec<f64>,
     pub increments: Vec<IncrementReport>,
     pub unused_vertices: usize,
 }
@@ -352,6 +355,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         }
         Ok(NewtonSolution {
             displacements: self.displacements,
+            internal_force: self.internal_force,
             increments: self.reports,
             unused_vertices: self.unused_vertices,
         })

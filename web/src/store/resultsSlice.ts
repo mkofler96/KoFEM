@@ -18,6 +18,12 @@ import {
   type SolverMethod,
 } from "../lib/solve/amg";
 import type { SolveRoute } from "../lib/solve/route";
+import type { LargeDeformation } from "../workers/solverTypes";
+import {
+  DEFAULT_LOAD_INCREMENTS,
+  isLoadIncrementCount,
+  MAX_LOAD_INCREMENTS,
+} from "../lib/solve/largeDeformation";
 import type { Material } from "./materialSlice";
 import type { Property } from "./geometrySlice";
 import {
@@ -59,6 +65,8 @@ export interface SolveRun {
   path: SolveRoute["path"];
   preconditioner: Preconditioner;
   elementOrder: number;
+  // The large deformation solved, or null for the linear solve.
+  largeDeformation: LargeDeformation | null;
   warnings: string[];
   materials: Material[];
   properties: Property[];
@@ -113,6 +121,11 @@ export interface ResultsSlice {
   // covers all-solid tet and hex models of order 1 or 2, as Gauss–Seidel in
   // Rust does. A model with shells may solve with another (solvePreconditioner).
   solverMethod: SolverMethod;
+  // Large deformation (KOF-486): solve the solids as Neo-Hookean over
+  // `loadIncrements` load increments instead of the linear solve. The count is
+  // kept while the option is off.
+  largeDeformation: boolean;
+  loadIncrements: number;
   // Colorbar limits for the displayed field, or null for the field's own
   // min/max. A single stress concentration otherwise takes the whole colour
   // map and flattens everything else to blue, hiding the second-highest
@@ -152,6 +165,9 @@ export interface ResultsSlice {
   setRunning(v: boolean): void;
   setElementOrder(order: number): void;
   setSolverMethod(method: SolverMethod): void;
+  setLargeDeformation(on: boolean): void;
+  // Throws unless `count` is a whole number from 1 to MAX_LOAD_INCREMENTS.
+  setLoadIncrements(count: number): void;
   setLegendRange(range: LegendRange | null): void;
   setShellSurface(surface: ShellSurface): void;
   setProbing(on: boolean): void;
@@ -181,6 +197,8 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   // an opt-in upgrade (Solver settings) — far more accurate but ~8× the DOFs.
   elementOrder: 1,
   solverMethod: DEFAULT_SOLVER_METHOD,
+  largeDeformation: false,
+  loadIncrements: DEFAULT_LOAD_INCREMENTS,
   legendRange: null,
   shellSurface: "top",
   mode: "geometry",
@@ -223,6 +241,18 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setSolverMethod: (method) =>
     set((s) => {
       s.solverMethod = method;
+    }),
+  setLargeDeformation: (on) =>
+    set((s) => {
+      s.largeDeformation = on;
+    }),
+  setLoadIncrements: (count) =>
+    set((s) => {
+      if (!isLoadIncrementCount(count))
+        throw new Error(
+          `load increments must be a whole number from 1 to ${MAX_LOAD_INCREMENTS}, got ${count}`,
+        );
+      s.loadIncrements = count;
     }),
   setShellSurface: (surface) =>
     set((s) => {

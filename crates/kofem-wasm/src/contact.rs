@@ -158,6 +158,7 @@ impl ContactRun {
                 unused_vertices: solution.unused_vertices,
                 level_sizes: Vec::new(),
                 reduction: None,
+                internal_force: None,
             },
             state,
             iterations,

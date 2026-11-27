@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { TemperatureLoad } from "../workers/solverTypes";
+import type { LargeDeformation, TemperatureLoad } from "../workers/solverTypes";
+import {
+  DEFAULT_LOAD_INCREMENTS,
+  isLoadIncrementCount,
+  MAX_LOAD_INCREMENTS,
+} from "./solve/largeDeformation";
 import {
   cornerCount,
   SHELL_SURFACES,
@@ -124,6 +129,9 @@ export interface AnalysisState {
   topOpt?: TopOptSettingsState;
   // FE polynomial order of the solve (1 linear, 2 quadratic).
   elementOrder: number;
+  // The Solve panel's large-deformation option and its load increments.
+  largeDeformation: boolean;
+  loadIncrements: number;
   // The closed-form check a gallery example carries (lib/handCheck), or null.
   handCheck: HandCheck | null;
   // Element sizes on selected CAD faces (KOF-394); empty for none.
@@ -187,6 +195,9 @@ interface KofemFieldDataV1 {
   // Absent in files written before the order was saved; they were solved with
   // whatever order the session had, and reopen linear (the app's default).
   elementOrder?: number;
+  // Written only while on (KOF-486), so files without it are unchanged; such
+  // a file reopens with the option off and the default increments.
+  largeDeformation?: LargeDeformation;
   // Only gallery examples carry one.
   handCheck?: HandCheck;
   // Written only when there are some (KOF-394), so files without face sizes
@@ -408,6 +419,9 @@ export function serializeAnalysis(state: AnalysisState): string {
     surfaceFaceIds: state.surfaceFaceIds,
     topOpt: state.topOpt,
     elementOrder: state.elementOrder,
+    ...(state.largeDeformation
+      ? { largeDeformation: { increments: state.loadIncrements } }
+      : {}),
     ...(state.handCheck ? { handCheck: state.handCheck } : {}),
     // A model that never had a contact saves as it did before contact
     // existed (KOF-485).
@@ -611,6 +625,17 @@ function checkFaceSizes(value: unknown): void {
     );
 }
 
+function checkLargeDeformation(value: unknown): void {
+  const increments =
+    typeof value === "object" && value !== null
+      ? (value as Partial<LargeDeformation>).increments
+      : undefined;
+  if (typeof increments !== "number" || !isLoadIncrementCount(increments))
+    throw new Error(
+      `Invalid analysis file: "largeDeformation" must give its load increments, a whole number from 1 to ${MAX_LOAD_INCREMENTS}`,
+    );
+}
+
 function checkMeshSizes(value: unknown): void {
   const sizes = value as Partial<MeshSizes> | null;
   const valid =
@@ -689,6 +714,8 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
 
   if (meta.faceSizes !== undefined) checkFaceSizes(meta.faceSizes);
   if (meta.meshSizes !== undefined) checkMeshSizes(meta.meshSizes);
+  if (meta.largeDeformation !== undefined)
+    checkLargeDeformation(meta.largeDeformation);
 
   // Ties postdate the first analysis files, so absence is legitimate — but a
   // present entry of the wrong shape is not.
@@ -967,6 +994,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
     topOpt: meta.topOpt,
     // eslint-disable-next-line kofem/no-silent-fallback -- files written before the order was saved carry none; linear is the app's documented default order
     elementOrder: meta.elementOrder ?? 1,
+    largeDeformation: meta.largeDeformation !== undefined,
+    loadIncrements:
+      // eslint-disable-next-line kofem/no-silent-fallback -- a file without large deformation was solved with it off; the count matters only once the user turns it on, and starts at the app's default as in a new analysis
+      meta.largeDeformation?.increments ?? DEFAULT_LOAD_INCREMENTS,
     // Only gallery examples carry a hand check.
     handCheck: meta.handCheck ?? null,
     faceSizes: meta.faceSizes ?? [],

@@ -7,6 +7,7 @@
 
 import type { ModelState } from "../../store/modelStore";
 import type { SolvePayload } from "../../workers/solverTypes";
+import { largeDeformationSetting } from "./largeDeformation";
 
 export type SolveSource = Pick<
   ModelState,
@@ -25,6 +26,8 @@ export type SolveSource = Pick<
   | "contactGroups"
   | "surfaceTriangles"
   | "surfaceFaceIds"
+  | "largeDeformation"
+  | "loadIncrements"
 >;
 
 export function solvePayload(s: SolveSource): SolvePayload {
@@ -46,5 +49,9 @@ export function solvePayload(s: SolveSource): SolvePayload {
     // bodies in the worker's coupled solve.
     surfaceTriangles: s.surfaceTriangles,
     surfaceFaceIds: s.surfaceFaceIds,
+    largeDeformation: largeDeformationSetting(
+      s.largeDeformation,
+      s.loadIncrements,
+    ),
   };
 }

@@ -5,9 +5,14 @@
 // that cannot honour a tie or an element order refuses the model by name rather
 // than solve a different model; the panels show the same words before the run.
 
-import type { TieDefinition } from "../tie.js";
+import { tieMethod, type TieDefinition } from "../tie.js";
 import type { ContactDefinition } from "../contact.js";
-import type { Element, SurfaceLoad } from "../../workers/solverTypes.js";
+import type {
+  Element,
+  LargeDeformation,
+  SurfaceLoad,
+  TemperatureLoad,
+} from "../../workers/solverTypes.js";
 import { faceKey, loadableFaceKeys } from "../../store/boundaryRebuild.js";
 import { tr } from "../../i18n/useLocale.js";
 import { refusalMessages } from "../../i18n/messages/refusals.js";
@@ -50,6 +55,47 @@ export function contactRefusal(
   if (elementOrder !== 1)
     return text.contactOrder(namedContacts(contacts), elementOrder);
   return null;
+}
+
+// Large deformation is solved by the solid solve only (KOF-486), which does
+// not yet carry a contact, a constraint tie or a temperature change with it.
+// A node-merge tie only joins the mesh, so it solves. Null when the route and
+// the model take it.
+export function largeDeformationRefusal(
+  model: {
+    largeDeformation?: LargeDeformation | null;
+    contacts?: ContactDefinition[];
+    tieGroups?: TieDefinition[];
+    temperature?: TemperatureLoad | null;
+  },
+  path: "solid" | "shell" | "coupled" | "auto-shell",
+): string | null {
+  if (!model.largeDeformation) return null;
+  const text = tr(refusalMessages);
+  if (path !== "solid") return text.largeDeformationNotSolid;
+  const contacts = model.contacts ?? [];
+  if (contacts.length > 0)
+    return text.largeDeformationContacts(
+      namedContacts(contacts),
+      contacts.length,
+    );
+  const constraintTies = (model.tieGroups ?? []).filter(
+    (tie) => tieMethod(tie) === "mpc",
+  );
+  if (constraintTies.length > 0)
+    return text.largeDeformationTies(
+      namedTies(constraintTies),
+      constraintTies.length,
+    );
+  if (model.temperature) return text.largeDeformationTemperature;
+  return null;
+}
+
+// The topology optimizer is linear: it refuses large deformation.
+export function topOptLargeDeformationRefusal(
+  largeDeformation: LargeDeformation | null | undefined,
+): string | null {
+  return largeDeformation ? tr(refusalMessages).topOptLargeDeformation : null;
 }
 
 // The topology optimizer solves no contact.
