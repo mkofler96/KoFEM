@@ -10,6 +10,7 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod contact;
 mod convergence;
 mod failure;
 mod field;
@@ -24,6 +25,7 @@ mod stiffness;
 mod tie;
 mod topology;
 
+pub use contact::{ContactPairs, ContactRun, ContactSolution};
 pub use convergence::{
     clamped_free_wedge_exponent, extrapolate_to_zero_size, fit_convergence_rate,
     relative_element_sizes, ConvergenceRate, ZeroSizeExtrapolation,
@@ -41,6 +43,8 @@ pub use shellize::{
 pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
+use kofem_fem::contact::{ContactCg, ContactInterface, ContactPair};
+use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonSettings, NewtonStatus};
 use kofem_fem::{
     assemble_stiffness, corner_stress_tensors, fold_onto_vertices, load_on_held_nodes,
     nodal_residual, prepare_coupled_static, prepare_static, prepare_tied_static, solve_pcg_with,
@@ -609,6 +613,100 @@ impl ElasticModel {
     }
 }
 
+#[wasm_bindgen]
+impl ElasticModel {
+    /// Solve with frictionless contact between the surface pairs `contacts`
+    /// (`kofem_fem::contact`), on linear elements, with the constraint ties
+    /// `ties` (an empty table for none) and constraints and forces as for
+    /// `startSolve`, 3 per node. Returns a run the caller advances in
+    /// steps; each correction solve stops at the options' tolerance and fails
+    /// after their iteration budget, and the active set must settle within
+    /// `max_iterations` iterations. The out-of-balance force is held to the
+    /// same tolerance as each correction.
+    ///
+    /// # Errors
+    /// Missing assembly, a contact pair whose sides name no boundary face or
+    /// do not face each other, a quadratic model, malformed ties,
+    /// constraints or forces, or a zero iteration limit.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the tied solve's inputs plus the contact pairs and their iteration limit"
+    )]
+    #[wasm_bindgen(js_name = startContactSolve)]
+    pub fn start_contact_solve(
+        &mut self,
+        contacts: &ContactPairs,
+        ties: &Ties,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: &[f64],
+        options: &SolveOptions,
+        max_iterations: usize,
+    ) -> Result<ContactRun, JsError> {
+        let stiffness = self
+            .stiffness
+            .with("startContactSolve", |assembled| Ok(assembled.clone()))?;
+        let boundary = self
+            .boundary
+            .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
+        let pairs = contacts
+            .sides
+            .iter()
+            .enumerate()
+            .map(|(index, (side_a, side_b))| {
+                ContactPair::between(&self.mesh, boundary, side_a, side_b)
+                    .map_err(|error| JsError::new(&format!("contact pair {index}: {error}")))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let interface = ContactInterface::new(&self.mesh, &pairs).map_err(|error| to_js(&error))?;
+        let vertex_ties = if ties.slaves.is_empty() {
+            None
+        } else {
+            Some(
+                VertexTies::new(
+                    self.mesh.vertex_count(),
+                    &ties.slaves,
+                    &ties.offsets,
+                    &ties.masters,
+                    &ties.weights,
+                )
+                .and_then(|vertex_ties| vertex_ties.with_interfaces(&ties.interfaces))
+                .map_err(|error| to_js(&error))?,
+            )
+        };
+        let solver = ContactCg::new(
+            &self.mesh,
+            interface,
+            vertex_ties,
+            options.settings,
+            options.preconditioner,
+        );
+        let run = NewtonRun::start(
+            LinearElastic::new(stiffness),
+            solver,
+            &self.mesh,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            NewtonSettings {
+                increments: 1,
+                max_iterations,
+                tolerance: options.settings.relative_tolerance,
+            },
+        )
+        .map_err(|error| to_js(&error))?;
+        Ok(ContactRun {
+            run,
+            status: NewtonStatus::Solving {
+                increment: 1,
+                iteration: 1,
+                cg_iterations: 0,
+            },
+            preconditioner: preconditioner_name(options.preconditioner).to_owned(),
+        })
+    }
+}
+
 /// Couplings for `ElasticModel.startCoupledSolve` and
 /// `MixedModel.startSolve`, in the CSR layout of the engine's
 /// `solve_coupled`: coupling k ties vertex `reference[k]` to vertices
@@ -944,6 +1042,7 @@ impl SolveOptions {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct ElasticSolution {
     displacements: Vec<f64>,
     iterations: usize,

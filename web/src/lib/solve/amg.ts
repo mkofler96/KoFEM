@@ -40,6 +40,7 @@ import type {
   Ties,
 } from "../../wasm/fem/kofem_wasm.js";
 import type { TieConstraint } from "../tieConstraints.js";
+import type { ContactDefinition, ContactResult } from "../contact.js";
 import type { SolveRoute } from "./route.js";
 import {
   groupDirichlet,
@@ -62,6 +63,12 @@ import {
   type SupportOwners,
 } from "./reactions.js";
 import { release } from "./rustFailure.js";
+import {
+  contactPairs,
+  readContact,
+  runContactSolve,
+  type ContactFemModule,
+} from "./contactRun.js";
 import { tr } from "../../i18n/useLocale.js";
 import { solveMessages } from "../../i18n/messages/solve.js";
 
@@ -185,9 +192,9 @@ export interface FemModule {
   SolveOptions: typeof SolveOptions;
 }
 
-// The solid solve needs the tie tables too, for constraint ties, and the
-// formula evaluator for a temperature change.
-export interface SolidFemModule extends FemModule {
+// The solid solve needs the tie tables too, for constraint ties, the
+// formula evaluator for a temperature change, and the contact pairs.
+export interface SolidFemModule extends FemModule, ContactFemModule {
   Ties: typeof Ties;
   evaluateFieldExpression: EvaluateField;
 }
@@ -210,6 +217,8 @@ export interface AmgSolidModel {
   // The constraint-tie equations of the model's "mpc" connections
   // (weldTies), in original node ids; absent or empty when it has none.
   constraintTies?: TieConstraint[];
+  // Frictionless contacts; absent or empty when it has none.
+  contacts?: ContactDefinition[];
 }
 
 // The CG budget when the solve request names none (the former MFEM path's
@@ -233,6 +242,8 @@ const RELATIVE_TOLERANCE = 1e-6;
 // their displacements stay there.
 // Constraint ties (`model.constraintTies`) are eliminated in the same solve;
 // on quadratic elements their tied surface's edge and face nodes come along.
+// Contacts (`model.contacts`, linear elements) make it a contact solve, which
+// also returns the contact pressure and status of every slave node.
 export async function solveSolidInRust(
   fem: SolidFemModule,
   model: AmgSolidModel,
@@ -248,6 +259,7 @@ export async function solveSolidInRust(
   vonMises: Float64Array;
   stress: ElementStress;
   reactions: ReactionSummary | null;
+  contact: ContactResult | null;
 }> {
   const reason = amgUnavailableReason({
     elements: model.elements,
@@ -308,6 +320,36 @@ export async function solveSolidInRust(
     );
 
     const constraintTies = model.constraintTies ?? [];
+    // One triple per node: the vertices first, then any edge nodes.
+    const readSolution = (solution: ElasticSolution) => {
+      const nodal = solution.displacements;
+      return {
+        displacements: nodal.slice(0, 3 * elastic.vertexCount),
+        vonMises: elastic.vonMises(nodal),
+        stress: uniformStress(
+          thermal
+            ? elastic.stressTensorsThermal(nodal, thermal.alpha, thermal.deltaT)
+            : elastic.stressTensors(nodal),
+        ),
+        reactions: readReactions(elastic, solution, forces, supports),
+      };
+    };
+    const contacts = model.contacts ?? [];
+    if (contacts.length > 0)
+      return await solveWithContact(
+        fem,
+        elastic,
+        model,
+        contacts,
+        constraintTies,
+        refVid,
+        { fixedDofs, fixedValues, forces },
+        method,
+        iterationLimit,
+        started,
+        log,
+        readSolution,
+      );
     const start =
       constraintTies.length === 0
         ? (options: SolveOptions) =>
@@ -349,27 +391,93 @@ export async function solveSolidInRust(
       started,
       askToContinue,
       log,
-      (solution) => {
-        // One triple per node: the vertices first, then any edge nodes.
-        const nodal = solution.displacements;
-        return {
-          displacements: nodal.slice(0, 3 * elastic.vertexCount),
-          vonMises: elastic.vonMises(nodal),
-          stress: uniformStress(
-            thermal
-              ? elastic.stressTensorsThermal(
-                  nodal,
-                  thermal.alpha,
-                  thermal.deltaT,
-                )
-              : elastic.stressTensors(nodal),
-          ),
-          reactions: readReactions(elastic, solution, forces, supports),
-        };
-      },
+      (solution) => ({ ...readSolution(solution), contact: null }),
     );
   } finally {
     release(elastic);
+  }
+}
+
+// The contact solve of an assembled solid model (see solveSolidInRust): the
+// constraint ties, if any, eliminated with it; each correction solved by CG
+// with `method` to the solid solve's tolerance.
+async function solveWithContact<T>(
+  fem: SolidFemModule,
+  elastic: ElasticModel,
+  model: AmgSolidModel,
+  contacts: ContactDefinition[],
+  constraintTies: TieConstraint[],
+  refVid: VertexIndexer,
+  conditions: {
+    fixedDofs: Uint32Array;
+    fixedValues: Float64Array;
+    forces: Float64Array;
+  },
+  method: SolverMethod,
+  iterationLimit: number | undefined,
+  started: number,
+  log: (line: string) => void,
+  read: (solution: ElasticSolution) => T,
+): Promise<T & { contact: ContactResult }> {
+  const tables = rustTieTables(constraintTies, refVid);
+  const ties = new fem.Ties(
+    tables.slaves,
+    tables.offsets,
+    tables.masters,
+    tables.weights,
+    tables.interfaces,
+  );
+  const pairs = contactPairs(fem, contacts, refVid);
+  const options = new fem.SolveOptions(
+    RELATIVE_TOLERANCE,
+    // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
+    iterationLimit ?? DEFAULT_ITERATION_LIMIT,
+    method,
+    "residual",
+  );
+  log(
+    `${METHOD_LABEL[method]} contact solve: ${contacts.length} contact pair(s), each touching node found by the active set`,
+  );
+  try {
+    const solution = await runContactSolve(
+      elastic,
+      pairs,
+      ties,
+      conditions.fixedDofs,
+      conditions.fixedValues,
+      conditions.forces,
+      options,
+      log,
+    );
+    try {
+      const contact = readContact(solution, model.nodes);
+      const elasticSolution = solution.elastic;
+      try {
+        const result = read(elasticSolution);
+        const touching = contact.closed.reduce(
+          (sum, closed) => sum + closed,
+          0,
+        );
+        const seconds = (performance.now() - started) / 1000;
+        log(
+          `Contact converged: ${contact.iterations} active-set iterations, ${elasticSolution.iterations} CG iterations, ` +
+            `${touching} of ${contact.nodeIds.length} slave nodes touching, contact force ${contact.force.toExponential(3)}, ${seconds.toFixed(2)} s`,
+        );
+        if (solution.heldNodes > 0)
+          log(
+            `${solution.heldNodes} slave node(s) held by a support along their normal — the support applies there`,
+          );
+        return { ...result, contact };
+      } finally {
+        release(elasticSolution);
+      }
+    } finally {
+      release(solution);
+    }
+  } finally {
+    release(options);
+    release(pairs);
+    release(ties);
   }
 }
 

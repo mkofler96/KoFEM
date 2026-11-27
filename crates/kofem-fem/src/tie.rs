@@ -748,41 +748,21 @@ pub fn translations(dofs: &[f64]) -> Vec<f64> {
         .collect()
 }
 
-/// Check one tied load case and set up its reduced system for CG: the
-/// uncoupled solve's inputs (`fixed_dofs`/`fixed_values` and `forces` over
-/// 3·node + component, vertex conditions extended to the edge nodes as
-/// [`crate::prepare_static`] does) plus the vertex ties, turned into node
-/// ties by [`node_ties`] and eliminated by the coupled solve's reduction.
-/// A slave DOF a support prescribes (directly, or extended to an edge node)
-/// keeps its support and is not tied.
+/// The ties of `ties` on `mesh` as the couplings the coupled reduction
+/// eliminates ([`node_ties`], then one [`CouplingKind::Tie`] per tied node).
+/// A slave DOF a support prescribes (`fixed_dofs` over 3·node + component,
+/// directly or extended to an edge node) keeps its support and is not tied.
 ///
 /// # Errors
-/// Malformed forces or constraints, ties that do not fit the mesh (see
-/// [`node_ties`]), ties that depend on each other in a cycle
-/// ([`FemError::CouplingCycle`]), a load nothing stiffens, or a multigrid
-/// setup that finds the model under-constrained.
-pub fn prepare_tied_static(
+/// Ties that do not fit the mesh (see [`node_ties`]), or a fixed DOF out of
+/// range.
+pub fn tie_couplings(
     mesh: &TetMesh,
-    stiffness: &CsrMatrix,
     ties: &VertexTies,
     fixed_dofs: &[u32],
     fixed_values: &[f64],
-    forces: &[f64],
-    preconditioner: PreconditionerChoice,
-) -> Result<PreparedTied, FemError> {
+) -> Result<(Vec<Coupling>, TieReport), FemError> {
     let dof_count = mesh.dof_count();
-    if forces.len() != dof_count {
-        return Err(FemError::ForceLength {
-            len: forces.len(),
-            count: dof_count,
-        });
-    }
-    if fixed_dofs.len() != fixed_values.len() {
-        return Err(FemError::ConstraintValueCount {
-            dofs: fixed_dofs.len(),
-            values: fixed_values.len(),
-        });
-    }
     if let Some(&dof) = fixed_dofs.iter().find(|&&dof| dof as usize >= dof_count) {
         return Err(FemError::DofOutOfRange {
             dof,
@@ -821,6 +801,45 @@ pub fn prepare_tied_static(
             });
         }
     }
+    Ok((couplings, report))
+}
+
+/// Check one tied load case and set up its reduced system for CG: the
+/// uncoupled solve's inputs (`fixed_dofs`/`fixed_values` and `forces` over
+/// 3·node + component, vertex conditions extended to the edge nodes as
+/// [`crate::prepare_static`] does) plus the vertex ties, turned into node
+/// ties by [`node_ties`] and eliminated by the coupled solve's reduction.
+/// A slave DOF a support prescribes (directly, or extended to an edge node)
+/// keeps its support and is not tied.
+///
+/// # Errors
+/// Malformed forces or constraints, ties that do not fit the mesh (see
+/// [`node_ties`]), ties that depend on each other in a cycle
+/// ([`FemError::CouplingCycle`]), a load nothing stiffens, or a multigrid
+/// setup that finds the model under-constrained.
+pub fn prepare_tied_static(
+    mesh: &TetMesh,
+    stiffness: &CsrMatrix,
+    ties: &VertexTies,
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+    preconditioner: PreconditionerChoice,
+) -> Result<PreparedTied, FemError> {
+    let dof_count = mesh.dof_count();
+    if forces.len() != dof_count {
+        return Err(FemError::ForceLength {
+            len: forces.len(),
+            count: dof_count,
+        });
+    }
+    if fixed_dofs.len() != fixed_values.len() {
+        return Err(FemError::ConstraintValueCount {
+            dofs: fixed_dofs.len(),
+            values: fixed_values.len(),
+        });
+    }
+    let (couplings, report) = tie_couplings(mesh, ties, fixed_dofs, fixed_values)?;
     let wide = |dof: u32| to_u32(DOFS_PER_NODE * (dof as usize / 3) + dof as usize % 3);
     let wide_dofs: Vec<u32> = fixed_dofs.iter().map(|&dof| wide(dof)).collect();
     let mut wide_forces = vec![0.0; DOFS_PER_NODE * mesh.node_count()];

@@ -242,4 +242,6 @@ pub enum FemError {
     NewtonUnfinished { increment: u32, iteration: usize },
     #[error("nonlinear solve: {reason}")]
     NonlinearInput { reason: String },
+    #[error("contact: {reason}")]
+    Contact { reason: String },
 }

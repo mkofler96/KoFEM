@@ -5,7 +5,10 @@
 //! factor λ = n/N to the forces and to the prescribed displacements, then
 //! iterates u ← u + Δu with tangent · Δu = λ·f − `f_int(u)` until the
 //! out-of-balance force is small. The first correction of an increment moves
-//! the supported DOFs to their new values; later ones leave them there.
+//! the supported DOFs to their new values; later ones leave them there. The
+//! out-of-balance force is measured without the reactions of the supports
+//! and of the solver's own constraints ([`TangentSolver::settle`]); an
+//! increment has converged only once those constraints are settled too.
 //!
 //! Like [`crate::PcgRun`], the driver advances in steps: each
 //! [`NewtonRun::advance`] spends at most a CG budget and returns after every
@@ -25,10 +28,18 @@ pub struct NewtonSettings {
     /// Newton iterations allowed per increment.
     pub max_iterations: usize,
     /// An increment has converged when ‖`r_free`‖ ≤ `tolerance` ·
-    /// max(‖λ·`f_free`‖, ‖`f_int`‖), with `r_free` the out-of-balance force
-    /// on the free DOFs. The
-    /// internal force over all DOFs includes the support reactions, so a load
-    /// case driven by prescribed displacements alone has a scale too.
+    /// max(‖λ·`f_free`‖, ‖(K·λ·`u_s`)`_free`‖, ‖`f_int`‖), with `r_free` the
+    /// out-of-balance force on the free DOFs less the reactions of the
+    /// solver's constraints, and K·λ·`u_s` the force the prescribed
+    /// displacements exert on the model held everywhere else (K the tangent
+    /// at the start of the increment): the load of a case driven by
+    /// prescribed displacements, as λ·f is of one driven by forces. It gives
+    /// a scale where the internal force has none, as when the prescribed
+    /// displacements only move a body rigidly. The force the solver's own
+    /// constraints impose (contact pushing an overlap apart,
+    /// [`super::Settled::load`]) joins the max, its largest over the
+    /// increment. The internal force over all DOFs includes the support
+    /// reactions.
     pub tolerance: f64,
 }
 
@@ -99,6 +110,17 @@ pub struct NewtonRun<P, S> {
     forces: Vec<f64>,
     displacements: Vec<f64>,
     internal_force: Vec<f64>,
+    /// The out-of-balance force less every constraint reaction, at the
+    /// current iterate.
+    free_residual: Vec<f64>,
+    /// Whether the solver's constraints are unsettled at the current iterate.
+    constraints_pending: bool,
+    /// ‖(K·λ·`u_s`)`_free`‖ of the current increment (see
+    /// [`NewtonSettings::tolerance`]).
+    prescribed_load: f64,
+    /// The largest force the solver's constraints imposed in the current
+    /// increment ([`super::Settled::load`]).
+    constraint_load: f64,
     /// `None` while the solver holds it.
     tangent: Option<CsrMatrix>,
     increment: u32,
@@ -162,6 +184,10 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
             forces: forces.to_vec(),
             displacements: vec![0.0; dof_count],
             internal_force: Vec::new(),
+            free_residual: Vec::new(),
+            constraints_pending: false,
+            prescribed_load: 0.0,
+            constraint_load: 0.0,
             tangent: Some(tangent),
             increment: 1,
             iteration: 0,
@@ -177,7 +203,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
             unused_vertices: mesh.unused_vertex_count(),
         };
         run.evaluate()?;
-        run.begin_increment();
+        run.begin_increment()?;
         Ok(run)
     }
 
@@ -206,7 +232,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                             return Ok(NewtonStatus::Converged);
                         }
                         self.increment += 1;
-                        self.begin_increment();
+                        self.begin_increment()?;
                         continue;
                     }
                     if self.iteration == self.settings.max_iterations {
@@ -252,6 +278,13 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         &self.displacements
     }
 
+    /// The tangent solver, with whatever state its constraints are in (a
+    /// contact solver's pressures).
+    #[must_use]
+    pub fn solver(&self) -> &S {
+        &self.solver
+    }
+
     /// The converged solution.
     ///
     /// # Errors
@@ -274,7 +307,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         f64::from(self.increment) / f64::from(self.settings.increments)
     }
 
-    fn begin_increment(&mut self) {
+    fn begin_increment(&mut self) -> Result<(), FemError> {
         self.iteration = 0;
         self.report = IncrementReport {
             load_factor: self.load_factor(),
@@ -282,14 +315,73 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
             residuals: Vec::new(),
             cg_iterations: 0,
         };
-        self.relative_residual = self.measure_residual();
+        self.prescribed_load = self.measure_prescribed_load()?;
+        self.constraint_load = 0.0;
+        self.settle()
     }
 
-    /// Converged once the increment's supports are applied and the
-    /// out-of-balance force is within tolerance.
+    /// ‖(K·λ·`u_s`)`_free`‖ with the current tangent.
+    fn measure_prescribed_load(&self) -> Result<f64, FemError> {
+        if !self.supports_move {
+            return Ok(0.0);
+        }
+        let tangent = self
+            .tangent
+            .as_ref()
+            .ok_or_else(|| FemError::NonlinearInput {
+                reason: String::from("the tangent is held by an unfinished solve"),
+            })?;
+        let factor = self.load_factor();
+        let mut prescribed = vec![0.0; self.displacements.len()];
+        for (dof, value) in self.supports.prescribed() {
+            prescribed[dof] = factor * value;
+        }
+        let mut force = vec![0.0; prescribed.len()];
+        tangent.mul_vec(&prescribed, &mut force);
+        Ok(force
+            .iter()
+            .enumerate()
+            .filter(|(dof, _)| self.supports.value(*dof).is_none())
+            .map(|(_, value)| value * value)
+            .sum::<f64>()
+            .sqrt())
+    }
+
+    /// Converged once the increment's supports are applied, the solver's
+    /// constraints are settled and the out-of-balance force is
+    /// within tolerance.
     fn increment_converged(&self) -> bool {
         let supports_pending = self.iteration == 0 && self.supports_move;
-        !supports_pending && self.relative_residual <= self.settings.tolerance
+        !supports_pending
+            && !self.constraints_pending
+            && self.relative_residual <= self.settings.tolerance
+    }
+
+    /// Let the solver settle its constraints at the current iterate, and
+    /// measure what is left out of balance.
+    fn settle(&mut self) -> Result<(), FemError> {
+        let residual = self.out_of_balance();
+        let tangent = self
+            .tangent
+            .as_ref()
+            .ok_or_else(|| FemError::NonlinearInput {
+                reason: String::from("the tangent is held by an unfinished solve"),
+            })?;
+        let settled = self
+            .solver
+            .settle(&self.displacements, residual, tangent, &self.supports)
+            .map_err(|error| self.tangent_failure(&error))?;
+        if settled.residual.len() != self.displacements.len() {
+            return Err(FemError::DisplacementLength {
+                len: settled.residual.len(),
+                count: self.displacements.len(),
+            });
+        }
+        self.free_residual = settled.residual;
+        self.constraints_pending = settled.pending;
+        self.constraint_load = self.constraint_load.max(settled.load);
+        self.relative_residual = self.measure_residual();
+        Ok(())
     }
 
     /// λ·f − `f_int` on the free DOFs, zero on the supported ones.
@@ -313,7 +405,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let norm = |values: &mut dyn Iterator<Item = f64>| {
             values.map(|value| value * value).sum::<f64>().sqrt()
         };
-        let residual = norm(&mut self.out_of_balance().into_iter());
+        let residual = norm(&mut self.free_residual.iter().copied());
         let free_load = norm(
             &mut self
                 .forces
@@ -323,7 +415,10 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                 .map(|(_, force)| factor * force),
         );
         let internal = norm(&mut self.internal_force.iter().copied());
-        let scale = free_load.max(internal);
+        let scale = free_load
+            .max(self.prescribed_load)
+            .max(self.constraint_load)
+            .max(internal);
         if scale == 0.0 {
             // No load, no internal force: the residual is zero as well.
             0.0
@@ -374,7 +469,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         self.tangent = Some(tangent);
         self.iteration += 1;
         self.evaluate()?;
-        self.relative_residual = self.measure_residual();
+        self.settle()?;
         self.report.iterations = self.iteration;
         self.report.residuals.push(self.relative_residual);
         self.phase = Phase::Evaluated;

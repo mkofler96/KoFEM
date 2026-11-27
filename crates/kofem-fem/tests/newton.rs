@@ -544,3 +544,36 @@ fn the_linear_solve_checks_refuse_a_load_on_an_unused_vertex() {
     .expect("refused");
     assert_eq!(error, FemError::LoadOnUnusedVertex { vertex: unused });
 }
+
+/// Supports that only move the body rigidly leave every force at round-off:
+/// the force they exert on the held model is the increment's scale then.
+#[test]
+fn a_prescribed_rigid_motion_converges() {
+    let mesh = tet_mesh(ElementOrder::Linear);
+    let shift = [1e-3, -2e-3, 5e-4];
+    let mut fixed_dofs = Vec::new();
+    let mut fixed_values = Vec::new();
+    for (vertex, point) in mesh.vertices().iter().enumerate() {
+        if point[0] == 0.0 {
+            for (component, &value) in shift.iter().enumerate() {
+                fixed_dofs.push(3 * vertex as u32 + component as u32);
+                fixed_values.push(value);
+            }
+        }
+    }
+    let solution = solve_newton(
+        LinearElastic::new(assemble_stiffness(&mesh)),
+        DirichletCg::new(&mesh, CG, GS),
+        &mesh,
+        &fixed_dofs,
+        &fixed_values,
+        &vec![0.0; mesh.dof_count()],
+        settings(2),
+    )
+    .expect("converges");
+    for node in solution.displacements.chunks(3) {
+        for (value, expected) in node.iter().zip(shift) {
+            assert!((value - expected).abs() < 1e-12, "{node:?}");
+        }
+    }
+}

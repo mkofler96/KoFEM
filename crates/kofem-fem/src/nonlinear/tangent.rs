@@ -6,7 +6,11 @@
 //! supports prescribe, steps the solve in iteration budgets, and takes back
 //! the full-length correction. How the constraints enter the system
 //! (elimination here, a reduction with offsets for contact) and which Krylov
-//! method solves it are the solver's business.
+//! method solves it are the solver's business. So are the reactions of the
+//! constraints beyond the supports — contact pressures, tie forces — which
+//! [`TangentSolver::settle`] takes out of the out-of-balance force before the
+//! driver measures it, and the set of those constraints (contact's active
+//! set), which may change from one iterate to the next.
 
 use crate::amg::Preconditioner;
 use crate::cg::{CgSettings, PcgRun, PcgStatus};
@@ -25,9 +29,45 @@ pub struct SolveProgress {
     pub ready: bool,
 }
 
+/// What [`TangentSolver::settle`] found at an iterate.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Settled {
+    /// The out-of-balance force less the reactions of the solver's own
+    /// constraints, one entry per DOF: what vanishes at equilibrium.
+    pub residual: Vec<f64>,
+    /// Whether the solver's constraints are not settled at this iterate:
+    /// their set changed (a contact node opened or closed), or the iterate
+    /// does not satisfy them yet (an overlap still to push apart). It is then
+    /// no solution, whatever its residual.
+    pub pending: bool,
+    /// The force the solver's constraints impose at this iterate: the
+    /// tangent times the displacement they still prescribe (contact closing
+    /// a gap or pushing an overlap apart), on the free DOFs. A scale for the
+    /// residual where loads and supports give none, as the prescribed
+    /// displacements' force is.
+    pub load: f64,
+}
+
 /// One linear solve per Newton correction: tangent · Δu = residual, with Δu
 /// prescribed at the supported DOFs.
 pub trait TangentSolver {
+    /// Bring the solver's own constraints to the iterate `displacements`,
+    /// with out-of-balance force `residual` (zero at the `supports`, the
+    /// supports at load factor 1): take their reactions out of the residual
+    /// and update their set, saying whether they are settled. The driver calls it after every evaluation, and
+    /// before each [`TangentSolver::start`], which solves with the set it
+    /// leaves.
+    ///
+    /// # Errors
+    /// Constraints that do not fit the model or its supports.
+    fn settle(
+        &mut self,
+        displacements: &[f64],
+        residual: Vec<f64>,
+        tangent: &CsrMatrix,
+        supports: &Dirichlet,
+    ) -> Result<Settled, FemError>;
+
     /// Set up the solve. `residual` has one entry per DOF; its entries at the
     /// prescribed DOFs carry no meaning.
     ///
@@ -92,6 +132,22 @@ impl DirichletCg {
 }
 
 impl TangentSolver for DirichletCg {
+    /// The supports are its only constraints, and the driver already leaves
+    /// their reactions out.
+    fn settle(
+        &mut self,
+        _displacements: &[f64],
+        residual: Vec<f64>,
+        _tangent: &CsrMatrix,
+        _supports: &Dirichlet,
+    ) -> Result<Settled, FemError> {
+        Ok(Settled {
+            residual,
+            pending: false,
+            load: 0.0,
+        })
+    }
+
     fn start(
         &mut self,
         tangent: CsrMatrix,

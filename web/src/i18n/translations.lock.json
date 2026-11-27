@@ -3991,6 +3991,22 @@
     "es": "48c346909491",
     "pt": "c0cc88b6b2ef"
   },
+  "refusals.ts:refusalMessages.contactNotSolid": {
+    "en": "d76ae2041805",
+    "de": "e2e0525c8bc2",
+    "fr": "c5570ff3bd2b",
+    "it": "53d9ddd8746e",
+    "es": "4df34eee7edb",
+    "pt": "f81f651c060e"
+  },
+  "refusals.ts:refusalMessages.contactOrder": {
+    "en": "91376b43a6f6",
+    "de": "f189847f7034",
+    "fr": "24eac8f71dbc",
+    "it": "ac3aedf7011d",
+    "es": "233737ec8d97",
+    "pt": "34ec17a0d816"
+  },
   "refusals.ts:refusalMessages.holdBodies": {
     "en": "2e9fde6afe50",
     "de": "682cb634b0cf",
@@ -4070,6 +4086,22 @@
     "it": "bc0cbbfb644d",
     "es": "063e69f6c800",
     "pt": "85aab31fc491"
+  },
+  "refusals.ts:refusalMessages.namedContact": {
+    "en": "96c5d4509a5d",
+    "de": "7d5e069b9ce5",
+    "fr": "8bf4f5affe5a",
+    "it": "a355255597f8",
+    "es": "1fd3e3040147",
+    "pt": "5e3e031126ba"
+  },
+  "refusals.ts:refusalMessages.namedContacts": {
+    "en": "c7bdaf6edd2d",
+    "de": "f8bbdcfc000a",
+    "fr": "c7bdaf6edd2d",
+    "it": "271d793375e2",
+    "es": "dc458b8a68be",
+    "pt": "d432e22a5460"
   },
   "refusals.ts:refusalMessages.namedLoad": {
     "en": "aa09c5411c69",
@@ -4246,6 +4278,14 @@
     "it": "ad002c20d79a",
     "es": "5418379c2e24",
     "pt": "28570a213d66"
+  },
+  "refusals.ts:refusalMessages.topOptContacts": {
+    "en": "26ba97332787",
+    "de": "240b9133ad29",
+    "fr": "b6028a6e43ee",
+    "it": "1233e2c8add7",
+    "es": "0de84ad60f87",
+    "pt": "9de046d85e83"
   },
   "refusals.ts:refusalMessages.topOptLevelSetCouplings": {
     "en": "14902cd27524",
