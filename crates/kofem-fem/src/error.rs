@@ -62,6 +62,8 @@ pub enum FemError {
     },
     #[error("support reactions: {reason}")]
     ReactionInput { reason: String },
+    #[error("report: {reason}")]
+    ReportField { reason: String },
     #[error(
         "a coupled, tied or mixed solve works on a reduction of the stiffness matrix, \
          so it has no assembled matrix to give back"

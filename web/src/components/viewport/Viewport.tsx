@@ -5,6 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { OrbitPivot } from "./OrbitPivot";
+import { ReportCapture } from "./ReportCapture";
 import { ViewportTestHooks } from "./ViewportTestHooks";
 import { ProjectionSwitch } from "./ProjectionSwitch";
 import { pickingEvents } from "./pickingEvents";
@@ -125,6 +126,7 @@ export function Viewport() {
         <OrbitPivot />
         <ProjectionSwitch />
         <ViewportTestHooks />
+        <ReportCapture />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
           <GizmoViewport labelColor="#374151" axisHeadScale={1} />
         </GizmoHelper>

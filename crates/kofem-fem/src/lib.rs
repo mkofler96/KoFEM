@@ -35,6 +35,7 @@ pub mod mesh_outline;
 pub mod mortar;
 pub mod nonlinear;
 pub mod reactions;
+pub mod report;
 pub mod rigid_body;
 pub mod section;
 pub mod shell;
@@ -72,6 +73,7 @@ pub use reactions::{
     fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,
     widen_translations, NodalReaction, ReactionSummary, SupportReaction,
 };
+pub use report::{percentile, report_stats, ReportStats};
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
