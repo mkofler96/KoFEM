@@ -32,8 +32,29 @@
 //! `pⱼ − c·gⱼ > 0` for every c > 0: no penalty or complementarity constant
 //! enters. The solve has converged when the set stops changing and the
 //! residual is within tolerance. The first set closes the nodes that touch
-//! at the start (gⱼ ≤ 0), so a body that only contact holds is supported
-//! from the first solve.
+//! at the start (gⱼ ≤ 0).
+//!
+//! A body its supports and ties leave loose may still be held by contact,
+//! but not before its gap has closed, and frictionless contact never holds
+//! it across the surface: a block resting on a flat face can still slide and
+//! spin. Such a body therefore gets a weak spring to its rest position on
+//! every DOF, a fraction [`STABILISATION`] of its mean tangent diagonal, as
+//! weak springs in commercial codes do: the system stays positive definite,
+//! and a motion nothing holds is held at zero rather than left to drift on
+//! round-off. The first set closes every node where such a body faces the
+//! other surface, so the first correction moves it across its gap instead of
+//! far along the springs, and the update opens the nodes that pull.
+//!
+//! While the set changes, the springs' force is part of the balance. Once it
+//! has settled, the springs of a body that contact or a support holds carry
+//! only their stiffness times its rigid motion; where the load drives a body
+//! in a motion nothing holds, they carry the load, and a spring force above
+//! [`SPRING_SHARE`] of the load refuses the solve with that motion
+//! ([`FemError::ContactUnheld`]). Otherwise the springs then leave the
+//! balance and stay in the tangent only: the last corrections remove the
+//! little they carried, so the converged solution is balanced by contact and
+//! supports alone, and with nothing left out of balance along a free motion
+//! nothing makes it drift.
 //!
 //! The pressure of a closed node is its share of the force the out-of-balance
 //! residual leaves along its normal, pⱼ = nⱼ · rⱼ / Dⱼⱼ; the same pressure
@@ -46,17 +67,31 @@
 //! condition, so a coarse slave surface lets a fine master surface's nodes
 //! through between its own.
 //!
+//! Each node carries one condition and is one side of contact only, so where
+//! two contacts meet at an edge its nodes are settled first: a node on two
+//! slave surfaces whose normals agree (one surface picked as two contacts)
+//! takes both shares as one condition, summing the areas and weighting the
+//! masters by area, as one contact over both would; at a corner it keeps the
+//! larger share. A slave node that is also among another's masters keeps
+//! its condition, and the other follows its remaining masters instead, their
+//! weights scaled back to sum to one so a rigid motion still closes no gap;
+//! one left with too little of its weight gives up its condition. The nodes
+//! these steps touched are reported ([`ContactState::shared`]); the same face
+//! in two contacts would count its area twice and is refused.
+//!
 //! References: S. Hüeber, B. I. Wohlmuth, "A primal–dual active set strategy
 //! for non-linear multibody contact problems", CMAME 194 (2005) 3147–3166;
 //! A. Popp, M. W. Gee, W. A. Wall, "A finite deformation mortar contact
 //! formulation using a primal–dual active set strategy", IJNME 79 (2009)
 //! 1354–1391.
 
-use std::collections::BTreeSet;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::amg::Preconditioner;
 use crate::cg::{CgSettings, PcgRun, PcgStatus};
 use crate::constraints::Dirichlet;
+use crate::count::count_as_f64;
 use crate::coupled_static::{
     constrained_reduction, prepare_constrained_static, CoupledReduction, NormalConstraint,
     PreparedMixed,
@@ -66,10 +101,36 @@ use crate::error::FemError;
 use crate::mesh::{ElementOrder, TetMesh};
 use crate::mortar::{mortar_integrals, MortarFace, SlaveIntegrals};
 use crate::nonlinear::{Settled, SolveProgress, TangentSolver};
+use crate::rigid_body::{free_rigid_motions, RigidBodyModel, RigidLink};
 use crate::sparse::CsrMatrix;
 use crate::static_solve::PreconditionerChoice;
 use crate::surface::BoundaryFaces;
 use crate::tie::{tie_couplings, translations, TieReport, VertexTies};
+
+/// The spring on each DOF of a loose body, as a fraction of the body's mean
+/// tangent diagonal (see the module notes): what a held body's springs carry,
+/// their stiffness times a rigid motion of the order of a gap, stays far
+/// below any load, and a body nothing holds still moves a finite way.
+const STABILISATION: f64 = 1e-9;
+
+/// Springs carrying more than this fraction of the load, summed over its
+/// magnitudes, hold a body that nothing else holds in that motion.
+const SPRING_SHARE: f64 = 1e-3;
+
+/// Two slave normals of one node at most this far apart (cos 10°) are one
+/// surface picked as two contacts; further apart, the node is a corner.
+const SAME_SURFACE: f64 = 0.984_807_753;
+
+/// A slave node that keeps less than this share of its master weights once
+/// the other contacts' slave nodes are taken out of them mostly faces the
+/// other contact's slave side, and gives up its condition. A node half-way
+/// across a master face from the shared edge keeps half.
+const KEPT_WEIGHT: f64 = 0.25;
+
+/// A direction component below this is taken as zero, so that a motion along
+/// a coordinate axis is reported as exactly that axis: the springs' share of
+/// a held motion leaves a trace in the direction of an unheld one.
+const AXIS_SNAP: f64 = 1e-3;
 
 fn contact_error(reason: String) -> FemError {
     FemError::Contact { reason }
@@ -164,6 +225,8 @@ struct SlaveNode {
 #[derive(Debug, Clone)]
 pub struct ContactInterface {
     pairs: Vec<[Vec<SlaveNode>; 2]>,
+    /// The faces of each way round's slave side, each as its sorted nodes.
+    slave_faces: Vec<[Vec<Vec<usize>>; 2]>,
 }
 
 impl ContactInterface {
@@ -187,6 +250,7 @@ impl ContactInterface {
         }
         let vertices = mesh.vertex_count();
         let mut both_ways = Vec::with_capacity(pairs.len());
+        let mut slave_faces = Vec::with_capacity(pairs.len());
         for (index, pair) in pairs.iter().enumerate() {
             let fail = |reason: &str| contact_error(format!("contact pair {index}: {reason}"));
             if pair.slave.is_empty() {
@@ -220,8 +284,22 @@ impl ContactInterface {
                 ));
             }
             both_ways.push([preferred, reversed]);
+            let keys = |faces: &[MortarFace]| -> Vec<Vec<usize>> {
+                faces
+                    .iter()
+                    .map(|face| {
+                        let mut key = face.nodes.clone();
+                        key.sort_unstable();
+                        key
+                    })
+                    .collect()
+            };
+            slave_faces.push([keys(&pair.slave), keys(&pair.master)]);
         }
-        Ok(Self { pairs: both_ways })
+        Ok(Self {
+            pairs: both_ways,
+            slave_faces,
+        })
     }
 }
 
@@ -238,6 +316,26 @@ impl From<SlaveIntegrals> for SlaveNode {
             masters: integrals.masters,
             area: integrals.diagonal,
         }
+    }
+}
+
+/// The rigid motion a load drives a body in that nothing holds: along a unit
+/// direction, or about a unit axis through the body. A coordinate axis is
+/// given exactly.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum UnheldMotion {
+    Along([f64; 3]),
+    About([f64; 3]),
+}
+
+impl std::fmt::Display for UnheldMotion {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (verb, direction) = match self {
+            Self::Along(direction) => ("move it along", direction),
+            Self::About(axis) => ("turn it about", axis),
+        };
+        let [first, second, third] = direction;
+        write!(formatter, "{verb} ({first}, {second}, {third})")
     }
 }
 
@@ -258,6 +356,10 @@ pub struct ContactState {
     /// Slave nodes a support holds along their whole normal; they keep the
     /// support and carry no contact condition.
     pub held: Vec<usize>,
+    /// Nodes on an edge two contacts share (see the module notes): slave
+    /// nodes another contact no longer follows, and nodes that gave up a
+    /// condition there.
+    pub shared: Vec<usize>,
     /// What the elimination did with the model's ties.
     pub ties: TieReport,
 }
@@ -295,10 +397,103 @@ struct Setup {
     ties: TieReport,
     nodes: Vec<ActiveNode>,
     held: Vec<usize>,
+    /// Nodes on an edge two contacts share ([`ContactState::shared`]).
+    shared: Vec<usize>,
     /// The ties-only reduction and its held unknowns, to take the reactions
     /// out of a residual.
     tie_reduction: CoupledReduction,
     tie_held: Vec<bool>,
+    /// The bodies the supports and ties leave loose (see the module notes).
+    loose: Vec<LooseBody>,
+    /// Settles in a row whose active set update changed nothing.
+    steady: usize,
+    /// The largest load seen, summed over its magnitudes: the out-of-balance
+    /// force or what the closed nodes imposed.
+    load_scale: f64,
+    /// The springs' force at the last settled iterate, 3 per node; zero
+    /// once they have left the balance.
+    spring_force: Vec<f64>,
+    /// Whether the springs have left the balance (see the module notes).
+    released: bool,
+}
+
+/// A piece of the mesh the supports and ties leave free to move rigidly.
+struct LooseBody {
+    /// Its nodes, sorted.
+    nodes: Vec<usize>,
+    center: [f64; 3],
+    /// Its bounding box diagonal, which turns a moment into a force.
+    size: f64,
+}
+
+impl LooseBody {
+    /// The force and the moment about the centre over the size that `forces`
+    /// (3 per node) exert on the body.
+    fn resultant_of(&self, forces: &[f64], points: &[[f64; 3]]) -> [f64; 6] {
+        let mut sum = [0.0; 6];
+        for &node in &self.nodes {
+            let force = [forces[3 * node], forces[3 * node + 1], forces[3 * node + 2]];
+            let arm: [f64; 3] = std::array::from_fn(|axis| points[node][axis] - self.center[axis]);
+            let moment = cross(arm, force);
+            for axis in 0..3 {
+                sum[axis] += force[axis];
+                sum[3 + axis] += moment[axis] / self.size;
+            }
+        }
+        sum
+    }
+
+    /// The motion a resultant drives: along its force, or about its moment
+    /// where that is the larger.
+    fn motion(resultant: [f64; 6]) -> UnheldMotion {
+        let force = [resultant[0], resultant[1], resultant[2]];
+        let moment = [resultant[3], resultant[4], resultant[5]];
+        if dot(force, force) >= dot(moment, moment) {
+            UnheldMotion::Along(snapped(force))
+        } else {
+            UnheldMotion::About(snapped(moment))
+        }
+    }
+
+    /// The spring on each of the body's DOFs for `tangent`.
+    fn spring(&self, tangent: &CsrMatrix) -> f64 {
+        let diagonal: f64 = self
+            .nodes
+            .iter()
+            .flat_map(|&node| (0..3).map(move |axis| tangent.diagonal(3 * node + axis)))
+            .sum();
+        STABILISATION * diagonal / count_as_f64(3 * self.nodes.len())
+    }
+}
+
+/// `vector` as a unit vector, components below [`AXIS_SNAP`] of it zeroed.
+fn snapped(vector: [f64; 3]) -> [f64; 3] {
+    let length = dot(vector, vector).sqrt();
+    let kept = vector.map(|component| {
+        if component.abs() < AXIS_SNAP * length {
+            0.0
+        } else {
+            component
+        }
+    });
+    let length = dot(kept, kept).sqrt();
+    kept.map(|component| component / length)
+}
+
+fn cross(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
+    [
+        lhs[1] * rhs[2] - lhs[2] * rhs[1],
+        lhs[2] * rhs[0] - lhs[0] * rhs[2],
+        lhs[0] * rhs[1] - lhs[1] * rhs[0],
+    ]
+}
+
+/// What one active set update did.
+struct Update {
+    /// A node opened or closed.
+    flipped: bool,
+    /// A closed node's gap was not yet zero (an overlap at the start).
+    overlap: bool,
 }
 
 struct ActiveSolve {
@@ -365,12 +560,15 @@ impl ContactCg {
                 .map(|active| setup.slaves[active.index].area)
                 .collect(),
             held: setup.held.clone(),
+            shared: setup.shared.clone(),
             ties: setup.ties,
         })
     }
 
     /// The ties as couplings, the slave normals as the supports leave them,
-    /// the initial gaps and the first active set: the nodes that touch.
+    /// the initial gaps and the first active set: the nodes that touch, and
+    /// every node where a loose body faces the other surface, which closes
+    /// that body's gap in the first correction (see the module notes).
     fn set_up(&self, supports: &Dirichlet) -> Result<Setup, FemError> {
         let (fixed_dofs, fixed_values): (Vec<u32>, Vec<f64>) = supports
             .prescribed()
@@ -380,7 +578,14 @@ impl ContactCg {
             Some(ties) => tie_couplings(&self.mesh, ties, &fixed_dofs, &fixed_values)?,
             None => (Vec::new(), TieReport::default()),
         };
-        let slaves = self.slave_sides(supports)?;
+        let (slaves, shared) = self.slave_sides(supports)?;
+        let wide_dofs: Vec<u32> = fixed_dofs.iter().map(|&dof| widen_dof(dof)).collect();
+        let loose = self.loose_bodies(&wide_dofs)?;
+        let on_loose = |node: usize| {
+            loose
+                .iter()
+                .any(|body| body.nodes.binary_search(&node).is_ok())
+        };
         let points = self.mesh.vertices();
         let mut nodes = Vec::new();
         let mut held = Vec::new();
@@ -411,12 +616,13 @@ impl ContactCg {
                 index,
                 normal,
                 initial_gap,
-                closed: initial_gap <= 0.0,
+                closed: initial_gap <= 0.0
+                    || on_loose(slave.node)
+                    || slave.masters.iter().any(|&master| on_loose(master)),
                 gap: initial_gap,
                 pressure: 0.0,
             });
         }
-        let wide_dofs: Vec<u32> = fixed_dofs.iter().map(|&dof| widen_dof(dof)).collect();
         let (tie_reduction, tie_held) =
             constrained_reduction(&self.mesh, &couplings, &[], &wide_dofs, &fixed_values)?;
         Ok(Setup {
@@ -425,20 +631,94 @@ impl ContactCg {
             ties,
             nodes,
             held,
+            shared,
             tie_reduction,
             tie_held,
+            loose,
+            steady: 0,
+            load_scale: 0.0,
+            spring_force: vec![0.0; self.mesh.dof_count()],
+            released: false,
         })
+    }
+
+    /// The pieces of the mesh that the supports (`wide_dofs`, 6 per node)
+    /// and the ties leave free to move rigidly, contact aside.
+    fn loose_bodies(&self, wide_dofs: &[u32]) -> Result<Vec<LooseBody>, FemError> {
+        let points = self.mesh.vertices();
+        let positions: Vec<f64> = points.iter().flatten().copied().collect();
+        let mut element_offsets = vec![0];
+        let mut element_nodes = Vec::new();
+        for element in 0..self.mesh.element_count() {
+            element_nodes.extend_from_slice(self.mesh.element_nodes(element));
+            element_offsets.push(to_u32(element_nodes.len()));
+        }
+        // Each element labelled by its index, so a loose piece reports its
+        // elements.
+        let element_labels: Vec<u32> = (0..self.mesh.element_count()).map(to_u32).collect();
+        let links: Vec<RigidLink> = self
+            .ties
+            .iter()
+            .flat_map(VertexTies::ties)
+            .map(|tie| RigidLink {
+                primary: tie.masters.iter().map(|&master| to_u32(master)).collect(),
+                secondary: vec![to_u32(tie.node)],
+                dof_mask: 0b111,
+            })
+            .collect();
+        let motions = free_rigid_motions(&RigidBodyModel {
+            positions: &positions,
+            element_offsets: &element_offsets,
+            element_nodes: &element_nodes,
+            element_labels: &element_labels,
+            rotational_nodes: &[],
+            links: &links,
+            contacts: &[],
+            fixed_dofs: wide_dofs,
+        })?;
+        Ok(motions
+            .into_iter()
+            .map(|motion| {
+                let members: BTreeSet<usize> = motion
+                    .labels
+                    .iter()
+                    .flat_map(|&element| self.mesh.element_nodes(element as usize))
+                    .map(|&node| node as usize)
+                    .collect();
+                let nodes: Vec<usize> = members.into_iter().collect();
+                let mut low = [f64::INFINITY; 3];
+                let mut high = [f64::NEG_INFINITY; 3];
+                let mut sum = [0.0; 3];
+                for &node in &nodes {
+                    for axis in 0..3 {
+                        let value = points[node][axis];
+                        low[axis] = low[axis].min(value);
+                        high[axis] = high[axis].max(value);
+                        sum[axis] += value;
+                    }
+                }
+                let count = count_as_f64(nodes.len());
+                let extent: [f64; 3] = std::array::from_fn(|axis| high[axis] - low[axis]);
+                LooseBody {
+                    center: sum.map(|value| value / count),
+                    size: dot(extent, extent).sqrt(),
+                    nodes,
+                }
+            })
+            .collect())
     }
 
     /// The slave nodes of every pair, each pair the preferred way round
     /// unless its supports hold a slave node along its whole normal while a
     /// master of it can still move — the master would pass through, so the
-    /// other side is the slave then.
+    /// other side is the slave then. Nodes where pairs meet are settled as
+    /// the module notes say; returns the slave nodes and those that gave up
+    /// a condition.
     ///
     /// # Errors
     /// [`FemError::Contact`] when neither way round avoids that, or when a
-    /// node ends up a slave twice, or both a slave and a master.
-    fn slave_sides(&self, supports: &Dirichlet) -> Result<Vec<SlaveNode>, FemError> {
+    /// face is on the slave side of two pairs.
+    fn slave_sides(&self, supports: &Dirichlet) -> Result<(Vec<SlaveNode>, Vec<usize>), FemError> {
         let held_along = |node: usize, normal: [f64; 3]| {
             (0..3).all(|axis| normal[axis] == 0.0 || supports.value(3 * node + axis).is_some())
         };
@@ -454,11 +734,11 @@ impl ContactCg {
                 .map(|slave| slave.node)
         };
         let mut chosen: Vec<SlaveNode> = Vec::new();
+        let mut faces_of: BTreeMap<&[usize], usize> = BTreeMap::new();
         for (index, ways) in self.interface.pairs.iter().enumerate() {
-            let side = ways
-                .iter()
-                .filter(|side| !side.is_empty())
-                .find(|side| stuck(side).is_none())
+            let way = (0..2)
+                .filter(|&way| !ways[way].is_empty())
+                .find(|&way| stuck(&ways[way]).is_none())
                 .ok_or_else(|| {
                     let node = ways.iter().find_map(|side| stuck(side)).unwrap_or_default();
                     contact_error(format!(
@@ -467,29 +747,17 @@ impl ContactCg {
                          release the support on one of them"
                     ))
                 })?;
-            chosen.extend(side.iter().cloned());
-        }
-        let mut slaves = BTreeSet::new();
-        for slave in &chosen {
-            if !slaves.insert(slave.node) {
-                return Err(contact_error(format!(
-                    "node {} is on two slave surfaces — a node can be in contact with one \
-                     surface only",
-                    slave.node
-                )));
+            for face in &self.interface.slave_faces[index][way] {
+                if let Some(other) = faces_of.insert(face, index) {
+                    return Err(contact_error(format!(
+                        "contact pairs {other} and {index} both press the face of nodes \
+                         {face:?} — a face can be in two contacts only as their common edge"
+                    )));
+                }
             }
+            chosen.extend(ways[way].iter().cloned());
         }
-        if let Some(node) = chosen
-            .iter()
-            .flat_map(|slave| &slave.masters)
-            .find(|master| slaves.contains(master))
-        {
-            return Err(contact_error(format!(
-                "node {node} is on a slave surface and on a master surface — a node can be one \
-                 side of contact only"
-            )));
-        }
-        Ok(chosen)
+        Ok(settle_shared_nodes(chosen))
     }
 
     fn running(&mut self) -> Result<&mut ActiveSolve, FemError> {
@@ -552,11 +820,9 @@ impl Setup {
     }
 
     /// Open the closed nodes that pull and close the open nodes that
-    /// penetrate; returns whether the set is unsettled: it changed, or a
-    /// closed node's gap is not yet zero (an overlap at the start). Below
-    /// `tolerance` (the solve's) times the largest displacement or pressure,
-    /// a gap or a pressure carries no sign.
-    fn update_active_set(&mut self, tolerance: f64, displacements: &[f64]) -> bool {
+    /// penetrate. Below `tolerance` (the solve's) times the largest
+    /// displacement or pressure, a gap or a pressure carries no sign.
+    fn update_active_set(&mut self, tolerance: f64, displacements: &[f64]) -> Update {
         let gap_tolerance = tolerance
             * displacements
                 .iter()
@@ -568,10 +834,11 @@ impl Setup {
                 .iter()
                 .map(|active| active.pressure.abs())
                 .fold(0.0, f64::max);
-        let mut pending = self
+        let overlap = self
             .nodes
             .iter()
             .any(|active| active.closed && active.gap.abs() > gap_tolerance);
+        let mut flipped = false;
         for active in &mut self.nodes {
             let flip = if active.closed {
                 active.pressure < -pressure_tolerance
@@ -581,21 +848,82 @@ impl Setup {
             if flip {
                 active.closed = !active.closed;
                 active.pressure = 0.0;
-                pending = true;
+                flipped = true;
             }
         }
-        pending
+        Update { flipped, overlap }
     }
 
-    /// The force on the free DOFs of moving each closed node by its gap
-    /// along its normal: what the closed nodes still impose.
+    /// The loose bodies' spring force at `displacements` (3 per node), zero
+    /// on the supported DOFs.
+    fn springs_at(
+        &self,
+        displacements: &[f64],
+        tangent: &CsrMatrix,
+        supports: &Dirichlet,
+    ) -> Vec<f64> {
+        let mut force = vec![0.0; displacements.len()];
+        for body in &self.loose {
+            let spring = body.spring(tangent);
+            for &node in &body.nodes {
+                for axis in 0..3 {
+                    let dof = 3 * node + axis;
+                    if supports.value(dof).is_none() {
+                        force[dof] = spring * displacements[dof];
+                    }
+                }
+            }
+        }
+        force
+    }
+
+    /// Refuse a loose body whose springs carry more than [`SPRING_SHARE`] of
+    /// the load (see the module notes).
+    fn check_held(&self, points: &[[f64; 3]]) -> Result<(), FemError> {
+        let limit = SPRING_SHARE * self.load_scale;
+        for body in &self.loose {
+            let resultant = body.resultant_of(&self.spring_force, points);
+            if norm(&resultant) > limit {
+                return Err(FemError::ContactUnheld {
+                    node: body.nodes[0],
+                    motion: LooseBody::motion(resultant),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The tangent with the loose bodies' springs, or `None` without loose
+    /// bodies.
+    fn stabilised(&self, tangent: &CsrMatrix) -> Option<CsrMatrix> {
+        if self.loose.is_empty() {
+            return None;
+        }
+        let mut stiffened = tangent.clone();
+        for body in &self.loose {
+            let spring = body.spring(tangent);
+            for &node in &body.nodes {
+                for axis in 0..3 {
+                    let at = stiffened.diagonal_position(3 * node + axis);
+                    stiffened.values_mut()[at] += spring;
+                }
+            }
+        }
+        Some(stiffened)
+    }
+
+    /// The force on the free DOFs of moving each closed node out of its
+    /// overlap at the start along its normal: what the model's own overlaps
+    /// impose. A node a correction pushed through the other surface counts
+    /// only its overlap at the start: how far it went is the solve's doing,
+    /// not a load.
     fn imposed_load(&self, tangent: &CsrMatrix, supports: &Dirichlet) -> f64 {
         let count = tangent.rows();
         let mut imposed = vec![0.0; count];
         for active in self.nodes.iter().filter(|active| active.closed) {
             let node = self.slaves[active.index].node;
             for axis in 0..3 {
-                imposed[3 * node + axis] = active.normal[axis] * active.gap;
+                imposed[3 * node + axis] = active.normal[axis] * active.initial_gap.min(0.0);
             }
         }
         let mut force = vec![0.0; count];
@@ -636,12 +964,42 @@ impl TangentSolver for ContactCg {
                 reason: String::from("the contact set-up is missing (internal error)"),
             });
         };
-        let free = setup.measure(displacements, &widen(&residual))?;
-        let pending = setup.update_active_set(self.cg.relative_tolerance, displacements);
+        setup.load_scale = setup
+            .load_scale
+            .max(residual.iter().map(|value| value.abs()).sum());
+        if !setup.released {
+            setup.spring_force = setup.springs_at(displacements, tangent, supports);
+        }
+        let balance: Vec<f64> = residual
+            .iter()
+            .zip(&setup.spring_force)
+            .map(|(force, spring)| force - spring)
+            .collect();
+        let mut free = setup.measure(displacements, &widen(&balance))?;
+        let update = setup.update_active_set(self.cg.relative_tolerance, displacements);
         let load = setup.imposed_load(tangent, supports);
+        setup.load_scale = setup.load_scale.max(load);
+        // Only an iterate balanced under the set it was solved with says
+        // what the springs hold: one that changes the set or closes an
+        // overlap is on its way.
+        setup.steady = if update.flipped || update.overlap {
+            0
+        } else {
+            setup.steady + 1
+        };
+        // The springs' share is still in this iterate and its reactions: one
+        // more correction takes it out.
+        let mut release = false;
+        if setup.steady > 0 && !setup.released {
+            setup.check_held(self.mesh.vertices())?;
+            setup.released = true;
+            setup.spring_force.fill(0.0);
+            free = setup.measure(displacements, &widen(&residual))?;
+            release = true;
+        }
         Ok(Settled {
             residual: free,
-            pending,
+            pending: update.flipped || update.overlap || release,
             load,
         })
     }
@@ -681,18 +1039,25 @@ impl TangentSolver for ContactCg {
             .prescribed()
             .map(|(dof, value)| (widen_dof(to_u32(dof)), value))
             .unzip();
+        let stabilised = setup.stabilised(&tangent);
         let PreparedMixed {
             mut prepared,
             reduction,
             ..
         } = prepare_constrained_static(
             &self.mesh,
-            &tangent,
+            stabilised.as_ref().unwrap_or(&tangent),
             &setup.couplings,
             &constraints,
             &dofs,
             &values,
-            &widen(&residual),
+            &widen(
+                &residual
+                    .iter()
+                    .zip(&setup.spring_force)
+                    .map(|(force, spring)| force - spring)
+                    .collect::<Vec<f64>>(),
+            ),
             self.preconditioner,
         )?;
         let run = PcgRun::start(
@@ -741,6 +1106,100 @@ impl TangentSolver for ContactCg {
     }
 }
 
+/// Give each node one contact condition and one side (see the module notes):
+/// merge a node's slave shares where their normals agree, else keep the
+/// larger; then take every slave node out of the others' masters, the
+/// remaining weights scaled back to sum to one, dropping the condition of a
+/// node that keeps less than [`KEPT_WEIGHT`] of them. Returns the kept slave
+/// nodes in their first order, and the nodes these steps touched, sorted.
+fn settle_shared_nodes(chosen: Vec<SlaveNode>) -> (Vec<SlaveNode>, Vec<usize>) {
+    let mut shared = BTreeSet::new();
+    let mut order: Vec<usize> = Vec::new();
+    let mut by_node: BTreeMap<usize, SlaveNode> = BTreeMap::new();
+    for slave in chosen {
+        match by_node.entry(slave.node) {
+            Entry::Vacant(entry) => {
+                order.push(slave.node);
+                entry.insert(slave);
+            }
+            Entry::Occupied(mut entry) => {
+                let kept = entry.get_mut();
+                if dot(kept.normal, slave.normal) >= SAME_SURFACE {
+                    *kept = merged(kept, &slave);
+                } else {
+                    shared.insert(slave.node);
+                    if slave.area > kept.area {
+                        *kept = slave;
+                    }
+                }
+            }
+        }
+    }
+    let slave_nodes: BTreeSet<usize> = by_node.keys().copied().collect();
+    let mut unfollowable = Vec::new();
+    for slave in by_node.values_mut() {
+        let (masters, weights): (Vec<usize>, Vec<f64>) = slave
+            .masters
+            .iter()
+            .zip(&slave.weights)
+            .filter(|&(master, _)| !slave_nodes.contains(master))
+            .map(|(&master, &weight)| (master, weight))
+            .unzip();
+        if masters.len() == slave.masters.len() {
+            continue;
+        }
+        shared.extend(
+            slave
+                .masters
+                .iter()
+                .filter(|master| slave_nodes.contains(master)),
+        );
+        let kept: f64 = weights.iter().sum();
+        if kept < KEPT_WEIGHT {
+            unfollowable.push(slave.node);
+            continue;
+        }
+        slave.masters = masters;
+        slave.weights = weights.iter().map(|weight| weight / kept).collect();
+    }
+    for node in unfollowable {
+        by_node.remove(&node);
+        shared.insert(node);
+    }
+    let slaves = order
+        .into_iter()
+        .filter_map(|node| by_node.remove(&node))
+        .collect();
+    (slaves, shared.into_iter().collect())
+}
+
+/// One node's two shares of one surface as one condition: the areas summed,
+/// the normal and the master weights averaged by area.
+fn merged(first: &SlaveNode, second: &SlaveNode) -> SlaveNode {
+    let area = first.area + second.area;
+    let mut weights: BTreeMap<usize, f64> = BTreeMap::new();
+    for share in [first, second] {
+        for (&master, &weight) in share.masters.iter().zip(&share.weights) {
+            *weights.entry(master).or_default() += weight * share.area / area;
+        }
+    }
+    SlaveNode {
+        node: first.node,
+        normal: snapped_to_unit(std::array::from_fn(|axis| {
+            first.area * first.normal[axis] + second.area * second.normal[axis]
+        })),
+        masters: weights.keys().copied().collect(),
+        weights: weights.values().copied().collect(),
+        area,
+    }
+}
+
+/// `vector` scaled to unit length.
+fn snapped_to_unit(vector: [f64; 3]) -> [f64; 3] {
+    let length = dot(vector, vector).sqrt();
+    vector.map(|component| component / length)
+}
+
 /// Three DOFs per node to six (translations, then three zero rotations).
 fn widen(values: &[f64]) -> Vec<f64> {
     values
@@ -753,6 +1212,10 @@ fn widen(values: &[f64]) -> Vec<f64> {
 fn widen_dof(dof: u32) -> u32 {
     let node = dof / 3;
     to_u32(DOFS_PER_NODE) * node + dof % 3
+}
+
+fn norm(values: &[f64]) -> f64 {
+    values.iter().map(|value| value * value).sum::<f64>().sqrt()
 }
 
 fn dot(lhs: [f64; 3], rhs: [f64; 3]) -> f64 {

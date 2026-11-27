@@ -14,6 +14,9 @@
 //! * Hertz: a cylinder on a flat block matches the analytic peak pressure
 //!   and contact width.
 //! * A missing or degenerate contact surface is refused by name.
+//! * A body that only the contact holds, across an initial gap and free to
+//!   slide along the contact, is pressed on all the same; a load the
+//!   contact cannot take is refused with the motion nothing holds.
 
 #![allow(
     clippy::expect_used,
@@ -25,7 +28,7 @@
 
 mod stacked;
 
-use kofem_fem::contact::{ContactCg, ContactInterface, ContactPair, ContactState};
+use kofem_fem::contact::{ContactCg, ContactInterface, ContactPair, ContactState, UnheldMotion};
 use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonSettings, NewtonStatus};
 use kofem_fem::{
     assemble_stiffness, mortar_weights, AmgSettings, BoundaryFaces, CgSettings, ElementOrder,
@@ -88,6 +91,32 @@ fn solve(
     increments: u32,
     preconditioner: PreconditionerChoice,
 ) -> Outcome {
+    try_solve(
+        mesh,
+        interface,
+        fixed_dofs,
+        fixed_values,
+        forces,
+        increments,
+        preconditioner,
+    )
+    .expect("converges")
+}
+
+/// [`solve`], returning the error a solve that does not converge ends in.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "a load case's parts, as the Newton driver takes them"
+)]
+fn try_solve(
+    mesh: &TetMesh,
+    interface: ContactInterface,
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+    increments: u32,
+    preconditioner: PreconditionerChoice,
+) -> Result<Outcome, FemError> {
     let stiffness = assemble_stiffness(mesh);
     let solver = ContactCg::new(mesh, interface, None, CG, preconditioner);
     let mut run = NewtonRun::start(
@@ -100,10 +129,10 @@ fn solve(
         settings(increments),
     )
     .expect("starts");
-    while run.advance(usize::MAX).expect("converges") != NewtonStatus::Converged {}
+    while run.advance(usize::MAX)? != NewtonStatus::Converged {}
     let state = run.solver().state().expect("settled");
     let solution = run.into_solution().expect("finished");
-    Outcome {
+    Ok(Outcome {
         displacements: solution.displacements,
         state,
         iterations: solution
@@ -111,7 +140,7 @@ fn solve(
             .iter()
             .map(|increment| increment.iterations)
             .collect(),
-    }
+    })
 }
 
 fn pressed(lower: Shape, upper: Shape) -> Stacked {
@@ -429,9 +458,9 @@ fn contact_on_quadratic_elements_is_refused() {
 }
 
 #[test]
-fn a_node_on_two_slave_surfaces_is_refused() {
-    // Which side is the slave depends on the supports, so the solve refuses
-    // it when it starts.
+fn a_face_in_two_contacts_is_refused() {
+    // Its area would count twice. Which side is the slave depends on the
+    // supports, so the solve refuses it when it starts.
     let model = pressed(Shape::Hex, Shape::Hex);
     let pair = ContactPair {
         slave: model.upper_bottom.clone(),
@@ -458,7 +487,154 @@ fn a_node_on_two_slave_surfaces_is_refused() {
     let Err(FemError::TangentSolve { reason, .. }) = result else {
         panic!("expected a refusal, got {:?}", result.err());
     };
-    assert!(reason.contains("two slave surfaces"), "{reason}");
+    assert!(reason.contains("two contacts"), "{reason}");
+}
+
+/// The upper block finer than the lower one, both with a grid line at
+/// x = 0.5, and the faces of each facing surface on either side of it.
+struct Split {
+    model: Stacked,
+    upper_left: Vec<MortarFace>,
+    upper_right: Vec<MortarFace>,
+    lower_left: Vec<MortarFace>,
+    lower_right: Vec<MortarFace>,
+}
+
+fn split() -> Split {
+    let model = stacked(
+        Block {
+            cells: [2, 2, 2],
+            height: 1.0,
+            shape: Shape::Hex,
+            young: 70_000.0,
+        },
+        Block {
+            cells: [4, 4, 2],
+            height: 0.5,
+            shape: Shape::Tet,
+            young: 210_000.0,
+        },
+        0.0,
+    );
+    let halves = |faces: &[MortarFace]| -> (Vec<MortarFace>, Vec<MortarFace>) {
+        faces.iter().cloned().partition(|face| {
+            face.points.iter().map(|point| point[0]).sum::<f64>() / (face.points.len() as f64) < 0.5
+        })
+    };
+    let (upper_left, upper_right) = halves(&model.upper_bottom);
+    let (lower_left, lower_right) = halves(&model.lower_top);
+    Split {
+        model,
+        upper_left,
+        upper_right,
+        lower_left,
+        lower_right,
+    }
+}
+
+fn solve_pairs(model: &Stacked, pairs: &[ContactPair]) -> Outcome {
+    let (dofs, values) = model.symmetry_supports();
+    solve(
+        &model.mesh,
+        ContactInterface::new(&model.mesh, pairs).expect("a valid interface"),
+        &dofs,
+        &values,
+        &model.top_traction(|_, _| TRACTION),
+        1,
+        PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+    )
+}
+
+/// One surface picked as two contacts, split along a grid line: the nodes
+/// on the line take both contacts' shares as one condition, so the two
+/// contacts pass the patch test as one would.
+#[test]
+fn two_contacts_over_one_surface_split_in_two_act_as_one() {
+    let split = split();
+    let outcome = solve_pairs(
+        &split.model,
+        &[
+            ContactPair {
+                slave: split.upper_left.clone(),
+                master: split.lower_left.clone(),
+            },
+            ContactPair {
+                slave: split.upper_right.clone(),
+                master: split.lower_right.clone(),
+            },
+        ],
+    );
+    let state = &outcome.state;
+    assert_eq!(
+        state.nodes.len(),
+        25,
+        "every bottom node of the upper block, once"
+    );
+    assert!(
+        state.shared.is_empty(),
+        "no condition dropped: {:?}",
+        state.shared
+    );
+    assert!(
+        state.closed.iter().all(|&closed| closed),
+        "every node closed"
+    );
+    let worst = state
+        .pressure
+        .iter()
+        .map(|pressure| (pressure - (-TRACTION)).abs())
+        .fold(0.0, f64::max);
+    assert!(
+        worst <= 1e-8 * TRACTION.abs(),
+        "pressure error {worst:e} (pressures {:?})",
+        state.pressure
+    );
+}
+
+/// Two contacts whose slave sides cross at a shared grid line: each node on
+/// the line is a slave of one contact and a master of the other. It keeps
+/// one role, and the interface still carries the whole load.
+#[test]
+fn crossed_contacts_at_a_shared_edge_carry_the_load() {
+    let split = split();
+    let outcome = solve_pairs(
+        &split.model,
+        &[
+            ContactPair {
+                slave: split.upper_left.clone(),
+                master: split.lower_left.clone(),
+            },
+            ContactPair {
+                slave: split.lower_right.clone(),
+                master: split.upper_right.clone(),
+            },
+        ],
+    );
+    let state = &outcome.state;
+    assert!(!state.shared.is_empty(), "the line's nodes are shared");
+    for &node in &state.shared {
+        assert!(
+            (split.model.vertices[node][0] - 0.5).abs() < 1e-12,
+            "node {node} at {:?} off the shared line",
+            split.model.vertices[node]
+        );
+    }
+    assert!(
+        (state.force() + TRACTION).abs() <= 1e-8 * TRACTION.abs(),
+        "contact force {} carries the load",
+        state.force()
+    );
+    let pressure_tolerance = 1e-9 * TRACTION.abs();
+    for (pressure, gap) in state.pressure.iter().zip(&state.gap) {
+        assert!(*pressure >= -pressure_tolerance, "pressure {pressure:e}");
+        assert!(*gap >= -1e-9, "gap {gap:e}");
+    }
+    println!(
+        "crossed contacts: {} shared node(s), pressures {:.4}..{:.4}",
+        state.shared.len(),
+        state.pressure.iter().copied().fold(f64::INFINITY, f64::min),
+        state.pressure.iter().copied().fold(0.0, f64::max)
+    );
 }
 
 /// Grid lines over [0, `extent`]: uniform steps of `fine` up to `uniform`,
@@ -982,5 +1158,143 @@ fn a_held_finer_surface_makes_the_other_side_the_slave() {
         (state.force() - expected).abs() <= 1e-8 * expected,
         "force {}, expected {expected}",
         state.force()
+    );
+}
+
+/// The upper block resting `GAP` above the lower one with no support of its
+/// own: only the contact can hold it, and only along z. The lower block is
+/// held by symmetry supports.
+fn resting(lower: Shape, upper: Shape) -> (Stacked, Vec<u32>, Vec<f64>) {
+    let model = stacked(
+        Block {
+            cells: [2, 2, 2],
+            height: 1.0,
+            shape: lower,
+            young: 70_000.0,
+        },
+        Block {
+            cells: [3, 3, 2],
+            height: 0.5,
+            shape: upper,
+            young: 210_000.0,
+        },
+        GAP,
+    );
+    let (dofs, values) = symmetry_supports(&model.vertices[..model.first_upper]);
+    (model, dofs, values)
+}
+
+/// The upper block's top loaded by a uniform traction per area, `lateral`
+/// along x and `vertical` along z.
+fn top_load(model: &Stacked, lateral: f64, vertical: f64) -> Vec<f64> {
+    let mut forces = model.top_traction(|_, _| vertical);
+    let along_x = model.top_traction(|_, _| lateral);
+    for node in 0..model.vertices.len() {
+        forces[3 * node] = along_x[3 * node + 2];
+    }
+    forces
+}
+
+#[test]
+fn a_body_only_the_contact_holds_is_pressed_on_across_a_gap() {
+    for (lower, upper) in [(Shape::Hex, Shape::Tet), (Shape::Tet, Shape::Hex)] {
+        let (model, dofs, values) = resting(lower, upper);
+        let forces = top_load(&model, 0.0, TRACTION);
+        for preconditioner in preconditioners() {
+            let outcome = solve(
+                &model.mesh,
+                interface(&model),
+                &dofs,
+                &values,
+                &forces,
+                1,
+                preconditioner,
+            );
+            let state = &outcome.state;
+            assert!(
+                state.closed.iter().all(|&closed| closed),
+                "{lower:?} below {upper:?}: every node closed"
+            );
+            let worst = state
+                .pressure
+                .iter()
+                .map(|pressure| (pressure - (-TRACTION)).abs())
+                .fold(0.0, f64::max);
+            assert!(
+                worst <= 1e-8 * TRACTION.abs(),
+                "{lower:?} below {upper:?} {preconditioner:?}: pressure error {worst:e}"
+            );
+            assert!(
+                (state.force() + TRACTION).abs() <= 1e-8 * TRACTION.abs(),
+                "{lower:?} below {upper:?}: contact force {} carries the load",
+                state.force()
+            );
+            // Free to slide, the block does not drift: it moves no further
+            // than its own lateral expansion.
+            let slide = (model.first_upper..model.vertices.len())
+                .flat_map(|node| [0, 1].map(|axis| outcome.displacements[3 * node + axis]))
+                .map(f64::abs)
+                .fold(0.0, f64::max);
+            let expansion = POISSON * TRACTION.abs() / model.upper.young;
+            assert!(
+                slide <= expansion,
+                "{lower:?} below {upper:?}: slid {slide:e}, expansion {expansion:e}"
+            );
+            println!(
+                "resting {lower:?} below {upper:?} {preconditioner:?}: max |p − σ|/σ = {:.2e}, \
+                 active-set iterations {:?}",
+                worst / TRACTION.abs(),
+                outcome.iterations
+            );
+        }
+    }
+}
+
+/// The error a load on the resting block ends in (tractions as for
+/// [`top_load`]), and the upper block's first vertex.
+fn unheld(lateral: f64, vertical: f64) -> (FemError, usize) {
+    let (model, dofs, values) = resting(Shape::Hex, Shape::Tet);
+    let forces = top_load(&model, lateral, vertical);
+    let error = try_solve(
+        &model.mesh,
+        interface(&model),
+        &dofs,
+        &values,
+        &forces,
+        1,
+        PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+    )
+    .err()
+    .expect("the load on the resting block is refused");
+    (error, model.first_upper)
+}
+
+#[test]
+fn a_load_along_the_contact_that_nothing_holds_is_refused() {
+    let (error, first_upper) = unheld(1.0, TRACTION);
+    assert!(
+        matches!(
+            error,
+            FemError::ContactUnheld {
+                node,
+                motion: UnheldMotion::Along([1.0, 0.0, 0.0]),
+            } if node >= first_upper
+        ),
+        "refused along x at a node of the upper block, got {error:?}"
+    );
+}
+
+#[test]
+fn a_body_pulled_off_the_contact_is_refused() {
+    let (error, _) = unheld(0.0, -TRACTION);
+    assert!(
+        matches!(
+            error,
+            FemError::ContactUnheld {
+                motion: UnheldMotion::Along([0.0, 0.0, 1.0]),
+                ..
+            }
+        ),
+        "refused along z, got {error:?}"
     );
 }

@@ -5,8 +5,9 @@
 //! picked surface pairs, and the contact solve as a run the worker advances
 //! in steps, one active-set iteration at a time.
 
-use kofem_fem::contact::{ContactCg, ContactState};
+use kofem_fem::contact::{ContactCg, ContactState, UnheldMotion};
 use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonStatus};
+use kofem_fem::FemError;
 use wasm_bindgen::prelude::*;
 
 use crate::{to_js, ElasticSolution};
@@ -45,6 +46,9 @@ impl ContactPairs {
 #[wasm_bindgen]
 pub struct ContactRun {
     pub(crate) run: NewtonRun<LinearElastic, ContactCg>,
+    /// Why the solve was refused, when a body only contact holds is loaded
+    /// in a motion nothing holds.
+    pub(crate) unheld: Option<(usize, UnheldMotion)>,
     pub(crate) status: NewtonStatus,
     pub(crate) preconditioner: String,
 }
@@ -56,11 +60,51 @@ impl ContactRun {
     /// Returns whether the solve has converged.
     ///
     /// # Errors
-    /// A correction solve that fails, or an active set that has not settled
-    /// within the iteration limit.
+    /// A correction solve that fails, an active set that has not settled
+    /// within the iteration limit, or a body only contact holds that its
+    /// load drives in a motion nothing holds (then `unheldNode` names it).
     pub fn advance(&mut self, budget: usize) -> Result<bool, JsError> {
-        self.status = self.run.advance(budget).map_err(|error| to_js(&error))?;
+        self.status = match self.run.advance(budget) {
+            Ok(status) => status,
+            Err(error) => {
+                if let FemError::ContactUnheld { node, motion } = error {
+                    self.unheld = Some((node, motion));
+                }
+                return Err(to_js(&error));
+            }
+        };
         Ok(self.status == NewtonStatus::Converged)
+    }
+
+    /// After `advance` refused a body only contact holds: a vertex of it.
+    #[wasm_bindgen(getter, js_name = unheldNode)]
+    #[must_use]
+    pub fn unheld_node(&self) -> Option<u32> {
+        self.unheld.map(|(node, _)| {
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "vertex indices come from u32 arrays"
+            )]
+            let narrow = node as u32;
+            narrow
+        })
+    }
+
+    /// The motion its load drives it in: a unit direction, or with
+    /// `unheldTurns` a unit axis.
+    #[wasm_bindgen(getter, js_name = unheldDirection)]
+    #[must_use]
+    pub fn unheld_direction(&self) -> Option<Vec<f64>> {
+        self.unheld.map(|(_, motion)| match motion {
+            UnheldMotion::Along(direction) | UnheldMotion::About(direction) => direction.to_vec(),
+        })
+    }
+
+    /// Whether that motion turns about the axis rather than moving along it.
+    #[wasm_bindgen(getter, js_name = unheldTurns)]
+    #[must_use]
+    pub fn unheld_turns(&self) -> bool {
+        matches!(self.unheld, Some((_, UnheldMotion::About(_))))
     }
 
     /// Active-set iterations finished so far.
@@ -254,6 +298,14 @@ impl ContactSolution {
     #[must_use]
     pub fn held_nodes(&self) -> usize {
         self.state.held.len()
+    }
+
+    /// Nodes on an edge two contacts share: slave nodes another contact no
+    /// longer follows, and nodes that gave up a condition there.
+    #[wasm_bindgen(getter, js_name = sharedNodes)]
+    #[must_use]
+    pub fn shared_nodes(&self) -> usize {
+        self.state.shared.len()
     }
 
     /// Nodes the model's ties tie; 0 without ties.

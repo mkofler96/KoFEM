@@ -251,4 +251,12 @@ pub enum FemError {
     NonlinearInput { reason: String },
     #[error("contact: {reason}")]
     Contact { reason: String },
+    #[error(
+        "contact: the body with node {node} is held only by contact, and its load would {motion} \
+         where no contact or support holds it — add a support"
+    )]
+    ContactUnheld {
+        node: usize,
+        motion: crate::contact::UnheldMotion,
+    },
 }

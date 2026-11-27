@@ -271,6 +271,66 @@ test("the static solve reports the contact pressure and force", async ({
   await expect(page.getByTestId("add-plot-contact-status")).toBeVisible();
 });
 
+// Box B on no support, pushed by a force (KOF-501): only the contact holds
+// it, and only along x. It is pressed onto box A across the gap all the
+// same; a load across the contact is refused, naming the body and motion.
+test("a box only the contact holds is pressed on, and a load across it is refused", async ({
+  page,
+}) => {
+  const model = await openConstraintsMode(page);
+  const push = async (sideways: number) => {
+    await page.evaluate(
+      ({ nodes, farB, offset, sideways }) => {
+        const constraints: object[] = [];
+        for (const node of nodes) {
+          if (node.id >= offset) continue;
+          if (node.x === 0) constraints.push({ nodeId: node.id, dof: 0 });
+          if (node.y === 0) constraints.push({ nodeId: node.id, dof: 1 });
+          if (node.z === 0) constraints.push({ nodeId: node.id, dof: 2 });
+        }
+        const loads = farB.flatMap((nodeId) => [
+          { nodeId, dof: 0, value: -1000 / farB.length },
+          { nodeId, dof: 1, value: sideways / farB.length },
+        ]);
+        (window as unknown as { __kofemStore: Store }).__kofemStore.setState({
+          constraints,
+          loads,
+          result: null,
+        });
+      },
+      { nodes: model.nodes, farB: model.farB, offset: OFFSET, sideways },
+    );
+  };
+  await push(0);
+  await createContact(page, model);
+  await openTree(page, "static");
+  await page.getByRole("button", { name: /Run static solve/ }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __kofemStore: Store }).__kofemStore.getState()
+            .result?.contact?.force ?? null,
+      ),
+    )
+    .not.toBeNull();
+  const force = await page.evaluate(
+    () =>
+      (window as unknown as { __kofemStore: Store }).__kofemStore.getState()
+        .result?.contact?.force ?? null,
+  );
+  expect(Math.abs((force ?? 0) - 1000) / 1000).toBeLessThan(1e-4);
+
+  await push(10);
+  await openTree(page, "static");
+  await page.getByRole("button", { name: /Run static solve/ }).click();
+  await expect(
+    page.getByText(
+      "Body 2 is held only by contact, which cannot stop it: its load would make it move along Y.",
+    ),
+  ).toBeVisible();
+});
+
 test("a model without contact offers no contact results", async ({ page }) => {
   const model = await openConstraintsMode(page);
   await page.evaluate((count) => {

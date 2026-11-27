@@ -20,6 +20,12 @@
 //! - a tie ties each node of one surface to the components of the other on the
 //!   translations.
 //!
+//! A loose piece that takes part in a contact, or is linked to one that does,
+//! is not reported: the contact solve holds it with weak springs and refuses
+//! a load that nothing holds ([`crate::contact`]), which only it can tell,
+//! since a contact holds only once its gap has closed and only along its
+//! normal.
+//!
 //! The rigid motions left free are the null space of these equations. Each
 //! equation is scaled to unit norm and folded into a small triangular factor
 //! per component (or per linked pair) as it is read, so the whole check is one
@@ -59,10 +65,8 @@ pub struct RigidLink {
     pub dof_mask: u8,
 }
 
-/// Two surfaces in frictionless contact: they can only press on each other,
-/// so they hold each other along the surface normal and nothing else. Each
-/// node of the outer element faces whose corners all lie on `surface` moves
-/// with every component an `other` node is in, along the faces' normal there.
+/// Two surfaces in frictionless contact, by their nodes: the pieces they lie
+/// on are left to the contact solve.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RigidContact {
     pub surface: Vec<u32>,
@@ -118,9 +122,8 @@ pub fn free_rigid_motions(model: &RigidBodyModel<'_>) -> Result<Vec<FreeMotion>,
     let mut rows = RowSets::default();
     rows.add_supports(model, &components);
     rows.add_links(model, &components);
-    rows.add_contacts(model, &components)?;
     let held = rows.propagate_holds(components.count);
-    Ok(rows.free_motions(&components, &held))
+    Ok(rows.free_motions(&components, &held, &in_contact(model, &components)))
 }
 
 fn validate(model: &RigidBodyModel<'_>) -> Result<usize, FemError> {
@@ -339,123 +342,6 @@ impl Components {
     }
 }
 
-/// A tetrahedron's faces, corners in cyclic order (turned outward when used).
-const TET_FACES: [&[usize]; 4] = [&[0, 2, 1], &[0, 1, 3], &[1, 2, 3], &[0, 3, 2]];
-
-/// A hexahedron's faces, corners in cyclic order (CHEXA: the bottom, then the
-/// top above it).
-const HEX_FACES: [&[usize]; 6] = [
-    &[0, 3, 2, 1],
-    &[4, 5, 6, 7],
-    &[0, 1, 5, 4],
-    &[1, 2, 6, 5],
-    &[2, 3, 7, 6],
-    &[3, 0, 4, 7],
-];
-
-/// The faces of solid elements that no other element shares and whose
-/// corners all lie on `surface`, each turned to face out of its element. A
-/// tetrahedron has its 4 corners first (of 4 or 10 nodes), a hexahedron its 8
-/// (of 8, 20 or 27); other elements (shell facets) have no solid face.
-fn outer_faces_on(
-    model: &RigidBodyModel<'_>,
-    positions: &[[f64; 3]],
-    surface: &[u32],
-) -> Vec<Vec<u32>> {
-    let members: HashSet<u32> = surface.iter().copied().collect();
-    let mut faces: HashMap<Vec<u32>, (Vec<u32>, usize)> = HashMap::new();
-    for element in model.element_offsets.windows(2) {
-        let nodes = &model.element_nodes[element[0] as usize..element[1] as usize];
-        let (corners, local): (&[u32], &[&[usize]]) = match nodes.len() {
-            4 | 10 => (&nodes[..4], &TET_FACES),
-            8 | 20 | 27 => (&nodes[..8], &HEX_FACES),
-            _ => continue,
-        };
-        let center = centroid(corners.iter().map(|&node| positions[node as usize]));
-        for face in local {
-            let mut corners_of: Vec<u32> = face.iter().map(|&at| corners[at]).collect();
-            let mut key = corners_of.clone();
-            key.sort_unstable();
-            let entry = faces.entry(key).or_insert_with(|| (Vec::new(), 0));
-            entry.1 += 1;
-            if entry.1 > 1 || !corners_of.iter().all(|node| members.contains(node)) {
-                continue;
-            }
-            // Turned outward by the element centre, whatever the element's
-            // orientation.
-            let points: Vec<[f64; 3]> = corners_of
-                .iter()
-                .map(|&node| positions[node as usize])
-                .collect();
-            let normal = newell(&points);
-            let middle = centroid(points.iter().copied());
-            let outward: f64 = (0..3)
-                .map(|axis| normal[axis] * (middle[axis] - center[axis]))
-                .sum();
-            if outward < 0.0 {
-                corners_of.reverse();
-            }
-            entry.0 = corners_of;
-        }
-    }
-    let mut outer: Vec<Vec<u32>> = faces
-        .into_values()
-        .filter(|(corners, count)| *count == 1 && !corners.is_empty())
-        .map(|(corners, _)| corners)
-        .collect();
-    outer.sort_unstable();
-    outer
-}
-
-fn centroid(points: impl Iterator<Item = [f64; 3]>) -> [f64; 3] {
-    let mut sum = [0.0; 3];
-    let mut count = 0_usize;
-    for point in points {
-        for axis in 0..3 {
-            sum[axis] += point[axis];
-        }
-        count += 1;
-    }
-    let count = count_as_f64(count);
-    [sum[0] / count, sum[1] / count, sum[2] / count]
-}
-
-/// Twice the area vector of a polygon (Newell), so a warped quadrilateral
-/// counts too.
-fn newell(points: &[[f64; 3]]) -> [f64; 3] {
-    let mut normal = [0.0; 3];
-    for (index, current) in points.iter().enumerate() {
-        let next = points[(index + 1) % points.len()];
-        normal[0] += (current[1] - next[1]) * (current[2] + next[2]);
-        normal[1] += (current[2] - next[2]) * (current[0] + next[0]);
-        normal[2] += (current[0] - next[0]) * (current[1] + next[1]);
-    }
-    normal
-}
-
-/// The area-weighted normal at each node of `faces`, unit length, sorted by node. A node whose
-/// faces cancel out has no normal and is left out.
-fn nodal_normals(faces: &[Vec<u32>], positions: &[[f64; 3]]) -> Vec<(usize, [f64; 3])> {
-    let mut sums: HashMap<usize, [f64; 3]> = HashMap::new();
-    for face in faces {
-        let points: Vec<[f64; 3]> = face.iter().map(|&node| positions[node as usize]).collect();
-        let normal = newell(&points);
-        for &node in face {
-            let sum = sums.entry(node as usize).or_insert([0.0; 3]);
-            for axis in 0..3 {
-                sum[axis] += normal[axis];
-            }
-        }
-    }
-    let mut normals: Vec<(usize, [f64; 3])> = sums
-        .into_iter()
-        .filter(|(_, sum)| sum.iter().any(|&value| value != 0.0))
-        .map(|(node, sum)| (node, normalized(sum)))
-        .collect();
-    normals.sort_unstable_by_key(|&(node, _)| node);
-    normals
-}
-
 /// The diagonal of the model's bounding box; 1 for a model of one point, where
 /// any length is as good as another.
 fn model_size(positions: &[[f64; 3]]) -> f64 {
@@ -476,6 +362,17 @@ fn model_size(positions: &[[f64; 3]]) -> f64 {
     } else {
         1.0
     }
+}
+
+/// Whether each component has a node on either surface of a contact.
+fn in_contact(model: &RigidBodyModel<'_>, components: &Components) -> Vec<bool> {
+    let mut marked = vec![false; components.count];
+    for contact in model.contacts {
+        for &node in contact.surface.iter().chain(&contact.other) {
+            marked[components.of_node[node as usize]] = true;
+        }
+    }
+    marked
 }
 
 // ── Constraint rows, folded as they are read ─────────────────────────────────
@@ -597,55 +494,6 @@ impl RowSets {
         }
     }
 
-    /// One row per contact node and other component: the two move the node
-    /// alike along the surface normal there, and freely across it.
-    fn add_contacts(
-        &mut self,
-        model: &RigidBodyModel<'_>,
-        components: &Components,
-    ) -> Result<(), FemError> {
-        for (index, contact) in model.contacts.iter().enumerate() {
-            let faces = outer_faces_on(model, &components.positions, &contact.surface);
-            if faces.is_empty() {
-                return Err(invalid(format!(
-                    "contact {index} names no whole outer face of a solid element"
-                )));
-            }
-            let normals = nodal_normals(&faces, &components.positions);
-            let mut others: Vec<usize> = contact
-                .other
-                .iter()
-                .map(|&node| components.of_node[node as usize])
-                .collect();
-            others.sort_unstable();
-            others.dedup();
-            for (node, normal) in normals {
-                let own = components.of_node[node];
-                let point = components.positions[node];
-                for &other in &others {
-                    if other == own {
-                        continue;
-                    }
-                    let (lower, higher) = (own.min(other), own.max(other));
-                    let mut row = [0.0; 2 * MODES];
-                    for (dof, &direction) in normal.iter().enumerate() {
-                        let first = components.motion_row(lower, point, dof);
-                        let second = components.motion_row(higher, point, dof);
-                        for mode in 0..MODES {
-                            row[mode] += direction * first[mode];
-                            row[MODES + mode] -= direction * second[mode];
-                        }
-                    }
-                    self.pairs
-                        .entry((lower, higher))
-                        .or_insert_with(Triangle::new)
-                        .add(row);
-                }
-            }
-        }
-        Ok(())
-    }
-
     /// Mark every component its own rows hold, and pass each hold on: a link to
     /// a held component is a support of the other one.
     fn propagate_holds(&mut self, count: usize) -> Vec<bool> {
@@ -695,8 +543,14 @@ impl RowSets {
         held
     }
 
-    /// The loose components that have elements, with their free motions.
-    fn free_motions(&self, components: &Components, held: &[bool]) -> Vec<FreeMotion> {
+    /// The loose components that have elements, with their free motions,
+    /// but for clusters with a component `in_contact`.
+    fn free_motions(
+        &self,
+        components: &Components,
+        held: &[bool],
+        in_contact: &[bool],
+    ) -> Vec<FreeMotion> {
         let mut sets = DisjointSets::new(components.count);
         for &(lower, higher) in self.pairs.keys() {
             if !held[lower] && !held[higher] {
@@ -714,6 +568,9 @@ impl RowSets {
         }
         let mut motions = Vec::new();
         for members in clusters.values() {
+            if members.iter().any(|&member| in_contact[member]) {
+                continue;
+            }
             if members
                 .iter()
                 .any(|&member| !components.labels[member].is_empty())

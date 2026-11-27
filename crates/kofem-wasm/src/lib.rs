@@ -699,6 +699,7 @@ impl ElasticModel {
         .map_err(|error| to_js(&error))?;
         Ok(ContactRun {
             run,
+            unheld: None,
             status: NewtonStatus::Solving {
                 increment: 1,
                 iteration: 1,

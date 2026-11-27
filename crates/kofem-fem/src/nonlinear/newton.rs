@@ -250,7 +250,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                     let progress = self
                         .solver
                         .advance(cg_budget)
-                        .map_err(|error| self.tangent_failure(&error))?;
+                        .map_err(|error| self.tangent_failure(error))?;
                     let cg_iterations = cg_iterations + progress.iterations;
                     self.report.cg_iterations += progress.iterations;
                     if !progress.ready {
@@ -370,7 +370,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let settled = self
             .solver
             .settle(&self.displacements, residual, tangent, &self.supports)
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         if settled.residual.len() != self.displacements.len() {
             return Err(FemError::DisplacementLength {
                 len: settled.residual.len(),
@@ -442,7 +442,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let residual = self.out_of_balance();
         self.solver
             .start(tangent, residual, &prescribed)
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         self.phase = Phase::Solving { cg_iterations: 0 };
         Ok(())
     }
@@ -451,7 +451,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let (correction, tangent) = self
             .solver
             .finish()
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         if correction.len() != self.displacements.len() {
             return Err(FemError::DisplacementLength {
                 len: correction.len(),
@@ -507,11 +507,16 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         Ok(())
     }
 
-    fn tangent_failure(&self, error: &FemError) -> FemError {
-        FemError::TangentSolve {
-            increment: self.increment,
-            iteration: self.iteration + 1,
-            reason: error.to_string(),
+    fn tangent_failure(&self, error: FemError) -> FemError {
+        match error {
+            // A verdict on the model, not a failed solve: the user acts on it
+            // as it is.
+            FemError::ContactUnheld { .. } => error,
+            _ => FemError::TangentSolve {
+                increment: self.increment,
+                iteration: self.iteration + 1,
+                reason: error.to_string(),
+            },
         }
     }
 }
