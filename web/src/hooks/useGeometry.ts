@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { sendToWorker } from "../workers/sharedWorker";
+import type { CadFaceProperties } from "../lib/cadFaceProperties";
 import { clearWorkerLogs } from "./useWorkerLogs";
 import {
   cadFormatFromName,
@@ -30,6 +31,7 @@ export function useGeometry() {
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const setStepBytes = useModelStore((s) => s.setStepBytes);
+  const setCadFaces = useModelStore((s) => s.setCadFaces);
   const setGeometryFormat = useModelStore((s) => s.setGeometryFormat);
   const setBodies = useModelStore((s) => s.setBodies);
 
@@ -76,13 +78,14 @@ export function useGeometry() {
         );
         return false;
       }
-      const { points, triangles, bodyIds, faceIds, bodyCount } =
+      const { points, triangles, bodyIds, faceIds, bodyCount, cadFaces } =
         await sendToWorker<{
           points: [number, number, number][];
           triangles: [number, number, number][];
           bodyIds: number[];
           faceIds: number[];
           bodyCount: number;
+          cadFaces: CadFaceProperties[];
         }>("parse_step", { bytes, format });
       if (points.length === 0) {
         failed("empty_geometry", tr(geometryMessages).noGeometryFound);
@@ -91,6 +94,7 @@ export function useGeometry() {
       // Retain the raw bytes + format so the geometry can be reloaded for a
       // re-mesh (the worker is reset after each mesh and loses the shape).
       setStepBytes(bytes);
+      setCadFaces(bytes, cadFaces);
       setGeometryFormat(format);
       setStepSurface({ points, triangles, bodyIds, faceIds });
       // A new part is a new model: the previous one's logs no longer apply.

@@ -9,9 +9,13 @@ import { consentBanner } from "../../lib/analytics";
 import type { ViewRepr } from "../../store/viewSlice";
 import type { Projection } from "../../lib/projection";
 import { EngineStatus } from "./EngineStatus";
-import { useT } from "../../i18n/useLocale";
+import { useIntlTag, useT } from "../../i18n/useLocale";
 import { statusMessages } from "../../i18n/messages/shell";
 import type { PickGeometry } from "../../lib/facePick";
+import { cadFacesOf } from "../../store/geometrySlice";
+import { cadFaceLabel } from "../../lib/cadFaceProperties";
+import type { CadFaceProperties } from "../../lib/cadFaceProperties";
+import { MODEL_UNITS } from "../../lib/modelUnits";
 import styles from "./StatusBar.module.css";
 
 type StatusText = (typeof statusMessages)["en"];
@@ -42,6 +46,23 @@ function loadCountLabels(
   if (faceLoads > 0) parts.push(text.faceLoads(faceLoads));
   if (nodalLoadDofs > 0) parts.push(text.nodalLoadDofs(nodalLoadDofs));
   return parts;
+}
+
+// The CAD face a face pick selected whole, when the engine has described the
+// geometry's faces.
+function pickedCadFace(
+  faces: CadFaceProperties[] | null,
+  pickGeometry: PickGeometry,
+  cadFaceId: number | undefined,
+): { id: number; face: CadFaceProperties } | null {
+  if (faces === null || pickGeometry !== "face" || cadFaceId === undefined)
+    return null;
+  const face = faces[cadFaceId - 1];
+  if (face === undefined)
+    throw new Error(
+      `Picked CAD face ${cadFaceId}, but the geometry has ${faces.length} faces`,
+    );
+  return { id: cadFaceId, face };
 }
 
 function reprLabels(
@@ -188,7 +209,13 @@ export function StatusBar() {
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const setLoadDisplay = useModelStore((s) => s.setLoadDisplay);
   const stepSurface = useModelStore((s) => s.stepSurface);
+  const cadFaces = useModelStore(cadFacesOf);
   const text = useT(statusMessages);
+  const intl = useIntlTag();
+  const picked = pickedCadFace(cadFaces, pickGeometry, selectedFace?.cadFaceId);
+  const pickedLabel =
+    picked &&
+    cadFaceLabel(picked.id, picked.face, text, intl, MODEL_UNITS.length);
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
   const hasSurface = nodes.length > 0;
@@ -225,6 +252,16 @@ export function StatusBar() {
               pickTarget(text, pickGeometry),
               pickPurpose(text, pickMode),
             )}
+          </span>
+        )}
+
+        {pickedLabel && (
+          <span
+            className={styles.faceChip}
+            title={pickedLabel}
+            data-testid="picked-face"
+          >
+            {pickedLabel}
           </span>
         )}
 
@@ -390,7 +427,10 @@ export function StatusBar() {
           </span>
         ) : null}
         <EngineStatus />
-        <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
+        <span className={styles.muted}>
+          {MODEL_UNITS.length} · {MODEL_UNITS.force} · {MODEL_UNITS.stress} ·{" "}
+          {APP_VERSION}
+        </span>
         <a
           className={styles.discLink}
           href="https://github.com/mkofler96/KoFEM/blob/main/DISCLAIMER.md"

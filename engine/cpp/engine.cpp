@@ -43,3 +43,11 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("split_cone_tips",        &split_cone_tips);
     emscripten::function("remove_faces",           &remove_faces);
 }
+
+// Per-face CAD properties (face_properties.cpp): kept in a block of its own at
+// the end of the file, so the stages above can be rewired without touching it.
+#include "face_properties.h"
+
+EMSCRIPTEN_BINDINGS(kofem_face_properties) {
+    emscripten::function("cad_face_properties",    &cad_face_properties);
+}

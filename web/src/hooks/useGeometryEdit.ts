@@ -8,6 +8,7 @@ import { resetWorker, sendToWorker } from "../workers/sharedWorker";
 import { isCadBody } from "../store/geometrySlice";
 import { booleanBodySources } from "../lib/booleanBodies";
 import type { RepairHingesOptions } from "../wasm/pkg/kofem_wasm";
+import type { CadFaceProperties } from "../lib/cadFaceProperties";
 import { tr } from "../i18n/useLocale";
 import { geometryMessages } from "../i18n/messages/geometry";
 
@@ -18,6 +19,7 @@ export type BooleanOp = "union" | "subtract" | "intersect";
 type EditReply = Required<StepTessellation> & {
   bytes: Uint8Array;
   bodyCount: number;
+  cadFaces: CadFaceProperties[];
 };
 
 const AXIS_NORMAL: Record<SplitAxis, [number, number, number]> = {
@@ -47,6 +49,7 @@ export function useGeometryEdit() {
   const geometryFormat = useModelStore((s) => s.geometryFormat);
   const properties = useModelStore((s) => s.properties);
   const applyGeometryEdit = useModelStore((s) => s.applyGeometryEdit);
+  const setCadFaces = useModelStore((s) => s.setCadFaces);
   const undoGeometryEdit = useModelStore((s) => s.undoGeometryEdit);
   const setRunning = useModelStore((s) => s.setRunning);
   const splitError = useModelStore((s) => s.splitError);
@@ -208,6 +211,7 @@ export function useGeometryEdit() {
         bodySources?.(reply),
         piecesAs,
       );
+      setCadFaces(reply.bytes, reply.cadFaces);
       return true;
     } catch (err) {
       // The worker may already hold the edited shape the store did not take;

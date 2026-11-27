@@ -25,6 +25,7 @@ import {
   suggestElementSizes,
 } from "../lib/meshSizing";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
+import type { CadFaceProperties } from "../lib/cadFaceProperties";
 import {
   detectInterfaces,
   INTERFACE_TYPES,
@@ -285,9 +286,16 @@ export interface GeometryVersion {
   stepBytes: Uint8Array;
   geometryFormat: GeometryFormat;
   stepSurface: StepTessellation;
+  cadFaces: CadFaces | null;
   properties: Property[];
   interfaces: BodyInterface[] | null;
   faceSizes: FaceSize[];
+}
+
+// The CAD faces of a geometry file, with the file they describe.
+export interface CadFaces {
+  bytes: Uint8Array;
+  faces: CadFaceProperties[];
 }
 
 // How the split tool cuts: imprint the plane on the picked faces (the part stays
@@ -297,6 +305,16 @@ export type SplitMode = "faces" | "bodies";
 export interface VolMesh {
   points: [number, number, number][];
   edges: [number, number][];
+}
+
+// The properties of the current geometry's CAD faces, indexed by face id − 1;
+// null while the engine has not described the file the store now holds.
+export function cadFacesOf(
+  s: Pick<GeometrySlice, "cadFaces" | "stepBytes">,
+): CadFaceProperties[] | null {
+  return s.cadFaces !== null && s.cadFaces.bytes === s.stepBytes
+    ? s.cadFaces.faces
+    : null;
 }
 
 export interface GeometrySlice {
@@ -312,6 +330,10 @@ export interface GeometrySlice {
   stepBytes: Uint8Array | null;
   // Format of the retained stepBytes — selects the OCCT reader on re-mesh.
   geometryFormat: GeometryFormat;
+  // What each CAD face is (lib/cadFaceProperties), measured by the engine on
+  // the file it holds; read it through cadFacesOf, which gives it only while
+  // that file is stepBytes. Null until the engine has described the file.
+  cadFaces: CadFaces | null;
   isMeshing: boolean;
   volMesh: VolMesh | null;
   // Netgen surface element vertex indices (0-based, same node IDs as the volume
@@ -394,6 +416,7 @@ export interface GeometrySlice {
   setInterfaceType(interfaceId: number, type: InterfaceType): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
+  setCadFaces(bytes: Uint8Array, faces: CadFaceProperties[]): void;
   setGeometryFormat(format: GeometryFormat): void;
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
@@ -547,6 +570,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   stepSurface: null,
   stepBytes: null,
   geometryFormat: "step",
+  cadFaces: null,
   isMeshing: false,
   volMesh: null,
   surfaceTriangles: null,
@@ -682,6 +706,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepBytes = bytes;
     }),
+  setCadFaces: (bytes, faces) =>
+    set((s) => {
+      s.cadFaces = { bytes, faces };
+    }),
   setGeometryFormat: (format) =>
     set((s) => {
       s.geometryFormat = format;
@@ -695,6 +723,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       if (!tessellation) {
         s.stepBytes = null;
         s.geometryFormat = "step";
+        s.cadFaces = null;
       }
       // New (or cleared) geometry: body ids, the mesh and everything on it no
       // longer apply (issue #353), and the edits of the previous geometry are
@@ -777,6 +806,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         stepBytes: s.stepBytes,
         geometryFormat: s.geometryFormat,
         stepSurface: s.stepSurface,
+        cadFaces: s.cadFaces,
         properties: cadBodies,
         interfaces: s.interfaces,
         faceSizes: s.faceSizes,
@@ -840,6 +870,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.stepBytes = previous.stepBytes;
       s.geometryFormat = previous.geometryFormat;
       s.stepSurface = previous.stepSurface;
+      s.cadFaces = previous.cadFaces;
       s.properties = previous.properties;
       s.interfaces = previous.interfaces;
       dropAnalysis(s);

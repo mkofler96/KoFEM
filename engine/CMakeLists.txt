@@ -247,3 +247,7 @@ target_link_options(kofem_wasm_emcc PRIVATE
 
 # emcc adds .wasm automatically; only set the JS extension here
 set_target_properties(kofem_wasm_emcc PROPERTIES SUFFIX ".js")
+
+# Per-face CAD properties (KOF-493), added on its own so the stage list above
+# can change without touching this line.
+target_sources(kofem_wasm_emcc PRIVATE cpp/face_properties.cpp)

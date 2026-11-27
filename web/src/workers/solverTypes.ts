@@ -118,6 +118,11 @@ export interface SplitConeTipsPayload {
   format: string;
   faceIds: number[];
 }
+export interface CadFacePropertiesPayload {
+  // The geometry file whose faces are described, and its format.
+  bytes: Uint8Array;
+  format: string;
+}
 export interface RemoveFacesPayload {
   // The current geometry file and its format — reloaded before the removal.
   bytes: Uint8Array;

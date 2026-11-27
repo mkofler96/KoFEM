@@ -5743,6 +5743,38 @@
     "es": "5cd73385c0a3",
     "pt": "5b1d0ac5d1fa"
   },
+  "shell.ts:statusMessages.faceAxis": {
+    "en": "c95a65a10dd0",
+    "de": "ef936e403178",
+    "fr": "569dbb198daf",
+    "it": "f65d0b1c4338",
+    "es": "428ea5ec3540",
+    "pt": "22cee12f0517"
+  },
+  "shell.ts:statusMessages.faceCone": {
+    "en": "fda44e495cda",
+    "de": "88dc83a33f30",
+    "fr": "126d94a3fa82",
+    "it": "4d033babac00",
+    "es": "4d033babac00",
+    "pt": "fda44e495cda"
+  },
+  "shell.ts:statusMessages.faceCylinder": {
+    "en": "c849acf1e631",
+    "de": "7d2fe148497a",
+    "fr": "7d5a1b1b7e0a",
+    "it": "9cd56acb095f",
+    "es": "9cd56acb095f",
+    "pt": "9cd56acb095f"
+  },
+  "shell.ts:statusMessages.faceLabel": {
+    "en": "91be53a69f19",
+    "de": "4815ab1746b8",
+    "fr": "91be53a69f19",
+    "it": "1007fa2a9915",
+    "es": "280b8e28d8fb",
+    "pt": "91be53a69f19"
+  },
   "shell.ts:statusMessages.faceLoads": {
     "en": "eadee24633d1",
     "de": "58b80af58725",
@@ -5750,6 +5782,38 @@
     "it": "7d04887bf5f2",
     "es": "a07960daca4c",
     "pt": "b1837d018ba5"
+  },
+  "shell.ts:statusMessages.faceNormal": {
+    "en": "7b707adec540",
+    "de": "81ca97f03aa6",
+    "fr": "2da7cad99a98",
+    "it": "2da7cad99a98",
+    "es": "7b707adec540",
+    "pt": "7b707adec540"
+  },
+  "shell.ts:statusMessages.faceOther": {
+    "en": "2975a55d350b",
+    "de": "44d8ff9c859a",
+    "fr": "8c51d4da5490",
+    "it": "8a356e132bbb",
+    "es": "3300c2f92804",
+    "pt": "156860d01bb7"
+  },
+  "shell.ts:statusMessages.facePlane": {
+    "en": "1048b88588f8",
+    "de": "508064ff8ad6",
+    "fr": "b1e4518582dd",
+    "it": "70913c3d4cab",
+    "es": "7edf220133c2",
+    "pt": "7edf220133c2"
+  },
+  "shell.ts:statusMessages.faceVector": {
+    "en": "830c18f453cb",
+    "de": "d4c2523cadbb",
+    "fr": "f18b0a2f18a2",
+    "it": "d4c2523cadbb",
+    "es": "d4c2523cadbb",
+    "pt": "d4c2523cadbb"
   },
   "shell.ts:statusMessages.meshOk": {
     "en": "e998564af64d",
