@@ -73,7 +73,8 @@ Work on Linear issue KOF-nn: "<title>". Read the full issue in Linear first
 Context: other cloud sessions are working in parallel on KOF-aa (<area>),
 KOF-bb (<area>) ... Stay out of those areas. <Known conflict risk, if any.>
 Branch from develop, target develop, write `Fixes KOF-nn` in the PR
-(`Refs KOF-nn` if the acceptance criteria may not be met).
+(`Refs KOF-nn` if the acceptance criteria may not be met, or if the issue
+has a GitHub issue attached: only the maintainer closes GitHub issues).
 
 Show the proof in this chat too, not only on Linear. When you post or update
 the Linear evidence comment, also send it here: the before/after screenshots
