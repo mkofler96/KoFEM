@@ -80,6 +80,26 @@
 //! these steps touched are reported ([`ContactState::shared`]); the same face
 //! in two contacts would count its area twice and is refused.
 //!
+//! A contact made from picked surfaces ([`ContactCg::from_picked_surfaces`])
+//! holds its two bodies wherever they meet, not only on the faces picked.
+//! After each correction, a boundary node of one body found behind an outer
+//! face of the other, by more than [`OVERLAP_TOLERANCE`] of the model size
+//! and less than the face's size, and not already on a contact with that
+//! face, makes the contacts grow. Only a node with a face of its own turned
+//! toward the face it is behind counts ([`FACING`]), not one round the other
+//! body's edge. The surface around the node that faces the other body joins
+//! its side, and the surface around the face it passed the other side, each
+//! spread over neighbouring faces of one smooth surface within
+//! [`SEARCH_FACES`] face sizes of a face of the other body that faces it, so
+//! a contact grows over a whole symmetric surface, not one side of it. The
+//! contact that already has the passed face grows; a face no contact has
+//! starts a contact of its own, so one contact does not mix surfaces turned
+//! different ways, and no face ends up in two. Faces whose corners all lie on
+//! a grown side join it, so it has no holes. The mortar integrals are then
+//! taken anew; slave nodes keep their state and new ones start closed where
+//! they overlap, the springs come back into the balance until the set has
+//! settled again, and the iterations go on from the displacements reached.
+//!
 //! References: S. Hüeber, B. I. Wohlmuth, "A primal–dual active set strategy
 //! for non-linear multibody contact problems", CMAME 194 (2005) 3147–3166;
 //! A. Popp, M. W. Gee, W. A. Wall, "A finite deformation mortar contact
@@ -102,7 +122,7 @@ use crate::error::FemError;
 use crate::mesh::{ElementOrder, TetMesh};
 use crate::mortar::{mortar_integrals, MortarFace, SlaveIntegrals};
 use crate::nonlinear::{Settled, SolveProgress, TangentSolver};
-use crate::rigid_body::{free_rigid_motions, RigidBodyModel, RigidLink};
+use crate::rigid_body::{free_rigid_motions, DisjointSets, RigidBodyModel, RigidLink};
 use crate::sparse::CsrMatrix;
 use crate::static_solve::PreconditionerChoice;
 use crate::surface::BoundaryFaces;
@@ -122,6 +142,22 @@ const STALLED: f64 = 0.5;
 /// Below this many times the solve's tolerance and the load, a resultant is
 /// round-off and says nothing about a motion.
 const RESULTANT_FLOOR: f64 = 10.0;
+
+/// A node behind an outer face of the other body by more than this fraction
+/// of the model size overlaps it (see the module notes); less is round-off.
+const OVERLAP_TOLERANCE: f64 = 1e-6;
+
+/// Faces whose normals are at least this far apart (cos 120°) face each
+/// other: a contact grows over those only, not round a body's edge.
+const FACING: f64 = -0.5;
+
+/// A point this far outside an edge of a face, as a fraction of the edge's
+/// length, still lies over the face.
+const EDGE_TOLERANCE: f64 = 1e-6;
+
+/// How far from the other body, in face sizes, a contact grows over a
+/// surface that faces it.
+const SEARCH_FACES: f64 = 2.0;
 
 /// Two slave normals of one node at most this far apart (cos 10°) are one
 /// surface picked as two contacts; further apart, the node is a corner.
@@ -366,6 +402,9 @@ pub struct ContactState {
     /// nodes another contact no longer follows, and nodes that gave up a
     /// condition there.
     pub shared: Vec<usize>,
+    /// Outer faces the contacts grew over where their bodies overlapped
+    /// outside the picked surfaces.
+    pub grown_faces: usize,
     /// What the elimination did with the model's ties.
     pub ties: TieReport,
 }
@@ -525,6 +564,37 @@ pub struct ContactCg {
     active: Option<ActiveSolve>,
     /// Corrections solved so far.
     corrections: usize,
+    /// For a contact from picked surfaces, what it needs to grow.
+    growth: Option<Growth>,
+}
+
+/// The picked surfaces of each contact pair and the outer faces of their
+/// bodies, for growing the contacts where the bodies overlap.
+struct Growth {
+    /// The picked vertices of each pair's two sides, for a pair that does
+    /// not grow.
+    picked: Vec<[Vec<u32>; 2]>,
+    /// The body (mesh component) of each pair's two sides; `None` for a pair
+    /// whose sides share a body, which does not grow.
+    bodies: Vec<Option<[usize; 2]>>,
+    /// The outer faces of each body, by component.
+    faces: BTreeMap<usize, Vec<OuterFace>>,
+    /// Each growing pair's two sides, as indices into its bodies' faces.
+    sides: Vec<[BTreeSet<usize>; 2]>,
+    /// Faces the pairs held as picked.
+    picked_faces: usize,
+    grown_faces: usize,
+}
+
+/// An outer face of a body, turned to face out of its element.
+struct OuterFace {
+    face: MortarFace,
+    /// Whether the corner order as given turns the face's normal inwards.
+    inward: bool,
+    /// The outward unit normal on the undeformed geometry.
+    normal: [f64; 3],
+    /// The longest distance between two corners.
+    size: f64,
 }
 
 impl ContactCg {
@@ -549,7 +619,134 @@ impl ContactCg {
             setup: None,
             active: None,
             corrections: 0,
+            growth: None,
         }
+    }
+
+    /// A contact solve over pairs of picked surfaces, each side given by its
+    /// vertices, that grows where the two bodies overlap elsewhere (see the
+    /// module notes). Ties and settings as for [`ContactCg::new`].
+    ///
+    /// # Errors
+    /// [`FemError::Contact`] where [`ContactPair::between`] or
+    /// [`ContactInterface::new`] refuse the surfaces.
+    pub fn from_picked_surfaces(
+        mesh: &TetMesh,
+        sides: &[(Vec<u32>, Vec<u32>)],
+        ties: Option<VertexTies>,
+        cg: CgSettings,
+        preconditioner: PreconditionerChoice,
+    ) -> Result<Self, FemError> {
+        let boundary = BoundaryFaces::new(mesh);
+        let picked: Vec<[Vec<u32>; 2]> = sides
+            .iter()
+            .map(|(first, second)| [first.clone(), second.clone()])
+            .collect();
+        let component = mesh_components(mesh);
+        let body_of = |side: &[u32]| -> Option<usize> {
+            let mut bodies = side.iter().map(|&vertex| component[vertex as usize]);
+            let first = bodies.next()?;
+            bodies.all(|body| body == first).then_some(first)
+        };
+        let bodies: Vec<Option<[usize; 2]>> = picked
+            .iter()
+            .map(|[first, second]| match (body_of(first), body_of(second)) {
+                (Some(first), Some(second)) if first != second => Some([first, second]),
+                _ => None,
+            })
+            .collect();
+        let mut faces: BTreeMap<usize, Vec<OuterFace>> = BTreeMap::new();
+        for &body in bodies.iter().flatten().flatten() {
+            faces.entry(body).or_insert_with(|| {
+                boundary
+                    .mortar_faces(mesh, |vertex| component[vertex as usize] == body)
+                    .into_iter()
+                    .map(OuterFace::from)
+                    .collect()
+            });
+        }
+        let sides: Vec<[BTreeSet<usize>; 2]> = picked
+            .iter()
+            .zip(&bodies)
+            .map(|(vertices, bodies)| {
+                let Some(bodies) = bodies else {
+                    return [BTreeSet::new(), BTreeSet::new()];
+                };
+                std::array::from_fn(|side| {
+                    let members: BTreeSet<u32> = vertices[side].iter().copied().collect();
+                    faces[&bodies[side]]
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, outer)| {
+                            outer
+                                .face
+                                .nodes
+                                .iter()
+                                .all(|&node| members.contains(&to_u32(node)))
+                        })
+                        .map(|(index, _)| index)
+                        .collect()
+                })
+            })
+            .collect();
+        let growth = Growth {
+            picked,
+            bodies,
+            faces,
+            picked_faces: sides.iter().flatten().map(BTreeSet::len).sum(),
+            sides,
+            grown_faces: 0,
+        };
+        let interface = growth.interface(mesh, &boundary)?;
+        let mut solver = Self::new(mesh, interface, ties, cg, preconditioner);
+        solver.growth = Some(growth);
+        Ok(solver)
+    }
+
+    /// Grow the contacts where their bodies overlap at `displacements` (see
+    /// the module notes) and set up their mortar integrals anew; returns
+    /// whether any grew.
+    fn grow(&mut self, displacements: &[f64]) -> Result<bool, FemError> {
+        let Some(growth) = self.growth.as_mut() else {
+            return Ok(false);
+        };
+        let points = self.mesh.vertices();
+        let at = |node: usize| -> [f64; 3] {
+            std::array::from_fn(|axis| points[node][axis] + displacements[3 * node + axis])
+        };
+        let tolerance = OVERLAP_TOLERANCE * model_size(points);
+        let mut grew = false;
+        let body_pairs: BTreeSet<[usize; 2]> = growth
+            .bodies
+            .iter()
+            .flatten()
+            .map(|&[first, second]| [first.min(second), first.max(second)])
+            .collect();
+        for [first, second] in body_pairs {
+            for (own, other) in [(first, second), (second, first)] {
+                for (node, face) in growth.overlaps(own, other, &at, tolerance) {
+                    if growth.faces_toward(own, other, node, face)
+                        && !growth.within_contact(own, other, node, face)
+                    {
+                        grew |= growth.take_overlap(own, other, node, face);
+                    }
+                }
+            }
+        }
+        if !grew {
+            return Ok(false);
+        }
+        growth.close_sides();
+        let boundary = BoundaryFaces::new(&self.mesh);
+        self.interface = growth.interface(&self.mesh, &boundary)?;
+        growth.grown_faces = growth
+            .sides
+            .iter()
+            .flatten()
+            .map(BTreeSet::len)
+            .sum::<usize>()
+            .saturating_sub(growth.picked_faces);
+        Ok(true)
     }
 
     /// The contact state at the last settled iterate; `None` before the
@@ -573,6 +770,7 @@ impl ContactCg {
                 .collect(),
             held: setup.held.clone(),
             shared: setup.shared.clone(),
+            grown_faces: self.growth.as_ref().map_or(0, |growth| growth.grown_faces),
             ties: setup.ties,
         })
     }
@@ -783,6 +981,38 @@ impl ContactCg {
 }
 
 impl Setup {
+    /// Continue from `previous`, the set-up before the contacts grew: a slave
+    /// node it had keeps its state, a new one starts closed where it overlaps
+    /// at `displacements`. The springs come back into the balance until the
+    /// grown set has settled, so nothing drifts along a free motion while it
+    /// does.
+    fn carry_over(&mut self, previous: &Setup, displacements: &[f64]) {
+        let before: BTreeMap<usize, bool> = previous
+            .nodes
+            .iter()
+            .map(|active| (previous.slaves[active.index].node, active.closed))
+            .collect();
+        for active in &mut self.nodes {
+            let slave = &self.slaves[active.index];
+            let mut moved = 0.0;
+            for axis in 0..3 {
+                let followed: f64 = slave
+                    .masters
+                    .iter()
+                    .zip(&slave.weights)
+                    .map(|(&master, &weight)| weight * displacements[3 * master + axis])
+                    .sum();
+                moved += active.normal[axis] * (followed - displacements[3 * slave.node + axis]);
+            }
+            active.gap = active.initial_gap + moved;
+            active.closed = before
+                .get(&slave.node)
+                .copied()
+                .unwrap_or(active.gap <= 0.0);
+        }
+        self.load_scale = previous.load_scale;
+    }
+
     /// The pressure and gap of every slave node at `displacements`, and the
     /// residual `wide` (6 per node) less the reactions of the closed nodes
     /// and the ties, back on 3 DOFs per node (see the module notes).
@@ -977,8 +1207,13 @@ impl TangentSolver for ContactCg {
                 count,
             });
         }
-        if self.setup.is_none() {
-            self.setup = Some(self.set_up(supports)?);
+        let grew = self.corrections > 0 && self.grow(displacements)?;
+        if grew || self.setup.is_none() {
+            let mut setup = self.set_up(supports)?;
+            if let Some(previous) = self.setup.take() {
+                setup.carry_over(&previous, displacements);
+            }
+            self.setup = Some(setup);
         }
         let Some(setup) = self.setup.as_mut() else {
             return Err(FemError::NonlinearInput {
@@ -1028,7 +1263,7 @@ impl TangentSolver for ContactCg {
         }
         Ok(Settled {
             residual: free,
-            pending: update.flipped || update.overlap || release,
+            pending: update.flipped || update.overlap || release || grew,
             load,
         })
     }
@@ -1229,6 +1464,432 @@ fn merged(first: &SlaveNode, second: &SlaveNode) -> SlaveNode {
 fn unit(vector: [f64; 3]) -> [f64; 3] {
     let length = dot(vector, vector).sqrt();
     vector.map(|component| component / length)
+}
+
+impl From<MortarFace> for OuterFace {
+    fn from(face: MortarFace) -> Self {
+        let normal = newell(&face.points);
+        let center = centroid(&face.points);
+        let outward: f64 = (0..3)
+            .map(|axis| normal[axis] * (center[axis] - face.element_centroid[axis]))
+            .sum();
+        let mut size: f64 = 0.0;
+        for first in &face.points {
+            for second in &face.points {
+                let gap: [f64; 3] = std::array::from_fn(|axis| first[axis] - second[axis]);
+                size = size.max(dot(gap, gap).sqrt());
+            }
+        }
+        let size = size;
+        let length = dot(normal, normal).sqrt();
+        let sign = if outward < 0.0 { -1.0 } else { 1.0 };
+        Self {
+            face,
+            inward: outward < 0.0,
+            normal: normal.map(|component| sign * component / length),
+            size,
+        }
+    }
+}
+
+impl OuterFace {
+    /// How far `point` is behind the face at the positions `at`, if it lies
+    /// over the face (its projection inside it); positive behind.
+    fn depth_behind(&self, point: [f64; 3], at: &impl Fn(usize) -> [f64; 3]) -> Option<f64> {
+        let corners: Vec<[f64; 3]> = self.face.nodes.iter().map(|&node| at(node)).collect();
+        let mut normal = newell(&corners);
+        if self.inward {
+            normal = normal.map(|component| -component);
+        }
+        let length = dot(normal, normal).sqrt();
+        if length == 0.0 {
+            return None;
+        }
+        let normal = normal.map(|component| component / length);
+        let center = centroid(&corners);
+        let offset: [f64; 3] = std::array::from_fn(|axis| point[axis] - center[axis]);
+        let depth = -dot(normal, offset);
+        // Over the face: on the inner side of every edge, seen along the
+        // normal. A point on an edge, as where two bodies' edges line up,
+        // is over it too: [`EDGE_TOLERANCE`] keeps round-off from deciding.
+        let inside = (0..corners.len()).all(|index| {
+            let start = corners[index];
+            let end = corners[(index + 1) % corners.len()];
+            let edge: [f64; 3] = std::array::from_fn(|axis| end[axis] - start[axis]);
+            let to_point: [f64; 3] = std::array::from_fn(|axis| point[axis] - start[axis]);
+            dot(cross(edge, to_point), normal) >= -EDGE_TOLERANCE * dot(edge, edge)
+        });
+        inside.then_some(depth)
+    }
+}
+
+impl Growth {
+    /// The boundary nodes of body `own` behind an outer face of body `other`
+    /// by more than `tolerance` and less than the face's size, with the index
+    /// of the deepest such face.
+    fn overlaps(
+        &self,
+        own: usize,
+        other: usize,
+        at: &impl Fn(usize) -> [f64; 3],
+        tolerance: f64,
+    ) -> Vec<(usize, usize)> {
+        let (Some(own_faces), Some(other_faces)) = (self.faces.get(&own), self.faces.get(&other))
+        else {
+            return Vec::new();
+        };
+        let mut low = [f64::INFINITY; 3];
+        let mut high = [f64::NEG_INFINITY; 3];
+        for face in other_faces {
+            for &node in &face.face.nodes {
+                let point = at(node);
+                for axis in 0..3 {
+                    low[axis] = low[axis].min(point[axis]);
+                    high[axis] = high[axis].max(point[axis]);
+                }
+            }
+        }
+        let nodes: BTreeSet<usize> = own_faces
+            .iter()
+            .flat_map(|face| face.face.nodes.iter().copied())
+            .collect();
+        let mut found = Vec::new();
+        for node in nodes {
+            let point = at(node);
+            if (0..3).any(|axis| point[axis] < low[axis] || point[axis] > high[axis]) {
+                continue;
+            }
+            let deepest = other_faces
+                .iter()
+                .enumerate()
+                .filter_map(|(index, face)| {
+                    face.depth_behind(point, at)
+                        .filter(|&depth| depth > tolerance && depth < face.size)
+                        .map(|depth| (index, depth))
+                })
+                .max_by(|first, second| first.1.total_cmp(&second.1));
+            if let Some((face, _)) = deepest {
+                found.push((node, face));
+            }
+        }
+        found
+    }
+
+    /// Whether node `node` of body `own` has a face of its own turned toward
+    /// face `face` of body `other` ([`FACING`]): a node behind a face it
+    /// turns away from, as round a body's edge, is no contact.
+    fn faces_toward(&self, own: usize, other: usize, node: usize, face: usize) -> bool {
+        let (Some(own_faces), Some(other_faces)) = (self.faces.get(&own), self.faces.get(&other))
+        else {
+            return false;
+        };
+        let passed = &other_faces[face];
+        own_faces.iter().any(|candidate| {
+            candidate.face.nodes.contains(&node) && dot(candidate.normal, passed.normal) <= FACING
+        })
+    }
+
+    /// The pairs between bodies `own` and `other`, with which of their sides
+    /// is `own`'s and which `other`'s.
+    fn pairs_between(&self, own: usize, other: usize) -> Vec<(usize, usize, usize)> {
+        (0..self.sides.len())
+            .filter_map(|pair| match self.bodies[pair]? {
+                [first, second] if first == own && second == other => Some((pair, 0, 1)),
+                [first, second] if first == other && second == own => Some((pair, 1, 0)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Whether node `node` is a corner of a face on side `side` of pair
+    /// `pair`.
+    fn side_has_node(&self, pair: usize, side: usize, node: usize) -> bool {
+        let Some(bodies) = self.bodies[pair] else {
+            return false;
+        };
+        let faces = &self.faces[&bodies[side]];
+        self.sides[pair][side]
+            .iter()
+            .any(|&index| faces[index].face.nodes.contains(&node))
+    }
+
+    /// Whether face `index` of body `body` is on a side of a pair other than
+    /// `pair`.
+    fn in_other_pair(&self, pair: usize, body: usize, index: usize) -> bool {
+        (0..self.sides.len()).any(|other| {
+            other != pair
+                && self.bodies[other].is_some_and(|bodies| {
+                    (0..2).any(|side| {
+                        bodies[side] == body && self.sides[other][side].contains(&index)
+                    })
+                })
+        })
+    }
+
+    /// Whether node `node` of body `own` and face `face` of body `other` are
+    /// both on contacts between the two already, the same or two that meet:
+    /// an overlap there is the mortar method's own.
+    fn within_contact(&self, own: usize, other: usize, node: usize, face: usize) -> bool {
+        let pairs = self.pairs_between(own, other);
+        pairs
+            .iter()
+            .any(|&(pair, own_side, _)| self.side_has_node(pair, own_side, node))
+            && pairs
+                .iter()
+                .any(|&(pair, _, other_side)| self.sides[pair][other_side].contains(&face))
+    }
+
+    /// Take node `node` of body `own` found at face `face` of body `other`
+    /// into a contact between the two (see the module notes); returns
+    /// whether a contact grew.
+    fn take_overlap(&mut self, own: usize, other: usize, node: usize, face: usize) -> bool {
+        let pairs = self.pairs_between(own, other);
+        let holding = pairs
+            .iter()
+            .find(|&&(pair, _, other_side)| self.sides[pair][other_side].contains(&face))
+            .copied();
+        // A face no contact has starts a contact of its own (index one past
+        // the last), so one contact does not mix surfaces turned different
+        // ways.
+        let (pair, own_side, other_side, new_pair) = match holding {
+            Some((pair, own_side, other_side)) => (pair, own_side, other_side, false),
+            None if pairs.is_empty() => return false,
+            None => (self.sides.len(), 0, 1, true),
+        };
+        if !new_pair && self.side_has_node(pair, own_side, node) {
+            // Inside the contact already: the mortar method's own overlap.
+            return false;
+        }
+        let own_faces = &self.faces[&own];
+        let other_faces = &self.faces[&other];
+        let passed = &other_faces[face];
+        // The surface around the node that faces the other body, and the
+        // surface around the passed face that faces back: grown as a whole,
+        // so a contact does not grow over one side of a symmetric surface
+        // and leave the other.
+        let seeds: Vec<usize> = own_faces
+            .iter()
+            .enumerate()
+            .filter(|(_, candidate)| candidate.face.nodes.contains(&node))
+            .filter(|(_, candidate)| dot(candidate.normal, passed.normal) <= FACING)
+            .map(|(index, _)| index)
+            .collect();
+        let added: Vec<usize> = facing_surface(own_faces, &seeds, other_faces)
+            .into_iter()
+            .filter(|&index| !self.in_other_pair(pair, own, index))
+            .collect();
+        let added_other: Vec<usize> = if new_pair {
+            facing_surface(other_faces, &[face], own_faces)
+                .into_iter()
+                .filter(|&index| !self.in_other_pair(pair, other, index))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if new_pair {
+            if added.is_empty() || added_other.is_empty() {
+                return false;
+            }
+            self.picked.push([Vec::new(), Vec::new()]);
+            self.bodies.push(Some([own, other]));
+            self.sides.push([BTreeSet::new(), BTreeSet::new()]);
+        }
+        let before = self.sides[pair][own_side].len() + self.sides[pair][other_side].len();
+        self.sides[pair][own_side].extend(added);
+        self.sides[pair][other_side].extend(added_other);
+        self.sides[pair][own_side].len() + self.sides[pair][other_side].len() > before
+    }
+
+    /// Fill the holes growing leaves: a face of a side's body whose corners
+    /// are all on the side, turned within [`FACING`] of a side face it
+    /// shares a corner with, joins the side unless another pair has it.
+    fn close_sides(&mut self) {
+        for pair in 0..self.sides.len() {
+            let Some(bodies) = self.bodies[pair] else {
+                continue;
+            };
+            for side in 0..2 {
+                let faces = &self.faces[&bodies[side]];
+                let on_side = &self.sides[pair][side];
+                let corners: BTreeSet<usize> = on_side
+                    .iter()
+                    .flat_map(|&index| faces[index].face.nodes.iter().copied())
+                    .collect();
+                let holes: Vec<usize> = faces
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, candidate)| {
+                        !on_side.contains(index)
+                            && candidate
+                                .face
+                                .nodes
+                                .iter()
+                                .all(|node| corners.contains(node))
+                            && on_side.iter().any(|&member| {
+                                faces[member]
+                                    .face
+                                    .nodes
+                                    .iter()
+                                    .any(|node| candidate.face.nodes.contains(node))
+                                    && dot(faces[member].normal, candidate.normal) >= -FACING
+                            })
+                    })
+                    .map(|(index, _)| index)
+                    .filter(|&index| !self.in_other_pair(pair, bodies[side], index))
+                    .collect();
+                self.sides[pair][side].extend(holes);
+            }
+        }
+    }
+
+    /// The contact interface of the pairs as they stand: a growing pair's
+    /// faces, the finer side the slave; a pair that does not grow from its
+    /// picked vertices.
+    fn interface(
+        &self,
+        mesh: &TetMesh,
+        boundary: &BoundaryFaces,
+    ) -> Result<ContactInterface, FemError> {
+        let pairs = (0..self.picked.len())
+            .map(|index| {
+                let named = |error: FemError| match error {
+                    FemError::Contact { reason } => {
+                        contact_error(format!("contact pair {index}: {reason}"))
+                    }
+                    other => other,
+                };
+                let Some(bodies) = self.bodies[index] else {
+                    let [first, second] = &self.picked[index];
+                    return ContactPair::between(mesh, boundary, first, second).map_err(named);
+                };
+                let [first, second]: [Vec<MortarFace>; 2] = std::array::from_fn(|side| {
+                    self.sides[index][side]
+                        .iter()
+                        .map(|&face| self.faces[&bodies[side]][face].face.clone())
+                        .collect()
+                });
+                if let Some(name) = [&first, &second]
+                    .iter()
+                    .position(|faces| faces.is_empty())
+                    .map(|side| if side == 0 { "A" } else { "B" })
+                {
+                    return Err(named(contact_error(format!(
+                        "side {name} of the contact names no whole boundary face — pick the \
+                         faces of a solid's surface"
+                    ))));
+                }
+                Ok(if mean_area(&first) <= mean_area(&second) {
+                    ContactPair {
+                        slave: first,
+                        master: second,
+                    }
+                } else {
+                    ContactPair {
+                        slave: second,
+                        master: first,
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        ContactInterface::new(mesh, &pairs)
+    }
+}
+
+/// The faces of `faces` reached from `seeds` across shared corners, each
+/// turned within [`SAME_SURFACE`] of the face it was reached from (one smooth
+/// surface) and within [`SEARCH_FACES`] of its size of a face of `opposite`
+/// that faces it ([`FACING`]), on the undeformed geometry.
+fn facing_surface(faces: &[OuterFace], seeds: &[usize], opposite: &[OuterFace]) -> BTreeSet<usize> {
+    let center = |face: &OuterFace| centroid(&face.face.points);
+    let near_opposite = |face: &OuterFace| {
+        let own = center(face);
+        let reach = SEARCH_FACES * face.size;
+        opposite.iter().any(|other| {
+            let gap: [f64; 3] = std::array::from_fn(|axis| own[axis] - center(other)[axis]);
+            dot(face.normal, other.normal) <= FACING && dot(gap, gap).sqrt() <= reach + other.size
+        })
+    };
+    let mut reached: BTreeSet<usize> = seeds.iter().copied().collect();
+    let mut queue: Vec<usize> = seeds.to_vec();
+    while let Some(current) = queue.pop() {
+        let from = &faces[current];
+        for (index, candidate) in faces.iter().enumerate() {
+            if reached.contains(&index)
+                || !candidate
+                    .face
+                    .nodes
+                    .iter()
+                    .any(|node| from.face.nodes.contains(node))
+                || dot(candidate.normal, from.normal) < SAME_SURFACE
+                || !near_opposite(candidate)
+            {
+                continue;
+            }
+            reached.insert(index);
+            queue.push(index);
+        }
+    }
+    reached
+}
+
+/// The mean area of `faces`.
+fn mean_area(faces: &[MortarFace]) -> f64 {
+    faces
+        .iter()
+        .map(|face| polygon_area(&face.points))
+        .sum::<f64>()
+        / count_as_f64(faces.len())
+}
+
+/// The piece of the mesh its elements hold together that each vertex is in.
+fn mesh_components(mesh: &TetMesh) -> Vec<usize> {
+    let mut sets = DisjointSets::new(mesh.vertex_count());
+    for element in 0..mesh.element_count() {
+        if let Some((&first, rest)) = mesh.element_nodes(element).split_first() {
+            for &node in rest {
+                sets.join(first as usize, node as usize);
+            }
+        }
+    }
+    (0..mesh.vertex_count())
+        .map(|node| sets.root(node))
+        .collect()
+}
+
+/// The diagonal of the bounding box of `points`; 1 for a degenerate one.
+fn model_size(points: &[[f64; 3]]) -> f64 {
+    let mut low = [f64::INFINITY; 3];
+    let mut high = [f64::NEG_INFINITY; 3];
+    for point in points {
+        for axis in 0..3 {
+            low[axis] = low[axis].min(point[axis]);
+            high[axis] = high[axis].max(point[axis]);
+        }
+    }
+    let extent: [f64; 3] = std::array::from_fn(|axis| high[axis] - low[axis]);
+    let size = dot(extent, extent).sqrt();
+    if size.is_finite() && size > 0.0 {
+        size
+    } else {
+        1.0
+    }
+}
+
+/// Twice the area vector of a polygon (Newell).
+fn newell(points: &[[f64; 3]]) -> [f64; 3] {
+    let mut normal = [0.0; 3];
+    for (index, current) in points.iter().enumerate() {
+        let next = points[(index + 1) % points.len()];
+        normal[0] += (current[1] - next[1]) * (current[2] + next[2]);
+        normal[1] += (current[2] - next[2]) * (current[0] + next[0]);
+        normal[2] += (current[0] - next[0]) * (current[1] + next[1]);
+    }
+    normal
+}
+
+fn centroid(points: &[[f64; 3]]) -> [f64; 3] {
+    let count = count_as_f64(points.len());
+    std::array::from_fn(|axis| points.iter().map(|point| point[axis]).sum::<f64>() / count)
 }
 
 /// Three DOFs per node to six (translations, then three zero rotations).

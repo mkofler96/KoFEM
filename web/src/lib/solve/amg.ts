@@ -535,6 +535,10 @@ async function solveWithContact<T>(
           log(
             `${solution.heldNodes} slave node(s) held by a support along their normal — the support applies there`,
           );
+        if (solution.grownFaces > 0)
+          log(
+            `Contact grew over ${solution.grownFaces} face(s) where the bodies overlapped outside the picked surfaces`,
+          );
         if (solution.sharedNodes > 0)
           log(
             `${solution.sharedNodes} node(s) on an edge two contacts share — each keeps one contact role there`,

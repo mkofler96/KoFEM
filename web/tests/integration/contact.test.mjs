@@ -129,6 +129,8 @@ const facing = (nodes, split) => {
       ];
 };
 
+// `split`: the facing surfaces as two contacts meeting at y = SIDE / 2;
+// "half": only the half y ≤ SIDE / 2 picked.
 async function solve(elementType, push, method, split = false) {
   const { nodes, elements } = gappedBoxes(elementType, split ? 4 : 3);
   const constraints = [];
@@ -139,7 +141,8 @@ async function solve(elementType, push, method, split = false) {
   }
   for (const nodeId of onPlane(nodes, 2 * LENGTH + GAP))
     constraints.push({ nodeId, dof: 0, prescribedValue: -push });
-  const contacts = facing(nodes, split);
+  const contacts =
+    split === "half" ? facing(nodes, true).slice(0, 1) : facing(nodes, split);
   const logs = [];
   const vid = buildVertexIndexer(nodes);
   const result = await solveSolidInRust(
@@ -337,4 +340,19 @@ test("two contacts meeting at an edge act as one", async () => {
     expect(
       Math.abs(pressure - expected / area) / (expected / area),
     ).toBeLessThan(1e-5);
+});
+
+// Only half of the facing surfaces picked: the other half would pass through
+// box A, so the contact grows over it, and the boxes are the same two bars
+// in series as with the whole surface picked.
+test("a contact picked on half the facing surfaces grows over the rest", async () => {
+  const push = 2 * GAP;
+  const { result, logs } = await solve("CHEXA", push, "amg", "half");
+  const { contact } = result;
+  const area = SIDE * SIDE;
+  const expected = (YOUNG * area * (push - GAP)) / (2 * LENGTH);
+  expect(contact.nodeIds).toHaveLength(25);
+  expect(contact.closed.every((closed) => closed === 1)).toBe(true);
+  expect(Math.abs(contact.force - expected) / expected).toBeLessThan(1e-5);
+  expect(logs.some((line) => line.startsWith("Contact grew over"))).toBe(true);
 });

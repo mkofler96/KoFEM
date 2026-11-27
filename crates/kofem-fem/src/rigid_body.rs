@@ -209,18 +209,18 @@ fn validate(model: &RigidBodyModel<'_>) -> Result<usize, FemError> {
 // ── Components ────────────────────────────────────────────────────────────────
 
 /// Union–find over nodes with path halving.
-struct DisjointSets {
+pub(crate) struct DisjointSets {
     parent: Vec<usize>,
 }
 
 impl DisjointSets {
-    fn new(count: usize) -> Self {
+    pub(crate) fn new(count: usize) -> Self {
         Self {
             parent: (0..count).collect(),
         }
     }
 
-    fn root(&mut self, mut node: usize) -> usize {
+    pub(crate) fn root(&mut self, mut node: usize) -> usize {
         while self.parent[node] != node {
             self.parent[node] = self.parent[self.parent[node]];
             node = self.parent[node];
@@ -228,7 +228,7 @@ impl DisjointSets {
         node
     }
 
-    fn join(&mut self, first: usize, second: usize) {
+    pub(crate) fn join(&mut self, first: usize, second: usize) {
         let (first, second) = (self.root(first), self.root(second));
         if first != second {
             self.parent[second] = first;

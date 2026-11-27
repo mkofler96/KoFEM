@@ -14,6 +14,8 @@
 //! * Hertz: a cylinder on a flat block matches the analytic peak pressure
 //!   and contact width.
 //! * A missing or degenerate contact surface is refused by name.
+//! * Bodies that overlap outside the picked surfaces are held there too: the
+//!   contact grows over the faces where they meet.
 //! * A body that only the contact holds, across an initial gap and free to
 //!   slide along the contact, is pressed on all the same; a load the
 //!   contact cannot take is refused with the motion nothing holds.
@@ -1370,4 +1372,123 @@ fn a_light_load_across_a_gap_is_held_by_the_contact() {
         "contact force {} carries the load",
         state.force()
     );
+}
+
+/// The vertices of `faces`, as a contact side picks them.
+fn vertices_of(faces: &[MortarFace]) -> Vec<u32> {
+    let mut vertices: Vec<u32> = faces
+        .iter()
+        .flat_map(|face| face.nodes.iter().map(|&node| node as u32))
+        .collect();
+    vertices.sort_unstable();
+    vertices.dedup();
+    vertices
+}
+
+/// A contact solve over picked surfaces, run to convergence.
+fn solve_picked(model: &Stacked, sides: &[(Vec<u32>, Vec<u32>)]) -> ContactState {
+    let (dofs, values) = model.symmetry_supports();
+    let solver = ContactCg::from_picked_surfaces(
+        &model.mesh,
+        sides,
+        None,
+        CG,
+        PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+    )
+    .expect("the picked surfaces name faces");
+    let mut run = NewtonRun::start(
+        LinearElastic::new(assemble_stiffness(&model.mesh)),
+        solver,
+        &model.mesh,
+        &dofs,
+        &values,
+        &model.top_traction(|_, _| TRACTION),
+        settings(1),
+    )
+    .expect("starts");
+    while run.advance(usize::MAX).expect("converges") != NewtonStatus::Converged {}
+    run.solver().state().expect("settled")
+}
+
+/// Only half of the touching faces picked: the other half would pass through
+/// the lower block, so the contact grows over it, and the two blocks pass
+/// the patch test as if the whole face had been picked.
+#[test]
+fn a_contact_grows_over_faces_where_the_bodies_overlap() {
+    let split = split();
+    let state = solve_picked(
+        &split.model,
+        &[(
+            vertices_of(&split.upper_left),
+            vertices_of(&split.lower_left),
+        )],
+    );
+    assert!(state.grown_faces > 0, "the contact grew");
+    assert_eq!(
+        state.nodes.len(),
+        25,
+        "every bottom node of the upper block"
+    );
+    assert!(
+        state.closed.iter().all(|&closed| closed),
+        "every node closed"
+    );
+    let worst = state
+        .pressure
+        .iter()
+        .map(|pressure| (pressure - (-TRACTION)).abs())
+        .fold(0.0, f64::max);
+    assert!(
+        worst <= 1e-8 * TRACTION.abs(),
+        "pressure error {worst:e} (pressures {:?})",
+        state.pressure
+    );
+}
+
+/// Bodies that do not overlap outside the picked faces keep them as they
+/// are.
+#[test]
+fn a_contact_without_overlap_elsewhere_does_not_grow() {
+    let model = pressed(Shape::Hex, Shape::Tet);
+    let state = solve_picked(
+        &model,
+        &[(
+            vertices_of(&model.upper_bottom),
+            vertices_of(&model.lower_top),
+        )],
+    );
+    assert_eq!(state.grown_faces, 0, "nothing overlaps outside the contact");
+}
+
+/// [`two_contacts_over_one_surface_split_in_two_act_as_one`], picked as the
+/// app picks them: the two contacts share their edge, which is no overlap
+/// to grow over.
+#[test]
+fn two_picked_contacts_split_in_two_act_as_one_and_do_not_grow() {
+    let split = split();
+    let state = solve_picked(
+        &split.model,
+        &[
+            (
+                vertices_of(&split.upper_left),
+                vertices_of(&split.lower_left),
+            ),
+            (
+                vertices_of(&split.upper_right),
+                vertices_of(&split.lower_right),
+            ),
+        ],
+    );
+    let worst = state
+        .pressure
+        .iter()
+        .map(|pressure| (pressure - (-TRACTION)).abs())
+        .fold(0.0, f64::max);
+    assert!(
+        worst <= 1e-8 * TRACTION.abs(),
+        "pressure error {worst:e}, grown {} (pressures {:?})",
+        state.grown_faces,
+        state.pressure
+    );
+    assert_eq!(state.grown_faces, 0, "the shared edge is no overlap");
 }

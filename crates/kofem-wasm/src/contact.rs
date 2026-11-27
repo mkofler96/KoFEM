@@ -310,6 +310,14 @@ impl ContactSolution {
         self.state.shared.len()
     }
 
+    /// Outer faces the contacts grew over where their bodies overlapped
+    /// outside the picked surfaces.
+    #[wasm_bindgen(getter, js_name = grownFaces)]
+    #[must_use]
+    pub fn grown_faces(&self) -> usize {
+        self.state.grown_faces
+    }
+
     /// Nodes the model's ties tie; 0 without ties.
     #[wasm_bindgen(getter, js_name = tiedNodes)]
     #[must_use]
