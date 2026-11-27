@@ -111,8 +111,9 @@ get the same rules through Clippy, configured in the root `Cargo.toml` and
 
 ## Issues live in Linear
 
-Work is tracked in Linear (team `KOF`), not in GitHub Issues. Pick up or file
-work there; GitHub is for the code, the pull request and CI.
+Work is tracked in Linear (team `KOF`). GitHub Issues are for user reports
+only, and only the maintainer creates, closes or reopens one. Pick up or file
+work in Linear; GitHub is for the code, the pull request and CI.
 
 ## Public site layout
 
@@ -136,8 +137,10 @@ sources and that the navigation follows `docs/theory/content-map.md`.
   mismatched data produces an error rather than a default. Answer it honestly
   — reviewers check this first.
 - Include `Fixes KOF-nn` in the PR description. Linear's GitHub integration
-  links the PR and closes the issue when it merges. (Older PRs use
-  `closes #<github-number>`; that convention is retired.)
+  links the PR and closes the issue when it merges. If the Linear issue is
+  synced with a GitHub issue, write `Refs KOF-nn` instead: closing it would
+  close the user's GitHub issue too. (Older PRs use `closes #<github-number>`;
+  that convention is retired.)
 - If the change has a visible result, attach the screenshot to the **Linear
   issue** — one comment, edited on each push rather than a new comment per push.
 - Before committing: `cargo fmt`, `cargo clippy`, and in `web/`:

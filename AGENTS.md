@@ -122,12 +122,20 @@ write the minimal code that makes it pass, then clean up with the suite green.
 
 - Linear holds issues, specs, and decisions; GitHub holds code and PRs.
   Keep task-specific findings out of this file.
+- GitHub Issues are for user reports only; everything else goes in Linear.
+  Only the maintainer closes, reopens or creates a GitHub issue; agents never
+  do, and never write a closing keyword (`Fixes #nn`) for one. Linear syncs
+  some issues with a GitHub issue (it shows as an attachment) and closes the
+  GitHub issue when the Linear issue is completed or canceled. So for a
+  synced Linear issue, write `Refs KOF-nn`, never `Fixes`, and never move it
+  to Done or Canceled.
 - Branch from `develop` and target PRs there. Write `Fixes KOF-nn` for every
-  issue whose scope the PR delivers, parents and sub-issues alike, even when
-  follow-ups are split into new issues; `Fixes` closes the issue on merge.
-  Write `Refs KOF-nn` only for an issue that stays open after the merge,
-  because work in its own scope remains: `Refs` moves it to In Progress and
-  nothing closes it. Mention ongoing operational issues in prose.
+  unsynced issue whose scope the PR delivers, parents and sub-issues alike,
+  even when follow-ups are split into new issues; `Fixes` closes the issue on
+  merge. Write `Refs KOF-nn` for a synced issue, and for one that stays open
+  after the merge because work in its own scope remains: `Refs` moves it to
+  In Progress and nothing closes it. Mention ongoing operational issues in
+  prose.
 - When you start work on a Linear issue, move it to **In Progress** before
   writing code. After that, let the GitHub integration manage its status.
 - Record meaningful evidence on the Linear issue in one comment, edited in
