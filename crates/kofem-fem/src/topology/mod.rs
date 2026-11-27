@@ -43,3 +43,22 @@ fn topology_error(reason: impl Into<String>) -> FemError {
         reason: reason.into(),
     }
 }
+
+/// Refuses a sensitivity array with a value that is not finite: a design
+/// update from it would move the design by a plausible but meaningless step,
+/// or by NaN that no convergence test then catches.
+/// `entry` names what one value belongs to: a design variable, an element.
+fn check_sensitivity(
+    iteration: usize,
+    what: &str,
+    entry: &str,
+    values: &[f64],
+) -> Result<(), FemError> {
+    match values.iter().position(|value| !value.is_finite()) {
+        None => Ok(()),
+        Some(index) => Err(topology_error(format!(
+            "iteration {iteration}: the {what} of {entry} {index} is {}, not a finite number",
+            values[index]
+        ))),
+    }
+}

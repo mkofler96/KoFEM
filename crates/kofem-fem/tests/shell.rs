@@ -1129,3 +1129,24 @@ fn drilling_axes_ignore_how_each_facet_is_wound() {
         axes[0][1].map(|value| -value),
     );
 }
+
+#[test]
+fn a_non_finite_facet_stress_fails_stress_recovery() {
+    let model = Model::grid([1.0, 1.0], [2, 2], 0.01, material(210e9, 0.3));
+    let mesh = model.mesh().expect("valid mesh");
+    let mut dofs = vec![0.0; 6 * mesh.vertex_count()];
+    // One rotation of node 4 is NaN: only the facets around it see it.
+    dofs[6 * 4 + 3] = f64::NAN;
+    assert!(matches!(
+        shell_von_mises(&mesh, &dofs),
+        Err(FemError::NonFiniteStress { .. })
+    ));
+    // Finite displacements so large the stress overflows.
+    let ramp: Vec<f64> = (0..6 * mesh.vertex_count())
+        .map(|index| 1e300 * index as f64)
+        .collect();
+    assert!(matches!(
+        shell_von_mises(&mesh, &ramp),
+        Err(FemError::NonFiniteStress { .. })
+    ));
+}

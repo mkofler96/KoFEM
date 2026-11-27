@@ -112,6 +112,11 @@ pub enum FemError {
          force cannot be spread over them"
     )]
     SurfaceLoadArea { load: usize, area: f64 },
+    #[error(
+        "triangle {triangle}: the recovered stress is {value}, not a finite number — the \
+         displacements it was recovered from are not finite or overflow"
+    )]
+    NonFiniteStress { triangle: usize, value: f64 },
     #[error("displacement vector has {len} entries, but the model has {count} degrees of freedom")]
     DisplacementLength { len: usize, count: usize },
     #[error("multigrid setup input is invalid: {reason}")]

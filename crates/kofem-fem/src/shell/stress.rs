@@ -4,6 +4,7 @@
 //! Shell stress recovery, as the C++ engine's `shell_von_mises` reports it.
 
 use crate::error::FemError;
+use crate::extremum::largest;
 use crate::mesh::dot;
 use crate::shell::assembly::SHELL_NODE_DOFS;
 use crate::shell::element::{
@@ -19,23 +20,31 @@ use crate::shell::mesh::ShellMesh;
 /// sign convention.
 ///
 /// # Errors
-/// [`FemError::DisplacementLength`] when `dofs` is not 6 per vertex.
+/// [`FemError::DisplacementLength`] when `dofs` is not 6 per vertex, and
+/// [`FemError::NonFiniteStress`] when a facet's stress is not finite.
 pub fn shell_von_mises(mesh: &ShellMesh, dofs: &[f64]) -> Result<Vec<f64>, FemError> {
     check_length(mesh, dofs)?;
     let axes = mesh.drilling_normals();
-    let stresses = (0..mesh.triangles().len())
+    (0..mesh.triangles().len())
         .map(|triangle| {
             let facet = FacetStrain::new(mesh, &axes, dofs, triangle);
-            [facet.half, -facet.half]
-                .into_iter()
-                .map(|depth| {
+            let worse = largest(
+                0.0,
+                [facet.half, -facet.half].into_iter().map(|depth| {
                     let [sx, sy, txy] = facet.stress_at(depth);
                     (sx * sx - sx * sy + sy * sy + 3.0 * txy * txy).sqrt()
+                }),
+            );
+            if worse.is_finite() {
+                Ok(worse)
+            } else {
+                Err(FemError::NonFiniteStress {
+                    triangle,
+                    value: worse,
                 })
-                .fold(0.0, f64::max)
+            }
         })
-        .collect();
-    Ok(stresses)
+        .collect()
 }
 
 /// The surface of a shell a stress is read on: z = +t/2 along the facet

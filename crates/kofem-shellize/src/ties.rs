@@ -4,6 +4,7 @@
 //! Tie connections the user declared between solid bodies, turned into
 //! distributing couplings — with a report of what each one contributed.
 
+use kofem_fem::extremum::smallest;
 use std::collections::HashSet;
 
 use crate::coupling_set::CouplingSet;
@@ -131,10 +132,11 @@ fn nearest_master_distances(
     let reach2 = reach * reach;
     for &reference in refs {
         let position = point(reference);
-        let best = grid
-            .candidates(position, 1, 0)
-            .map(|node| dist2(position, point(node)))
-            .fold(f64::INFINITY, f64::min);
+        let best = smallest(
+            f64::INFINITY,
+            grid.candidates(position, 1, 0)
+                .map(|node| dist2(position, point(node))),
+        );
         if best <= reach2 {
             out.insert(reference, best.sqrt());
         }
@@ -225,7 +227,7 @@ pub fn tie_couplings(
             continue;
         }
 
-        let gap = distances.values().copied().fold(f64::INFINITY, f64::min);
+        let gap = smallest(f64::INFINITY, distances.values().copied());
         let kept: Vec<usize> = distances
             .iter()
             .filter(|(_, &distance)| distance <= tie.reach)

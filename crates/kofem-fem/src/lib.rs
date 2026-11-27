@@ -25,6 +25,7 @@ pub mod coupled_static;
 pub mod coupling;
 pub mod element;
 pub mod error;
+pub mod extremum;
 pub mod field_expression;
 pub mod field_statistics;
 pub mod incomplete_cholesky;
