@@ -1165,6 +1165,11 @@ fn a_held_finer_surface_makes_the_other_side_the_slave() {
 /// own: only the contact can hold it, and only along z. The lower block is
 /// held by symmetry supports.
 fn resting(lower: Shape, upper: Shape) -> (Stacked, Vec<u32>, Vec<f64>) {
+    resting_at(lower, upper, GAP)
+}
+
+/// [`resting`], `gap` above the lower block.
+fn resting_at(lower: Shape, upper: Shape, gap: f64) -> (Stacked, Vec<u32>, Vec<f64>) {
     let model = stacked(
         Block {
             cells: [2, 2, 2],
@@ -1178,7 +1183,7 @@ fn resting(lower: Shape, upper: Shape) -> (Stacked, Vec<u32>, Vec<f64>) {
             shape: upper,
             young: 210_000.0,
         },
-        GAP,
+        gap,
     );
     let (dofs, values) = symmetry_supports(&model.vertices[..model.first_upper]);
     (model, dofs, values)
@@ -1253,7 +1258,12 @@ fn a_body_only_the_contact_holds_is_pressed_on_across_a_gap() {
 /// The error a load on the resting block ends in (tractions as for
 /// [`top_load`]), and the upper block's first vertex.
 fn unheld(lateral: f64, vertical: f64) -> (FemError, usize) {
-    let (model, dofs, values) = resting(Shape::Hex, Shape::Tet);
+    unheld_at(GAP, lateral, vertical)
+}
+
+/// [`unheld`], the block `gap` above the lower one.
+fn unheld_at(gap: f64, lateral: f64, vertical: f64) -> (FemError, usize) {
+    let (model, dofs, values) = resting_at(Shape::Hex, Shape::Tet, gap);
     let forces = top_load(&model, lateral, vertical);
     let error = try_solve(
         &model.mesh,
@@ -1296,5 +1306,68 @@ fn a_body_pulled_off_the_contact_is_refused() {
             }
         ),
         "refused along z, got {error:?}"
+    );
+}
+
+/// Surfaces that touch at the start leave the first active set as it is:
+/// the springs must still be checked on a balanced correction, not on the
+/// undisplaced start where they carry nothing.
+#[test]
+fn a_load_along_the_contact_is_refused_where_the_surfaces_already_touch() {
+    let cube = |height| Block {
+        cells: [1, 1, 1],
+        height,
+        shape: Shape::Hex,
+        young: 70_000.0,
+    };
+    let model = stacked(cube(1.0), cube(0.5), 0.0);
+    let (dofs, values) = symmetry_supports(&model.vertices[..model.first_upper]);
+    let error = try_solve(
+        &model.mesh,
+        interface(&model),
+        &dofs,
+        &values,
+        &top_load(&model, 1.0, TRACTION),
+        1,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    )
+    .err()
+    .expect("the load along the contact is refused");
+    assert!(
+        matches!(
+            error,
+            FemError::ContactUnheld {
+                motion: UnheldMotion::Along([1.0, 0.0, 0.0]),
+                ..
+            }
+        ),
+        "refused along x, got {error:?}"
+    );
+}
+
+/// A load far below what the springs resist in closing the gap: the contact
+/// holds the block, so the springs' share of the gap closing is no verdict.
+#[test]
+fn a_light_load_across_a_gap_is_held_by_the_contact() {
+    let light = -1e-3;
+    let (model, dofs, values) = resting(Shape::Hex, Shape::Tet);
+    let outcome = solve(
+        &model.mesh,
+        interface(&model),
+        &dofs,
+        &values,
+        &top_load(&model, 0.0, light),
+        1,
+        PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+    );
+    let state = &outcome.state;
+    assert!(
+        state.closed.iter().all(|&closed| closed),
+        "every node closed"
+    );
+    assert!(
+        (state.force() + light).abs() <= 1e-8 * light.abs(),
+        "contact force {} carries the load",
+        state.force()
     );
 }

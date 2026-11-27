@@ -45,16 +45,17 @@
 //! other surface, so the first correction moves it across its gap instead of
 //! far along the springs, and the update opens the nodes that pull.
 //!
-//! While the set changes, the springs' force is part of the balance. Once it
-//! has settled, the springs of a body that contact or a support holds carry
-//! only their stiffness times its rigid motion; where the load drives a body
-//! in a motion nothing holds, they carry the load, and a spring force above
-//! [`SPRING_SHARE`] of the load refuses the solve with that motion
-//! ([`FemError::ContactUnheld`]). Otherwise the springs then leave the
-//! balance and stay in the tangent only: the last corrections remove the
-//! little they carried, so the converged solution is balanced by contact and
-//! supports alone, and with nothing left out of balance along a free motion
-//! nothing makes it drift.
+//! While the set changes, the springs' force is part of the balance. Once a
+//! correction has been solved under a set that it leaves unchanged, the
+//! springs leave the balance and stay in the tangent only: the following
+//! corrections remove what they carried, so the converged solution is
+//! balanced by contact and supports alone, and with nothing left out of
+//! balance along a free motion nothing makes it drift. Where contact or a
+//! support holds a body, what the springs carried, its load or their pull
+//! against its crossing a gap, is gone after one correction but for the
+//! springs' share. Where the load drives a body in a motion nothing holds,
+//! the force out of balance on it stays from one correction to the next, and
+//! the solve is refused with that motion ([`FemError::ContactUnheld`]).
 //!
 //! The pressure of a closed node is its share of the force the out-of-balance
 //! residual leaves along its normal, pⱼ = nⱼ · rⱼ / Dⱼⱼ; the same pressure
@@ -113,9 +114,14 @@ use crate::tie::{tie_couplings, translations, TieReport, VertexTies};
 /// below any load, and a body nothing holds still moves a finite way.
 const STABILISATION: f64 = 1e-9;
 
-/// Springs carrying more than this fraction of the load, summed over its
-/// magnitudes, hold a body that nothing else holds in that motion.
-const SPRING_SHARE: f64 = 1e-3;
+/// A loose body whose out-of-balance resultant keeps more than this fraction
+/// from one correction to the next, under an unchanged active set, is driven
+/// in a motion nothing holds: a held one keeps about the springs' share.
+const STALLED: f64 = 0.5;
+
+/// Below this many times the solve's tolerance and the load, a resultant is
+/// round-off and says nothing about a motion.
+const RESULTANT_FLOOR: f64 = 10.0;
 
 /// Two slave normals of one node at most this far apart (cos 10°) are one
 /// surface picked as two contacts; further apart, the node is a corner.
@@ -424,6 +430,9 @@ struct LooseBody {
     center: [f64; 3],
     /// Its bounding box diagonal, which turns a moment into a force.
     size: f64,
+    /// The out-of-balance force and moment / size on it at the last settle
+    /// since the springs left the balance under the same active set.
+    resultant: Option<[f64; 6]>,
 }
 
 impl LooseBody {
@@ -514,6 +523,8 @@ pub struct ContactCg {
     preconditioner: PreconditionerChoice,
     setup: Option<Setup>,
     active: Option<ActiveSolve>,
+    /// Corrections solved so far.
+    corrections: usize,
 }
 
 impl ContactCg {
@@ -537,6 +548,7 @@ impl ContactCg {
             preconditioner,
             setup: None,
             active: None,
+            corrections: 0,
         }
     }
 
@@ -703,6 +715,7 @@ impl ContactCg {
                     center: sum.map(|value| value / count),
                     size: dot(extent, extent).sqrt(),
                     nodes,
+                    resultant: None,
                 }
             })
             .collect())
@@ -877,17 +890,25 @@ impl Setup {
         force
     }
 
-    /// Refuse a loose body whose springs carry more than [`SPRING_SHARE`] of
-    /// the load (see the module notes).
-    fn check_held(&self, points: &[[f64; 3]]) -> Result<(), FemError> {
-        let limit = SPRING_SHARE * self.load_scale;
-        for body in &self.loose {
-            let resultant = body.resultant_of(&self.spring_force, points);
-            if norm(&resultant) > limit {
-                return Err(FemError::ContactUnheld {
-                    node: body.nodes[0],
-                    motion: LooseBody::motion(resultant),
-                });
+    /// Refuse a loose body whose out-of-balance resultant under `free` kept
+    /// more than [`STALLED`] of the last one, both measured under one active
+    /// set with the springs out of the balance (see the module notes).
+    /// Resultants below `floor` are round-off.
+    fn check_held(
+        &mut self,
+        free: &[f64],
+        points: &[[f64; 3]],
+        floor: f64,
+    ) -> Result<(), FemError> {
+        for body in &mut self.loose {
+            let now = body.resultant_of(free, points);
+            if let Some(before) = body.resultant.replace(now) {
+                if norm(&now) > floor && norm(&now) > STALLED * norm(&before) {
+                    return Err(FemError::ContactUnheld {
+                        node: body.nodes[0],
+                        motion: LooseBody::motion(now),
+                    });
+                }
             }
         }
         Ok(())
@@ -979,22 +1000,30 @@ impl TangentSolver for ContactCg {
         let update = setup.update_active_set(self.cg.relative_tolerance, displacements);
         let load = setup.imposed_load(tangent, supports);
         setup.load_scale = setup.load_scale.max(load);
-        // Only an iterate balanced under the set it was solved with says
-        // what the springs hold: one that changes the set or closes an
-        // overlap is on its way.
+        // Only an iterate balanced under the set it was solved with tells a
+        // held body from one nothing holds: one that changes the set or
+        // closes an overlap is on its way.
         setup.steady = if update.flipped || update.overlap {
             0
         } else {
             setup.steady + 1
         };
-        // The springs' share is still in this iterate and its reactions: one
-        // more correction takes it out.
         let mut release = false;
-        if setup.steady > 0 && !setup.released {
-            setup.check_held(self.mesh.vertices())?;
+        if setup.steady == 0 {
+            for body in &mut setup.loose {
+                body.resultant = None;
+            }
+        } else if setup.released {
+            let floor = RESULTANT_FLOOR * self.cg.relative_tolerance * setup.load_scale;
+            setup.check_held(&free, self.mesh.vertices(), floor)?;
+        } else if self.corrections > 0 {
+            // The springs' share is still in this iterate and its reactions:
+            // the next corrections take it out.
             setup.released = true;
             setup.spring_force.fill(0.0);
             free = setup.measure(displacements, &widen(&residual))?;
+            let floor = RESULTANT_FLOOR * self.cg.relative_tolerance * setup.load_scale;
+            setup.check_held(&free, self.mesh.vertices(), floor)?;
             release = true;
         }
         Ok(Settled {
@@ -1102,6 +1131,7 @@ impl TangentSolver for ContactCg {
             reason: String::from("no tangent solve has been started"),
         })?;
         let (reduced, _outcome) = run.into_solution()?;
+        self.corrections += 1;
         Ok((translations(&reduction.expand(&reduced)), tangent))
     }
 }

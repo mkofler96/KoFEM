@@ -219,7 +219,7 @@ describe("contact between two boxes across a gap", () => {
 
 // Box A on its rollers, box B on nothing, a force `[fx, fy]` spread over box
 // B's far end, or the loads `endLoads(end nodes)` there.
-async function solveResting(elementType, [fx, fy], method, endLoads) {
+function solveResting(elementType, [fx, fy], method, endLoads) {
   const { nodes, elements } = gappedBoxes(elementType);
   const constraints = [];
   for (const node of nodes) {
