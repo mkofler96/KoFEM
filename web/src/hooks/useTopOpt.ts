@@ -43,7 +43,7 @@ import {
   topOptTieRefusal,
 } from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
-import { withAdvice } from "../lib/solve/failureAdvice";
+import { failureNotice, plainNotice } from "../lib/solve/failureAdvice";
 import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import { tr, useT } from "../i18n/useLocale";
 import { optimizeMessages } from "../i18n/messages/optimize";
@@ -312,7 +312,11 @@ export function useTopOpt() {
     // re-check the settings here rather than trust the caller.
     if (!settings) {
       setError(
-        tr(optimizeMessages).settingsInvalid(Object.values(errors).join("; ")),
+        plainNotice(
+          tr(optimizeMessages).settingsInvalid(
+            Object.values(errors).join("; "),
+          ),
+        ),
       );
       return;
     }
@@ -371,7 +375,7 @@ export function useTopOpt() {
         console.error("[topopt] optimization failed:", err.message);
         const failure = classifyFailure(err);
         setError(
-          withAdvice(
+          failureNotice(
             failure,
             tr(optimizeMessages).optimizationError(err.message),
           ),
@@ -420,7 +424,7 @@ export function useTopOpt() {
     state.clearTopOptRunRequest();
     if (state.isOptimizing) return;
     if (allOk) optimize();
-    else setError(tr(optimizeMessages).rerunBlocked);
+    else setError(plainNotice(tr(optimizeMessages).rerunBlocked));
   });
 
   const stressSummary = topOpt.stressConstraint

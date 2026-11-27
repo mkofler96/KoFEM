@@ -51,6 +51,7 @@ import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 import {
   inStage,
   inStageAsync,
+  rustFailureClass,
   splitStage,
   type FailureStage,
 } from "../lib/workerError.js";
@@ -1244,12 +1245,19 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
       : `[solver.worker] ${type} failed:`,
     explained ? `${detail}\n${describeError(raw)}` : describeError(err),
   );
+  const rustClass = rustFailureClass(err);
   self.postMessage({
     id,
     ok: false,
     error: errorMessage,
     english: inEnglish(errorMessage),
     ...(stage === null ? {} : { stage }),
+    ...(rustClass === null
+      ? {}
+      : {
+          failureClass: rustClass.category,
+          numericalReason: rustClass.reason,
+        }),
   });
 }
 

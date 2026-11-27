@@ -11,6 +11,7 @@ import { NotConvergedNotice } from "./NotConvergedNotice";
 import { PreflightChecks } from "./PreflightChecks";
 import { useT } from "../../i18n/useLocale";
 import { optimizeMessages } from "../../i18n/messages/optimize";
+import { FailureBanner } from "./FailureBanner";
 import styles from "./Panel.module.css";
 
 // One labelled numeric setting bound to the store, with its inline validation
@@ -116,10 +117,11 @@ export function OptimizePanel({
       <div className={styles.tabContent}>
         {header}
         {error && (
-          <div className={styles.errorBanner} data-testid="optimize-error">
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>×</button>
-          </div>
+          <FailureBanner
+            notice={error}
+            onClose={() => setError(null)}
+            testId="optimize-error"
+          />
         )}
 
         <PreflightChecks checks={checks} />

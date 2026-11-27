@@ -13,9 +13,7 @@ import {
 import { openTree } from "./fixtures/tree";
 
 const ADVICE =
-  "Part of the model can still move freely, so the solve has no unique answer. " +
-  "Look for a part joined to the rest only along an edge or at a point: " +
-  "support it, or join it to the rest over a face.";
+  "Hold every part: support it, or join it to the rest over a face, not only at an edge or a point.";
 
 test("a singular model names what to change, not just a solver error", async ({
   page,

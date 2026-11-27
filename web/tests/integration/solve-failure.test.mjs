@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// KOF-490: each numerical sub-reason of a failed solve, from a model the Rust
+// KOF-490: each numerical reason of a failed solve, from a model the Rust
 // module really fails on, through the app's solve paths (lib/solve) and the
 // classification the solve_failed event and the Solve panel use. The error
 // reaches the page as the worker sends it: a WorkerTaskError of the solving
-// step, carrying the "Error: message" text.
+// step with the class the Rust module set on it.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
@@ -20,7 +20,10 @@ import {
 } from "../../src/lib/solve/rigidBody.ts";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking.ts";
 import { classifyFailure } from "../../src/lib/analytics.ts";
-import { WorkerTaskError } from "../../src/lib/workerError.ts";
+import {
+  rustFailureClass,
+  WorkerTaskError,
+} from "../../src/lib/workerError.ts";
 import { boxHexMesh } from "../../../examples/validation/lib/mesh.mjs";
 import { loadFem } from "../support/wasm.mjs";
 
@@ -67,10 +70,10 @@ function clampedBar({ length = 10, depth = 0.4, cells = 20 } = {}) {
 }
 
 // How the page sees a solve's rejection: the worker's "name: message" text in
-// the solving step.
+// the solving step, and the class set on the error.
 function asWorkerSends(err) {
   const text = `${err.name}: ${err.message}`;
-  return new WorkerTaskError(text, "solving", text);
+  return new WorkerTaskError(text, "solving", text, rustFailureClass(err));
 }
 
 async function failedSolve(model, { method = "amg", iterationLimit } = {}) {

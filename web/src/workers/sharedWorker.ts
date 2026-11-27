@@ -6,7 +6,12 @@
 // responses back to the correct Promise via a pending-call map.
 
 import { durationBucket, trackOnce } from "../lib/analytics";
-import { isFailureStage, WorkerTaskError } from "../lib/workerError";
+import {
+  isFailureStage,
+  rustFailureClass,
+  WorkerCrashError,
+  WorkerTaskError,
+} from "../lib/workerError";
 import { askCgContinuation, dismissCgContinuation } from "./cgContinuation";
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import { useEngineStatus, type EngineFailureStage } from "../store/engineStore";
@@ -82,19 +87,6 @@ function applyEngineStatus(status: EngineStatusMessage) {
 export class WorkerResetError extends Error {
   constructor() {
     super("Worker reset — restart your operation");
-  }
-}
-
-/**
- * What a request in flight rejects with when the worker dies without
- * answering it. The browser's text of the uncaught error alone matches no
- * analytics rule; this message makes it a worker failure (KOF-490).
- */
-export class WorkerCrashError extends Error {
-  constructor(detail: string | undefined) {
-    super(
-      detail ? `Worker crashed: ${detail}` : "Worker crashed without a message",
-    );
   }
 }
 
@@ -190,8 +182,11 @@ function createWorker(): Worker {
       const english = (rest.english as string | undefined) ?? msg;
       console.error("[worker] task failed:", msg);
       const { stage } = rest;
+      const rustClass = rustFailureClass(rest);
       if (stage === undefined || isFailureStage(stage))
-        pending.reject(new WorkerTaskError(msg, stage ?? null, english));
+        pending.reject(
+          new WorkerTaskError(msg, stage ?? null, english, rustClass),
+        );
       else {
         const unknownStep = ` (the worker also reported an unknown step "${String(stage)}")`;
         pending.reject(
@@ -199,6 +194,7 @@ function createWorker(): Worker {
             `${msg}${unknownStep}`,
             null,
             `${english}${unknownStep}`,
+            rustClass,
           ),
         );
       }
@@ -209,7 +205,8 @@ function createWorker(): Worker {
     dismissCgContinuation();
     _cgTaskId = null;
     console.error("[worker] crashed:", e.message, e);
-    const err = new WorkerCrashError(e.message);
+    // A worker that died without a message still needs a text.
+    const err = new WorkerCrashError(e.message ?? "Worker crashed");
     for (const p of _pending.values()) p.reject(err);
     _pending.clear();
     // An uncaught error does not end a worker by itself; end it, so the

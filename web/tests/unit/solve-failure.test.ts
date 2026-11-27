@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // KOF-490: a failed solve is sent with a category, and a numerical failure
-// with the sub-reason the solver knows; the user reads what to change. Every
-// FemError the Rust module can raise has a deliberate category, so none ends
-// as "unknown" or in the solver_failure catch-all by accident.
+// with its reason, from the class the Rust module sets on a FemError
+// (crates/kofem-fem/src/failure_class.rs). Failures that reach the page
+// without a step have a category too, and the user reads what to change.
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import {
   categorizeError,
   classifyFailure,
@@ -15,254 +14,110 @@ import {
   resetAnalyticsForTests,
   track,
   type FailureClass,
-  type NumericalReason,
 } from "../../src/lib/analytics.ts";
+import { failureNotice } from "../../src/lib/solve/failureAdvice.ts";
 import {
-  failureAdvice,
-  withAdvice,
-} from "../../src/lib/solve/failureAdvice.ts";
-import { WorkerTaskError } from "../../src/lib/workerError.ts";
-import { WorkerCrashError } from "../../src/workers/sharedWorker.ts";
-import { tr, useLocaleStore } from "../../src/i18n/useLocale.ts";
-import { solveMessages } from "../../src/i18n/messages/solve.ts";
+  ClassifiedError,
+  rustFailureClass,
+  WorkerCrashError,
+  WorkerTaskError,
+  type RustFailureClass,
+} from "../../src/lib/workerError.ts";
 
-// What the worker sends for a failure in the solve step.
-const solving = (english: string) =>
-  new WorkerTaskError(english, "solving", english);
+// A failure of the solve step as the worker sends it.
+const solving = (message: string, rust: RustFailureClass | null) =>
+  new WorkerTaskError(message, "solving", message, rust);
 
-describe("numerical failures carry the sub-reason the solver knows", () => {
-  test.each<[string, NumericalReason]>([
-    // FemError::NotPositiveDefinite, a CG breakdown.
+describe("the Rust module's class decides the category", () => {
+  test.each<[RustFailureClass, FailureClass]>([
     [
-      "Error: the stiffness matrix is not positive definite (CG breakdown at iteration 115) — the model is probably not fully constrained",
-      "singular_matrix",
-    ],
-    // FemError::CoarseNotPositiveDefinite, the AMG coarsest level.
-    [
-      "Error: the coarsest multigrid matrix (315 unknowns) is not positive definite — the model is probably not fully constrained",
-      "singular_matrix",
-    ],
-    ["shell: singular 3×3 matrix", "singular_matrix"],
-    // FemError::NotConverged, and the app's stalled-CG message (cgRun.ts).
-    [
-      "Error: CG did not converge: relative residual 3.2e-3 after 5000 iterations (target 1e-6)",
-      "not_converged",
+      { category: "numerical", reason: "singular_matrix" },
+      {
+        error_category: "numerical_failure",
+        numerical_reason: "singular_matrix",
+      },
     ],
     [
-      "Error: CG did not converge: relative residual 3.827e+0 after 1 iterations (target 1e-6) and is no longer improving. The partial result was discarded — check that the model is fully constrained, or refine the mesh.",
-      "not_converged",
-    ],
-    // FemError::TangentSolve: the linear solve inside a Newton iteration.
-    [
-      "Error: Newton increment 2, iteration 4: the tangent solve failed: multigrid setup input is invalid: empty",
-      "not_converged",
-    ],
-    // FemError::NewtonNotConverged.
-    [
-      "Error: Newton increment 1 of 1 did not converge: relative residual 1.72e-1 after 30 iterations (target 1e-6)",
-      "newton_not_converged",
-    ],
-    // FemError::TangentNotPositiveDefinite.
-    [
-      "Error: Newton increment 3 of 4 (load factor 0.75): the tangent stiffness is not positive definite — the model loses stability (it buckles or snaps through) at or below this load, so a static solve cannot follow it further",
-      "unstable_tangent",
-    ],
-    // FemError::InvertedElement.
-    [
-      "Error: element 0 is turned inside out (volume ratio J = -2.8e4): the deformation is too large for one load increment, or for the element — try more load increments",
-      "inverted_element",
-    ],
-    // FemError::NonFiniteStress, and a non-finite internal force in Newton.
-    [
-      "Error: triangle 0: the recovered stress is NaN, not a finite number — the displacements it was recovered from are not finite or overflow",
-      "non_finite_result",
+      { category: "numerical", reason: "unstable_tangent" },
+      {
+        error_category: "numerical_failure",
+        numerical_reason: "unstable_tangent",
+      },
     ],
     [
-      "Error: a non-finite value (NaN) was given for an internal force component",
-      "non_finite_result",
+      { category: "invalid_input", reason: null },
+      { error_category: "invalid_input" },
     ],
-  ])("%p is numerical_failure / %s", (english, reason) => {
-    expect(classifyFailure(solving(english))).toEqual({
-      error_category: "numerical_failure",
-      numerical_reason: reason,
-    });
-    expect(categorizeError(solving(english))).toBe("numerical_failure");
+    [
+      { category: "degenerate_element", reason: null },
+      { error_category: "degenerate_element" },
+    ],
+    [
+      { category: "resource_limit", reason: null },
+      { error_category: "resource_limit" },
+    ],
+    [
+      { category: "unsupported_model", reason: null },
+      { error_category: "unsupported_model" },
+    ],
+    // A malformed payload from the app.
+    [
+      { category: "internal", reason: null },
+      { error_category: "solver_failure" },
+    ],
+  ])("%p is %p", (rust, expected) => {
+    expect(classifyFailure(solving("Error: any words", rust))).toEqual(
+      expected,
+    );
   });
 
-  test("a failure that is not numerical carries no sub-reason", () => {
-    expect(
-      classifyFailure(
-        solving("Error: the mesh has 9 nodes; at most 4 are supported"),
-      ),
-    ).toEqual({ error_category: "resource_limit" });
-  });
-
-  test("the rigid-body check's own input errors are not a numerical failure", () => {
+  test("the class wins over words a text rule would match", () => {
     expect(
       categorizeError(
-        solving(
-          "Error: rigid-body check: offsets do not describe the node array",
-        ),
+        solving("Error: Young's modulus must be positive", {
+          category: "numerical",
+          reason: "non_finite_result",
+        }),
       ),
-    ).toBe("solver_failure");
+    ).toBe("numerical_failure");
   });
 
-  // The rules read English: a German message is classified by the English
-  // the worker sent along with it.
-  test("a translated message keeps its sub-reason", () => {
-    useLocaleStore.setState({ locale: "de" });
+  test("an error thrown on the page carries its class too", () => {
+    const err = new ClassifiedError("CG did not converge", {
+      category: "numerical",
+      reason: "not_converged",
+    });
+    expect(rustFailureClass(err)).toEqual({
+      category: "numerical",
+      reason: "not_converged",
+    });
+    expect(classifyFailure(err)).toEqual({
+      error_category: "numerical_failure",
+      numerical_reason: "not_converged",
+    });
+  });
+
+  test("a class the page does not know is reported, and unknown", () => {
+    const logged = spyOn(console, "error").mockImplementation(() => undefined);
     try {
-      const message = tr(solveMessages).cgNotConverged("1.0e-1", 3, "1e-6");
-      expect(message).not.toContain("did not converge");
-      expect(classifyFailure(new Error(message))).toEqual({
-        error_category: "numerical_failure",
-        numerical_reason: "not_converged",
-      });
+      expect(
+        classifyFailure(
+          solving("Error: x", { category: "numerical", reason: "melted" }),
+        ),
+      ).toEqual({ error_category: "unknown" });
+      expect(logged).toHaveBeenCalledTimes(1);
     } finally {
-      useLocaleStore.setState({ locale: "en" });
+      logged.mockRestore();
     }
   });
-});
 
-// Every FemError variant, by name, with the category its message must get.
-// solver_failure is for errors a malformed payload of the app raises, a bug
-// in KoFEM rather than in the visitor's model; the user can change nothing.
-const FEM_ERROR_CATEGORY: Record<string, FailureClass> = {
-  VertexArrayLength: { error_category: "solver_failure" },
-  TetArrayLength: { error_category: "solver_failure" },
-  VertexOutOfRange: { error_category: "solver_failure" },
-  DegenerateTet: { error_category: "degenerate_element" },
-  MaterialIdCount: { error_category: "solver_failure" },
-  MaterialOutOfRange: { error_category: "solver_failure" },
-  HexArrayLength: { error_category: "solver_failure" },
-  HexVertexOutOfRange: { error_category: "solver_failure" },
-  DegenerateHex: { error_category: "degenerate_element" },
-  HexMaterialOutOfRange: { error_category: "solver_failure" },
-  YoungsModulus: { error_category: "invalid_input" },
-  PoissonRatio: { error_category: "invalid_input" },
-  TooManyNodes: { error_category: "resource_limit" },
-  EmptyMesh: { error_category: "invalid_input" },
-  ConnectivityLength: { error_category: "solver_failure" },
-  ReactionInput: { error_category: "solver_failure" },
-  ReportField: { error_category: "solver_failure" },
-  ReducedSystem: { error_category: "solver_failure" },
-  DofOutOfRange: { error_category: "solver_failure" },
-  ConflictingConstraint: { error_category: "invalid_input" },
-  ConstraintOnUnusedVertex: { error_category: "invalid_input" },
-  LoadOnUnusedVertex: { error_category: "invalid_input" },
-  ConstraintValueCount: { error_category: "solver_failure" },
-  ForceLength: { error_category: "solver_failure" },
-  NonFinite: { error_category: "invalid_input" },
-  NotPositiveDefinite: {
-    error_category: "numerical_failure",
-    numerical_reason: "singular_matrix",
-  },
-  NotConverged: {
-    error_category: "numerical_failure",
-    numerical_reason: "not_converged",
-  },
-  InvalidSettings: { error_category: "invalid_input" },
-  SurfaceLoadUnmatched: { error_category: "invalid_input" },
-  SurfaceLoadArea: { error_category: "invalid_input" },
-  NonFiniteStress: {
-    error_category: "numerical_failure",
-    numerical_reason: "non_finite_result",
-  },
-  DisplacementLength: { error_category: "solver_failure" },
-  AmgInput: { error_category: "invalid_input" },
-  CoarseNotPositiveDefinite: {
-    error_category: "numerical_failure",
-    numerical_reason: "singular_matrix",
-  },
-  SectionInput: { error_category: "solver_failure" },
-  StatisticsInput: { error_category: "solver_failure" },
-  Coupling: { error_category: "invalid_input" },
-  CouplingInput: { error_category: "invalid_input" },
-  Tie: { error_category: "invalid_input" },
-  RigidBodyInput: { error_category: "solver_failure" },
-  CouplingDofConflict: { error_category: "invalid_input" },
-  CouplingCycle: { error_category: "invalid_input" },
-  ConstraintOnCoupledDof: { error_category: "invalid_input" },
-  RotationWithoutDof: { error_category: "invalid_input" },
-  LoadWithoutStiffness: { error_category: "invalid_input" },
-  ShellOnQuadraticMesh: { error_category: "unsupported_model" },
-  TriangleArrayLength: { error_category: "solver_failure" },
-  EmptyShellMesh: { error_category: "invalid_input" },
-  TriangleVertexOutOfRange: { error_category: "solver_failure" },
-  DegenerateTriangle: { error_category: "degenerate_element" },
-  ThicknessCount: { error_category: "solver_failure" },
-  Thickness: { error_category: "invalid_input" },
-  ShellMaterialIdCount: { error_category: "solver_failure" },
-  ShellMaterialOutOfRange: { error_category: "solver_failure" },
-  ExpansionCoefficientCount: { error_category: "solver_failure" },
-  TemperatureCount: { error_category: "solver_failure" },
-  ElementOutOfRange: { error_category: "solver_failure" },
-  TopologyInput: { error_category: "solver_failure" },
-  Convergence: { error_category: "solver_failure" },
-  NewtonNotConverged: {
-    error_category: "numerical_failure",
-    numerical_reason: "newton_not_converged",
-  },
-  TangentSolve: {
-    error_category: "numerical_failure",
-    numerical_reason: "not_converged",
-  },
-  TangentNotPositiveDefinite: {
-    error_category: "numerical_failure",
-    numerical_reason: "unstable_tangent",
-  },
-  InvertedElement: {
-    error_category: "numerical_failure",
-    numerical_reason: "inverted_element",
-  },
-  NewtonUnfinished: { error_category: "solver_failure" },
-  NonlinearInput: { error_category: "solver_failure" },
-  Contact: { error_category: "invalid_input" },
-};
-
-// Each FemError's message as the Rust module words it, read from its
-// #[error(...)] attribute with sample values for the fields: a number for
-// counts and indices, NaN for a value, a short free text for a reason.
-function femErrorMessages(): [string, string][] {
-  const source = readFileSync(
-    new URL("../../../crates/kofem-fem/src/error.rs", import.meta.url),
-    "utf8",
-  );
-  const attribute =
-    /#\[error\(\s*((?:"(?:[^"\\]|\\[\s\S])*"\s*)+)\)\]\s*(\w+)/g;
-  return [...source.matchAll(attribute)].map((match) => {
-    const template = [...match[1].matchAll(/"((?:[^"\\]|\\[\s\S])*)"/g)]
-      .map((part) => part[1].replace(/\\\n\s*/g, ""))
-      .join("");
-    const message = template.replace(/\{(\w+)(?::e)?\}/g, (_, field: string) =>
-      field === "reason"
-        ? "the input is inconsistent"
-        : field === "what"
-          ? "a force component"
-          : field === "value"
-            ? "NaN"
-            : "7",
-    );
-    return [match[2], `Error: ${message}`];
-  });
-}
-
-describe("every FemError has a deliberate category", () => {
-  const messages = femErrorMessages();
-
-  test("the table names every variant of error.rs, and only those", () => {
-    expect(messages.map(([name]) => name).sort()).toEqual(
-      Object.keys(FEM_ERROR_CATEGORY).sort(),
-    );
-  });
-
-  test.each(messages)("%s", (name, message) => {
-    expect(classifyFailure(solving(message))).toEqual(FEM_ERROR_CATEGORY[name]);
+  test("a failure class that is not text is refused", () => {
+    const err = Object.assign(new Error("x"), { failureClass: 3 });
+    expect(() => rustFailureClass(err)).toThrow(/not text/);
   });
 });
 
-// A failure that reaches the page without a step: no stage fallback catches
-// it, so a rule must, or it would be sent as "unknown".
+// No stage fallback catches these, so without a category they were "unknown".
 describe("failures outside the solve step have a category", () => {
   test("the worker dying mid-solve is worker_failure", () => {
     const err = new WorkerCrashError(
@@ -280,17 +135,17 @@ describe("failures outside the solve step have a category", () => {
 
   test("a request the busy worker refuses is worker_failure", () => {
     const message = "Error: The solver worker is busy with another operation";
-    expect(categorizeError(new WorkerTaskError(message, null, message))).toBe(
-      "worker_failure",
-    );
+    expect(
+      categorizeError(new WorkerTaskError(message, null, message, null)),
+    ).toBe("worker_failure");
   });
 
   test("a language whose text did not load is app_load_failure", () => {
     const message =
       "Error: The Deutsch text of KoFEM could not be loaded: Failed to fetch dynamically imported module";
-    expect(categorizeError(new WorkerTaskError(message, null, message))).toBe(
-      "app_load_failure",
-    );
+    expect(
+      categorizeError(new WorkerTaskError(message, null, message, null)),
+    ).toBe("app_load_failure");
   });
 });
 
@@ -299,23 +154,28 @@ describe("the solve_failed event", () => {
   const hadWindow = "window" in globalThis;
   const previousWindow = globalThis.window;
   beforeAll(() => {
-    globalThis.window = Object.assign(new EventTarget(), {
-      __kofemAnalyticsConsent: "granted",
-      gtag: (_command: "event", name: string, params: object) =>
-        sent.push({ name, params }),
-    }) as unknown as Window & typeof globalThis;
+    Reflect.set(
+      globalThis,
+      "window",
+      Object.assign(new EventTarget(), {
+        __kofemAnalyticsConsent: "granted",
+        gtag: (_command: "event", name: string, params: object) =>
+          sent.push({ name, params }),
+      }),
+    );
   });
   afterAll(() => {
     resetAnalyticsForTests();
-    if (hadWindow) globalThis.window = previousWindow;
+    if (hadWindow) Reflect.set(globalThis, "window", previousWindow);
     else Reflect.deleteProperty(globalThis, "window");
   });
 
-  test("a numerical failure is sent with its sub-reason and nothing else", () => {
+  test("a numerical failure is sent with its reason and nothing else", () => {
     const failure = classifyFailure(
-      solving(
-        "Error: the coarsest multigrid matrix (315 unknowns) is not positive definite — the model is probably not fully constrained",
-      ),
+      solving("Error: the coarsest multigrid matrix is not positive definite", {
+        category: "numerical",
+        reason: "singular_matrix",
+      }),
     );
     track("solve_failed", {
       workflow: "cad_import",
@@ -337,40 +197,37 @@ describe("the solve_failed event", () => {
 });
 
 describe("the user reads what to change", () => {
-  test.each(NUMERICAL_REASONS.map((reason) => [reason]))(
-    "%s has advice of its own",
-    (reason) => {
-      const advice = failureAdvice({
-        error_category: "numerical_failure",
-        numerical_reason: reason,
-      });
-      expect(advice).not.toBeNull();
-      const others = NUMERICAL_REASONS.filter((r) => r !== reason).map((r) =>
-        failureAdvice({
-          error_category: "numerical_failure",
-          numerical_reason: r,
-        }),
-      );
-      expect(others).not.toContain(advice);
-    },
-  );
+  const adviceFor = (reason: (typeof NUMERICAL_REASONS)[number]) =>
+    failureNotice(
+      { error_category: "numerical_failure", numerical_reason: reason },
+      "Solver error: …",
+    ).advice;
 
-  test("a singular matrix asks for a support or a joint over a face", () => {
-    const failure: FailureClass = {
-      error_category: "numerical_failure",
-      numerical_reason: "singular_matrix",
-    };
-    expect(withAdvice(failure, "Solver error: the stiffness matrix …")).toBe(
-      "Part of the model can still move freely, so the solve has no unique answer. " +
-        "Look for a part joined to the rest only along an edge or at a point: " +
-        "support it, or join it to the rest over a face.\n" +
+  test("each reason has advice of its own", () => {
+    const advice = NUMERICAL_REASONS.map(adviceFor);
+    expect(advice).not.toContain(null);
+    expect(new Set(advice).size).toBe(NUMERICAL_REASONS.length);
+  });
+
+  test("a singular matrix asks to hold every part", () => {
+    expect(
+      failureNotice(
+        {
+          error_category: "numerical_failure",
+          numerical_reason: "singular_matrix",
+        },
         "Solver error: the stiffness matrix …",
-    );
+      ),
+    ).toEqual({
+      advice:
+        "Hold every part: support it, or join it to the rest over a face, not only at an edge or a point.",
+      detail: "Solver error: the stiffness matrix …",
+    });
   });
 
   test("other failures keep the solver's words alone", () => {
     expect(
-      withAdvice({ error_category: "invalid_input" }, "Solver error: x"),
-    ).toBe("Solver error: x");
+      failureNotice({ error_category: "invalid_input" }, "Solver error: x"),
+    ).toEqual({ advice: null, detail: "Solver error: x" });
   });
 });

@@ -1084,10 +1084,12 @@ label.sectionHeadAction {
 
 .errorBanner span {
   flex: 1;
-  /* Advice above the solver's own words (lib/solve/failureAdvice.ts), and a
-     long unbroken token (a path, a number) must not widen the panel. */
-  white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+.errorBanner .errorAdvice {
+  display: block;
+  margin-bottom: 4px;
 }
 
 .errorBanner button {

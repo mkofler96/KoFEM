@@ -19,6 +19,7 @@ import {
 } from "../lib/topOptConvergence";
 import { ensurePlot, showPlot } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
+import type { FailureNotice } from "../lib/solve/failureAdvice";
 
 // The two objectives the panel offers: minimize compliance under a volume
 // fraction (KOF-230) or minimize volume under a compliance limit (KOF-235).
@@ -150,7 +151,7 @@ export interface TopOptSlice {
   topOptView: TopOptView;
   // Why the last run failed, for whichever panel is open: the run hands off to
   // Results as it starts, so the Optimize panel is gone by the time it fails.
-  topOptError: string | null;
+  topOptError: FailureNotice | null;
 
   setTopOptMethod(method: TopOptMethod): void;
   setTopOptObjective(objective: TopOptObjective): void;
@@ -161,7 +162,7 @@ export interface TopOptSlice {
   setDensityResult(result: DensityResult | null): void;
   setLiveDensity(live: LiveDensity | null): void;
   setTopOptView(view: TopOptView): void;
-  setTopOptError(error: string | null): void;
+  setTopOptError(error: FailureNotice | null): void;
   // Open Results → Density, adding its plot when there is none yet: where a
   // run goes as it starts.
   showTopOptResult(): void;

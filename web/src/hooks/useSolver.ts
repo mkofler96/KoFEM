@@ -39,7 +39,7 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
-import { withAdvice } from "../lib/solve/failureAdvice";
+import { failureNotice, type FailureNotice } from "../lib/solve/failureAdvice";
 import { tr, useT } from "../i18n/useLocale";
 import type { SolveRun } from "../store/resultsSlice";
 import { solveMessages } from "../i18n/messages/solve";
@@ -79,7 +79,7 @@ export function useSolver() {
   // in the worker's coupled solve.
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FailureNotice | null>(null);
   const text = useT(solveMessages);
   const { logs, clearLogs } = useWorkerLogs("solve");
   const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
@@ -327,7 +327,7 @@ export function useSolver() {
         console.error("[solve] solver failed:", err.message);
         const failure = classifyFailure(err);
         setError(
-          withAdvice(failure, tr(solveMessages).solverError(err.message)),
+          failureNotice(failure, tr(solveMessages).solverError(err.message)),
         );
         track("solve_failed", {
           ...workflow,
