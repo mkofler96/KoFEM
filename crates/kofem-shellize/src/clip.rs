@@ -4,6 +4,7 @@
 //! Plane clipping of the solid tets, the solid surface and the shell facets at
 //! the shell/solid transition planes.
 
+use kofem_fem::extremum::{largest, smallest};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use kofem_fem::count_as_f64;
@@ -110,10 +111,10 @@ impl<'planes> PlaneClipper<'planes> {
             .iter()
             .map(|&index| self.distance(index, plane))
             .collect();
-        if distances.iter().copied().fold(f64::NEG_INFINITY, f64::max) <= self.tolerance {
+        if largest(f64::NEG_INFINITY, distances.iter().copied()) <= self.tolerance {
             return Side::Negative;
         }
-        if distances.iter().copied().fold(f64::INFINITY, f64::min) >= -self.tolerance {
+        if smallest(f64::INFINITY, distances.iter().copied()) >= -self.tolerance {
             return Side::Positive;
         }
         Side::Straddles

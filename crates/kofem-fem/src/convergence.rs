@@ -15,6 +15,7 @@
 //! measured against a known reference: the slope of ln|e| against ln h.
 
 use crate::count::count_as_f64;
+use crate::extremum::{largest, smallest};
 use crate::FemError;
 
 /// A power law |e| = C·hᵖ fitted to errors by least squares in log–log.
@@ -107,11 +108,13 @@ pub fn fit_rate(sizes: &[f64], errors: &[f64]) -> Result<RateFit, FemError> {
         .sum();
     let rate = covariance / spread;
     let log_coefficient = mean_error - rate * mean_size;
-    let max_log_residual = log_sizes
-        .iter()
-        .zip(&log_errors)
-        .map(|(ls, le)| (le - log_coefficient - rate * ls).abs())
-        .fold(0.0, f64::max);
+    let max_log_residual = largest(
+        0.0,
+        log_sizes
+            .iter()
+            .zip(&log_errors)
+            .map(|(ls, le)| (le - log_coefficient - rate * ls).abs()),
+    );
     Ok(RateFit {
         rate,
         log_coefficient,
@@ -167,17 +170,17 @@ fn fit_at_order(scaled: &[f64], values: &[f64], order: f64) -> (f64, f64, f64) {
 /// anything.
 pub fn extrapolate(sizes: &[f64], values: &[f64]) -> Result<Extrapolation, FemError> {
     check_levels(sizes, values, "results", 3)?;
-    let h_max = sizes.iter().copied().fold(0.0, f64::max);
+    let h_max = largest(0.0, sizes.iter().copied());
     let scaled: Vec<f64> = sizes.iter().map(|size| size / h_max).collect();
-    let spread = values.iter().copied().fold(f64::NEG_INFINITY, f64::max)
-        - values.iter().copied().fold(f64::INFINITY, f64::min);
-    let magnitude = values.iter().map(|value| value.abs()).fold(0.0, f64::max);
+    let spread = largest(f64::NEG_INFINITY, values.iter().copied())
+        - smallest(f64::INFINITY, values.iter().copied());
+    let magnitude = largest(0.0, values.iter().map(|value| value.abs()));
     if spread <= 1e-14 * magnitude.max(f64::MIN_POSITIVE) {
         return Err(refuse(
             "the results do not change with the mesh, so they give no order of convergence",
         ));
     }
-    if scaled.iter().copied().fold(f64::INFINITY, f64::min) >= 1.0 - 1e-12 {
+    if smallest(f64::INFINITY, scaled.iter().copied()) >= 1.0 - 1e-12 {
         return Err(refuse(
             "the element sizes are all equal, so they give no order",
         ));

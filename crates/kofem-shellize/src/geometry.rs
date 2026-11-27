@@ -4,6 +4,7 @@
 //! Mesh primitives shared by every stage: the validated input mesh and the
 //! small measurements each stage takes of it.
 
+use kofem_fem::extremum::largest;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
@@ -59,7 +60,11 @@ pub fn dist2(left: Vec3, right: Vec3) -> f64 {
 /// replaces overflowed V8's call stack past ~120k values).
 #[must_use]
 pub fn max_of(values: &[f64]) -> Option<f64> {
-    values.iter().copied().reduce(f64::max)
+    if values.is_empty() {
+        None
+    } else {
+        Some(largest(f64::NEG_INFINITY, values.iter().copied()))
+    }
 }
 
 /// The distinct items of `items`, in order of first appearance — the order a JS

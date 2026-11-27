@@ -151,3 +151,32 @@ fn inconsistent_sizes_and_bounds_are_refused() {
         .update(&[0.5, 0.5], 0.0, &[1.0, 1.0], &[0.0], &[1.0])
         .is_err());
 }
+
+/// The message of the error a non-finite entry at the second MMA step gives.
+fn second_step_refusal(df0: [f64; 2], fval: [f64; 1], dfdx: [f64; 2]) -> String {
+    let mut mma = Mma::new(2, 1, vec![0.0; 2], vec![1.0; 2], 0.2).expect("MMA");
+    let first = mma
+        .update(&[0.5, 0.5], 1.0, &[-1.0, -1.0], &[0.0], &[1.0, 1.0])
+        .expect("a finite first step");
+    let error = mma
+        .update(&first, 1.0, &df0, &fval, &dfdx)
+        .expect_err("a non-finite sensitivity must be refused");
+    assert!(matches!(error, FemError::TopologyInput { .. }), "{error:?}");
+    error.to_string()
+}
+
+#[test]
+fn a_nan_objective_sensitivity_is_refused_with_its_iteration() {
+    let reason = second_step_refusal([-1.0, f64::NAN], [0.0], [1.0, 1.0]);
+    assert!(reason.contains("iteration 2"), "{reason}");
+    assert!(reason.contains("variable 1"), "{reason}");
+}
+
+#[test]
+fn a_non_finite_constraint_value_or_gradient_is_refused_with_its_iteration() {
+    let reason = second_step_refusal([-1.0, -1.0], [f64::NAN], [1.0, 1.0]);
+    assert!(reason.contains("iteration 2"), "{reason}");
+    let reason = second_step_refusal([-1.0, -1.0], [0.0], [f64::INFINITY, 1.0]);
+    assert!(reason.contains("iteration 2"), "{reason}");
+    assert!(reason.contains("variable 0"), "{reason}");
+}

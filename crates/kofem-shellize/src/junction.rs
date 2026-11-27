@@ -8,6 +8,7 @@
 //! edges between them, into the other wall's facets, so the two mid-surfaces
 //! share nodes and edges along the junction line.
 
+use kofem_fem::extremum::smallest;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use kofem_fem::count_as_f64;
@@ -177,9 +178,11 @@ impl Triangulation<'_> {
     }
 
     fn worst_quality(&self, fan: &[usize]) -> f64 {
-        fan.iter()
-            .filter_map(|&index| self.triangles[index].map(|tri| self.quality(tri)))
-            .fold(f64::INFINITY, f64::min)
+        smallest(
+            f64::INFINITY,
+            fan.iter()
+                .filter_map(|&index| self.triangles[index].map(|tri| self.quality(tri))),
+        )
     }
 
     /// The far ends of the boundary edges (edges with no facet across) at
@@ -363,15 +366,16 @@ impl Triangulation<'_> {
             return Placement::Outside;
         };
         // Weld onto the nearest corner when it can move there cleanly.
-        let shortest = (0..3)
-            .map(|corner| {
+        let shortest = smallest(
+            f64::INFINITY,
+            (0..3).map(|corner| {
                 let delta = sub(
                     self.vertices[triangle[corner]],
                     self.vertices[triangle[(corner + 1) % 3]],
                 );
                 norm(delta)
-            })
-            .fold(f64::INFINITY, f64::min);
+            }),
+        );
         let nearest = (0..3)
             .min_by(|&left, &right| {
                 let distance =

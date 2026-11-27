@@ -31,6 +31,7 @@
 //! What it does not see is a mechanism inside one component (a hinge in a
 //! single body's mesh): the mesh is assumed to be stiff where it is connected.
 
+use crate::extremum::largest;
 use std::collections::{HashMap, HashSet};
 
 use crate::count::count_as_f64;
@@ -669,9 +670,9 @@ fn svd(mut columns: Vec<Vec<f64>>) -> Svd {
 
 /// The columns whose singular value marks a free motion.
 fn free_columns(sigma: &[f64]) -> Vec<usize> {
-    let largest = sigma.iter().copied().fold(1.0, f64::max);
+    let scale = largest(1.0, sigma.iter().copied());
     (0..sigma.len())
-        .filter(|&column| sigma[column] <= FREE_TOLERANCE * largest)
+        .filter(|&column| sigma[column] <= FREE_TOLERANCE * scale)
         .collect()
 }
 
@@ -685,8 +686,8 @@ struct Directions {
 /// space (one six-vector per null vector); `None` when the block does not move.
 fn describe(block: Vec<Vec<f64>>) -> Option<Directions> {
     let decomposition = svd(block);
-    let largest = decomposition.sigma.iter().copied().fold(0.0, f64::max);
-    if largest <= MOTION_TOLERANCE {
+    let scale = largest(0.0, decomposition.sigma.iter().copied());
+    if scale <= MOTION_TOLERANCE {
         return None;
     }
     // An orthonormal basis of the motions this component can make.
@@ -694,7 +695,7 @@ fn describe(block: Vec<Vec<f64>>) -> Option<Directions> {
         .av
         .iter()
         .zip(&decomposition.sigma)
-        .filter(|&(_, &sigma)| sigma > MOTION_TOLERANCE * largest)
+        .filter(|&(_, &sigma)| sigma > MOTION_TOLERANCE * scale)
         .map(|(column, &sigma)| column.iter().map(|value| value / sigma).collect())
         .collect();
     let rotations = svd(motions.iter().map(|motion| motion[3..].to_vec()).collect());
