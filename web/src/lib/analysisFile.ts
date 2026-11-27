@@ -8,6 +8,7 @@ import {
   uniformStress,
   type ElementStress,
 } from "./stressFields";
+import type { ContactResult } from "./contact";
 import type {
   AppMode,
   ContactGroup,
@@ -114,6 +115,7 @@ export interface AnalysisState {
     displacements: Float64Array;
     vonMises?: Float64Array;
     stress?: ElementStress;
+    contact?: ContactResult | null;
   } | null;
   resultType: ResultType;
   // Topology-optimization setup (KOF-232). Absent in files written before TO
@@ -154,6 +156,9 @@ interface KofemFieldDataV1 {
   // Contacts (KOF-485). Absent in files written before contact existed —
   // such a file simply has none.
   contactGroups?: ContactGroup[];
+  // What the solve found at the contacts (KOF-485), with a result that has
+  // one: per slave node, as in ContactResult.
+  contactResult?: SavedContactResult;
   // Surface-to-point couplings. Absent in files written before couplings
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
@@ -274,6 +279,66 @@ function dataArray(
   return `<DataArray type="${type}" Name="${name}"${comp} format="ascii">\n${body}\n</DataArray>`;
 }
 
+// A contact result as the file's JSON holds it: plain arrays.
+interface SavedContactResult {
+  nodeIds: number[];
+  pressure: number[];
+  gap: number[];
+  closed: number[];
+  area: number[];
+  force: number;
+  iterations: number;
+}
+
+function savedContactResult(contact: ContactResult): SavedContactResult {
+  return {
+    nodeIds: contact.nodeIds,
+    pressure: Array.from(contact.pressure),
+    gap: Array.from(contact.gap),
+    closed: Array.from(contact.closed),
+    area: Array.from(contact.area),
+    force: contact.force,
+    iterations: contact.iterations,
+  };
+}
+
+function restoredContactResult(
+  saved: SavedContactResult,
+  nodeIds: Set<number>,
+): ContactResult {
+  const invalid = (why: string) =>
+    new Error(`Invalid analysis file: the contact result ${why}`);
+  if (typeof saved !== "object" || saved === null)
+    throw invalid("is not an object");
+  const lists = ["nodeIds", "pressure", "gap", "closed", "area"] as const;
+  for (const name of lists)
+    if (
+      !Array.isArray(saved[name]) ||
+      !saved[name].every((value) => Number.isFinite(value))
+    )
+      throw invalid(`has no list of numbers "${name}"`);
+  const count = saved.nodeIds.length;
+  for (const name of lists)
+    if (saved[name].length !== count)
+      throw invalid(`has ${saved[name].length} ${name} for ${count} nodes`);
+  const unknown = saved.nodeIds.find((id) => !nodeIds.has(id));
+  if (unknown !== undefined)
+    throw invalid(`names node ${unknown}, which the mesh does not have`);
+  if (saved.closed.some((closed) => closed !== 0 && closed !== 1))
+    throw invalid("marks a node touching with a value other than 0 or 1");
+  if (!Number.isFinite(saved.force) || !Number.isInteger(saved.iterations))
+    throw invalid("has no force or iteration count");
+  return {
+    nodeIds: saved.nodeIds,
+    pressure: Float64Array.from(saved.pressure),
+    gap: Float64Array.from(saved.gap),
+    closed: Uint8Array.from(saved.closed),
+    area: Float64Array.from(saved.area),
+    force: saved.force,
+    iterations: saved.iterations,
+  };
+}
+
 export function serializeAnalysis(state: AnalysisState): string {
   const { nodes, elements, result } = state;
 
@@ -351,6 +416,9 @@ export function serializeAnalysis(state: AnalysisState): string {
           contactGroups: state.contactGroups,
           nextContactGroupId: state.nextContactGroupId,
         }
+      : {}),
+    ...(result?.contact
+      ? { contactResult: savedContactResult(result.contact) }
       : {}),
     ...(state.faceSizes.length > 0 ? { faceSizes: state.faceSizes } : {}),
     ...(state.meshSizes ? { meshSizes: state.meshSizes } : {}),
@@ -840,6 +908,11 @@ export function parseAnalysisFile(text: string): AnalysisState {
         middle: tensors("StressMiddle"),
         bottom: tensors("StressBottom"),
       };
+    if (meta.contactResult !== undefined)
+      result.contact = restoredContactResult(
+        meta.contactResult,
+        new Set(nodes.map((node) => node.id)),
+      );
   }
 
   // A file written before ties existed carries none. The counter is then not

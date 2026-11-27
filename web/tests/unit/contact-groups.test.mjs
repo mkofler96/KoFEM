@@ -47,6 +47,7 @@ const face = (id, cadFaceId, nodeIds = [0, 1, 2]) => ({
   ...(cadFaceId !== undefined ? { cadFaceId } : {}),
 });
 
+const contact_ = (id) => contact(id, [face(1, 4)], [face(2, 5)]);
 const contact = (id, facesA, facesB) => ({
   id,
   name: `Contact${id}`,
@@ -114,6 +115,57 @@ describe("a contact in a saved analysis file", () => {
   test("a file written before contact existed opens with none", () => {
     expect(example.contactGroups).toEqual([]);
     expect(example.nextContactGroupId).toBe(1);
+  });
+});
+
+describe("a contact result in a saved analysis file", () => {
+  const example = parseAnalysisFile(
+    readFileSync(
+      new URL(
+        "../../../examples/gallery/site/cantilever-beam.vtu",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const ids = example.nodes.slice(0, 2).map((node) => node.id);
+  // The example is saved unsolved; a solve gives it a displacement field.
+  const plain = { displacements: new Float64Array(3 * example.nodes.length) };
+  const solved = {
+    nodeIds: ids,
+    pressure: Float64Array.from([12.5, 0]),
+    gap: Float64Array.from([0, 0.25]),
+    closed: Uint8Array.from([1, 0]),
+    area: Float64Array.from([0.5, 0.5]),
+    force: 6.25,
+    iterations: 3,
+  };
+  const saved = (result) =>
+    serializeAnalysis({
+      ...example,
+      contactGroups: [contact_(3)],
+      nextContactGroupId: 4,
+      resultType: "Contact pressure",
+      result,
+    });
+
+  test("the pressure, gap, touching nodes and force come back", () => {
+    const opened = parseAnalysisFile(saved({ ...plain, contact: solved }));
+    expect(opened.resultType).toBe("Contact pressure");
+    expect(opened.result?.contact).toEqual(solved);
+  });
+
+  test("a solve without contact saves none", () => {
+    const opened = parseAnalysisFile(saved(plain));
+    expect(opened.result?.contact).toBeUndefined();
+  });
+
+  test("a contact result naming a node the mesh lacks is refused", () => {
+    const text = saved({
+      ...plain,
+      contact: { ...solved, nodeIds: [ids[0], -77] },
+    });
+    expect(() => parseAnalysisFile(text)).toThrow(/node -77/);
   });
 });
 
