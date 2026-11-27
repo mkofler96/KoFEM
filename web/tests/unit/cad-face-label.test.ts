@@ -51,7 +51,7 @@ describe("cadFaceLabel", () => {
         "en-US",
         "mm",
       ),
-    ).toBe("Face 5 · plane · 2.5 mm² · normal (0.71, 0, −0.71)");
+    ).toBe("Face 5 · plane · 2.5 mm² · normal (0.71, 0, -0.71)");
   });
 
   test("a cylinder with its diameter and axis", () => {
@@ -80,7 +80,7 @@ describe("cadFaceLabel", () => {
         "en-US",
         "mm",
       ),
-    ).toBe("Face 8 · cylinder Ø20 · 1,000 mm² · axis (0.6, −0.8, 0)");
+    ).toBe("Face 8 · cylinder Ø20 · 1,000 mm² · axis (0.6, -0.8, 0)");
   });
 
   test("a cone with its axis", () => {

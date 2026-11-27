@@ -49,7 +49,6 @@ export function useGeometryEdit() {
   const geometryFormat = useModelStore((s) => s.geometryFormat);
   const properties = useModelStore((s) => s.properties);
   const applyGeometryEdit = useModelStore((s) => s.applyGeometryEdit);
-  const setCadFaces = useModelStore((s) => s.setCadFaces);
   const undoGeometryEdit = useModelStore((s) => s.undoGeometryEdit);
   const setRunning = useModelStore((s) => s.setRunning);
   const splitError = useModelStore((s) => s.splitError);
@@ -201,6 +200,7 @@ export function useGeometryEdit() {
       });
       applyGeometryEdit(
         reply.bytes,
+        reply.cadFaces,
         {
           points: reply.points,
           triangles: reply.triangles,
@@ -211,7 +211,6 @@ export function useGeometryEdit() {
         bodySources?.(reply),
         piecesAs,
       );
-      setCadFaces(reply.bytes, reply.cadFaces);
       return true;
     } catch (err) {
       // The worker may already hold the edited shape the store did not take;

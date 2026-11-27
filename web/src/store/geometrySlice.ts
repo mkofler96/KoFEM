@@ -286,16 +286,10 @@ export interface GeometryVersion {
   stepBytes: Uint8Array;
   geometryFormat: GeometryFormat;
   stepSurface: StepTessellation;
-  cadFaces: CadFaces | null;
+  cadFaces: CadFaceProperties[];
   properties: Property[];
   interfaces: BodyInterface[] | null;
   faceSizes: FaceSize[];
-}
-
-// The CAD faces of a geometry file, with the file they describe.
-export interface CadFaces {
-  bytes: Uint8Array;
-  faces: CadFaceProperties[];
 }
 
 // How the split tool cuts: imprint the plane on the picked faces (the part stays
@@ -305,16 +299,6 @@ export type SplitMode = "faces" | "bodies";
 export interface VolMesh {
   points: [number, number, number][];
   edges: [number, number][];
-}
-
-// The properties of the current geometry's CAD faces, indexed by face id − 1;
-// null while the engine has not described the file the store now holds.
-export function cadFacesOf(
-  s: Pick<GeometrySlice, "cadFaces" | "stepBytes">,
-): CadFaceProperties[] | null {
-  return s.cadFaces !== null && s.cadFaces.bytes === s.stepBytes
-    ? s.cadFaces.faces
-    : null;
 }
 
 export interface GeometrySlice {
@@ -330,10 +314,8 @@ export interface GeometrySlice {
   stepBytes: Uint8Array | null;
   // Format of the retained stepBytes — selects the OCCT reader on re-mesh.
   geometryFormat: GeometryFormat;
-  // What each CAD face is (lib/cadFaceProperties), measured by the engine on
-  // the file it holds; read it through cadFacesOf, which gives it only while
-  // that file is stepBytes. Null until the engine has described the file.
-  cadFaces: CadFaces | null;
+  // What each CAD face of stepBytes is (lib/cadFaceProperties), by face id − 1.
+  cadFaces: CadFaceProperties[] | null;
   isMeshing: boolean;
   volMesh: VolMesh | null;
   // Netgen surface element vertex indices (0-based, same node IDs as the volume
@@ -415,8 +397,7 @@ export interface GeometrySlice {
   promoteRegion(propertyId: number): void;
   setInterfaceType(interfaceId: number, type: InterfaceType): void;
   setStepSurface(tessellation: StepTessellation | null): void;
-  setStepBytes(bytes: Uint8Array | null): void;
-  setCadFaces(bytes: Uint8Array, faces: CadFaceProperties[]): void;
+  setStepBytes(bytes: Uint8Array, cadFaces: CadFaceProperties[]): void;
   setGeometryFormat(format: GeometryFormat): void;
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
@@ -437,6 +418,7 @@ export interface GeometrySlice {
   // rebuilds it as an import would.
   applyGeometryEdit(
     bytes: Uint8Array,
+    cadFaces: CadFaceProperties[],
     tessellation: StepTessellation,
     bodyCount: number,
     // For an edit that knows where each new body came from (a split, a
@@ -702,13 +684,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         );
       delete prop.materialUnconfirmed;
     }),
-  setStepBytes: (bytes) =>
+  setStepBytes: (bytes, cadFaces) =>
     set((s) => {
       s.stepBytes = bytes;
-    }),
-  setCadFaces: (bytes, faces) =>
-    set((s) => {
-      s.cadFaces = { bytes, faces };
+      s.cadFaces = cadFaces;
     }),
   setGeometryFormat: (format) =>
     set((s) => {
@@ -790,14 +769,21 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources, piecesAs) =>
+  applyGeometryEdit: (
+    bytes,
+    cadFaces,
+    tessellation,
+    bodyCount,
+    bodySources,
+    piecesAs,
+  ) =>
     set((s) => {
       // Where the pieces of one solid go is the edit's to say (KOF-432).
       if (bodySources && piecesAs === undefined)
         throw new Error(
           "Geometry edit: body sources given without saying whether the pieces of a solid become regions or bodies",
         );
-      if (!s.stepBytes || !s.stepSurface)
+      if (!s.stepBytes || !s.cadFaces || !s.stepSurface)
         throw new Error(
           "Cannot apply a geometry edit: no geometry is loaded to edit",
         );
@@ -812,6 +798,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         faceSizes: s.faceSizes,
       });
       s.stepBytes = bytes;
+      s.cadFaces = cadFaces;
       // The engine writes every edit as STEP, whatever the source format was.
       s.geometryFormat = "step";
       s.stepSurface = tessellation;

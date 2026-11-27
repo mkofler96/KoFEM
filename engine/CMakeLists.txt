@@ -34,6 +34,7 @@ add_executable(kofem_wasm_emcc
     cpp/tessellate.cpp
     cpp/geometry_cache.cpp
     cpp/geometry_edit.cpp
+    cpp/face_properties.cpp
     cpp/mesh_netgen.cpp
     cpp/mesh_overlap.cpp
     cpp/json_util.cpp
@@ -247,7 +248,3 @@ target_link_options(kofem_wasm_emcc PRIVATE
 
 # emcc adds .wasm automatically; only set the JS extension here
 set_target_properties(kofem_wasm_emcc PROPERTIES SUFFIX ".js")
-
-# Per-face CAD properties (KOF-493), added on its own so the stage list above
-# can change without touching this line.
-target_sources(kofem_wasm_emcc PRIVATE cpp/face_properties.cpp)

@@ -12,7 +12,6 @@ import { EngineStatus } from "./EngineStatus";
 import { useIntlTag, useT } from "../../i18n/useLocale";
 import { statusMessages } from "../../i18n/messages/shell";
 import type { PickGeometry } from "../../lib/facePick";
-import { cadFacesOf } from "../../store/geometrySlice";
 import { cadFaceLabel } from "../../lib/cadFaceProperties";
 import type { CadFaceProperties } from "../../lib/cadFaceProperties";
 import { MODEL_UNITS } from "../../lib/modelUnits";
@@ -209,7 +208,7 @@ export function StatusBar() {
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const setLoadDisplay = useModelStore((s) => s.setLoadDisplay);
   const stepSurface = useModelStore((s) => s.stepSurface);
-  const cadFaces = useModelStore(cadFacesOf);
+  const cadFaces = useModelStore((s) => s.cadFaces);
   const text = useT(statusMessages);
   const intl = useIntlTag();
   const picked = pickedCadFace(cadFaces, pickGeometry, selectedFace?.cadFaceId);
@@ -257,7 +256,7 @@ export function StatusBar() {
 
         {pickedLabel && (
           <span
-            className={styles.faceChip}
+            className={`${styles.chip} ${styles.faceChip}`}
             title={pickedLabel}
             data-testid="picked-face"
           >
@@ -266,7 +265,7 @@ export function StatusBar() {
         )}
 
         {selectedFace && !pickMode && (
-          <span className={styles.selChip}>
+          <span className={`${styles.chip} ${styles.selChip}`}>
             {text.selected(selectedFace.label)}
           </span>
         )}

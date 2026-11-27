@@ -36,7 +36,6 @@ import type {
   RepairHingesPayload,
   SplitConeTipsPayload,
   RemoveFacesPayload,
-  CadFacePropertiesPayload,
   VolumeMeshPayload,
   SolveModel,
   SolvePayload,
@@ -306,26 +305,6 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
       // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
       loadGeometry(payload.bytes, payload.format ?? "step"),
     ),
-  });
-}
-
-// ── cad_face_properties ───────────────────────────────────────────────────────
-
-// The CAD faces of a file the store holds without having imported it here (an
-// example, a problem report), described like an import describes its faces.
-function handleCadFaceProperties(
-  id: number,
-  payload: CadFacePropertiesPayload,
-) {
-  inStage("geometry_reload", () =>
-    reloadForEdit(payload.bytes, payload.format),
-  );
-  // The shape of the store's file is loaded now, so a mesh can use it.
-  geometryLoaded = true;
-  self.postMessage({
-    id,
-    ok: true,
-    cadFaces: decodeCadFaceProperties(m().cad_face_properties()),
   });
 }
 
@@ -1168,9 +1147,6 @@ function dispatchRequest({
       return null;
     case "remove_faces":
       handleRemoveFaces(id, payload as RemoveFacesPayload);
-      return null;
-    case "cad_face_properties":
-      handleCadFaceProperties(id, payload as CadFacePropertiesPayload);
       return null;
     case "volume_mesh":
       handleVolumeMesh(id, payload as VolumeMeshPayload);

@@ -31,7 +31,6 @@ export function useGeometry() {
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const setStepBytes = useModelStore((s) => s.setStepBytes);
-  const setCadFaces = useModelStore((s) => s.setCadFaces);
   const setGeometryFormat = useModelStore((s) => s.setGeometryFormat);
   const setBodies = useModelStore((s) => s.setBodies);
 
@@ -93,8 +92,7 @@ export function useGeometry() {
       }
       // Retain the raw bytes + format so the geometry can be reloaded for a
       // re-mesh (the worker is reset after each mesh and loses the shape).
-      setStepBytes(bytes);
-      setCadFaces(bytes, cadFaces);
+      setStepBytes(bytes, cadFaces);
       setGeometryFormat(format);
       setStepSurface({ points, triangles, bodyIds, faceIds });
       // A new part is a new model: the previous one's logs no longer apply.

@@ -18,7 +18,8 @@ import { SiteMenu, confirmLeave } from "./SiteMenu";
 import { SettingsMenu } from "./SettingsMenu";
 import { tr, useT } from "../../i18n/useLocale";
 import { topbarMessages } from "../../i18n/messages/topbar";
-import { describeCadFaces } from "../../lib/describeCadFaces";
+import { sendToWorker } from "../../workers/sharedWorker";
+import type { CadFaceProperties } from "../../lib/cadFaceProperties";
 import styles from "./TopBar.module.css";
 
 // A development deployment is marked at container start with
@@ -69,11 +70,16 @@ export function TopBar() {
         // A problem report (lib/bugReport): its analysis, then the CAD file it
         // was built from, so the model can be re-meshed and solved again.
         const report = await parseReport(bytes);
-        // Described before anything is loaded, so a file the engine cannot
-        // read leaves the current model as it was.
+        // Loaded into the engine first, so a file it cannot read leaves the
+        // current model as it was.
         const cad = report.cad && {
           ...report.cad,
-          faces: await describeCadFaces(report.cad.bytes, report.cad.format),
+          faces: (
+            await sendToWorker<{ cadFaces: CadFaceProperties[] }>(
+              "parse_step",
+              { bytes: report.cad.bytes, format: report.cad.format },
+            )
+          ).cadFaces,
         };
         loadAnalysis(report.analysis);
         clearWorkerLogs();
@@ -81,8 +87,7 @@ export function TopBar() {
           const { bytes: cadBytes, format, faces: cadFaces } = cad;
           const store = useModelStore.getState();
           store.setGeometryFormat(format);
-          store.setStepBytes(cadBytes);
-          store.setCadFaces(cadBytes, cadFaces);
+          store.setStepBytes(cadBytes, cadFaces);
         }
       } else {
         loadAnalysis(parseAnalysisFile(new TextDecoder("utf-8").decode(bytes)));

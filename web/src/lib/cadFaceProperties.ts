@@ -97,15 +97,11 @@ function direction(
     return signed ? `${d[along] > 0 ? "+" : "−"}${AXES[along]}` : AXES[along];
   const first = d.find((c) => Math.abs(c) > 0.005);
   const flip = !signed && first !== undefined && first < 0 ? -1 : 1;
-  const component = (c: number) => {
-    const shown = new Intl.NumberFormat(intl, {
-      maximumFractionDigits: 2,
-      signDisplay: "negative",
-    })
-      .format(flip * c)
-      .replace("-", "−");
-    return shown === "−0" ? "0" : shown;
-  };
+  const format = new Intl.NumberFormat(intl, {
+    maximumFractionDigits: 2,
+    signDisplay: "negative",
+  });
+  const component = (c: number) => format.format(flip * c);
   return text.faceVector(component(d[0]), component(d[1]), component(d[2]));
 }
 
