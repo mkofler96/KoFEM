@@ -37,8 +37,13 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { passiveElements, roleOf } from "../lib/regions";
-import { topOptContactRefusal, topOptTieRefusal } from "../lib/solve/refusals";
+import {
+  topOptContactRefusal,
+  topOptLargeDeformationRefusal,
+  topOptTieRefusal,
+} from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import { tr, useT } from "../i18n/useLocale";
 import { optimizeMessages } from "../i18n/messages/optimize";
 import { solveMessages } from "../i18n/messages/solve";
@@ -205,6 +210,12 @@ export function useTopOpt() {
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   // No optimizer solves contact either (KOF-485).
   const contactGroups = useModelStore((s) => s.contactGroups);
+  const largeDeformation = useModelStore((s) => s.largeDeformation);
+  const loadIncrements = useModelStore((s) => s.loadIncrements);
+  const largeDeformationRun = largeDeformationSetting(
+    largeDeformation,
+    loadIncrements,
+  );
   const isOptimizing = useModelStore((s) => s.isOptimizing);
   const setOptimizing = useModelStore((s) => s.setOptimizing);
   const setDensityResult = useModelStore((s) => s.setDensityResult);
@@ -277,9 +288,12 @@ export function useTopOpt() {
   // with the same words, so say so before the run.
   const tieRefusal = topOptTieRefusal(tieGroups);
   const contactRefusal = topOptContactRefusal(contactGroups);
+  const largeDeformationRefusal =
+    topOptLargeDeformationRefusal(largeDeformationRun);
   const allOk =
     tieRefusal === null &&
     contactRefusal === null &&
+    largeDeformationRefusal === null &&
     !noDesignRegion &&
     !levelSetShellBlock &&
     !levelSetCouplingBlock &&
@@ -332,6 +346,7 @@ export function useTopOpt() {
       tieGroups,
       couplings: couplingGroups,
       contacts: contactGroups,
+      largeDeformation: largeDeformationRun,
       settings: { ...settings, passive: passiveElements(elements, properties) },
     })
       .then(({ density, levelSet, history, converged, iterations }) => {
@@ -473,6 +488,8 @@ export function useTopOpt() {
   // for constraints most models never hit.
   if (tieRefusal !== null) checks.push([false, tieRefusal]);
   if (contactRefusal !== null) checks.push([false, contactRefusal]);
+  if (largeDeformationRefusal !== null)
+    checks.push([false, largeDeformationRefusal]);
   if (noDesignRegion) checks.push([false, text.noDesignRegion]);
   if (levelSetShellBlock) checks.push([false, text.levelSetShells]);
   if (levelSetCouplingBlock) checks.push([false, text.levelSetCouplings]);

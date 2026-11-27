@@ -16,6 +16,12 @@
 //! (the nodal moments plus the lever arm of each nodal force). Next to them
 //! it sums the applied loads, so the caller can check that the reactions
 //! balance them.
+//!
+//! A large-deformation solve balances its forces where they act, in the
+//! deformed configuration: its moments are taken there
+//! ([`summarize_reactions_at`]), and its added nodes are folded with the lever
+//! arm the fold moves them by ([`fold_onto_vertices_at`]), as a curved edge's
+//! node no longer lies midway between its ends.
 
 use crate::count::count_as_f64;
 use crate::coupling::DOFS_PER_NODE;
@@ -28,10 +34,13 @@ use crate::sparse::CsrMatrix;
 pub struct SupportReaction {
     /// Σ of the support's nodal reaction forces.
     pub force: [f64; 3],
-    /// Resultant moment about `centroid`: the nodal reaction moments plus
-    /// (x − centroid) × nodal force.
+    /// Resultant moment about the centroid of the held vertices where the
+    /// forces act: the nodal reaction moments plus (x − that centroid) ×
+    /// nodal force. That is `centroid` except after a large deformation
+    /// ([`summarize_reactions_at`]).
     pub moment: [f64; 3],
-    /// Mean of the vertices the support holds; the origin when it holds none.
+    /// Mean of the vertices the support holds, as given for drawing; the
+    /// origin when it holds none.
     pub centroid: [f64; 3],
     /// Vertices the support holds in this solve; 0 when none of its nodes
     /// reached it.
@@ -112,6 +121,40 @@ pub fn widen_translations(values: &[f64]) -> Vec<f64> {
 /// # Errors
 /// [`FemError::ReactionInput`] when `values` is not six per node.
 pub fn fold_onto_vertices(mesh: &TetMesh, values: &[f64]) -> Result<Vec<f64>, FemError> {
+    fold(mesh, values, None)
+}
+
+/// [`fold_onto_vertices`] for values that act at `positions` (one per node,
+/// as after a large deformation), where an added node need not sit at the
+/// mean of its corners. The force a node moves onto its corners keeps its
+/// moment about any point: its offset from the mean of the corners, crossed
+/// with the force, goes onto the corners' moments, shared as the force is.
+///
+/// # Errors
+/// [`FemError::ReactionInput`] when `values` is not six per node or
+/// `positions` not one per node.
+pub fn fold_onto_vertices_at(
+    mesh: &TetMesh,
+    values: &[f64],
+    positions: &[[f64; 3]],
+) -> Result<Vec<f64>, FemError> {
+    if positions.len() != mesh.node_count() {
+        return Err(FemError::ReactionInput {
+            reason: format!(
+                "{} positions for {} nodes",
+                positions.len(),
+                mesh.node_count()
+            ),
+        });
+    }
+    fold(mesh, values, Some(positions))
+}
+
+fn fold(
+    mesh: &TetMesh,
+    values: &[f64],
+    positions: Option<&[[f64; 3]]>,
+) -> Result<Vec<f64>, FemError> {
     let expected = DOFS_PER_NODE * mesh.node_count();
     if values.len() != expected {
         return Err(FemError::ReactionInput {
@@ -126,10 +169,26 @@ pub fn fold_onto_vertices(mesh: &TetMesh, values: &[f64]) -> Result<Vec<f64>, Fe
     let mut folded = values[..DOFS_PER_NODE * vertex_count].to_vec();
     let mut spread = |node: usize, corners: &[u32]| {
         let share = 1.0 / count_as_f64(corners.len());
+        let row = &values[DOFS_PER_NODE * node..DOFS_PER_NODE * (node + 1)];
+        let offset_moment = positions.map(|at| {
+            let mean: [f64; 3] = std::array::from_fn(|axis| {
+                corners
+                    .iter()
+                    .map(|&corner| at[corner as usize][axis])
+                    .sum::<f64>()
+                    * share
+            });
+            cross(sub(at[node], mean), [row[0], row[1], row[2]])
+        });
         for &corner in corners {
+            let base = DOFS_PER_NODE * corner as usize;
             for component in 0..DOFS_PER_NODE {
-                folded[DOFS_PER_NODE * corner as usize + component] +=
-                    share * values[DOFS_PER_NODE * node + component];
+                folded[base + component] += share * row[component];
+            }
+            if let Some(moment) = offset_moment {
+                for axis in 0..3 {
+                    folded[base + 3 + axis] += share * moment[axis];
+                }
             }
         }
     };
@@ -229,6 +288,34 @@ pub fn summarize_reactions(
     owners: &[i32],
     supports: usize,
 ) -> Result<ReactionSummary, FemError> {
+    summarize_reactions_at(vertices, vertices, reactions, forces, owners, supports)
+}
+
+/// [`summarize_reactions`] for forces that act at `acting_at` (one position
+/// per vertex, as after a large deformation) rather than at `vertices`: each
+/// support's moment is taken about the centroid of its held vertices there,
+/// with the lever arms there. The centroids and nodal positions it reports
+/// for drawing are still those of `vertices`.
+///
+/// # Errors
+/// As [`summarize_reactions`], and `acting_at` not one per vertex.
+pub fn summarize_reactions_at(
+    vertices: &[[f64; 3]],
+    acting_at: &[[f64; 3]],
+    reactions: &[f64],
+    forces: &[f64],
+    owners: &[i32],
+    supports: usize,
+) -> Result<ReactionSummary, FemError> {
+    if acting_at.len() != vertices.len() {
+        return Err(FemError::ReactionInput {
+            reason: format!(
+                "{} acting positions for {} vertices",
+                acting_at.len(),
+                vertices.len()
+            ),
+        });
+    }
     let expected = DOFS_PER_NODE * vertices.len();
     for (name, len) in [
         ("reactions", reactions.len()),
@@ -246,34 +333,17 @@ pub fn summarize_reactions(
     }
     let owned = owner_table(owners, supports)?;
 
-    let mut sums = vec![[0.0; 3]; supports];
-    let mut counts = vec![0usize; supports];
-    for (vertex, row) in owned.iter().enumerate() {
-        let mut seen: Vec<usize> = row.iter().flatten().copied().collect();
-        seen.sort_unstable();
-        seen.dedup();
-        for support in seen {
-            counts[support] += 1;
-            for axis in 0..3 {
-                sums[support][axis] += vertices[vertex][axis];
-            }
-        }
-    }
-    let mut result: Vec<SupportReaction> = sums
-        .iter()
+    let (centroids, counts) = held_means(&owned, vertices, supports);
+    // The point each support's moment is taken about.
+    let (pivots, _) = held_means(&owned, acting_at, supports);
+    let mut result: Vec<SupportReaction> = centroids
+        .into_iter()
         .zip(&counts)
-        .map(|(sum, &count)| {
-            let centroid = if count == 0 {
-                [0.0; 3]
-            } else {
-                sum.map(|value| value / count_as_f64(count))
-            };
-            SupportReaction {
-                force: [0.0; 3],
-                moment: [0.0; 3],
-                centroid,
-                vertices: count,
-            }
+        .map(|(centroid, &count)| SupportReaction {
+            force: [0.0; 3],
+            moment: [0.0; 3],
+            centroid,
+            vertices: count,
         })
         .collect();
 
@@ -306,7 +376,7 @@ pub fn summarize_reactions(
                 reaction.force[component] += value;
                 let mut nodal = [0.0; 3];
                 nodal[component] = value;
-                let arm = cross(sub(vertices[vertex], reaction.centroid), nodal);
+                let arm = cross(sub(acting_at[vertex], pivots[support]), nodal);
                 for axis in 0..3 {
                     reaction.moment[axis] += arm[axis];
                 }
@@ -322,6 +392,40 @@ pub fn summarize_reactions(
         applied,
         applied_on_supports,
     })
+}
+
+/// The mean of `positions` over the vertices each support holds in any DOF,
+/// the origin for a support that holds none, and how many it holds.
+fn held_means(
+    owned: &[[Option<usize>; DOFS_PER_NODE]],
+    positions: &[[f64; 3]],
+    supports: usize,
+) -> (Vec<[f64; 3]>, Vec<usize>) {
+    let mut sums = vec![[0.0; 3]; supports];
+    let mut counts = vec![0usize; supports];
+    for (vertex, row) in owned.iter().enumerate() {
+        let mut seen: Vec<usize> = row.iter().flatten().copied().collect();
+        seen.sort_unstable();
+        seen.dedup();
+        for support in seen {
+            counts[support] += 1;
+            for axis in 0..3 {
+                sums[support][axis] += positions[vertex][axis];
+            }
+        }
+    }
+    let means = sums
+        .iter()
+        .zip(&counts)
+        .map(|(sum, &count)| {
+            if count == 0 {
+                [0.0; 3]
+            } else {
+                sum.map(|value| value / count_as_f64(count))
+            }
+        })
+        .collect();
+    (means, counts)
 }
 
 /// Each vertex's DOF owners from the flat `owners` (6 per vertex, −1 for

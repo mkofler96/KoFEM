@@ -140,14 +140,6 @@ export const boundaryMessages = defineMessages({
     pt: (touching: number, total: number, force: string) =>
       `${touching} de ${total} nós em contato · força de contato ${force} N`,
   },
-  contactUnsolved: {
-    en: "Run the static solve to see where the surfaces touch.",
-    de: "Starten Sie die statische Berechnung, um zu sehen, wo sich die Flächen berühren.",
-    fr: "Lancez le calcul statique pour voir où les surfaces se touchent.",
-    it: "Esegui il calcolo statico per vedere dove le superfici si toccano.",
-    es: "Ejecuta el cálculo estático para ver dónde se tocan las superficies.",
-    pt: "Execute o cálculo estático para ver onde as superfícies se tocam.",
-  },
   kindTie: {
     en: "Tie",
     de: "Verbindung",

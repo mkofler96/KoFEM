@@ -146,6 +146,12 @@ export interface VolumeMeshPayload {
   suppressedBodyIds?: number[];
   properties?: Property[];
 }
+// Large deformation (KOF-486): the solids as Neo-Hookean, the loads applied
+// over `increments` equal load increments.
+export interface LargeDeformation {
+  increments: number;
+}
+
 // The model a solve (or a topology optimization) works on — everything in the
 // solve request except the choice of solver.
 export interface SolveModel {
@@ -174,6 +180,9 @@ export interface SolveModel {
   // all-solid path with linear elements only (routeSolve refuses the rest).
   // Absent/empty = no contact.
   contacts?: ContactDefinition[];
+  // Large deformation; absent or null: the linear solve. Only the solid path
+  // solves it (routeSolve refuses the rest).
+  largeDeformation?: LargeDeformation | null;
   // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
@@ -209,5 +218,7 @@ export interface TopOptPayload {
   contacts?: ContactDefinition[];
   // A temperature change; the optimizer refuses one.
   temperature?: TemperatureLoad | null;
+  // Large deformation; the optimizer, which is linear, refuses it.
+  largeDeformation?: LargeDeformation | null;
   settings: TopOptSettings;
 }
