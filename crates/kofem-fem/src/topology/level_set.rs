@@ -33,7 +33,6 @@
 //! the convergence plot and live streaming work as for SIMP.
 
 use crate::amg::SymmetricGaussSeidel;
-use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
 use crate::count::count_as_f64;
 use crate::element::{
@@ -619,7 +618,7 @@ fn check_settings(settings: &LevelSetSettings) -> Result<(), FemError> {
 /// linear H1 space of `mesh`, one row per vertex. A vertex no element uses
 /// gets an identity row in both, so it keeps its value.
 fn scalar_operators(mesh: &TetMesh, diffusion: f64) -> (CsrMatrix, CsrMatrix) {
-    let neighbours = node_neighbours(mesh);
+    let neighbours = vertex_neighbours(mesh);
     let mut mass = CsrMatrix::from_node_blocks(&neighbours, 1);
     let mut laplacian = mass.clone();
     let tet_count = mesh.tets().len();
@@ -650,6 +649,32 @@ fn scalar_operators(mesh: &TetMesh, diffusion: f64) -> (CsrMatrix, CsrMatrix) {
         *value += diffusion * diffusive;
     }
     (mass, operator)
+}
+
+/// Sorted neighbour list of every vertex (itself included): the vertices it
+/// shares an element with. The level set lives on the vertices, on each
+/// element's own corners, so the nodes a transition element adds inside a hex
+/// (KOF-433) have no row.
+fn vertex_neighbours(mesh: &TetMesh) -> Vec<Vec<u32>> {
+    let mut neighbours: Vec<Vec<u32>> = vec![Vec::new(); mesh.vertex_count()];
+    for element in 0..mesh.element_count() {
+        let corners = mesh.element_nodes(element);
+        for &corner in corners {
+            neighbours[corner as usize].extend_from_slice(corners);
+        }
+    }
+    for (vertex, list) in neighbours.iter_mut().enumerate() {
+        if list.is_empty() {
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "TetMesh caps the node count at MAX_NODES"
+            )]
+            list.push(vertex as u32);
+        }
+        list.sort_unstable();
+        list.dedup();
+    }
+    neighbours
 }
 
 /// Consistent mass `V/20·(1 + δ_ij)` and Laplacian `V·∇N_i·∇N_j` of a linear

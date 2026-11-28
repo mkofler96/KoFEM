@@ -672,6 +672,29 @@ impl ElasticModel {
             tie_report: Some(report),
         })
     }
+
+    /// Hex faces that meet two tet triangles. Each hex with one is solved as
+    /// a transition element (`kofem_fem::transition`), so the displacement
+    /// stays continuous across the face; the faces are inside the body.
+    #[wasm_bindgen(getter, js_name = interfaceFaces)]
+    #[must_use]
+    pub fn interface_faces(&self) -> usize {
+        self.mesh.interface_faces().len()
+    }
+
+    /// Hexes solved as transition elements.
+    #[wasm_bindgen(getter, js_name = transitionElements)]
+    #[must_use]
+    pub fn transition_elements(&self) -> usize {
+        let mut hexes: Vec<usize> = self
+            .mesh
+            .interface_faces()
+            .iter()
+            .map(|face| face.hex)
+            .collect();
+        hexes.dedup();
+        hexes.len()
+    }
 }
 
 #[wasm_bindgen]

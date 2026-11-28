@@ -30,6 +30,7 @@ mod support;
 
 use kofem_fem::hyperelastic::NeoHookean;
 use kofem_fem::nonlinear::{solve_newton, DirichletCg, NewtonSettings};
+use kofem_fem::topology::level_set::{optimize_level_set, LevelSetSettings};
 use kofem_fem::topology::{SimpModel, SimpPreconditioner, SimpSolver};
 use kofem_fem::{
     assemble_stiffness, corner_stress_tensors_thermal, displacement_at, outer_faces, solve_static,
@@ -551,9 +552,8 @@ fn a_large_homogeneous_stretch_crosses_a_hex_tet_interface_exactly() {
     }
 }
 
-#[test]
-fn simp_solves_the_transition_elements() {
-    let bar = bar([4, 2, 2], true, ElementOrder::Linear);
+/// The bar clamped at x = 0 and pulled down at the tip, as SIMP takes it.
+fn simp_case(bar: &Bar) -> (Vec<u32>, Vec<f64>) {
     let mesh = &bar.mesh;
     let mut fixed = Vec::new();
     let mut forces = vec![0.0; mesh.dof_count()];
@@ -568,6 +568,14 @@ fn simp_solves_the_transition_elements() {
     for &vertex in &tip {
         forces[3 * vertex + 2] = -1.0 / tip.len() as f64;
     }
+    (fixed, forces)
+}
+
+#[test]
+fn simp_solves_the_transition_elements() {
+    let bar = bar([4, 2, 2], true, ElementOrder::Linear);
+    let mesh = &bar.mesh;
+    let (fixed, forces) = simp_case(&bar);
     let stiffness = assemble_stiffness(mesh);
     let static_solution = solve_static(
         mesh,
@@ -606,4 +614,23 @@ fn simp_solves_the_transition_elements() {
             evaluation.compliance
         );
     }
+}
+
+#[test]
+fn the_level_set_method_runs_on_transition_elements() {
+    let bar = bar([4, 2, 2], true, ElementOrder::Linear);
+    let (fixed, forces) = simp_case(&bar);
+    let model = SimpModel::new(bar.mesh.clone(), &fixed, forces, SimpSolver::default())
+        .expect("a SIMP model");
+    let result = optimize_level_set(
+        model,
+        &LevelSetSettings {
+            max_iterations: 3,
+            ..LevelSetSettings::default()
+        },
+        |_, _| {},
+    )
+    .expect("the level-set run");
+    assert_eq!(result.density.len(), bar.tets.len() + bar.hexes.len());
+    assert_eq!(result.level_set.len(), bar.mesh.vertex_count());
 }

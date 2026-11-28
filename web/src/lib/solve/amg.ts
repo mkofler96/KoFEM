@@ -319,6 +319,8 @@ export async function solveSolidInRust(
           `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
       );
     }
+    const transitions = transitionNote(elastic);
+    if (transitions !== null) log(transitions);
     const { fixedDofs, fixedValues, forces } = rustSolidBoundaryConditions(
       elastic,
       model,
@@ -627,6 +629,20 @@ export function createRustSolidModel(
     tetCount: tetElements.length,
     hexCount: hexElements.length,
   };
+}
+
+// The solve log's line on hexes that meet tets on a face (KOF-433): each is
+// solved as a transition element, pyramids and tets that join it to the
+// tets, so the displacement stays continuous; null when there are none.
+export function transitionNote(
+  elastic: Pick<ElasticModel, "interfaceFaces" | "transitionElements">,
+): string | null {
+  if (elastic.interfaceFaces === 0) return null;
+  return (
+    `${elastic.interfaceFaces} hexahedron face(s) meet tetrahedra: ` +
+    `${elastic.transitionElements} hexahedra are solved as transition elements (pyramids and tetrahedra), ` +
+    `so the displacement is continuous across the interface`
+  );
 }
 
 // The element kinds a model has, e.g. "24 tetrahedra and 4 hexahedra".

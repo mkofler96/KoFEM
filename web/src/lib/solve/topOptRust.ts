@@ -28,6 +28,7 @@ import { buildVertexIndexer } from "../solveMeshPacking.js";
 import {
   createRustSolidModel,
   describeSolidElements,
+  transitionNote,
   rustSolidBoundaryConditions,
 } from "./amg.js";
 import {
@@ -307,6 +308,8 @@ export function optimizeSolidInRust(
     vid,
   );
   try {
+    const transitions = transitionNote(elastic);
+    if (transitions !== null) log(`[topopt] ${transitions}`);
     const { fixedDofs, fixedValues, forces } = rustSolidBoundaryConditions(
       elastic,
       payload,
