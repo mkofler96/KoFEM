@@ -61,5 +61,10 @@ export default {
         <a href="${url("scordelis-lo-roof")}">Scordelis–Lo roof</a> and the
         pinched hemisphere, which is <a href="${url("nafems-le3")}">NAFEMS
         LE3</a>.</p>`,
-  references: [REF.belytschko1985, REF.macnealHarder, REF.batoz, REF.felippa2003],
+  references: [
+    REF.belytschko1985,
+    REF.macnealHarder,
+    REF.batoz,
+    REF.felippa2003,
+  ],
 };
