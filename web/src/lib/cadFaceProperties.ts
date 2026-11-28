@@ -68,9 +68,10 @@ export interface CadFaceText {
   faceVector(x: string, y: string, z: string): string;
 }
 
-// A measure to three significant figures, but never rounding away whole units:
-// 37, 3.2, 0.0123, 149, 12,345.
-function measure(value: number, intl: string): string {
+/** A measure to three significant figures, but never rounding away whole
+ *  units: 37, 3.2, 0.0123, 149, 12,345. The status bar's face area and the
+ *  support and load cards (lib/groupSummary) use it alike. */
+export function formatMeasure(value: number, intl: string): string {
   return new Intl.NumberFormat(
     intl,
     Math.abs(value) >= 100
@@ -115,7 +116,7 @@ export function cadFaceLabel(
   intl: string,
   lengthUnit: string,
 ): string {
-  const area = `${measure(face.area, intl)} ${lengthUnit}²`;
+  const area = `${formatMeasure(face.area, intl)} ${lengthUnit}²`;
   const parts = [text.faceLabel(id)];
   if (face.kind === "plane")
     parts.push(
@@ -125,7 +126,7 @@ export function cadFaceLabel(
     );
   else if (face.kind === "cylinder")
     parts.push(
-      text.faceCylinder(measure(2 * face.radius, intl)),
+      text.faceCylinder(formatMeasure(2 * face.radius, intl)),
       area,
       text.faceAxis(direction(face.axis, false, text, intl)),
     );

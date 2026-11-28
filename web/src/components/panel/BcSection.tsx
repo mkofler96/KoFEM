@@ -4,6 +4,8 @@
 import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { usePickedFaces } from "../../hooks/usePickedFaces";
+import { useFemModule } from "../../hooks/useFemModule";
+import { groupArea, supportSummaryText } from "../../lib/groupSummary";
 import { DOF_LABELS, toFaceEntries } from "./bcFormUtils";
 import {
   DofCheckboxes,
@@ -19,7 +21,7 @@ import {
   useStartOnAdd,
   type SectionFocus,
 } from "./sectionFocus";
-import { useT } from "../../i18n/useLocale";
+import { useIntlTag, useT } from "../../i18n/useLocale";
 import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
@@ -57,6 +59,9 @@ export function BcSection({
     startPickForGroup,
   } = usePickedFaces(onError);
   const text = useT(boundaryMessages);
+  const intl = useIntlTag();
+  const cadFaces = useModelStore((s) => s.cadFaces);
+  const { ready: femReady } = useFemModule();
 
   // Group whose values are being edited inline (✎), if any.
   const [editingBcId, setEditingBcId] = useState<number | null>(
@@ -204,6 +209,18 @@ export function BcSection({
             key={group.id}
             name={group.name}
             meta={`${group.dofs.map((dof) => DOF_LABELS[dof]).join(", ")} = ${group.value}`}
+            summary={
+              femReady
+                ? supportSummaryText(
+                    groupArea(group.faces, cadFaces),
+                    group.dofs,
+                    group.value,
+                    group.faces,
+                    text,
+                    intl,
+                  )
+                : undefined
+            }
             dotClassName={styles.bcDot}
             editTitle={text.editBc}
             deleteTitle={text.deleteBc}

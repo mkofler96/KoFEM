@@ -895,6 +895,62 @@
     "es": "cc6eb0e407c6",
     "pt": "f537beeee626"
   },
+  "boundary.ts:boundaryMessages.summaryHolds": {
+    "en": "7e12a70d41fa",
+    "de": "2f99dac7f72b",
+    "fr": "7a20047b8038",
+    "it": "fbb94169d74a",
+    "es": "3648ad4666a8",
+    "pt": "dcff0deed7ec"
+  },
+  "boundary.ts:boundaryMessages.summaryNoFaces": {
+    "en": "f2e1f19a45bb",
+    "de": "6b25c4966d57",
+    "fr": "f9613436c864",
+    "it": "ab1a057a169a",
+    "es": "7ae97ac2bfe6",
+    "pt": "0f864c925f0c"
+  },
+  "boundary.ts:boundaryMessages.summaryNoValue": {
+    "en": "64cbcfaa8340",
+    "de": "67e0e0d7bf1c",
+    "fr": "fa3cae03cf98",
+    "it": "6070855c3b24",
+    "es": "37a02d316dc6",
+    "pt": "dd4907a4180a"
+  },
+  "boundary.ts:boundaryMessages.summaryNotMeasured": {
+    "en": "c4db0b707835",
+    "de": "f0658f996f02",
+    "fr": "bdd1d5d99349",
+    "it": "5080eb82e5eb",
+    "es": "2ad0de1b4006",
+    "pt": "313b3af7dc23"
+  },
+  "boundary.ts:boundaryMessages.summaryOver": {
+    "en": "80f30c505c2f",
+    "de": "79b56924be05",
+    "fr": "ba94ffc1accd",
+    "it": "eb82fa41bc5b",
+    "es": "a7b5a3d59ef4",
+    "pt": "a7b5a3d59ef4"
+  },
+  "boundary.ts:boundaryMessages.summarySameFace": {
+    "en": "1afb8d3140fe",
+    "de": "8f8f7f07b534",
+    "fr": "1dc905fa5b7d",
+    "it": "21b58287788f",
+    "es": "086a981d600a",
+    "pt": "528d767ccbc0"
+  },
+  "boundary.ts:boundaryMessages.summarySets": {
+    "en": "1038a8f85daf",
+    "de": "fdfee238b485",
+    "fr": "df73584c2f7b",
+    "it": "d5a204f36d56",
+    "es": "d5a204f36d56",
+    "pt": "c02938a6fd4f"
+  },
   "boundary.ts:boundaryMessages.surfaceA": {
     "en": "734e73f90ec9",
     "de": "89568a9eeb6e",

@@ -3,6 +3,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 import type { BcFaceEntry } from "../../store/modelStore";
+import type { SummaryText } from "../../lib/groupSummary";
 import { requestDelete } from "../../store/confirmDelete";
 import { useT } from "../../i18n/useLocale";
 import { boundaryMessages } from "../../i18n/messages/boundary";
@@ -11,10 +12,12 @@ import styles from "./Panel.module.css";
 // One entry in the BC / load group list: name + summary header with the
 // add-face / edit / delete actions, the Name field when the group can be
 // renamed, an optional inline edit form, and the group's face rows. Shared by
-// BcSection, LoadSection and CouplingSection.
+// BcSection, LoadSection and CouplingSection. Supports and loads also say
+// what they apply (KOF-494): area, DOFs held, total force and traction.
 export function GroupCard({
   name,
   meta,
+  summary,
   dotClassName,
   editTitle,
   deleteTitle,
@@ -28,6 +31,8 @@ export function GroupCard({
 }: {
   name: string;
   meta: string;
+  // Absent on groups that have none, and while the Rust module loads.
+  summary?: SummaryText;
   dotClassName: string;
   editTitle: string;
   deleteTitle: string;
@@ -71,6 +76,19 @@ export function GroupCard({
           </button>
         </div>
       </div>
+      {summary && (
+        <div className={styles.bcGroupSummary} data-testid="group-summary">
+          <div>{summary.summary}</div>
+          {summary.warning && (
+            <div
+              className={styles.bcGroupWarning}
+              data-testid="group-summary-warning"
+            >
+              {summary.warning}
+            </div>
+          )}
+        </div>
+      )}
       {onRename && <GroupNameField name={name} onRename={onRename} />}
       {editForm}
       {faces.map((face) => (

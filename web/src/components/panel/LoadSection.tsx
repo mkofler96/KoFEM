@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { LoadKind } from "../../store/modelStore";
 import { usePickedFaces } from "../../hooks/usePickedFaces";
+import { useFemModule } from "../../hooks/useFemModule";
+import { loadFigures, loadSummaryText } from "../../lib/groupSummary";
 import {
   loadGroupMeta,
   parseLoadVector,
@@ -27,7 +29,7 @@ import {
   useStartOnAdd,
   type SectionFocus,
 } from "./sectionFocus";
-import { useT } from "../../i18n/useLocale";
+import { useIntlTag, useT } from "../../i18n/useLocale";
 import { boundaryMessages } from "../../i18n/messages/boundary";
 import styles from "./Panel.module.css";
 
@@ -75,6 +77,9 @@ export function LoadSection({
     startPickForGroup,
   } = usePickedFaces(onError);
   const text = useT(boundaryMessages);
+  const intl = useIntlTag();
+  const cadFaces = useModelStore((s) => s.cadFaces);
+  const { ready: femReady } = useFemModule();
 
   // Group whose values are being edited inline (✎), if any.
   const [editingLoadId, setEditingLoadId] = useState<number | null>(
@@ -270,6 +275,16 @@ export function LoadSection({
             key={group.id}
             name={group.name}
             meta={loadGroupMeta(group)}
+            summary={
+              femReady
+                ? loadSummaryText(
+                    loadFigures(group, cadFaces),
+                    group.faces,
+                    text,
+                    intl,
+                  )
+                : undefined
+            }
             dotClassName={styles.loadDot}
             editTitle={text.editLoad}
             deleteTitle={text.deleteLoad}

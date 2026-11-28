@@ -10,6 +10,7 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod boundary_summary;
 mod contact;
 mod convergence;
 mod failure;
@@ -27,6 +28,9 @@ mod stiffness;
 mod tie;
 mod topology;
 
+pub use boundary_summary::{
+    force_summary, moment_summary, pressure_summary, selected_area, LoadSummary, SelectedArea,
+};
 pub use contact::{ContactPairs, ContactRun, ContactSolution};
 pub use convergence::{
     clamped_free_wedge_exponent, extrapolate_to_zero_size, fit_convergence_rate,
