@@ -167,14 +167,6 @@ export const reportMessages = defineMessages({
     es: "Lámina, idealizada al resolver; su espesor se mide al resolver y no se registra aquí",
     pt: "Casca, idealizada ao resolver; sua espessura é medida ao resolver e não é registrada aqui",
   },
-  shellOf: {
-    en: (body: string) => `${body}, shell`,
-    de: (body: string) => `${body}, Schale`,
-    fr: (body: string) => `${body}, coque`,
-    it: (body: string) => `${body}, guscio`,
-    es: (body: string) => `${body}, lámina`,
-    pt: (body: string) => `${body}, casca`,
-  },
   supports: {
     en: "Supports",
     de: "Lagerungen",
@@ -452,20 +444,6 @@ export const reportMessages = defineMessages({
     it: "Coefficiente di sicurezza allo snervamento sul 99° percentile di $σ_{\\u{vm}}$ per volume",
     es: "Factor de seguridad frente a la fluencia sobre el percentil 99 de $σ_{\\u{vm}}$ por volumen",
     pt: "Fator de segurança ao escoamento sobre o percentil 99 de $σ_{\\u{vm}}$ por volume",
-  },
-  safetyMaterial: {
-    en: (material: string, yieldStrength: string) =>
-      `${material}, ${yieldStrength} MPa`,
-    de: (material: string, yieldStrength: string) =>
-      `${material}, ${yieldStrength} MPa`,
-    fr: (material: string, yieldStrength: string) =>
-      `${material}, ${yieldStrength} MPa`,
-    it: (material: string, yieldStrength: string) =>
-      `${material}, ${yieldStrength} MPa`,
-    es: (material: string, yieldStrength: string) =>
-      `${material}, ${yieldStrength} MPa`,
-    pt: (material: string, yieldStrength: string) =>
-      `${material}, ${yieldStrength} MPa`,
   },
   p99VonMises: {
     en: "Von Mises stress, 99th percentile of the nodes",

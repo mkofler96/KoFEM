@@ -15,6 +15,14 @@ export const geometryMessages = defineMessages({
     es: (body: number) => `Cuerpo ${body}`,
     pt: (body: number) => `Corpo ${body}`,
   },
+  shellOf: {
+    en: (body: string) => `${body}, shell`,
+    de: (body: string) => `${body}, Schale`,
+    fr: (body: string) => `${body}, coque`,
+    it: (body: string) => `${body}, guscio`,
+    es: (body: string) => `${body}, lámina`,
+    pt: (body: string) => `${body}, casca`,
+  },
   bodyRegionName: {
     en: (body: number, region: number) => `Body ${body} · Region ${region}`,
     de: (body: number, region: number) => `Körper ${body} · Bereich ${region}`,

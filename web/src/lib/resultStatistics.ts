@@ -1,16 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Statistics of a result field, around the Rust computations in
-// crates/kofem-fem/src/field_statistics.rs: the volume-weighted percentiles
-// of the plotted nodal field (KOF-477, nodalPercentiles) and the per-group
-// max and percentile of an element field (KOF-496, groupedElementStatistics).
-// The Rust module must be loaded first (loadFemModule).
+// Volume-weighted percentiles of the plotted nodal field (KOF-477), around the
+// Rust computation (crates/kofem-fem/src/field_statistics.rs, called as
+// nodalPercentiles). The Rust module must be loaded first (loadFemModule).
 
-import {
-  groupedElementStatistics,
-  nodalPercentiles,
-} from "../wasm/fem/kofem_wasm.js";
+import { nodalPercentiles } from "../wasm/fem/kofem_wasm.js";
 import type { Element, Node, Property } from "../store/modelStore";
 import { tr } from "../i18n/useLocale";
 import { resultsMessages } from "../i18n/messages/results";
@@ -22,7 +17,7 @@ export const RESULT_PERCENTILES = [0.95, 0.99] as const;
 // coordinates in node order, connectivities by node index per element family,
 // and where each element lands in the family order (tetrahedra, hexahedra,
 // shell facets), which per-element inputs follow.
-interface PackedElements {
+export interface PackedElements {
   points: Float64Array;
   tets: Uint32Array;
   tetNodes: number;
@@ -32,7 +27,7 @@ interface PackedElements {
   familyOrder: number[];
 }
 
-function packElements(
+export function packElements(
   nodes: Node[],
   elements: Element[],
   properties: Property[],
@@ -115,45 +110,4 @@ export function fieldPercentiles(
       Float64Array.from(quantiles),
     ),
   );
-}
-
-/** The max and a percentile of one group's field. */
-export interface GroupStatistics {
-  max: number;
-  quantile: number;
-}
-
-/**
- * Per group, the max and the volume-weighted `quantile` of an element field
- * (`values`, one per element in element order) averaged to the nodes over
- * that group's elements only. `groups` gives each element's group, numbered
- * from 0 to `groupCount` − 1.
- */
-export function groupStatistics(
-  values: Float64Array,
-  groups: Uint32Array,
-  groupCount: number,
-  quantile: number,
-  nodes: Node[],
-  elements: Element[],
-  properties: Property[],
-): GroupStatistics[] {
-  const packed = packElements(nodes, elements, properties);
-  const order = packed.familyOrder;
-  const flat = groupedElementStatistics(
-    packed.points,
-    packed.tets,
-    packed.tetNodes,
-    packed.hexes,
-    packed.shells,
-    packed.thicknesses,
-    Float64Array.from(order, (e) => values[e]),
-    Uint32Array.from(order, (e) => groups[e]),
-    groupCount,
-    quantile,
-  );
-  return Array.from({ length: groupCount }, (_, g) => ({
-    max: flat[2 * g],
-    quantile: flat[2 * g + 1],
-  }));
 }

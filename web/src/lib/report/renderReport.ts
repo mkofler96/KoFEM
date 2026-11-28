@@ -10,6 +10,7 @@
 // table shares a row with a figure. Test ids and data-* attributes carry the
 // exact numbers for the e2e test.
 
+import { formatSafetyFactor } from "../safetyFactor";
 import type {
   BodyRow,
   ReportDocument,
@@ -224,7 +225,7 @@ function keyResults(doc: ReportDocument): string {
     ] as const)
       rows.push([
         label,
-        `${Number.isFinite(factor) ? sig4(factor) : "∞"} · ${escapeHtml(row.body)}`,
+        `${escapeHtml(formatSafetyFactor(factor))} · ${escapeHtml(row.body)}`,
         ` data-testid="report-safety-${id}-${row.key}" data-value="${factor}"`,
       ]);
   if (doc.reactions !== null) {

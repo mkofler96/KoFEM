@@ -26,7 +26,7 @@ import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { useFieldPercentiles } from "../../hooks/useFieldPercentiles";
 import { useSafetyFactors } from "../../hooks/useSafetyFactors";
-import { SAFETY_PERCENTILE } from "../../lib/safetyFactor";
+import { formatSafetyFactor, SAFETY_PERCENTILE } from "../../lib/safetyFactor";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
@@ -381,14 +381,7 @@ function PercentileRows({ symbol, unit }: { symbol: string; unit: string }) {
   ));
 }
 
-// A safety factor as Results shows it: three significant digits, ∞ where
-// nothing is stressed.
-const formatFactor = (factor: number): string =>
-  Number.isFinite(factor) ? factor.toPrecision(3) : "∞";
-
-// The safety factor against yield (KOF-496), for every material in use that
-// has a yield strength: one pair of rows for a model of one material, a pair
-// per body for a model of several. Nothing without a yield strength.
+// The safety factor against yield (KOF-496).
 function SafetyFactorSection() {
   const readings = useSafetyFactors();
   const text = useT(resultsMessages);
@@ -410,13 +403,11 @@ function SafetyFactorSection() {
             id: "max",
             label: text.safetyOnMax,
             factor: row.maxFactor,
-            stress: row.maxVonMises,
           },
           {
             id: "p99",
             label: text.safetyOnPercentile(Math.round(SAFETY_PERCENTILE * 100)),
             factor: row.p99Factor,
-            stress: row.p99VonMises,
           },
         ];
         return (
@@ -424,22 +415,15 @@ function SafetyFactorSection() {
             <div className={`${styles.formNote} ${styles.formNoteFull}`}>
               {label}
             </div>
-            {entries.map(({ id, label, factor, stress }) => (
-              <div
-                key={id}
-                className={styles.statRow}
-                title={text.safetyHint(
-                  String(row.yieldStrength),
-                  stress.toPrecision(4),
-                )}
-              >
+            {entries.map(({ id, label, factor }) => (
+              <div key={id} className={styles.statRow}>
                 <span className={styles.statKey}>{label}</span>
                 <span
                   className={styles.statVal}
                   data-testid={`safety-factor-${id}-${key}`}
                   data-value={String(factor)}
                 >
-                  {formatFactor(factor)}
+                  {formatSafetyFactor(factor)}
                 </span>
               </div>
             ))}

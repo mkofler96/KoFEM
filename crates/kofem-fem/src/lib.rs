@@ -40,6 +40,7 @@ pub mod nonlinear;
 pub mod reactions;
 pub mod report;
 pub mod rigid_body;
+pub mod safety_factor;
 pub mod section;
 pub mod shell;
 pub mod sparse;
@@ -81,6 +82,7 @@ pub use reactions::{
 };
 pub use report::{percentile, report_stats, ReportStats};
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};
+pub use safety_factor::{safety_factors, SafetyFactor, SafetyInput, SafetyScope};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
     assemble_shell_stiffness, prepare_shell_static, shell_corner_stress_tensors,

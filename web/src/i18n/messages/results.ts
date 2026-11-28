@@ -1071,20 +1071,6 @@ export const resultsMessages = defineMessages({
     es: (percent: number) => `Sobre P${percent} σ_vm`,
     pt: (percent: number) => `Sobre P${percent} σ_vm`,
   },
-  safetyHint: {
-    en: (yieldStrength: string, stress: string) =>
-      `Yield strength ${yieldStrength} MPa over ${stress} MPa von Mises. Below 1, the material yields there.`,
-    de: (yieldStrength: string, stress: string) =>
-      `Streckgrenze ${yieldStrength} MPa durch ${stress} MPa von Mises. Unter 1 fließt der Werkstoff dort.`,
-    fr: (yieldStrength: string, stress: string) =>
-      `Limite d'élasticité ${yieldStrength} MPa divisée par ${stress} MPa de von Mises. En dessous de 1, le matériau s'y plastifie.`,
-    it: (yieldStrength: string, stress: string) =>
-      `Carico di snervamento ${yieldStrength} MPa diviso ${stress} MPa di von Mises. Sotto 1, il materiale lì snerva.`,
-    es: (yieldStrength: string, stress: string) =>
-      `Límite elástico de ${yieldStrength} MPa entre ${stress} MPa de von Mises. Por debajo de 1, el material fluye ahí.`,
-    pt: (yieldStrength: string, stress: string) =>
-      `Tensão de escoamento de ${yieldStrength} MPa sobre ${stress} MPa de von Mises. Abaixo de 1, o material escoa ali.`,
-  },
   safetyUnreadable: {
     en: (reason: string) => `The safety factor cannot be read. ${reason}`,
     de: (reason: string) =>

@@ -53,14 +53,6 @@ export const materialsMessages = defineMessages({
     es: "Límite elástico (MPa)",
     pt: "Tensão de escoamento (MPa)",
   },
-  yieldTitle: {
-    en: "Optional. When set, Results show the safety factor against yield. Leave blank for none.",
-    de: "Optional. Wenn gesetzt, zeigen die Ergebnisse den Sicherheitsfaktor gegen Fließen. Leer lassen für keine.",
-    fr: "Facultatif. Si elle est renseignée, les résultats affichent le coefficient de sécurité à la plastification. Laissez vide sinon.",
-    it: "Facoltativo. Se impostato, i risultati mostrano il coefficiente di sicurezza allo snervamento. Lascia vuoto se assente.",
-    es: "Opcional. Si se indica, los resultados muestran el factor de seguridad frente a la fluencia. Déjalo vacío si no hay.",
-    pt: "Opcional. Se definida, os resultados mostram o fator de segurança ao escoamento. Deixe vazio se não houver.",
-  },
   name: {
     en: "Name",
     de: "Name",
@@ -101,7 +93,7 @@ export const materialsMessages = defineMessages({
     es: "No la usa el solucionador estático actual: reservada para futuras cargas de gravedad / inercia.",
     pt: "Não usada pelo solucionador estático atual — reservada para futuras cargas de gravidade / inércia.",
   },
-  expansionPlaceholder: {
+  nonePlaceholder: {
     en: "none",
     de: "keiner",
     fr: "aucun",

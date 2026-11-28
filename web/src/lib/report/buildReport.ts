@@ -53,8 +53,6 @@ export interface ReportInput {
   meshSizes: MeshSizes | null;
   result: SolverResult | null;
   stats: ReportStats;
-  // The safety factors against yield; empty when no material has a yield
-  // strength.
   safety: SafetyFactorRow[];
   figures: ReportFigures;
   assets: ReportAssets;
@@ -110,8 +108,6 @@ export interface LoadRow {
   unit: "MPa" | "N" | "N mm";
 }
 
-// A safety factor pair as the report lists it: `key` is "model" or the
-// body's property id, `body` what the pair is taken over.
 export interface ReportSafetyRow {
   key: string;
   body: string;

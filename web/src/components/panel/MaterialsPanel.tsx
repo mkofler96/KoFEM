@@ -37,8 +37,6 @@ function MaterialForm({
   const [expansion, setExpansion] = useState(
     mat?.expansion === undefined ? "" : String(mat.expansion),
   );
-  // Blank for a material without a yield strength; Results then show no
-  // safety factor for it.
   const [yieldStrength, setYieldStrength] = useState(
     mat?.yieldStrength === undefined ? "" : String(mat.yieldStrength),
   );
@@ -158,7 +156,7 @@ function MaterialForm({
           type="number"
           value={expansion}
           step="1e-6"
-          placeholder={text.expansionPlaceholder}
+          placeholder={text.nonePlaceholder}
           data-testid="material-expansion"
           aria-label={text.expansionLabel}
           onChange={(e) => setExpansion(e.target.value)}
@@ -172,11 +170,10 @@ function MaterialForm({
           type="number"
           value={yieldStrength}
           step="10"
-          placeholder={text.expansionPlaceholder}
+          placeholder={text.nonePlaceholder}
           data-testid="material-yield"
           aria-label={text.yieldLabel}
           onChange={(e) => setYieldStrength(e.target.value)}
-          title={text.yieldTitle}
         />
       </div>
       <div className={styles.formBtns}>

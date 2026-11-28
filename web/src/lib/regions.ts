@@ -17,7 +17,6 @@ import { orderedDesignElements } from "./designElements";
 import { tr } from "../i18n/useLocale";
 import { geometryMessages } from "../i18n/messages/geometry";
 import { meshMessages } from "../i18n/messages/mesh";
-import { reportMessages } from "../i18n/messages/report";
 
 export type OptimizationRole = "design" | "solid" | "void";
 
@@ -98,7 +97,7 @@ export function elementBodyName(
 ): string {
   if (property.sourceBodyId === undefined)
     return solidName(properties, property.id);
-  return tr(reportMessages).shellOf(
+  return tr(geometryMessages).shellOf(
     solidName(properties, property.sourceBodyId),
   );
 }

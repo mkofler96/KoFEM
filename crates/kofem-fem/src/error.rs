@@ -132,6 +132,8 @@ pub enum FemError {
     SectionInput { reason: String },
     #[error("field statistics: {reason}")]
     StatisticsInput { reason: String },
+    #[error("safety factor: {reason}")]
+    SafetyFactorInput { reason: String },
     #[error("coupling {coupling}: {reason}")]
     Coupling { coupling: usize, reason: String },
     #[error("coupling input is invalid: {reason}")]
