@@ -64,8 +64,8 @@ describe("groupArea", () => {
     expect(area.repeated).toEqual([5]);
   });
 
-  test("is not measured without geometry or on a point", () => {
-    expect(groupArea([entry(1, 7)], null)).toEqual({ state: "unmeasured" });
+  test("is not measured without geometry, nor on a point", () => {
+    expect(groupArea([entry(1, 7)], null)).toEqual({ state: "noGeometry" });
     expect(groupArea([entry(1, 7, "point")], cadFaces)).toEqual({
       state: "unmeasured",
     });
@@ -93,6 +93,7 @@ describe("loadFigures", () => {
       [],
     );
     expect(figures.kind).toBe("force");
+    expect(figures.axes).toBe(1);
     expectClose(figures.value.total, 100);
     expectClose(figures.value.meanTraction, 100 / plateArea);
   });
@@ -130,7 +131,7 @@ describe("loadFigures", () => {
       cadFaces,
       [],
     );
-    expect(figures.value).toEqual({ total: 2000, applied: 2 });
+    expect(figures.value).toEqual({ each: 1000, applied: 2, total: 2000 });
   });
 
   test("a moment's point selections share it once, like the solve's", () => {
@@ -143,7 +144,7 @@ describe("loadFigures", () => {
       cadFaces,
       [],
     );
-    expect(figures.value).toEqual({ total: 1000, applied: 1 });
+    expect(figures.value).toEqual({ each: 1000, applied: 1, total: 1000 });
   });
 
   test("a coupling's reference point is a point selection", () => {
@@ -154,7 +155,17 @@ describe("loadFigures", () => {
       cadFaces,
       [{ refNodeId: 99 }],
     );
-    expect(figures.value).toEqual({ total: 500, applied: 1 });
+    expect(figures.value).toEqual({ each: 500, applied: 1, total: 500 });
+  });
+
+  test("a group without faces has nothing to apply its value to", () => {
+    const figures = loadFigures(
+      group({ kind: "moment", components: [0, 0, 1000], faces: [] }),
+      cadFaces,
+      [],
+    );
+    expect(figures.area).toEqual({ state: "empty" });
+    expect(figures.value).toBeNull();
   });
 
   test("a zero force has no value, not 0 N", () => {

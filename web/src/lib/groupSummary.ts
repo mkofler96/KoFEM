@@ -3,7 +3,7 @@
 
 // What a support or load group card says it applies (KOF-494), so a wrong unit
 // or a face picked twice shows before the solve: the area of the group's CAD
-// faces, and a load's total and mean traction. The numbers come from the Rust
+// faces, and what a load's value comes to over it. The numbers come from the Rust
 // module (crates/kofem-fem/src/boundary_summary.rs) on the engine's CAD face
 // areas, the status bar's figures (KOF-493); the Rust module must be loaded
 // first (loadFemModule). Display only: the solve builds its loads elsewhere
@@ -19,7 +19,6 @@ import {
   loadComponents,
   loadKind,
   type BcFaceEntry,
-  type LoadKind,
   type NamedLoadGroup,
 } from "../store/boundaryGroups";
 import { isNodalFace } from "../store/boundaryRebuild";
@@ -31,9 +30,9 @@ import type { boundaryMessages } from "../i18n/messages/boundary";
 
 type Text = (typeof boundaryMessages)["en"];
 
-// Which CAD faces a group's selections are. A point, an edge or region picked
-// node by node, or a face of a mesh without geometry, has no CAD face area,
-// and the group's area is then not the sum of its faces'.
+// Which CAD faces a group's selections are. A point, or an edge or region
+// picked node by node, has no CAD face area, and the group's area is then not
+// the sum of its faces'.
 export type CadFaceSelection =
   | { state: "empty" }
   | { state: "unmeasured" }
@@ -53,10 +52,13 @@ export function cadFaceSelection(
 }
 
 /** The area a group covers: the sum of its distinct CAD faces' areas (mm²),
- *  with the faces selected more than once. */
+ *  with the faces selected more than once. "noGeometry": its faces are whole
+ *  CAD faces, but the model has no CAD geometry to measure them on (an
+ *  analysis file opened without its STEP file). */
 export type GroupArea =
   | { state: "empty" }
   | { state: "unmeasured" }
+  | { state: "noGeometry" }
   | { state: "measured"; area: number; repeated: number[] };
 
 export function groupArea(
@@ -65,7 +67,7 @@ export function groupArea(
 ): GroupArea {
   const selection = cadFaceSelection(faces);
   if (selection.state !== "faces") return selection;
-  if (cadFaces === null) return { state: "unmeasured" };
+  if (cadFaces === null) return { state: "noGeometry" };
   const measured = selectedArea(
     Float64Array.from(cadFaces, (face) => face.area),
     Uint32Array.from(selection.ids),
@@ -81,24 +83,26 @@ export function groupArea(
   }
 }
 
-/** A load's figures: a force's magnitude and mean traction |F| / A (null on
- *  an area not measured), a moment's magnitude times the `applied` times the
- *  solve applies it (once per face selection, once shared by the point
- *  selections: rebuildLoads), or a pressure and the total
- *  force p · A it pushes with (null on an area not measured). `value` is null
- *  for a load of zero size, which has nothing to show. */
+/** What a load group's value comes to over its area (Rust's force, moment
+ *  and pressure summaries). `value` is null for a load of zero, and for a
+ *  group without faces, which has nothing to apply it to. `axes` counts the
+ *  non-zero components, as the card shows |F| or |M| only for more than one. */
 export type LoadFigures = { area: GroupArea } & (
-  | { kind: LoadKind; value: null }
-  | { kind: "force"; value: { total: number; meanTraction: number | null } }
-  | { kind: "moment"; value: { total: number; applied: number } }
-  | { kind: "pressure"; value: { pressure: number; total: number | null } }
+  | {
+      kind: "force";
+      axes: number;
+      value: { total: number; meanTraction: number | null } | null;
+    }
+  | {
+      kind: "moment";
+      axes: number;
+      value: { each: number; applied: number; total: number } | null;
+    }
+  | {
+      kind: "pressure";
+      value: { pressure: number; total: number | null } | null;
+    }
 );
-
-function required(value: number | undefined, what: string): number {
-  if (value === undefined)
-    throw new Error(`The Rust load summary returned no ${what}`);
-  return value;
-}
 
 // How many times the solve applies a moment group's vector: in full on each
 // face selection (momentToNodalForces), and shared by its nodal selections
@@ -112,6 +116,19 @@ function momentApplications(
   return group.faces.length - nodal.length + (nodal.length > 0 ? 1 : 0);
 }
 
+// Copy a Rust summary's fields out and free it.
+function read<T extends { free(): void }, R>(
+  summary: T | undefined,
+  fields: (summary: T) => R,
+): R | null {
+  if (summary === undefined) return null;
+  try {
+    return fields(summary);
+  } finally {
+    summary.free();
+  }
+}
+
 export function loadFigures(
   group: NamedLoadGroup,
   cadFaces: readonly CadFaceProperties[] | null,
@@ -121,43 +138,57 @@ export function loadFigures(
   const area = groupArea(group.faces, cadFaces);
   const known = area.state === "measured" ? area.area : undefined;
   const vector = Float64Array.from(loadComponents(group));
-  if (kind === "pressure") {
-    if (group.totalForce === 0) return { kind, area, value: null };
-    const summary = pressureSummary(group.totalForce, known);
-    try {
-      return {
-        kind,
-        area,
-        value: { pressure: group.totalForce, total: summary.total ?? null },
-      };
-    } finally {
-      summary.free();
-    }
-  }
-  if (vector.every((component) => component === 0))
-    return { kind, area, value: null };
-  const applied = momentApplications(group, couplingGroups);
-  const summary =
-    kind === "moment"
-      ? momentSummary(vector, applied, known)
-      : forceSummary(vector, known);
-  try {
-    const total = required(summary.total, "total");
-    return kind === "moment"
-      ? { kind, area, value: { total, applied } }
-      : {
-          kind,
-          area,
-          value: { total, meanTraction: summary.meanTraction ?? null },
-        };
-  } finally {
-    summary.free();
-  }
+  const axes = vector.filter((component) => component !== 0).length;
+  const faces = area.state !== "empty";
+  if (kind === "pressure")
+    return {
+      kind,
+      area,
+      value: faces
+        ? read(pressureSummary(group.totalForce, known), (summary) => ({
+            pressure: summary.pressure,
+            total: summary.total ?? null,
+          }))
+        : null,
+    };
+  if (kind === "moment")
+    return {
+      kind,
+      area,
+      axes,
+      value: faces
+        ? read(
+            momentSummary(
+              vector,
+              momentApplications(group, couplingGroups),
+              known,
+            ),
+            (summary) => ({
+              each: summary.each,
+              applied: summary.applied,
+              total: summary.total,
+            }),
+          )
+        : null,
+    };
+  return {
+    kind,
+    area,
+    axes,
+    value: faces
+      ? read(forceSummary(vector, known), (summary) => ({
+          total: summary.total,
+          meanTraction: summary.meanTraction ?? null,
+        }))
+      : null,
+  };
 }
 
-/** The card's summary line, and a warning when a face is selected twice. */
+/** The card's summary line; a hint saying why an area is not measured; and a
+ *  warning when a face is selected twice. */
 export interface SummaryText {
   summary: string;
+  hint: string | undefined;
   warning: string | null;
 }
 
@@ -167,6 +198,9 @@ const UNIT = {
   stress: MODEL_UNITS.stress,
   area: `${MODEL_UNITS.length}²`,
 };
+
+// An area that is not measured shows as a dash, with the reason in the hint.
+const NOT_MEASURED = "—";
 
 function quantity(value: number, unit: string, intl: string): string {
   return `${formatMeasure(value, intl)} ${unit}`;
@@ -193,10 +227,16 @@ function repeatedWarning(
     .join("; ");
 }
 
-function areaText(area: GroupArea, text: Text, intl: string): string {
-  if (area.state === "empty") return text.summaryNoFaces;
+function areaHint(area: GroupArea, text: Text): string | undefined {
   if (area.state === "unmeasured") return text.summaryNotMeasured;
-  return quantity(area.area, UNIT.area, intl);
+  if (area.state === "noGeometry") return text.summaryNoGeometry;
+  return undefined;
+}
+
+function areaText(area: GroupArea, intl: string): string {
+  return area.state === "measured"
+    ? quantity(area.area, UNIT.area, intl)
+    : NOT_MEASURED;
 }
 
 export function loadSummaryText(
@@ -207,7 +247,8 @@ export function loadSummaryText(
 ): SummaryText {
   const { area } = figures;
   if (area.state === "empty")
-    return { summary: text.summaryNoFaces, warning: null };
+    return { summary: text.summaryNoFaces, hint: undefined, warning: null };
+  const hint = areaHint(area, text);
   // A moment is applied in full to each selection, a repeated face included.
   const warning = repeatedWarning(
     area,
@@ -217,63 +258,49 @@ export function loadSummaryText(
       ? text.summarySameFaceMoment
       : text.summarySameFace,
   );
-  const areaPart = areaText(area, text, intl);
+  const areaPart = areaText(area, intl);
   if (figures.value === null)
-    return { summary: `${text.summaryNoValue} · ${areaPart}`, warning };
+    return { summary: `${text.summaryNoValue} · ${areaPart}`, hint, warning };
+  const parts: string[] = [];
   if (figures.kind === "pressure") {
-    const { pressure, total } = figures.value;
-    const pressed = quantity(pressure, UNIT.stress, intl);
-    return {
-      summary:
-        total === null
-          ? `${pressed} · ${areaPart}`
-          : `${pressed} × ${areaPart} → ${quantity(total, UNIT.force, intl)}`,
-      warning,
-    };
+    const { total } = figures.value;
+    parts.push(
+      total === null
+        ? areaPart
+        : `${areaPart} → ${quantity(total, UNIT.force, intl)}`,
+    );
+  } else if (figures.kind === "moment") {
+    const { each, applied, total } = figures.value;
+    if (figures.axes > 1)
+      parts.push(`|M| = ${quantity(each, UNIT.moment, intl)}`);
+    if (applied > 1)
+      parts.push(
+        text.summaryAppliedEach(applied, quantity(total, UNIT.moment, intl)),
+      );
+    parts.push(areaPart);
+  } else {
+    const { total, meanTraction } = figures.value;
+    if (figures.axes > 1)
+      parts.push(`|F| = ${quantity(total, UNIT.force, intl)}`);
+    parts.push(
+      meanTraction === null
+        ? areaPart
+        : `${areaPart} → ${quantity(meanTraction, UNIT.stress, intl)}`,
+    );
   }
-  const total =
-    figures.kind !== "moment"
-      ? quantity(figures.value.total, UNIT.force, intl)
-      : figures.value.applied === 1
-        ? quantity(figures.value.total, UNIT.moment, intl)
-        : `${text.summaryEachOf(
-            quantity(
-              figures.value.total / figures.value.applied,
-              UNIT.moment,
-              intl,
-            ),
-            figures.value.applied,
-          )} → ${quantity(figures.value.total, UNIT.moment, intl)}`;
-  if (area.state === "unmeasured")
-    return { summary: `${total} · ${areaPart}`, warning };
-  const over = text.summaryOver(total, areaPart);
-  const traction = figures.kind === "force" ? figures.value.meanTraction : null;
-  return {
-    summary:
-      traction === null
-        ? over
-        : `${over} → ${quantity(traction, UNIT.stress, intl)}`,
-    warning,
-  };
+  return { summary: parts.join(" · "), hint, warning };
 }
-
-const DOF_NAMES = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 
 export function supportSummaryText(
   area: GroupArea,
-  dofs: readonly number[],
-  value: number,
   faces: readonly BcFaceEntry[],
   text: Text,
   intl: string,
 ): SummaryText {
-  const names = dofs.map((dof) => DOF_NAMES[dof]).join(", ");
-  const held =
-    value === 0
-      ? text.summaryHolds(names)
-      : text.summarySets(names, formatMeasure(value, intl));
   return {
-    summary: `${areaText(area, text, intl)} · ${held}`,
+    summary:
+      area.state === "empty" ? text.summaryNoFaces : areaText(area, intl),
+    hint: areaHint(area, text),
     warning: repeatedWarning(area, faces, intl, text.summarySameFace),
   };
 }

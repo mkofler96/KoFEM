@@ -213,8 +213,6 @@ export function BcSection({
               femReady
                 ? supportSummaryText(
                     groupArea(group.faces, cadFaces),
-                    group.dofs,
-                    group.value,
                     group.faces,
                     text,
                     intl,

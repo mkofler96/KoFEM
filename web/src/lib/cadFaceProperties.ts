@@ -69,8 +69,7 @@ export interface CadFaceText {
 }
 
 /** A measure to three significant figures, but never rounding away whole
- *  units: 37, 3.2, 0.0123, 149, 12,345. The status bar's face area and the
- *  support and load cards (lib/groupSummary) use it alike. */
+ *  units: 37, 3.2, 0.0123, 149, 12,345. */
 export function formatMeasure(value: number, intl: string): string {
   return new Intl.NumberFormat(
     intl,

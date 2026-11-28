@@ -9,7 +9,7 @@
     reason = "a fixture that fails should abort the test"
 )]
 
-use kofem_fem::{load_summary, selected_area, FemError, LoadValue};
+use kofem_fem::{force_summary, moment_summary, pressure_summary, selected_area, FemError};
 
 // The axial-bar example's CAD face areas: four 1000 × 100 mm sides and the
 // two 100 × 100 mm ends (faces 2 and 4).
@@ -77,93 +77,114 @@ fn a_face_without_a_positive_finite_area_is_refused() {
 #[test]
 fn a_force_is_spread_over_the_area_as_its_mean_traction() {
     // The axial bar: 1 MN on the 100 × 100 mm end is 100 MPa.
-    let summary = load_summary(LoadValue::Force([1.0e6, 0.0, 0.0]), Some(1.0e4)).expect("summary");
-    assert!(close(summary.total.expect("total"), 1.0e6));
+    let summary = force_summary([1.0e6, 0.0, 0.0], Some(1.0e4))
+        .expect("summary")
+        .expect("a value");
+    assert!(close(summary.total, 1.0e6));
     assert!(close(summary.mean_traction.expect("traction"), 100.0));
 }
 
 #[test]
 fn a_force_total_is_the_magnitude_of_its_components() {
     // 3-4-12 gives 13.
-    let summary = load_summary(LoadValue::Force([3.0, -4.0, 12.0]), Some(2.0)).expect("summary");
-    assert!(close(summary.total.expect("total"), 13.0));
+    let summary = force_summary([3.0, -4.0, 12.0], Some(2.0))
+        .expect("summary")
+        .expect("a value");
+    assert!(close(summary.total, 13.0));
     assert!(close(summary.mean_traction.expect("traction"), 6.5));
+}
+
+#[test]
+fn a_force_on_an_area_not_known_keeps_its_total() {
+    let summary = force_summary([0.0, -500.0, 0.0], None)
+        .expect("summary")
+        .expect("a value");
+    assert_eq!(summary.total, 500.0);
+    assert_eq!(summary.mean_traction, None);
 }
 
 #[test]
 fn a_pressure_totals_to_pressure_times_area() {
     // 10 MPa on 149 mm² pushes with 1,490 N.
-    let summary = load_summary(LoadValue::Pressure(10.0), Some(149.0)).expect("summary");
+    let summary = pressure_summary(10.0, Some(149.0))
+        .expect("summary")
+        .expect("a value");
+    assert_eq!(summary.pressure, 10.0);
     assert!(close(summary.total.expect("total"), 1490.0));
-    assert!(close(summary.mean_traction.expect("traction"), 10.0));
 }
 
 #[test]
 fn a_negative_pressure_pulls_with_a_negative_total() {
-    let summary = load_summary(LoadValue::Pressure(-2.0), Some(50.0)).expect("summary");
+    let summary = pressure_summary(-2.0, Some(50.0))
+        .expect("summary")
+        .expect("a value");
     assert!(close(summary.total.expect("total"), -100.0));
 }
 
 #[test]
-fn a_moment_has_a_total_but_no_traction() {
-    let summary =
-        load_summary(LoadValue::Moment([0.0, 0.0, -1000.0], 1), Some(1.0e4)).expect("summary");
-    assert!(close(summary.total.expect("total"), 1000.0));
-    assert_eq!(summary.mean_traction, None);
-}
-
-#[test]
-fn a_load_without_a_value_is_refused_rather_than_zero() {
-    for value in [
-        LoadValue::Force([0.0; 3]),
-        LoadValue::Moment([0.0; 3], 1),
-        LoadValue::Pressure(0.0),
-        LoadValue::Force([f64::NAN, 0.0, 1.0]),
-    ] {
-        assert!(matches!(
-            load_summary(value, Some(1.0)),
-            Err(FemError::BoundarySummary { .. })
-        ));
-    }
-}
-
-#[test]
-fn an_area_that_is_not_positive_is_refused() {
-    for area in [0.0, -1.0, f64::INFINITY] {
-        assert!(matches!(
-            load_summary(LoadValue::Pressure(1.0), Some(area)),
-            Err(FemError::BoundarySummary { .. })
-        ));
-    }
-}
-
-#[test]
-fn a_force_on_an_area_not_known_keeps_its_total() {
-    let summary = load_summary(LoadValue::Force([0.0, -500.0, 0.0]), None).expect("summary");
-    assert_eq!(summary.total, Some(500.0));
-    assert_eq!(summary.mean_traction, None);
-}
-
-#[test]
 fn a_pressure_on_an_area_not_known_has_no_total() {
-    let summary = load_summary(LoadValue::Pressure(3.0), None).expect("summary");
+    let summary = pressure_summary(3.0, None)
+        .expect("summary")
+        .expect("a value");
     assert_eq!(summary.total, None);
-    assert_eq!(summary.mean_traction, Some(3.0));
+}
+
+#[test]
+fn a_moment_on_one_face_is_its_magnitude() {
+    let summary = moment_summary([0.0, 0.0, -1000.0], 1, Some(1.0e4))
+        .expect("summary")
+        .expect("a value");
+    assert!(close(summary.each, 1000.0));
+    assert!(close(summary.total, 1000.0));
 }
 
 #[test]
 fn a_moment_on_several_faces_totals_once_per_face() {
     // The solve applies a moment group's full vector to each of its face
     // selections (momentToNodalForces), so two faces carry it twice.
-    let summary =
-        load_summary(LoadValue::Moment([0.0, 0.0, 1000.0], 2), Some(2.0e4)).expect("summary");
-    assert_eq!(summary.total, Some(2000.0));
+    let summary = moment_summary([0.0, 0.0, 1000.0], 2, Some(2.0e4))
+        .expect("summary")
+        .expect("a value");
+    assert_eq!(summary.applied, 2);
+    assert!(close(summary.total, 2000.0));
+}
+
+#[test]
+fn a_load_of_zero_has_no_value_rather_than_0_n() {
+    assert_eq!(force_summary([0.0; 3], Some(1.0)).expect("summary"), None);
+    assert_eq!(
+        moment_summary([0.0; 3], 1, Some(1.0)).expect("summary"),
+        None
+    );
+    assert_eq!(pressure_summary(0.0, Some(1.0)).expect("summary"), None);
+}
+
+#[test]
+fn a_value_that_is_not_finite_is_refused() {
+    assert!(matches!(
+        force_summary([f64::NAN, 0.0, 1.0], Some(1.0)),
+        Err(FemError::BoundarySummary { .. })
+    ));
+    assert!(matches!(
+        pressure_summary(f64::INFINITY, None),
+        Err(FemError::BoundarySummary { .. })
+    ));
+}
+
+#[test]
+fn an_area_that_is_not_positive_is_refused() {
+    for area in [0.0, -1.0, f64::INFINITY] {
+        assert!(matches!(
+            pressure_summary(1.0, Some(area)),
+            Err(FemError::BoundarySummary { .. })
+        ));
+    }
 }
 
 #[test]
 fn a_moment_applied_nowhere_is_refused() {
     assert!(matches!(
-        load_summary(LoadValue::Moment([0.0, 0.0, 1000.0], 0), Some(1.0)),
+        moment_summary([0.0, 0.0, 1000.0], 0, Some(1.0)),
         Err(FemError::BoundarySummary { .. })
     ));
 }

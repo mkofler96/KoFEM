@@ -895,21 +895,13 @@
     "es": "cc6eb0e407c6",
     "pt": "f537beeee626"
   },
-  "boundary.ts:boundaryMessages.summaryEachOf": {
-    "en": "62fa011055b7",
-    "de": "49e46beab2e5",
-    "fr": "cfb4f8227dbd",
-    "it": "4b89db327364",
-    "es": "6afe4e7085e2",
-    "pt": "ab59e47024d1"
-  },
-  "boundary.ts:boundaryMessages.summaryHolds": {
-    "en": "7e12a70d41fa",
-    "de": "2f99dac7f72b",
-    "fr": "7a20047b8038",
-    "it": "fbb94169d74a",
-    "es": "3648ad4666a8",
-    "pt": "dcff0deed7ec"
+  "boundary.ts:boundaryMessages.summaryAppliedEach": {
+    "en": "f46a6e26e805",
+    "de": "726a478c9ca4",
+    "fr": "7f7b37f7e094",
+    "it": "fb1b2fdb7592",
+    "es": "e400ce1ad7ae",
+    "pt": "3874009fc8fe"
   },
   "boundary.ts:boundaryMessages.summaryNoFaces": {
     "en": "f2e1f19a45bb",
@@ -918,6 +910,14 @@
     "it": "ab1a057a169a",
     "es": "7ae97ac2bfe6",
     "pt": "0f864c925f0c"
+  },
+  "boundary.ts:boundaryMessages.summaryNoGeometry": {
+    "en": "cb0d35f23096",
+    "de": "15c2f38b9618",
+    "fr": "845bbc734a8e",
+    "it": "16cb64f4315c",
+    "es": "33d0cadf12fa",
+    "pt": "6c952c9e0ee8"
   },
   "boundary.ts:boundaryMessages.summaryNoValue": {
     "en": "64cbcfaa8340",
@@ -928,20 +928,12 @@
     "pt": "dd4907a4180a"
   },
   "boundary.ts:boundaryMessages.summaryNotMeasured": {
-    "en": "c4db0b707835",
-    "de": "f0658f996f02",
-    "fr": "bdd1d5d99349",
-    "it": "5080eb82e5eb",
-    "es": "2ad0de1b4006",
-    "pt": "313b3af7dc23"
-  },
-  "boundary.ts:boundaryMessages.summaryOver": {
-    "en": "80f30c505c2f",
-    "de": "79b56924be05",
-    "fr": "ba94ffc1accd",
-    "it": "eb82fa41bc5b",
-    "es": "a7b5a3d59ef4",
-    "pt": "a7b5a3d59ef4"
+    "en": "cf23344dfbdc",
+    "de": "a7763c38615e",
+    "fr": "76f6fce4f1d8",
+    "it": "03ebead6ebe5",
+    "es": "9c2e588d2b35",
+    "pt": "d2027420de6f"
   },
   "boundary.ts:boundaryMessages.summarySameFace": {
     "en": "1afb8d3140fe",
@@ -958,14 +950,6 @@
     "it": "0ee2b9cbea78",
     "es": "94e08dc1f1a2",
     "pt": "93be35bcffce"
-  },
-  "boundary.ts:boundaryMessages.summarySets": {
-    "en": "1038a8f85daf",
-    "de": "fdfee238b485",
-    "fr": "df73584c2f7b",
-    "it": "d5a204f36d56",
-    "es": "d5a204f36d56",
-    "pt": "c02938a6fd4f"
   },
   "boundary.ts:boundaryMessages.surfaceA": {
     "en": "734e73f90ec9",

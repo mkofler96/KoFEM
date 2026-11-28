@@ -262,36 +262,34 @@ export const boundaryMessages = defineMessages({
     pt: "Nenhum valor definido",
   },
   summaryNotMeasured: {
-    en: "area not measured: not whole CAD faces",
-    de: "Fläche nicht gemessen: keine ganzen CAD-Flächen",
-    fr: "aire non mesurée : pas des faces CAO entières",
-    it: "area non misurata: non facce CAD intere",
-    es: "área no medida: no son caras CAD completas",
-    pt: "área não medida: não são faces CAD inteiras",
+    en: "Area not measured: the selection is not whole CAD faces",
+    de: "Fläche nicht gemessen: die Auswahl besteht nicht aus ganzen CAD-Flächen",
+    fr: "Aire non mesurée : la sélection n'est pas faite de faces CAO entières",
+    it: "Area non misurata: la selezione non è fatta di facce CAD intere",
+    es: "Área no medida: la selección no son caras CAD completas",
+    pt: "Área não medida: a seleção não é feita de faces CAD inteiras",
   },
-  summaryOver: {
-    en: (total: string, area: string) => `${total} over ${area}`,
-    de: (total: string, area: string) => `${total} auf ${area}`,
-    fr: (total: string, area: string) => `${total} sur ${area}`,
-    it: (total: string, area: string) => `${total} su ${area}`,
-    es: (total: string, area: string) => `${total} sobre ${area}`,
-    pt: (total: string, area: string) => `${total} sobre ${area}`,
+  summaryNoGeometry: {
+    en: "Area not measured: the CAD geometry is not loaded. Import the STEP file to measure it",
+    de: "Fläche nicht gemessen: die CAD-Geometrie ist nicht geladen. Importieren Sie die STEP-Datei, um sie zu messen",
+    fr: "Aire non mesurée : la géométrie CAO n'est pas chargée. Importez le fichier STEP pour la mesurer",
+    it: "Area non misurata: la geometria CAD non è caricata. Importa il file STEP per misurarla",
+    es: "Área no medida: la geometría CAD no está cargada. Importe el archivo STEP para medirla",
+    pt: "Área não medida: a geometria CAD não está carregada. Importe o arquivo STEP para medi-la",
   },
-  summaryHolds: {
-    en: (dofs: string) => `holds ${dofs}`,
-    de: (dofs: string) => `hält ${dofs}`,
-    fr: (dofs: string) => `bloque ${dofs}`,
-    it: (dofs: string) => `blocca ${dofs}`,
-    es: (dofs: string) => `fija ${dofs}`,
-    pt: (dofs: string) => `fixa ${dofs}`,
-  },
-  summarySets: {
-    en: (dofs: string, value: string) => `sets ${dofs} = ${value}`,
-    de: (dofs: string, value: string) => `setzt ${dofs} = ${value}`,
-    fr: (dofs: string, value: string) => `impose ${dofs} = ${value}`,
-    it: (dofs: string, value: string) => `impone ${dofs} = ${value}`,
-    es: (dofs: string, value: string) => `impone ${dofs} = ${value}`,
-    pt: (dofs: string, value: string) => `impõe ${dofs} = ${value}`,
+  summaryAppliedEach: {
+    en: (count: number, total: string) =>
+      `applied to each of ${count} selections → ${total}`,
+    de: (count: number, total: string) =>
+      `auf jede von ${count} Auswahlen angewendet → ${total}`,
+    fr: (count: number, total: string) =>
+      `appliqué à chacune des ${count} sélections → ${total}`,
+    it: (count: number, total: string) =>
+      `applicato a ciascuna di ${count} selezioni → ${total}`,
+    es: (count: number, total: string) =>
+      `aplicado a cada una de ${count} selecciones → ${total}`,
+    pt: (count: number, total: string) =>
+      `aplicado a cada uma de ${count} seleções → ${total}`,
   },
   summarySameFace: {
     en: (labels: string) => `${labels} are the same face, counted once`,
@@ -301,20 +299,6 @@ export const boundaryMessages = defineMessages({
       `${labels} sono la stessa faccia, contata una volta`,
     es: (labels: string) => `${labels} son la misma cara, contada una vez`,
     pt: (labels: string) => `${labels} são a mesma face, contada uma vez`,
-  },
-  summaryEachOf: {
-    en: (each: string, count: number) =>
-      `${each} on each of ${count} selections`,
-    de: (each: string, count: number) =>
-      `${each} auf jede von ${count} Auswahlen`,
-    fr: (each: string, count: number) =>
-      `${each} sur chacune des ${count} sélections`,
-    it: (each: string, count: number) =>
-      `${each} su ciascuna di ${count} selezioni`,
-    es: (each: string, count: number) =>
-      `${each} en cada una de ${count} selecciones`,
-    pt: (each: string, count: number) =>
-      `${each} em cada uma de ${count} seleções`,
   },
   summarySameFaceMoment: {
     en: (labels: string) =>

@@ -12,8 +12,7 @@ import styles from "./Panel.module.css";
 // One entry in the BC / load group list: name + summary header with the
 // add-face / edit / delete actions, the Name field when the group can be
 // renamed, an optional inline edit form, and the group's face rows. Shared by
-// BcSection, LoadSection and CouplingSection. Supports and loads also say
-// what they apply (KOF-494): area, DOFs held, total force and traction.
+// BcSection, LoadSection and CouplingSection.
 export function GroupCard({
   name,
   meta,
@@ -78,7 +77,7 @@ export function GroupCard({
       </div>
       {summary && (
         <div className={styles.bcGroupSummary} data-testid="group-summary">
-          <div>{summary.summary}</div>
+          <div title={summary.hint}>{summary.summary}</div>
           {summary.warning && (
             <div
               className={styles.bcGroupWarning}

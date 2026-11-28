@@ -29,7 +29,8 @@ mod tie;
 mod topology;
 
 pub use boundary_summary::{
-    force_summary, moment_summary, pressure_summary, selected_area, LoadSummary, SelectedArea,
+    force_summary, moment_summary, pressure_summary, selected_area, ForceSummary, MomentSummary,
+    PressureSummary, SelectedArea,
 };
 pub use contact::{ContactPairs, ContactRun, ContactSolution};
 pub use convergence::{
