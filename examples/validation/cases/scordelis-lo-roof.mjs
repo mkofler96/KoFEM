@@ -39,7 +39,7 @@
 // Read-out: Ux at the middle of the free edge, (R·cos 40°, R·sin 40°, 0).
 
 import { cylindricalPanelStep } from "../../gallery/step-revolve.mjs";
-import { APP_STEEL } from "../lib/recipe.mjs";
+import { benchmarkMaterial } from "../lib/recipe.mjs";
 
 const E = 432; // MPa (4.32·10⁸ Pa)
 const nu = 0;
@@ -52,14 +52,13 @@ const h = 1000; // Netgen maximum element size (mm)
 
 const deg = Math.PI / 180;
 // The weight of the quarter (N): q times its mid-surface area.
-const W = q * R * half * deg * (L / 2);
+export const W = q * R * half * deg * (L / 2);
 // A point on the outer cylinder at angle θ (degrees) and height z.
 const outer = (theta, z) => [
   (R + t / 2) * Math.cos(theta * deg),
   (R + t / 2) * Math.sin(theta * deg),
   z,
 ];
-// A point on the mid-surface of an edge face at angle θ and height z.
 const mid = (theta, z) => [
   R * Math.cos(theta * deg),
   R * Math.sin(theta * deg),
@@ -98,14 +97,7 @@ export default {
     splits: [],
     discretization: { kind: "shell", thickness: t },
     mesh: { maxElementSize: h, order: 1 },
-    // E and ν as the benchmark sets them; the density is the material form's
-    // default (the weight is a load, not the density times gravity).
-    material: {
-      name: "Scordelis-Lo roof",
-      young: E,
-      poisson: nu,
-      density: APP_STEEL.density,
-    },
+    material: benchmarkMaterial("Scordelis-Lo roof", E, nu),
     supports: [
       {
         name: "Symmetry at the crown",

@@ -5,6 +5,7 @@
 
 import { scordelisRoofFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
+import { W } from "../cases/scordelis-lo-roof.mjs";
 
 /** The finest mesh of the page's convergence study. */
 const finest = (study) => study.series[0].points.at(-1);
@@ -45,7 +46,7 @@ export default {
         quarter is imported as a ${inp("t")}&nbsp;mm solid and marked Shell.
         The diaphragm edge is held in both directions of its own plane and
         free along the roof and in every rotation. The weight is a force of
-        ${tex(`q R φ L / 2 = ${n((inp("q") * inp("R") * inp("φ") * Math.PI * inp("L")) / 360)}\\text{ N}`)} on the roof face, which the app spreads as a uniform
+        ${tex(`q R φ L / 2 = ${n(W)}\\text{ N}`)} on the roof face, which the app spreads as a uniform
         traction. The roof's vertical axis is the model's <i>x</i> axis.</p>
         <p>${row.mesh.elements.toLocaleString("en-US")} flat triangles, each an
         OPT drilling membrane with a DKT plate-bending element.</p>`,

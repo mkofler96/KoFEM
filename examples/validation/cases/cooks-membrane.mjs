@@ -33,7 +33,7 @@
 // 0.1 % of the converged slab.
 
 import { prismStep } from "../../gallery/step-prism.mjs";
-import { APP_STEEL } from "../lib/recipe.mjs";
+import { benchmarkMaterial } from "../lib/recipe.mjs";
 
 const E = 1; // MPa (dimensionless benchmark)
 const nu = 1 / 3;
@@ -92,14 +92,7 @@ export default {
     ],
     discretization: { kind: "solid" },
     mesh: { maxElementSize: 2, order: 2 },
-    // E and ν as the benchmark sets them; the density is the material form's
-    // default (it does not enter a static solve).
-    material: {
-      name: "Membrane",
-      young: E,
-      poisson: nu,
-      density: APP_STEEL.density,
-    },
+    material: benchmarkMaterial("Membrane", E, nu),
     supports: [{ name: "Clamp", faces: [clamped], dofs: [0, 1, 2], value: 0 }],
     loads: [
       {

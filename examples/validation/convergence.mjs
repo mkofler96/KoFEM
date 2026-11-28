@@ -56,6 +56,10 @@ const NAFEMS_STRESS_SOLID =
   "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only.";
 const NAFEMS_STRESS_SHELL =
   "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.";
+// A displacement read on a shell of flat facets, which stand in for the
+// curved surface: the rate check has theory for solid meshes only.
+const SHELL_DISPLACEMENT =
+  "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only.";
 
 /** A convergence study: levels are max element sizes (mm). */
 export function recipeStudy(study) {
@@ -436,8 +440,7 @@ export default [
     title: "Scordelis–Lo roof, curved shell triangles",
     note: "The free-edge deflection rises to the reference from below and settles about 0.6 % short of it.",
     expect: null,
-    noRate:
-      "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only.",
+    noRate: SHELL_DISPLACEMENT,
     series: [
       {
         label: "Shell (linear)",
@@ -453,8 +456,7 @@ export default [
     title: "Pinched cylinder, curved shell triangles",
     note: "The displacement under the load settles within 0.2 % of the reference.",
     expect: null,
-    noRate:
-      "The read-out is a displacement under a point load on a shell of flat facets; the rate check covers solid meshes only.",
+    noRate: SHELL_DISPLACEMENT,
     series: [
       {
         label: "Shell (linear)",

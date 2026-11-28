@@ -35,7 +35,7 @@
 // Read-out: Uy at (0, 300, 0), the load point on the mid-surface.
 
 import { cylindricalPanelStep } from "../../gallery/step-revolve.mjs";
-import { APP_STEEL } from "../lib/recipe.mjs";
+import { benchmarkMaterial } from "../lib/recipe.mjs";
 
 const E = 3e6; // MPa
 const nu = 0.3;
@@ -47,8 +47,7 @@ const patch = 1; // length of the loaded piece of the edge z = 0 (mm)
 const h = 10; // Netgen maximum element size (mm)
 
 const deg = Math.PI / 180;
-// A point on the mid-surface of an end face (z = 0 or z = L/2) at angle θ.
-const onEnd = (theta, z) => [
+const mid = (theta, z) => [
   R * Math.cos(theta * deg),
   R * Math.sin(theta * deg),
   z,
@@ -87,43 +86,36 @@ export default {
     splits: [
       {
         mode: "faces",
-        faces: [{ at: onEnd(45, 0) }],
+        faces: [{ at: mid(45, 0) }],
         origin: [patch, 0, 0],
         normal: [1, 0, 0],
       },
     ],
     discretization: { kind: "shell", thickness: t },
     mesh: { maxElementSize: h, order: 1 },
-    // E and ν as the benchmark sets them; the density is the material form's
-    // default (it does not enter a static solve).
-    material: {
-      name: "Pinched cylinder",
-      young: E,
-      poisson: nu,
-      density: APP_STEEL.density,
-    },
+    material: benchmarkMaterial("Pinched cylinder", E, nu),
     supports: [
       {
         name: "Symmetry y = 0",
-        faces: [{ at: onEnd(0, L / 4) }],
+        faces: [{ at: mid(0, L / 4) }],
         dofs: [1, 3, 5],
         value: 0,
       },
       {
         name: "Symmetry x = 0",
-        faces: [{ at: onEnd(90, L / 4) }],
+        faces: [{ at: mid(90, L / 4) }],
         dofs: [0, 4, 5],
         value: 0,
       },
       {
         name: "Symmetry z = 0",
-        faces: [{ at: onEnd(45, 0) }, { at: nearLoad(patch / 2) }],
+        faces: [{ at: mid(45, 0) }, { at: nearLoad(patch / 2) }],
         dofs: [2, 3, 4],
         value: 0,
       },
       {
         name: "Diaphragm",
-        faces: [{ at: onEnd(45, L / 2) }],
+        faces: [{ at: mid(45, L / 2) }],
         dofs: [0, 1],
         value: 0,
       },
