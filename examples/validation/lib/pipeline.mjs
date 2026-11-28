@@ -78,6 +78,7 @@ import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
 import { optimizeSolidInRust } from "../../../web/src/lib/solve/topOptRust.ts";
 import { modelShellRim } from "../../../web/src/lib/shellRim.ts";
+import { NETGEN_OPTIONS } from "../../../web/src/lib/engineOptions.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENGINE = join(here, "../../../web/src/wasm/pkg");
@@ -302,12 +303,7 @@ export async function buildFromRecipe(
                 ),
               }
             : {}),
-          grading: 0.3,
-          second_order: false,
-          elementsperedge: 2.0,
-          elementspercurve: 2.0,
-          optsteps_2d: 3,
-          optsteps_3d: 3,
+          ...NETGEN_OPTIONS,
         }),
       ),
   );

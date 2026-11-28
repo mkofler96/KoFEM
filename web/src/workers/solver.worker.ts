@@ -47,6 +47,7 @@ import {
 } from "../lib/solve/thinWall.js";
 import { describeShellRoute } from "../lib/cadShell.js";
 import { shellMeshOptions, storedMesh } from "../lib/storedMesh.js";
+import { NETGEN_OPTIONS, TESSELLATION_OPTIONS } from "../lib/engineOptions.js";
 import {
   inStage,
   inStageAsync,
@@ -265,14 +266,7 @@ function chunk3(
 // the display tessellation. Shared by the import and by every geometry edit,
 // which both end in a freshly loaded file.
 function loadGeometry(bytes: Uint8Array, format: string) {
-  // deflection_relative: chord tolerance as a fraction of the model's
-  // bounding-box diagonal, so a large part isn't tessellated into millions of
-  // needless triangles. ~0.1% matches the fast browser STEP viewers.
-  const opts = JSON.stringify({
-    deflection_relative: 0.001,
-    angular_deflection: 0.5,
-    format,
-  });
+  const opts = JSON.stringify({ ...TESSELLATION_OPTIONS, format });
   const { vertices, triangles, triangleBodyIds, triangleFaceIds, bodyCount } =
     m().tessellate_step(bytes, opts);
   // tessellate_step stores the OCCT shape in the module — record that so a
@@ -394,11 +388,7 @@ function handleRemoveFaces(id: number, payload: RemoveFacesPayload) {
 function reloadForEdit(bytes: Uint8Array, format: string) {
   m().tessellate_step(
     bytes,
-    JSON.stringify({
-      deflection_relative: 0.001,
-      angular_deflection: 0.5,
-      format,
-    }),
+    JSON.stringify({ ...TESSELLATION_OPTIONS, format }),
   );
 }
 
@@ -466,11 +456,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     inStage("geometry_reload", () =>
       m().tessellate_step(
         bytes,
-        JSON.stringify({
-          deflection_relative: 0.001,
-          angular_deflection: 0.5,
-          format,
-        }),
+        JSON.stringify({ ...TESSELLATION_OPTIONS, format }),
       ),
     );
     geometryLoaded = true;
@@ -490,12 +476,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     ...(payload.faceMaxSizes && payload.faceMaxSizes.length > 0
       ? { face_max_sizes: payload.faceMaxSizes }
       : {}),
-    grading: 0.3,
-    second_order: false,
-    elementsperedge: 2.0,
-    elementspercurve: 2.0,
-    optsteps_2d: 3,
-    optsteps_3d: 3,
+    ...NETGEN_OPTIONS,
   });
 
   // Use Netgen's native OCC mesher: reads the stored STEP geometry directly,
