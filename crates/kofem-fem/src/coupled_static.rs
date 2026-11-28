@@ -53,6 +53,7 @@ use std::collections::BTreeMap;
 use crate::amg::{NodeBlock, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
+use crate::count::index_as_u32;
 use crate::coupling::{Coupling, CouplingConstraints, CouplingKind, DOFS_PER_NODE};
 use crate::error::FemError;
 use crate::incomplete_cholesky::IncompleteCholesky;
@@ -674,7 +675,7 @@ fn prepare_reduced(
     let (dofs, values): (Vec<u32>, Vec<f64>) = prescribed
         .iter()
         .enumerate()
-        .filter_map(|(slot, value)| value.map(|value| (to_u32(slot), value)))
+        .filter_map(|(slot, value)| value.map(|value| (index_as_u32(slot), value)))
         .unzip();
     let dirichlet = Dirichlet::new(reduction.reduced_count(), &dofs, &values)?;
     apply_dirichlet(&mut matrix, &mut rhs, &dirichlet);
@@ -1002,7 +1003,7 @@ impl CoupledReduction {
                     continue;
                 }
                 for (dof, slot) in slot_of.iter_mut().enumerate().skip(first).take(3) {
-                    *slot = to_u32(dof_of_slot.len());
+                    *slot = index_as_u32(dof_of_slot.len());
                     dof_of_slot.push(dof);
                 }
                 blocks.points.push(point);
@@ -1292,7 +1293,7 @@ fn reduced_constraints(
         let (node, component) = (index / DOFS_PER_NODE, index % DOFS_PER_NODE);
         let what = if value == 0.0 { "fixed" } else { "prescribed" };
         let (slot, value) = match reduction.framed_support(index) {
-            FramedSupport::Tangent { slot, sign } => (to_u32(slot), sign * value),
+            FramedSupport::Tangent { slot, sign } => (index_as_u32(slot), sign * value),
             FramedSupport::AcrossNormal => {
                 return Err(FemError::ConstraintOnCoupledDof {
                     node,
@@ -1417,7 +1418,7 @@ fn reduced_stiffness(
                 let mut list = Vec::new();
                 for component in 0..components {
                     reduction.for_each_term(DOFS_PER_NODE * node + component, |slot, _| {
-                        list.push(to_u32(slot / 3));
+                        list.push(index_as_u32(slot / 3));
                     });
                 }
                 list.sort_unstable();
@@ -1432,7 +1433,7 @@ fn reduced_stiffness(
     } else {
         Vec::new()
     };
-    let mut adjacency: Vec<Vec<u32>> = (0..blocks).map(|block| vec![to_u32(block)]).collect();
+    let mut adjacency: Vec<Vec<u32>> = (0..blocks).map(|block| vec![index_as_u32(block)]).collect();
     let mut reached: Vec<u32> = Vec::new();
     for part in parts {
         let blocks_of_node = if part.node_dofs == DOFS_PER_NODE {
@@ -1680,13 +1681,4 @@ fn supports_with_boundary_nodes(
         &mut values,
     );
     (dofs, values)
-}
-
-fn to_u32(index: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "the node count is capped so that 6 DOFs per node fit in u32"
-    )]
-    let narrow = index as u32;
-    narrow
 }

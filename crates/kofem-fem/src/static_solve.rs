@@ -8,7 +8,7 @@ use crate::amg::{
 };
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{eliminate_dirichlet, Dirichlet, EliminatedEntries};
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, index_as_u32};
 use crate::error::FemError;
 use crate::mesh::{ElementOrder, TetMesh};
 use crate::sparse::CsrMatrix;
@@ -246,12 +246,7 @@ pub(crate) fn precondition(
 
 /// DOF number of `component` at `node`.
 fn dof_number(node: usize, component: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "TetMesh caps the node count at MAX_NODES, so every DOF fits in u32"
-    )]
-    let dof = (3 * node + component) as u32;
-    dof
+    index_as_u32(3 * node + component)
 }
 
 /// Append to `dofs`/`values` the conditions the given vertex conditions imply
@@ -293,11 +288,7 @@ pub(crate) fn extend_to_boundary_nodes(
             let sum: f64 = between.iter().filter_map(held).sum();
             let value = sum / count_as_f64(between.len());
             prescribed[node][component] = Some(value);
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "callers cap the node count so that every DOF fits in u32"
-            )]
-            dofs.push((node_dofs * node + component) as u32);
+            dofs.push(index_as_u32(node_dofs * node + component));
             values.push(value);
         }
     });

@@ -65,11 +65,13 @@ import {
 } from "./reactions.js";
 import { release } from "./rustFailure.js";
 import {
+  ContactUnheldError,
   contactPairs,
   readContact,
   runContactSolve,
   type ContactFemModule,
 } from "./contactRun.js";
+import { contactUnheldMessage } from "./rigidBody.js";
 import { runLargeDeformationSolve } from "./largeDeformation.js";
 import { tr } from "../../i18n/useLocale.js";
 import { solveMessages } from "../../i18n/messages/solve.js";
@@ -502,7 +504,21 @@ async function solveWithContact<T>(
       conditions.forces,
       options,
       log,
-    );
+    ).catch((err: unknown) => {
+      if (!(err instanceof ContactUnheldError)) throw err;
+      throw new Error(
+        contactUnheldMessage(
+          {
+            nodeId: model.nodes[err.vertex].id,
+            direction: err.direction,
+            turns: err.turns,
+          },
+          model.elements,
+          model.properties,
+        ),
+        { cause: err },
+      );
+    });
     try {
       const contact = readContact(solution, model.nodes);
       const elasticSolution = solution.elastic;
@@ -520,6 +536,14 @@ async function solveWithContact<T>(
         if (solution.heldNodes > 0)
           log(
             `${solution.heldNodes} slave node(s) held by a support along their normal — the support applies there`,
+          );
+        if (solution.grownFaces > 0)
+          log(
+            `Contact grew over ${solution.grownFaces} face(s) where the bodies overlapped outside the picked surfaces`,
+          );
+        if (solution.sharedNodes > 0)
+          log(
+            `${solution.sharedNodes} node(s) on an edge two contacts share — each keeps one contact role there`,
           );
         return { ...result, contact };
       } finally {

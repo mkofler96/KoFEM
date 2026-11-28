@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! The one place a count of things becomes a float.
+//! The one place a count of things becomes a float, and an index a `u32`.
 
 /// `count` as an `f64`, for averaging divisors, shares and ratios of counts,
 /// and for counts and indices carried in a float array.
@@ -24,11 +24,13 @@ pub fn count_as_f64(count: usize) -> f64 {
     exact
 }
 
-/// `index` (a node, or a count of nodes) as the `u32` the sparse matrices and
-/// the JS interface carry. Exact for every node of a mesh: the mesh caps its
-/// nodes at [`MAX_NODES`](crate::mesh::MAX_NODES), whose DOFs fit in `u32`.
+/// A node, DOF, row or aggregate number as the `u32` that sparse matrix
+/// columns and the JS interface index with. Exact for every such number of
+/// a mesh: [`MAX_NODES`](crate::mesh::MAX_NODES) and
+/// [`MAX_SHELL_VERTICES`](crate::shell::MAX_SHELL_VERTICES) cap the nodes so
+/// that their DOF numbers fit in `u32`.
 #[must_use]
-pub fn node_index(index: usize) -> u32 {
+pub fn index_as_u32(index: usize) -> u32 {
     u32::try_from(index)
-        .unwrap_or_else(|_| unreachable!("node {index} is past MAX_NODES, which fits in u32"))
+        .unwrap_or_else(|_| unreachable!("index {index} is past the mesh caps, which fit in u32"))
 }

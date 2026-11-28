@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::count::index_as_u32;
 use crate::shell::element::facet_stiffness;
 use crate::shell::mesh::ShellMesh;
 use crate::sparse::CsrMatrix;
@@ -21,11 +22,7 @@ pub fn shell_node_neighbours(mesh: &ShellMesh) -> Vec<Vec<u32>> {
     }
     for (node, list) in neighbours.iter_mut().enumerate() {
         if list.is_empty() {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "ShellMesh::new caps the vertex count at MAX_SHELL_VERTICES"
-            )]
-            list.push(node as u32);
+            list.push(index_as_u32(node));
         }
         list.sort_unstable();
         list.dedup();

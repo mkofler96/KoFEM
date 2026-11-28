@@ -266,7 +266,9 @@ describe("contacts", () => {
     );
   });
 
-  test("a frictionless contact leaves the slide and the spin", () => {
+  // Frictionless contact leaves the slide and the spin free, but the contact
+  // solve holds such a body and refuses a load nothing holds (KOF-501).
+  test("a body only a contact holds is left to the contact solve", () => {
     const { model, contacts, base } = stacked();
     expect(
       solidMessage({
@@ -275,9 +277,7 @@ describe("contacts", () => {
         contacts,
         properties: TWO_BODIES,
       }),
-    ).toBe(
-      `Body 2 can still move along X and Y, and rotate about Z. ${ONE_BODY_ADVICE}`,
-    );
+    ).toBeNull();
   });
 });
 

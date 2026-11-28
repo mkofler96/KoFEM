@@ -4143,6 +4143,14 @@
     "es": "48c346909491",
     "pt": "c0cc88b6b2ef"
   },
+  "refusals.ts:refusalMessages.contactCannotHold": {
+    "en": "81c74d146b84",
+    "de": "4c7607ffbdb5",
+    "fr": "9af8a0cbffb7",
+    "it": "9c54251101f2",
+    "es": "74edd42e2180",
+    "pt": "f78c0af9cf18"
+  },
   "refusals.ts:refusalMessages.contactNotSolid": {
     "en": "d76ae2041805",
     "de": "e2e0525c8bc2",

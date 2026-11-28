@@ -333,8 +333,12 @@ const ERROR_RULES: [PlainCategory, RegExp][] = [
     /does not support|cannot solve this model|solve with linear elements only|supports solid models only|the shell solver cannot apply|can be idealised as shells today|works on tetrahedral meshes only/i,
   ],
   ["shell_idealisation_failure", /Shell idealisation failed/i],
-  // The rigid-body check (lib/solve/rigidBody.ts, KOF-388).
-  ["unheld_body", /can still (move along|rotate about)/i],
+  // The rigid-body check (lib/solve/rigidBody.ts, KOF-388), and a body only
+  // contact holds that its load drives off (KOF-501).
+  [
+    "unheld_body",
+    /can still (move along|rotate about)|held only by contact, which cannot stop it/i,
+  ],
   [
     "invalid_input",
     /No geometry|must be|must not|no (solid|shell) element|no property|no material|degenerate|zero total|carries no|cannot be|missing|invalid|cannot fill/i,

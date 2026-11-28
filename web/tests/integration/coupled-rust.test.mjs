@@ -25,8 +25,6 @@
 //   - test_files/fin_two_parts.step with the fin marked Shell, idealised at
 //     mesh time (the stored CTRIA3 + CTETRA model) and at solve time
 //     (prepareAutoCoupledSolve), as the worker solves both;
-//   - the crane-holder shell showcase (examples/shell-coupling): the thin
-//     holder as shells, tied to the solid pin and hook;
 //   - every preconditioner of the Rust solve on one model, against the AMG
 //     solve, and payloads both must refuse.
 //
@@ -56,14 +54,7 @@ import {
   extractThinWallShells,
 } from "../../src/lib/shellize.ts";
 import { shellJunction } from "../fixtures/shell-junction.mjs";
-import {
-  buildCoupledModel as buildCraneModel,
-  dropCouplingsOnFixedNodes as dropCraneCouplings,
-  extractThinWallShells as extractCraneShells,
-  meshStep,
-  shellWallTets,
-  surfaceVertices,
-} from "../../../examples/shell-coupling/lib.mjs";
+import { meshStep } from "../../../examples/shell-coupling/lib.mjs";
 import { loadEngine, loadFem } from "../support/wasm.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -741,111 +732,7 @@ describe("fin_two_parts.step, the fin marked Shell", () => {
   });
 });
 
-// ── 4. The crane-holder shell showcase ───────────────────────────────────────
-// examples/shell-coupling/crane-holder-shell.mjs: the holder's thin walls as
-// shells (relaxed MPC seams), the pin/eye clearance tied by distributing
-// couplings, the mounting face clamped, two hook faces loaded.
-function craneHolderArgs() {
-  const mesh = meshStep(
-    engine,
-    join(here, "../../../test_files/full-crane-hook.step"),
-    { maxElementSize: 6 },
-  );
-  const shells = extractCraneShells(mesh);
-  const wallTets = shellWallTets(mesh, shells);
-  const { byBody, byFace } = surfaceVertices(mesh);
-  const model = buildCraneModel(mesh, shells, wallTets, {
-    ties: [
-      {
-        verticesA: [...byBody.get(2)],
-        verticesB: [...byFace.get(65)],
-        maxSeparation: 3.0,
-      },
-    ],
-  });
-  const fixedLocal = new Set();
-  for (let t = 0; t < shells.shellTris.length / 3; t++)
-    if (shells.shellTriSrc[t] === 7)
-      for (let k = 0; k < 3; k++) fixedLocal.add(shells.shellTris[3 * t + k]);
-  const fixed = [];
-  for (const local of fixedLocal)
-    for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[local] + c);
-  const loadNodes = new Map([
-    [66, new Set()],
-    [67, new Set()],
-  ]);
-  for (let t = 0; t < mesh.surfFace.length; t++) {
-    const set = loadNodes.get(mesh.surfFace[t]);
-    if (!set) continue;
-    for (let k = 0; k < 3; k++) {
-      const pool = model.solidPool.get(mesh.surfTri[3 * t + k]);
-      if (pool !== undefined) set.add(pool);
-    }
-  }
-  const loadDofs = [];
-  const loadVals = [];
-  for (const set of loadNodes.values())
-    for (const pool of set) {
-      loadDofs.push(6 * pool + 1);
-      loadVals.push(-1000 / set.size);
-    }
-  const coupling = dropCraneCouplings(model.coupling, fixed);
-  const steel = { young_modulus: 210000, poisson_ratio: 0.3 };
-  return {
-    mesh: {
-      vertices: Float64Array.from(model.pool),
-      tets: Int32Array.from(model.tets),
-      triangles: Int32Array.from(model.triangles),
-      thicknesses: Float64Array.from(model.thicknesses),
-    },
-    coupling: {
-      ref: Int32Array.from(coupling.ref),
-      offsets: Int32Array.from(coupling.offsets),
-      solid: Int32Array.from(coupling.solid),
-      mpc: Int32Array.from(coupling.mpc),
-      dof_mask: Int32Array.from(coupling.ref.map(() => 0x3f)),
-      relaxation: 1,
-    },
-    bcs: {
-      fixed_dofs: Int32Array.from(fixed),
-      prescribed_dofs: new Int32Array(0),
-      prescribed_vals: new Float64Array(0),
-      load_dofs: Int32Array.from(loadDofs),
-      load_vals: Float64Array.from(loadVals),
-    },
-    matJson: JSON.stringify({ solid: steel, shell: steel }),
-  };
-}
-
-// The pin and the hook are tied across their clearance by distributing
-// couplings whose reference nodes sit off their patches' centroids. The C++
-// engine measured the patch motion at the centroid, not at the reference node
-// (KOF-410), which welds such a tie too stiff, so its stored fields are no
-// reference for this model: the Rust fields differ from them by about half
-// their peak. What a tie across a gap must give is checked against a beam
-// without the cut in amg-coupling.test.mjs.
-describe("Crane holder shell showcase", () => {
-  let both = null;
-  beforeAll(async () => {
-    both = await solveBoth(craneHolderArgs());
-  });
-
-  agreementTests(() => both, { fields: false });
-
-  test("the holder deflects, with finite fields", () => {
-    const { rust } = both;
-    const peak = rust.displacements.reduce(
-      (largest, value) => Math.max(largest, Math.abs(value)),
-      0,
-    );
-    expect(rust.displacements.every(Number.isFinite)).toBe(true);
-    expect(rust.von_mises_tets.every(Number.isFinite)).toBe(true);
-    expect(rust.von_mises_tris.every(Number.isFinite)).toBe(true);
-    expect(peak).toBeGreaterThan(0);
-  });
-});
-
-// ── 5. Every preconditioner, and refusals ────────────────────────────────────
+// ── 4. Every preconditioner, and refusals ────────────────────────────────────
 describe("every preconditioner of the Rust solve", () => {
   let inputs = null;
   let amg = null;

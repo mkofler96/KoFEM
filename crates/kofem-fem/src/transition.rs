@@ -29,7 +29,7 @@
 
 use std::collections::HashMap;
 
-use crate::count::{count_as_f64, node_index};
+use crate::count::{count_as_f64, index_as_u32};
 use crate::error::FemError;
 use crate::mesh::{local_hex_edge, ElementOrder, TetMesh, EDGES_OF_HEX, FACES_OF_HEX};
 use crate::piece::{Blend, Piece, PieceGeometry};
@@ -383,7 +383,7 @@ fn hex_inside<'mesh>(
     let points = mesh.node_coordinates();
     let corner_points = corners.map(|vertex| points[vertex as usize]);
     let mut add = |at: [f64; 3]| -> u32 {
-        let node = node_index(first_node + out.added.len());
+        let node = index_as_u32(first_node + out.added.len());
         out.added.push(at);
         out.added_in.push(hex);
         node
