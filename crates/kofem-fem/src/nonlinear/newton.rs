@@ -576,7 +576,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         }
         if let Some(&value) = force.iter().find(|value| !value.is_finite()) {
             return Err(FemError::NonFinite {
-                what: "an internal force component",
+                what: crate::INTERNAL_FORCE,
                 value,
             });
         }

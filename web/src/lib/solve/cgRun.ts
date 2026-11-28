@@ -11,6 +11,7 @@
 import type { CgLimitProgress } from "./contracts.js";
 import { tr } from "../../i18n/useLocale.js";
 import { solveMessages } from "../../i18n/messages/solve.js";
+import { ClassifiedError } from "../workerError.js";
 
 // Asked when the iteration budget runs out while the residual is still
 // falling: resolves to the number of extra iterations, or 0 to stop. The
@@ -72,12 +73,14 @@ export async function iterateToConvergence(
       );
     if (run.iterations >= limit) {
       if (!run.stillDescending(window))
-        throw new Error(
+        throw new ClassifiedError(
           tr(solveMessages).cgNotConverged(
             run.relativeResidual.toExponential(3),
             run.iterations,
             run.tolerance.toExponential(0),
           ),
+          // The class FemError::NotConverged has (failure_class.rs).
+          { category: "numerical", reason: "not_converged" },
         );
       const asked = performance.now();
       const extra = await askToContinue({

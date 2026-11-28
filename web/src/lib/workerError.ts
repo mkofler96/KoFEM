@@ -67,17 +67,55 @@ export function splitStage(err: unknown): {
     : { stage: null, error: err };
 }
 
+// The class the Rust module sets on a FemError it raises
+// (crates/kofem-fem/src/failure_class.rs, KOF-490), and cgRun on its own
+// stalled solve. Validated where it is classified (lib/analytics.ts).
+export interface RustFailureClass {
+  category: string;
+  reason: string | null;
+}
+
+/** The class set on `err`, or null when it carries none. */
+export function rustFailureClass(err: unknown): RustFailureClass | null {
+  if (typeof err !== "object" || err === null || !("failureClass" in err))
+    return null;
+  const reason = "numericalReason" in err ? err.numericalReason : null;
+  if (
+    typeof err.failureClass !== "string" ||
+    (reason !== null && typeof reason !== "string")
+  )
+    throw new Error(
+      `an error carries a failure class that is not text: ${String(err.failureClass)}, ${String(reason)}`,
+    );
+  return { category: err.failureClass, reason };
+}
+
+/** An error thrown in TypeScript that the Rust module would class `rust`. */
+export class ClassifiedError extends Error {
+  readonly failureClass: string;
+  readonly numericalReason: string | null;
+  constructor(message: string, rust: RustFailureClass) {
+    super(message);
+    this.failureClass = rust.category;
+    this.numericalReason = rust.reason;
+  }
+}
+
 /**
- * Page side: a worker task's failure, with the step the worker reported and
- * the English of its message, which analytics categorises (the message is in
- * the user's language; src/i18n/english.ts).
+ * Page side: a worker task's failure, with the step the worker reported, the
+ * English of its message (the message is in the user's language;
+ * src/i18n/english.ts) and the class the Rust module gave it.
  */
 export class WorkerTaskError extends Error {
   constructor(
     message: string,
     readonly stage: FailureStage | null,
     readonly english: string,
+    readonly rustClass: RustFailureClass | null,
   ) {
     super(message);
   }
 }
+
+/** What a request in flight rejects with when the worker dies mid-task. */
+export class WorkerCrashError extends Error {}

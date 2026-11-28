@@ -278,11 +278,6 @@ describe("buckets and categories", () => {
       "NotFoundError: A requested file or directory could not be found at the time an operation was processed.",
       "file_unreadable",
     ],
-    [
-      "CG solver did not converge: relative residual 1e-2 after 5000 iterations",
-      "numerical_failure",
-    ],
-    ["shell: singular 3×3 matrix", "numerical_failure"],
     ["RuntimeError: Aborted(OOM)", "resource_limit"],
     ["Cannot enlarge memory arrays to size 2147483648 bytes", "resource_limit"],
     // Allocation failure inside the C++ engine, decoded by describeError.
@@ -360,6 +355,11 @@ describe("buckets and categories", () => {
       "Bodies 1 and 3 can still rotate about (0.71, 0.71, 0). Add supports or connect them to other bodies.",
       "unheld_body",
     ],
+    // A body only contact holds that its load lifts off (KOF-501).
+    [
+      "Body 1 is held only by contact, which cannot stop it: its load would make it move along Z.",
+      "unheld_body",
+    ],
     ["something nobody anticipated", "unknown"],
   ])("error category of %p is %s", (message, category) => {
     expect(categorizeError(new Error(message))).toBe(category);
@@ -382,6 +382,7 @@ describe("buckets and categories", () => {
       "Standard_Failure: BRep_API: command not done",
       stage,
       "Standard_Failure: BRep_API: command not done",
+      null,
     );
     expect(categorizeError(err)).toBe(category);
   });
@@ -403,7 +404,7 @@ describe("buckets and categories", () => {
     ],
   ])("the %s refusal is unsupported_model", (_name, message) => {
     expect(
-      categorizeError(new WorkerTaskError(message, "solving", message)),
+      categorizeError(new WorkerTaskError(message, "solving", message, null)),
     ).toBe("unsupported_model");
   });
 
@@ -433,6 +434,7 @@ describe("buckets and categories", () => {
         "Der Speicher ist voll",
         "solving",
         "The solver ran out of memory.",
+        null,
       );
       expect(categorizeError(err)).toBe("resource_limit");
     });
@@ -443,6 +445,7 @@ describe("buckets and categories", () => {
       "std::bad_alloc: std::bad_alloc",
       "meshing",
       "std::bad_alloc: std::bad_alloc",
+      null,
     );
     expect(categorizeError(err)).toBe("resource_limit");
   });
@@ -452,6 +455,7 @@ describe("buckets and categories", () => {
       "Standard_Failure: BRep_API: command not done",
       null,
       "Standard_Failure: BRep_API: command not done",
+      null,
     );
     expect(categorizeError(err)).toBe("unknown");
   });

@@ -51,6 +51,7 @@ import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 import {
   inStage,
   inStageAsync,
+  rustFailureClass,
   splitStage,
   type FailureStage,
 } from "../lib/workerError.js";
@@ -1211,6 +1212,14 @@ function isWasmTrap(err: unknown): boolean {
 // WebAssembly trap in them is the Rust module's (KOF-454).
 const RUST_STAGES: readonly FailureStage[] = ["shell_idealisation", "solving"];
 
+// The user's text of an error: its name and message. Its stack is for the
+// console only (KOF-490).
+function errorSummary(err: unknown): string {
+  return err instanceof Error
+    ? `${err.name}: ${err.message}`
+    : describeError(err);
+}
+
 function reportTaskError(id: number, type: string, failure: unknown): void {
   const { stage, error: raw } = splitStage(failure);
   const err =
@@ -1226,7 +1235,7 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
       ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
       : explained
         ? err.message
-        : describeError(err);
+        : errorSummary(err);
   const errorMessage = trap
     ? `WASM trap (code bug, not OOM): ${detail}`
     : detail;
@@ -1234,14 +1243,21 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
     trap
       ? `[solver.worker] WASM trap in ${type}:`
       : `[solver.worker] ${type} failed:`,
-    explained ? `${detail}\n${describeError(raw)}` : detail,
+    explained ? `${detail}\n${describeError(raw)}` : describeError(err),
   );
+  const rustClass = rustFailureClass(err);
   self.postMessage({
     id,
     ok: false,
     error: errorMessage,
     english: inEnglish(errorMessage),
     ...(stage === null ? {} : { stage }),
+    ...(rustClass === null
+      ? {}
+      : {
+          failureClass: rustClass.category,
+          numericalReason: rustClass.reason,
+        }),
   });
 }
 

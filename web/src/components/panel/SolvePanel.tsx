@@ -14,6 +14,7 @@ import {
 } from "../../lib/solve/largeDeformation";
 import { useT } from "../../i18n/useLocale";
 import { solveMessages } from "../../i18n/messages/solve";
+import { FailureBanner } from "./FailureBanner";
 import styles from "./Panel.module.css";
 
 // One static study: the pre-flight check, the solver settings and the run.
@@ -56,10 +57,11 @@ export function SolvePanel({
       <div className={styles.tabContent}>
         {header}
         {error && (
-          <div className={styles.errorBanner}>
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>×</button>
-          </div>
+          <FailureBanner
+            notice={error}
+            onClose={() => setError(null)}
+            testId="solve-error"
+          />
         )}
         <PreflightChecks checks={checks} />
 
