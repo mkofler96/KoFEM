@@ -15,6 +15,7 @@ import { clickViewportAt, drawnSegments } from "./fixtures/viewport";
 
 type PickState = {
   selectedFace: { nodeIds: number[]; label: string } | null;
+  pickMode: "bc" | "load" | "tie" | "coupling" | null;
   pickGeometry: "face" | "edge" | "point";
   bcGroups: { name: string; faces: { label: string; nodeIds: number[] }[] }[];
   loadGroups: { name: string; faces: { label: string }[] }[];
@@ -38,6 +39,7 @@ function readPickState(page: Page) {
             label: state.selectedFace.label,
           }
         : null,
+      pickMode: state.pickMode,
       pickGeometry: state.pickGeometry,
       bcGroups: state.bcGroups.map((g) => ({
         name: g.name,
@@ -126,7 +128,9 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
   const edgeToggle = page.getByRole("button", { name: "Edge", exact: true });
   await expect(edgeToggle).toBeVisible();
   await edgeToggle.click();
-  await expect(page.getByText("Pick edge — fixed displacement")).toBeVisible();
+  await expect(
+    page.getByText("Click near a mesh edge in the 3D viewport"),
+  ).toBeVisible();
 
   await edgePickOnViewport(page);
 
@@ -329,11 +333,15 @@ test("opening Results ends an edge pick, so the deformed surface picks nothing @
 
   await addBoundary(page, "bc");
   await page.getByTestId("pick-geometry-edge").click();
-  await expect(page.getByText("Pick edge — fixed displacement")).toBeVisible();
+  await expect
+    .poll(async () => (await readPickState(page)).pickMode)
+    .toBe("bc");
 
   await page.getByTestId("tree-plot-1").click();
   await expect(page.getByTestId("colorbar")).toBeVisible();
-  await expect(page.getByText("Pick edge — fixed displacement")).toHaveCount(0);
+  await expect
+    .poll(async () => (await readPickState(page)).pickMode)
+    .toBeNull();
   const canvas = page.locator("canvas").first();
   const box = await canvas.boundingBox();
   if (!box) throw new Error("viewport canvas has no bounding box");

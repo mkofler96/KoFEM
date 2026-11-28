@@ -97,7 +97,7 @@ test.describe("Full workflow showcase", () => {
 
     const meshingErrorBanner = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh OK")).toBeVisible(),
+      expect(page.getByTestId("mesh-summary")).toBeVisible(),
       meshingErrorBanner.waitFor({ state: "visible" }).then(async () => {
         throw new Error(
           `Volume meshing failed: ${await meshingErrorBanner.textContent()}`,

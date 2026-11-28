@@ -6,6 +6,8 @@ import { useModelStore } from "../store/modelStore";
 import { parseAnalysisFile } from "./analysisFile";
 import { categorizeError, setWorkflow, startTimer, track } from "./analytics";
 import { clearWorkerLogs } from "../hooks/useWorkerLogs";
+import { sendToWorker } from "../workers/sharedWorker";
+import type { CadFaceProperties } from "./cadFaceProperties";
 import { tr } from "../i18n/useLocale";
 import { dialogMessages } from "../i18n/messages/dialogs";
 
@@ -71,6 +73,10 @@ export async function openExample(
       throw new Error(
         `example "${id}" ships no geometry: ${id}.model.step is not a STEP file`,
       );
+    const { cadFaces } = await sendToWorker<{ cadFaces: CadFaceProperties[] }>(
+      "parse_step",
+      { bytes: stepBytes, format: "step" },
+    );
     if (signal?.aborted) return;
 
     // A saved .vtu carries the tessellation but not the STEP file, so
@@ -78,7 +84,7 @@ export async function openExample(
     const store = useModelStore.getState();
     store.loadAnalysis(analysis);
     store.setGeometryFormat("step");
-    store.setStepBytes(stepBytes);
+    store.setStepBytes(stepBytes, cadFaces);
     clearWorkerLogs();
     useExampleLoad.setState({ opened: { id, name: analysis.modelName } });
     setWorkflow("example", id);

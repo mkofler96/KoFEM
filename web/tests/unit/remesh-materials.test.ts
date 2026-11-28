@@ -70,7 +70,7 @@ describe("bodies a mesh adds to an imported part (KOF-413)", () => {
   beforeEach(() => {
     const state = useModelStore.getState();
     state.reset();
-    state.setStepBytes(new Uint8Array([1, 2, 3]));
+    state.setStepBytes(new Uint8Array([1, 2, 3]), []);
     state.setBodies(1);
     state.addMaterial(aluminium);
     state.assignBodyMaterial(1, aluminium.id);

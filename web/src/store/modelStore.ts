@@ -211,6 +211,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       // file, so re-meshing a loaded analysis requires re-importing the STEP.
       s.stepBytes = null;
       s.geometryFormat = "step";
+      s.cadFaces = null;
       s.geometryHistory = [];
       s.splitPicking = false;
       s.splitFaceIds = [];
@@ -329,6 +330,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.interfaces = [];
       s.stepBytes = null;
       s.geometryFormat = "step";
+      s.cadFaces = null;
       s.geometryHistory = [];
       s.splitPicking = false;
       s.splitFaceIds = [];

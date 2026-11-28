@@ -108,6 +108,7 @@ import {
   type TopOptRunResult,
 } from "../lib/solve/topOptRust.js";
 import { elementOrderOf } from "../lib/solve/messageDefaults.js";
+import { decodeCadFaceProperties } from "../lib/cadFaceProperties.js";
 import { useLocaleStore } from "../i18n/useLocale";
 import { loadLocale } from "../i18n/loadLocale";
 import { inEnglish } from "../i18n/english";
@@ -281,6 +282,9 @@ function loadGeometry(bytes: Uint8Array, format: string) {
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
+  // Measured on the exact CAD faces while the shape is cached: meshing frees
+  // the cache, and the status bar describes a picked face long after.
+  const cadFaces = decodeCadFaceProperties(m().cad_face_properties());
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
   // bodyCount (#353) drives the per-body material assignment UI; bodyIds
@@ -292,6 +296,7 @@ function loadGeometry(bytes: Uint8Array, format: string) {
     bodyIds: Array.from(triangleBodyIds),
     faceIds: Array.from(triangleFaceIds),
     bodyCount,
+    cadFaces,
   };
 }
 
