@@ -3,7 +3,6 @@
 
 import { Fragment } from "react";
 import { useModelStore, loadKind } from "../../store/modelStore";
-import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import { consentBanner } from "../../lib/analytics";
 import type { ViewRepr } from "../../store/viewSlice";
@@ -11,29 +10,13 @@ import type { Projection } from "../../lib/projection";
 import { EngineStatus } from "./EngineStatus";
 import { useIntlTag, useT } from "../../i18n/useLocale";
 import { statusMessages } from "../../i18n/messages/shell";
-import type { PickGeometry } from "../../lib/facePick";
+import { isPicking, pickedCadFaceId } from "../../lib/statusContext";
 import { cadFaceLabel } from "../../lib/cadFaceProperties";
 import type { CadFaceProperties } from "../../lib/cadFaceProperties";
 import { MODEL_UNITS } from "../../lib/modelUnits";
 import styles from "./StatusBar.module.css";
 
 type StatusText = (typeof statusMessages)["en"];
-
-// What the face being picked is for, shown next to the pick indicator.
-function pickPurpose(text: StatusText, mode: PickMode): string {
-  return {
-    bc: text.purposeBc,
-    load: text.purposeLoad,
-    tie: text.purposeTie,
-    coupling: text.purposeCoupling,
-  }[mode];
-}
-
-function pickTarget(text: StatusText, geometry: PickGeometry): string {
-  return { face: text.pickFace, edge: text.pickEdge, point: text.pickPoint }[
-    geometry
-  ];
-}
 
 // The face and nodal-DOF load counts, faces first.
 function loadCountLabels(
@@ -47,15 +30,11 @@ function loadCountLabels(
   return parts;
 }
 
-// The CAD face a face pick selected whole, when the engine has described the
-// geometry's faces.
 function pickedCadFace(
   faces: CadFaceProperties[] | null,
-  pickGeometry: PickGeometry,
   cadFaceId: number | undefined,
 ): { id: number; face: CadFaceProperties } | null {
-  if (faces === null || pickGeometry !== "face" || cadFaceId === undefined)
-    return null;
+  if (faces === null || cadFaceId === undefined) return null;
   const face = faces[cadFaceId - 1];
   if (face === undefined)
     throw new Error(
@@ -193,9 +172,8 @@ export function StatusBar() {
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const result = useModelStore((s) => s.result);
   const mode = useModelStore((s) => s.mode);
-  const selectedFace = useModelStore((s) => s.selectedFace);
-  const pickMode = useModelStore((s) => s.pickMode);
-  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const picking = useModelStore(isPicking);
+  const pickedFaceId = useModelStore(pickedCadFaceId);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
   const projection = useModelStore((s) => s.projection);
@@ -211,7 +189,7 @@ export function StatusBar() {
   const cadFaces = useModelStore((s) => s.cadFaces);
   const text = useT(statusMessages);
   const intl = useIntlTag();
-  const picked = pickedCadFace(cadFaces, pickGeometry, selectedFace?.cadFaceId);
+  const picked = pickedCadFace(cadFaces, pickedFaceId);
   const pickedLabel =
     picked &&
     cadFaceLabel(picked.id, picked.face, text, intl, MODEL_UNITS.length);
@@ -226,6 +204,15 @@ export function StatusBar() {
 
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
+  const modelCounts = [
+    ...(nodes.length > 0 ? [text.nodes(nodes.length)] : []),
+    ...(hexCount > 0 ? [`${hexCount} CHEXA`] : []),
+    ...(tetCount > 0 ? [`${tetCount} CTETRA`] : []),
+    ...(constraints.length > 0
+      ? [text.nodesFixed(new Set(constraints.map((c) => c.nodeId)).size)]
+      : []),
+    ...loadCountLabels(text, loads.length, surfaceLoads.length),
+  ];
   const meshOk = nodes.length > 0;
 
   // Load glyphs are only drawn outside the deformed-result view. Moment arrows
@@ -237,77 +224,25 @@ export function StatusBar() {
     !showingResult && loadGroups.some((g) => loadKind(g) !== "moment");
 
   return (
-    <div className={styles.bar}>
-      {/* Left */}
+    <div className={styles.bar} data-testid="status-bar">
+      {/* Left: the face being picked while a tool picks, else the model */}
       <div className={styles.left}>
-        {/* <span className={styles.stepChip}>
-          Step {MODE_NUMS[mode]} / 05 · {MODE_LABELS[mode]}
-        </span> */}
-
-        {pickMode && (
-          <span className={styles.pickChip}>
-            <span className={styles.pickDot} />
-            {text.pick(
-              pickTarget(text, pickGeometry),
-              pickPurpose(text, pickMode),
-            )}
-          </span>
-        )}
-
-        {pickedLabel && (
-          <span
-            className={`${styles.chip} ${styles.faceChip}`}
-            title={pickedLabel}
-            data-testid="picked-face"
-          >
-            {pickedLabel}
-          </span>
-        )}
-
-        {selectedFace && !pickMode && (
-          <span className={`${styles.chip} ${styles.selChip}`}>
-            {text.selected(selectedFace.label)}
-          </span>
-        )}
-
-        {nodes.length > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{text.nodes(nodes.length)}</span>
-          </>
-        )}
-
-        {hexCount > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{hexCount} CHEXA</span>
-          </>
-        )}
-
-        {tetCount > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{tetCount} CTETRA</span>
-          </>
-        )}
-
-        {constraints.length > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>
-              {text.nodesFixed(new Set(constraints.map((c) => c.nodeId)).size)}
-            </span>
-          </>
-        )}
-
-        {loadCountLabels(text, loads.length, surfaceLoads.length).map(
-          (count) => (
-            <Fragment key={count}>
-              <span className={styles.sep}>·</span>
-              <span className={styles.stat}>{count}</span>
-            </Fragment>
-          ),
-        )}
+        {picking
+          ? pickedLabel && (
+              <span
+                className={styles.faceInfo}
+                title={pickedLabel}
+                data-testid="picked-face"
+              >
+                {pickedLabel}
+              </span>
+            )
+          : modelCounts.map((count, i) => (
+              <Fragment key={count}>
+                {i > 0 && <span className={styles.sep}>·</span>}
+                <span className={styles.stat}>{count}</span>
+              </Fragment>
+            ))}
       </div>
 
       {/* Center — repr toolbar + undeformed overlay toggle */}

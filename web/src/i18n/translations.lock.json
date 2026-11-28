@@ -5887,38 +5887,6 @@
     "es": "88445a72e2cc",
     "pt": "c71bfe6e6583"
   },
-  "shell.ts:statusMessages.pick": {
-    "en": "cd5cda4a61d5",
-    "de": "4f95b935a772",
-    "fr": "657f6a058b0e",
-    "it": "ae8f97dd1833",
-    "es": "1e9023e86963",
-    "pt": "1a884455de05"
-  },
-  "shell.ts:statusMessages.pickEdge": {
-    "en": "06e314e50415",
-    "de": "1bc7cbb21c25",
-    "fr": "6ab4ce9882ce",
-    "it": "c892c6ca7048",
-    "es": "38a5b899f3f1",
-    "pt": "4f8722e8b8de"
-  },
-  "shell.ts:statusMessages.pickFace": {
-    "en": "9031ef768175",
-    "de": "a7919249a956",
-    "fr": "27d5e9c1e2b6",
-    "it": "26439103048b",
-    "es": "936525aa27cf",
-    "pt": "40950fb723ee"
-  },
-  "shell.ts:statusMessages.pickPoint": {
-    "en": "fec09f6948e2",
-    "de": "b2ff019132da",
-    "fr": "b822dc812c6f",
-    "it": "8b2cad2cb4ab",
-    "es": "8b2cad2cb4ab",
-    "pt": "ae3e1bd1f1bf"
-  },
   "shell.ts:statusMessages.projectionOrthographic": {
     "en": "ae932ec954f2",
     "de": "e84b2c570000",
@@ -5950,38 +5918,6 @@
     "it": "36957a571436",
     "es": "e55628cbe5f6",
     "pt": "d62a52983dbf"
-  },
-  "shell.ts:statusMessages.purposeBc": {
-    "en": "0b6c72e5f447",
-    "de": "c7408f6775bb",
-    "fr": "27b435a2618a",
-    "it": "66661112fa53",
-    "es": "19d800556c03",
-    "pt": "98591ef8ffbb"
-  },
-  "shell.ts:statusMessages.purposeCoupling": {
-    "en": "11e807647ade",
-    "de": "c0684b13e982",
-    "fr": "9f331383882c",
-    "it": "ba582bcd0513",
-    "es": "cc54d3f2f1c3",
-    "pt": "d0a7c797da68"
-  },
-  "shell.ts:statusMessages.purposeLoad": {
-    "en": "4bfa544227e9",
-    "de": "7b49cd59ddbf",
-    "fr": "a6880965e0e1",
-    "it": "75a81dde8499",
-    "es": "6fdbdaa48fa8",
-    "pt": "6fdbdaa48fa8"
-  },
-  "shell.ts:statusMessages.purposeTie": {
-    "en": "8dda3e389220",
-    "de": "ad0d9c0eb728",
-    "fr": "9f5b806d6957",
-    "it": "28a918d28595",
-    "es": "2d9500e8aff7",
-    "pt": "af24a48c8761"
   },
   "shell.ts:statusMessages.reprGeometry": {
     "en": "3708068b429f",
@@ -6038,14 +5974,6 @@
     "it": "afe914ffbbbb",
     "es": "60ce84b5abf3",
     "pt": "3d26bbf3e720"
-  },
-  "shell.ts:statusMessages.selected": {
-    "en": "4ef91985e464",
-    "de": "bf8ea4c12da4",
-    "fr": "ab10b9452346",
-    "it": "67dff527a62e",
-    "es": "ff8e432c1e54",
-    "pt": "06414f03840e"
   },
   "shell.ts:statusMessages.solved": {
     "en": "e92f60f4dde0",

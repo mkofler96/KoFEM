@@ -36,22 +36,6 @@
   white-space: nowrap;
 }
 
-.pickChip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #1f5fd0;
-  white-space: nowrap;
-}
-
-.pickDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #1f5fd0;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
 @keyframes pulse {
   0%,
   100% {
@@ -62,22 +46,9 @@
   }
 }
 
-.chip {
+.faceInfo {
   color: #3a4150;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  border-radius: 4px;
-  padding: 2px 7px;
   white-space: nowrap;
-}
-
-.selChip {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.faceChip {
   flex-shrink: 0;
 }
 
@@ -267,33 +238,28 @@
   .engineHint {
     display: none;
   }
-  .bar:has(.faceChip) {
+  .bar:has(.faceInfo) {
     flex-wrap: wrap;
     height: auto;
     padding-top: 3px;
     padding-bottom: 3px;
     row-gap: 3px;
   }
-  .left:has(.faceChip) {
+  .left:has(.faceInfo) {
     flex-basis: 100%;
   }
-  .faceChip {
+  .faceInfo {
     flex-shrink: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .pickChip:has(+ .faceChip),
-  .left:has(.faceChip) .sep,
-  .left:has(.faceChip) .stat {
-    display: none;
-  }
-  .bar:has(.faceChip) .right {
+  .bar:has(.faceInfo) .right {
     flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
   }
-  .bar:has(.faceChip) .right > * {
+  .bar:has(.faceInfo) .right > * {
     flex-shrink: 0;
     white-space: nowrap;
   }
