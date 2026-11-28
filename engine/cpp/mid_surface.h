@@ -33,11 +33,13 @@
 #include <vector>
 
 // The thickest wall that counts as thin: max(max_wall, body_share × the body's
-// bounding-box diagonal) — the rule of crates/kofem-shellize
-// (ExtractOptions::max_wall, SHELL_BODY_WALL_SHARE), passed in by the app.
+// bounding-box diagonal) × (1 + slack) — the rule of crates/kofem-shellize
+// (ExtractOptions::max_wall, SHELL_BODY_WALL_SHARE, MAX_WALL_SLACK), passed in
+// by the app.
 struct ThinWallRule {
     double max_wall;
     double body_share;
+    double slack;
 };
 
 enum class WallKind { Planar, Cylindrical };

@@ -199,8 +199,6 @@ export function buildAnalysisSetup(build, title) {
     volMesh: null,
     surfaceTriangles: build.surfaceTriangles,
     surfaceFaceIds: build.surfaceFaceIds,
-    // A Shell body's CAD mid-surface links and the Shell bodies' routes
-    // (KOF-498), as the app writes them: only when there are some.
     ...(build.midSurfaceLinks
       ? { midSurfaceLinks: build.midSurfaceLinks }
       : {}),

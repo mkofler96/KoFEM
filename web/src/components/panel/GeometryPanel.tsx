@@ -44,14 +44,11 @@ function sectionsTip(
   return text.shellSections(sections.length, thicknesses);
 }
 
-// How the last mesh meshed a body marked Shell (KOF-498): its mid-surface
-// from the paired CAD faces, or from its volume mesh and why.
-function shellRouteText(route: ShellRoute, text: GeometryText): string {
-  if (route.path === "cad")
-    return text.shellRouteCad(
-      route.walls.length,
-      route.walls.map((w) => `${w.thickness} mm`).join(", "),
-    );
+type MeshRoute = Extract<ShellRoute, { path: "mesh" }>;
+
+// Why the last mesh took a Shell body's mid-surface from its volume mesh
+// (KOF-498). The CAD path needs no note: its see-through CAD faces show it.
+function shellRouteText(route: MeshRoute, text: GeometryText): string {
   const why: Record<ShellRouteReason, string> = {
     no_thin_wall: text.shellRouteNoThinWall,
     no_opposite_face: text.shellRouteNoOppositeFace,
@@ -228,10 +225,11 @@ function BodyDetail({ id }: { id: number }) {
   const stillMeshed = mismatch.stillMeshed.includes(prop.id);
   const notMeshed = mismatch.missing.includes(prop.id);
   const tip = sectionsTip(shellSectionsOf(properties, prop.id), text);
-  // How the last mesh meshed this body, when it is marked Shell (KOF-498).
   const route =
     prop.discretization === "shell"
-      ? shellRoutes.find((r) => r.body === prop.id)
+      ? shellRoutes.find(
+          (r): r is MeshRoute => r.body === prop.id && r.path === "mesh",
+        )
       : undefined;
   const unbonded = unconnectedBodies(interfaces, properties).includes(prop.id);
   // The material a body the mesh added was offered (KOF-413). A deleted one has

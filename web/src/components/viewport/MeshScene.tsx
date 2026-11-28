@@ -91,9 +91,6 @@ export function MeshScene() {
     topology.shellRim,
   );
 
-  // The factor the displacements are drawn at (KOF-383): the automatic one or
-  // the user's, the same number the Results panel shows. 0 yields the
-  // undeformed shape coloured by the result field.
   const onCadFacePick = useCadFacePick();
   // The Shell bodies whose mid-surface came from their CAD faces (KOF-498):
   // their CAD geometry is drawn see-through over the mesh, and supports and
@@ -110,6 +107,9 @@ export function MeshScene() {
     [pendingFaces, selectedFace],
   );
 
+  // The factor the displacements are drawn at (KOF-383): the automatic one or
+  // the user's, the same number the Results panel shows. 0 yields the
+  // undeformed shape coloured by the result field.
   const deformScale = useDeformFactor().factor;
 
   // A click on the deformed result places a probe (KOF-389): at the point of

@@ -245,20 +245,6 @@ export const geometryMessages = defineMessages({
     es: "Sólido usa tetraedros. Lámina usa las superficies medias de las paredes y conserva material sólido en las uniones planas. Divide primero las regiones gruesas o curvas en cuerpos sólidos separados.",
     pt: "Sólido usa tetraedros. Casca usa as superfícies médias das paredes e mantém material sólido nas junções planas. Divida antes as regiões espessas ou curvas em corpos sólidos separados.",
   },
-  shellRouteCad: {
-    en: (walls: number, thickness: string) =>
-      `Mid-surface from the CAD faces: ${walls === 1 ? "1 wall" : `${walls} walls`}, ${thickness}.`,
-    de: (walls: number, thickness: string) =>
-      `Mittelfläche aus den CAD-Flächen: ${walls === 1 ? "1 Wand" : `${walls} Wände`}, ${thickness}.`,
-    fr: (walls: number, thickness: string) =>
-      `Surface moyenne issue des faces CAO : ${walls === 1 ? "1 paroi" : `${walls} parois`}, ${thickness}.`,
-    it: (walls: number, thickness: string) =>
-      `Superficie media dalle facce CAD: ${walls === 1 ? "1 parete" : `${walls} pareti`}, ${thickness}.`,
-    es: (walls: number, thickness: string) =>
-      `Superficie media a partir de las caras CAD: ${walls === 1 ? "1 pared" : `${walls} paredes`}, ${thickness}.`,
-    pt: (walls: number, thickness: string) =>
-      `Superfície média a partir das faces CAD: ${walls === 1 ? "1 parede" : `${walls} paredes`}, ${thickness}.`,
-  },
   shellRouteMesh: {
     en: (face: number, why: string) =>
       `Mid-surface from the volume mesh, because face ${face} ${why}.`,

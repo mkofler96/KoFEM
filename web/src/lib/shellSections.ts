@@ -25,13 +25,22 @@ const thicknessKey = (thickness: number): number =>
 
 // The material of a body marked Shell, which its PSHELLs inherit. A body
 // missing from the property table has none to give (KOF-413).
-export function shellBodyMaterial(
-  cadBodies: Property[],
-  bodyId: number,
-): number {
+function shellBodyMaterial(cadBodies: Property[], bodyId: number): number {
   const prop = cadBodies.find((p) => p.id === bodyId);
   if (!prop) throw new Error(tr(refusalMessages).shellBodyNoMaterial(bodyId));
   return prop.materialId;
+}
+
+const cadBodiesOf = (properties: Property[]): Property[] =>
+  properties.filter((p) => p.sourceBodyId === undefined);
+
+// Refuses a Shell body without a material before any idealisation runs, so
+// the refusal names the body rather than a failed step.
+export function requireShellBodyMaterial(
+  properties: Property[],
+  bodyId: number,
+): void {
+  shellBodyMaterial(cadBodiesOf(properties), bodyId);
 }
 
 // The CAD bodies keep their own ids, so material assignments survive a mesh.
@@ -42,7 +51,7 @@ export function shellSections(
   properties: Property[],
   sections: Iterable<{ body: number; thickness: number }>,
 ): ShellSections {
-  const cadBodies = properties.filter((p) => p.sourceBodyId === undefined);
+  const cadBodies = cadBodiesOf(properties);
   const nextId = cadBodies.reduce((mx, p) => Math.max(mx, p.id), 0) + 1;
   const out: Property[] = cadBodies.map((p) => ({ ...p }));
   const idOf = new Map<string, number>();

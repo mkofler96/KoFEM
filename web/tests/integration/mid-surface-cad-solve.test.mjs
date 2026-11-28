@@ -5,11 +5,13 @@
 // midSurface becomes the stored model through web/src/lib/cadShell.ts: CTRIA3
 // facets, one PSHELL per thickness that inherits the Shell body's material,
 // and the links from each facet and rim edge back to its CAD faces. Supports
-// and loads are picked on the CAD faces, which stay the ground truth:
-//   - a top face resolves to its facets, wound along its outward normal;
-//   - a bottom face to the same facets, wound the other way, along its own
+// and loads are picked on the CAD faces, which stay the ground truth, and go
+// through the code the app runs: the pick (cadShellPick) and the surface load
+// the store builds from it (rebuildSurfaceLoads):
+//   - a top face loads its facets, wound along its outward normal;
+//   - a bottom face the same facets, wound the other way, along its own
 //     outward normal;
-//   - a side face to the rim nodes it collapsed to.
+//   - a side face picks the rim nodes it collapsed to.
 // So a pressure on either face of the plate pushes into the plate (KOF-451),
 // and an edge support is a pick of the side face.
 //
@@ -21,11 +23,8 @@ import {
   annulusStep,
   prismStep,
 } from "../../../examples/gallery/step-prism.mjs";
-import {
-  buildCadShellModel,
-  cadFaceNodes,
-  cadFaceSurface,
-} from "../../src/lib/cadShell.ts";
+import { buildCadShellModel, cadShellPick } from "../../src/lib/cadShell.ts";
+import { shellThinWallRule } from "../../src/lib/shellize.ts";
 import { buildShellEngineInputs } from "../../src/lib/solve/shell.ts";
 import { rebuildSurfaceLoads } from "../../src/store/boundaryRebuild.ts";
 import { solveShellInRust } from "../../src/lib/solve/shellRust.ts";
@@ -60,6 +59,34 @@ const CENTRE = [(SIDE * (1 + cos30)) / 2, (SIDE * sin30) / 2]; // E = (A + C) / 
 
 const neverContinue = async () => false;
 
+// What a click on `cadFaceId` selects in the app.
+function pick(shell, cadFaceId) {
+  const picked = cadShellPick(shell.links, shell.elements, cadFaceId);
+  if (!picked) throw new Error(`face ${cadFaceId} is not on the mid-surface`);
+  return picked;
+}
+
+// The surface load the store builds from a pressure picked on `cadFaceId`.
+function pressureOn(shell, cadFaceId, pressure) {
+  const { geometry, nodeIds } = pick(shell, cadFaceId);
+  const [load] = rebuildSurfaceLoads(
+    [
+      {
+        id: 1,
+        name: "Pressure",
+        kind: "pressure",
+        dof: 0,
+        totalForce: pressure,
+        faces: [{ id: 1, label: "Face", nodeIds, geometry, cadFaceId }],
+      },
+    ],
+    shell.elements,
+    [],
+    shell.links,
+  );
+  return load;
+}
+
 let top = 0;
 let bottom = 0;
 let sides = [];
@@ -67,6 +94,7 @@ let model = null;
 let ShellModel = null;
 
 beforeAll(async () => {
+  ({ ShellModel } = await loadFem());
   const engine = await loadEngine();
   const tessellation = engine.tessellate_step(
     new TextEncoder().encode(prismStep(RHOMBUS, THICKNESS, "NAFEMS LE6")),
@@ -80,7 +108,7 @@ beforeAll(async () => {
       max_element_size: SIZE,
       min_element_size: 0,
       shell_bodies: [1],
-      thin_wall: { max_wall: 15, body_share: 0.1 },
+      thin_wall: shellThinWallRule(),
       grading: 0.3,
       second_order: false,
       elementsperedge: 2,
@@ -95,7 +123,6 @@ beforeAll(async () => {
     dto.midSurface,
     [{ id: 1, materialId: STEEL.id, discretization: "shell" }],
   );
-  ({ ShellModel } = await loadFem());
 });
 
 describe("the stored model of a CAD mid-surface", () => {
@@ -126,18 +153,19 @@ describe("the stored model of a CAD mid-surface", () => {
     expect(new Set(model.surfaceFaceIds)).toEqual(new Set([top]));
   });
 
-  test("the top and bottom faces resolve to the same facets, wound oppositely", () => {
-    const upper = cadFaceSurface(model, top);
-    const lower = cadFaceSurface(model, bottom);
+  test("a pressure on the top or bottom face loads the same facets, wound oppositely", () => {
+    const upper = pressureOn(model, top, PRESSURE).faces;
+    const lower = pressureOn(model, bottom, PRESSURE).faces;
     expect(upper.length).toBe(model.elements.length);
     expect(lower.map(([a, b, c]) => [a, c, b])).toEqual(upper);
   });
 
-  test("each side face resolves to the rim nodes on its edge of the rhombus", () => {
+  test("each side face picks the rim nodes on its edge of the rhombus", () => {
     const nodeById = new Map(model.nodes.map((n) => [n.id, n]));
     const covered = new Set();
     for (const face of sides) {
-      const ids = cadFaceNodes(model, face);
+      const { geometry, nodeIds: ids } = pick(model, face);
+      expect(geometry).toBe("edge");
       expect(ids.length).toBeGreaterThan(1);
       for (const id of ids) {
         covered.add(id);
@@ -156,8 +184,8 @@ describe("the stored model of a CAD mid-surface", () => {
     );
   });
 
-  test("a face of another body is refused by name", () => {
-    expect(() => cadFaceSurface(model, 999)).toThrow("999");
+  test("a face that is not on the mid-surface is no shell pick", () => {
+    expect(cadShellPick(model.links, model.elements, 999)).toBeNull();
   });
 });
 
@@ -168,7 +196,7 @@ describe("a pressure on either face of the plate pushes into it (KOF-451)", () =
   async function centreDeflection(loadedFace) {
     const constraints = [];
     for (const face of sides)
-      for (const nodeId of cadFaceNodes(model, face))
+      for (const nodeId of pick(model, face).nodeIds)
         for (const dof of [0, 1, 2]) constraints.push({ nodeId, dof });
     const inputs = buildShellEngineInputs({
       nodes: model.nodes,
@@ -177,13 +205,7 @@ describe("a pressure on either face of the plate pushes into it (KOF-451)", () =
       properties: model.properties,
       constraints,
       loads: [],
-      surfaceLoads: [
-        {
-          type: "pressure",
-          faces: cadFaceSurface(model, loadedFace),
-          pressure: PRESSURE,
-        },
-      ],
+      surfaceLoads: [pressureOn(model, loadedFace, PRESSURE)],
     });
     const result = await solveShellInRust(
       { ShellModel },
@@ -241,7 +263,7 @@ describe("a pressure on a tube's bore pushes with the bore's area", () => {
         max_element_size: 5,
         min_element_size: 0,
         shell_bodies: [1],
-        thin_wall: { max_wall: 15, body_share: 0.1 },
+        thin_wall: shellThinWallRule(),
         grading: 0.3,
         second_order: false,
         elementsperedge: 2,
@@ -255,29 +277,7 @@ describe("a pressure on a tube's bore pushes with the bore's area", () => {
       dto.midSurface,
       [{ id: 1, materialId: STEEL.id, discretization: "shell" }],
     );
-    const [load] = rebuildSurfaceLoads(
-      [
-        {
-          id: 1,
-          name: "Bore pressure",
-          kind: "pressure",
-          dof: 0,
-          totalForce: PRESSURE,
-          faces: [
-            {
-              id: 1,
-              label: "Face 1",
-              nodeIds: cadFaceNodes(tube, bore),
-              geometry: "face",
-              cadFaceId: bore,
-            },
-          ],
-        },
-      ],
-      tube.elements,
-      [],
-      tube.links,
-    );
+    const load = pressureOn(tube, bore, PRESSURE);
     const inputs = buildShellEngineInputs({
       nodes: tube.nodes,
       elements: tube.elements,

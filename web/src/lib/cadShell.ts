@@ -134,60 +134,13 @@ export function buildCadShellModel(
 
 type ShellElements = readonly { id: number; type: string; nodeIds: number[] }[];
 
-function facetNodes(
-  model: { elements: ShellElements },
-  elementId: number,
-): Triangle {
-  const element = model.elements[elementId];
+function facetNodes(elements: ShellElements, elementId: number): Triangle {
+  const element = elements[elementId];
   if (element?.id !== elementId || element.type !== "CTRIA3")
     throw new Error(
       `CAD shell model: element ${elementId} is not the shell facet the links name`,
     );
   return element.nodeIds as Triangle;
-}
-
-// The triangles a CAD face covers, wound along that face's outward normal, so
-// a pressure on them pushes into the body: a top face's facets as they are
-// wound (toward the top side), a bottom face's the other way, and a face of a
-// volume-meshed body its own boundary triangles. A side face collapsed to the
-// rim covers no area; it is picked for its nodes (cadFaceNodes).
-export function cadFaceSurface(
-  model: CadShellModel,
-  cadFaceId: number,
-): Triangle[] {
-  const { facets, rim } = model.links;
-  const top = facets.filter((f) => f.top === cadFaceId);
-  if (top.length > 0) return top.map((f) => facetNodes(model, f.element));
-  const bottom = facets.filter((f) => f.bottom === cadFaceId);
-  if (bottom.length > 0)
-    return bottom.map((f) => {
-      const [a, b, c] = facetNodes(model, f.element);
-      return [a, c, b];
-    });
-  if (rim.some((edge) => edge.sideFace === cadFaceId))
-    throw new Error(
-      `CAD face ${cadFaceId} is a side face of a shell: it collapsed to the shell's edge and covers no area`,
-    );
-  const triangles = model.surfaceTriangles.filter(
-    (_, t) => model.surfaceFaceIds[t] === cadFaceId,
-  );
-  if (triangles.length === 0)
-    throw new Error(`CAD face ${cadFaceId} is not on this mesh`);
-  return triangles;
-}
-
-// The nodes a CAD face resolves to: a side face's rim nodes, a top or bottom
-// face's facet nodes, a volume-meshed face's boundary nodes. Ascending ids.
-export function cadFaceNodes(
-  model: CadShellModel,
-  cadFaceId: number,
-): number[] {
-  const rimNodes = model.links.rim
-    .filter((edge) => edge.sideFace === cadFaceId)
-    .flatMap((edge) => edge.nodeIds);
-  const ids =
-    rimNodes.length > 0 ? rimNodes : cadFaceSurface(model, cadFaceId).flat();
-  return [...new Set(ids)].sort((a, b) => a - b);
 }
 
 const ascending = (ids: number[]): number[] =>
@@ -213,7 +166,7 @@ export function shellFaceNodes(
 ): Map<number, number[]> {
   const nodes = new Map<number, number[]>();
   for (const facet of links.facets) {
-    const corners = facetNodes({ elements }, facet.element);
+    const corners = facetNodes(elements, facet.element);
     for (const face of [facet.top, facet.bottom]) {
       let list = nodes.get(face);
       if (!list) {

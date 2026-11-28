@@ -46,9 +46,6 @@ namespace {
 constexpr double kParallel = 1e-9;
 // Share of the body's bounding-box diagonal below which two lengths are equal.
 constexpr double kRelativeTolerance = 1e-7;
-// The thickest wall may be this much over the limit, as in kofem-shellize
-// (MAX_WALL_SLACK), so a wall exactly at the limit is thin.
-constexpr double kMaxWallSlack = 1e-6;
 
 struct FaceInfo {
     int id = 0;
@@ -361,8 +358,8 @@ ThinWallRule thin_wall_rule(const val& opts) {
     const val rule = opts["thin_wall"];
     if (rule.isUndefined() || rule.isNull() || rule.typeOf().as<std::string>() != "object")
         throw std::runtime_error(
-            "shell meshing needs opts.thin_wall = { max_wall, body_share }: the thickest wall "
-            "that counts as thin");
+            "shell meshing needs opts.thin_wall = { max_wall, body_share, slack }: the "
+            "thickest wall that counts as thin");
     auto positive = [&](const char* key) {
         const val value = rule[key];
         if (!value.isNumber() || !(value.as<double>() > 0.0) ||
@@ -371,7 +368,10 @@ ThinWallRule thin_wall_rule(const val& opts) {
                                      " must be a positive number");
         return value.as<double>();
     };
-    return {positive("max_wall"), positive("body_share")};
+    const val slack = rule["slack"];
+    if (!slack.isNumber() || !(slack.as<double>() >= 0.0) || !std::isfinite(slack.as<double>()))
+        throw std::runtime_error("thin_wall.slack must be a number of at least 0");
+    return {positive("max_wall"), positive("body_share"), slack.as<double>()};
 }
 
 std::vector<int> shell_body_ids(const val& opts, const TopoDS_Shape& shape) {
@@ -422,7 +422,7 @@ ShellBodyAnalysis analyse_shell_body(const TopoDS_Shape& shape, int body,
     const double tolerance = std::max(kRelativeTolerance * diagonal, Precision::Confusion());
     analysis.tolerance = tolerance;
     const double max_wall =
-        std::max(rule.max_wall, rule.body_share * diagonal) * (1.0 + kMaxWallSlack);
+        std::max(rule.max_wall, rule.body_share * diagonal) * (1.0 + rule.slack);
 
     std::vector<FaceInfo> faces;
     TopTools_IndexedMapOfShape seen;

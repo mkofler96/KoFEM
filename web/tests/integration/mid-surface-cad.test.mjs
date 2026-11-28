@@ -16,10 +16,10 @@
 //     shellRoutes (as above) and, when a body takes the CAD path,
 //     midSurface { vertices, triangles, midFace, faces: [{ body, top, bottom,
 //     thickness }], rimEdges: [a, b, sideFace, ...] }
-// Both take opts.thin_wall { max_wall, body_share }: the thickest wall that is
-// thin is max(max_wall, body_share × the body's bounding-box diagonal), the
-// rule of crates/kofem-shellize (ExtractOptions::max_wall,
-// SHELL_BODY_WALL_SHARE).
+// Both take opts.thin_wall { max_wall, body_share, slack }: the thickest wall
+// that is thin is max(max_wall, body_share × the body's bounding-box diagonal)
+// × (1 + slack), the rule of crates/kofem-shellize, which the app reads from
+// the Rust module (lib/shellize.ts shellThinWallRule).
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import {
@@ -27,7 +27,8 @@ import {
   prismStep,
   quarterStripWithHoleStep,
 } from "../../../examples/gallery/step-prism.mjs";
-import { loadEngine } from "../support/wasm.mjs";
+import { shellThinWallRule } from "../../src/lib/shellize.ts";
+import { loadEngine, loadFem } from "../support/wasm.mjs";
 import { TESSELLATION_OPTIONS } from "../support/step-parts.mjs";
 import {
   allFaces,
@@ -35,7 +36,8 @@ import {
   faceWhere,
 } from "../support/cad-faces.mjs";
 
-const THIN_WALL = { max_wall: 15, body_share: 0.1 };
+await loadFem();
+const THIN_WALL = shellThinWallRule();
 
 function meshOptions(maxElementSize, shellBodies) {
   return JSON.stringify({
@@ -529,6 +531,20 @@ describe("the shell options are required", () => {
       engine.plan_shell_bodies(JSON.stringify({ shell_bodies: [1] })),
     );
     expect(message).toContain("thin_wall");
+  });
+
+  test("a thin-wall rule without its slack is refused by name", async () => {
+    const { engine } = await engineWith(LE6_STEP);
+    const { max_wall, body_share } = THIN_WALL;
+    const message = refusalOf(engine, () =>
+      engine.plan_shell_bodies(
+        JSON.stringify({
+          shell_bodies: [1],
+          thin_wall: { max_wall, body_share },
+        }),
+      ),
+    );
+    expect(message).toContain("thin_wall.slack");
   });
 
   test("a body that is not in the geometry is refused by name", async () => {

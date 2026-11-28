@@ -100,10 +100,11 @@ export interface FemMesh {
 }
 
 /** The thickest wall that counts as thin: max(max_wall, body_share × the
- *  body's bounding-box diagonal), mm. */
+ *  body's bounding-box diagonal) × (1 + slack), mm. */
 export interface ThinWallRule {
   max_wall: number
   body_share: number
+  slack: number
 }
 
 /** How a body marked Shell is meshed (KOF-498). On the CAD path its

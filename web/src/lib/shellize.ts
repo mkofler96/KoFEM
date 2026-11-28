@@ -26,6 +26,7 @@ import {
   shellWallTets as rustShellWallTets,
   ShellizeInput,
 } from "../wasm/fem/kofem_wasm.js";
+import type { ThinWallRule } from "../wasm/pkg/kofem_wasm.js";
 import { SpatialGrid } from "./spatialGrid.js";
 import { release, type Freeable } from "./solve/rustFailure.js";
 
@@ -335,12 +336,13 @@ function pairMap(keys: Uint32Array, values: Uint32Array): Map<number, number> {
 
 // The thin-wall rule for bodies marked Shell, in the engine's thin_wall form:
 // the thickest wall that is thin is max(max_wall, body_share × the body's
-// bounding-box diagonal). The engine's CAD mid-surface (KOF-498) applies the
-// same rule as the Rust extraction, from these numbers.
-export function shellThinWallRule(): { max_wall: number; body_share: number } {
+// bounding-box diagonal) × (1 + slack). The engine's CAD mid-surface (KOF-498)
+// applies the same rule as the Rust extraction, from these numbers.
+export function shellThinWallRule(): ThinWallRule {
   return using(rustShellThinWallRule(), (rule) => ({
     max_wall: rule.maxWall,
     body_share: rule.bodyShare,
+    slack: rule.slack,
   }));
 }
 

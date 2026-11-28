@@ -22,7 +22,7 @@ import type {
 } from "../../workers/solverTypes.js";
 import type { ShellMesh } from "./contracts.js";
 import { coupledMaterials } from "../coupledMaterials.js";
-import { shellBodyMaterial, shellSections } from "../shellSections.js";
+import { requireShellBodyMaterial, shellSections } from "../shellSections.js";
 import { buildReferenceCouplings, referencePointIds } from "../coupling.js";
 import {
   extractThinWallShells,
@@ -244,11 +244,8 @@ export function buildMeshTimeShellModel(
   requireMatchingSurface(surfaceTriangles, surfaceFaceIds);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
   if (tetElements.length !== elements.length) return null;
-  // The PSHELLs inherit the Shell body's material: look it up before the
-  // idealisation runs, so a missing one fails fast and names the body.
-  const cadBodies = properties.filter((p) => p.sourceBodyId === undefined);
   const [shellBodyId] = shellBodyIds;
-  shellBodyMaterial(cadBodies, shellBodyId);
+  requireShellBodyMaterial(properties, shellBodyId);
 
   const vid = buildVertexIndexer(nodes);
   const mesh = buildShellizeMesh(

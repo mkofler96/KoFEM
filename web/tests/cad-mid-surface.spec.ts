@@ -106,7 +106,7 @@ test("a plate marked Shell is meshed as its CAD mid-surface, without a volume me
     page.getByRole("button", { name: /Generate mesh/ }),
   ).toBeVisible();
   await setElementType(page, 1, "shell");
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByRole("button", { name: /Generate mesh/ }).click();
   await expect(page.getByTestId("mesh-summary")).toBeVisible();
 
@@ -133,7 +133,7 @@ async function meshAsShell(page: Page, step: Buffer = LE6): Promise<void> {
     page.getByRole("button", { name: /Generate mesh/ }),
   ).toBeVisible();
   await setElementType(page, 1, "shell");
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByRole("button", { name: /Generate mesh/ }).click();
   await expect(page.getByTestId("mesh-summary")).toBeVisible();
 }
@@ -266,14 +266,15 @@ const L_BRACKET = Buffer.from(
   ),
 );
 
-test("the body panel says a Shell body's mid-surface came from its CAD faces @pipeline", async ({
+// The see-through CAD faces already show a Shell body on the CAD path, so the
+// panel only explains the mesh-based path.
+test("the body panel adds no note for a Shell body meshed from its CAD faces @pipeline", async ({
   page,
 }) => {
   await meshAsShell(page);
   await openBody(page, 1);
-  await expect(page.getByTestId("body-shell-route-1")).toHaveText(
-    "Mid-surface from the CAD faces: 1 wall, 10 mm.",
-  );
+  await expect(page.getByTestId("body-type-1")).toHaveValue("shell");
+  await expect(page.getByTestId("body-shell-route-1")).toHaveCount(0);
 });
 
 test("the body panel says why a Shell body's mid-surface came from its volume mesh @pipeline", async ({

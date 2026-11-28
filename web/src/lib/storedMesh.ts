@@ -30,8 +30,13 @@ import {
   requireOneShellBody,
 } from "./solve/autoShell.js";
 import { shellThinWallRule } from "./shellize.js";
-import { dropSuppressedBodies } from "./suppressBodies.js";
+import {
+  dropSuppressedBodies,
+  type VolumeMeshParts,
+} from "./suppressBodies.js";
 import { inStage } from "./workerError.js";
+import { tr } from "../i18n/useLocale.js";
+import { meshMessages } from "../i18n/messages/mesh.js";
 
 type Triangle = [number, number, number];
 
@@ -65,29 +70,31 @@ function chunk3(flat: Int32Array): Triangle[] {
   return out;
 }
 
-export function storedMesh(
+type MeshRequest = Pick<
+  VolumeMeshPayload,
+  "properties" | "suppressedBodyIds"
+> & {
+  shellBodyIds: Set<number>;
+};
+
+// The bodies the engine meshed as volumes, without the suppressed ones.
+function volumePart(
   dto: FemMesh,
-  // The mesh request: the property table and the suppressed bodies, as the
-  // app sends them (VolumeMeshPayload; absent: none), and the Shell bodies.
-  request: Pick<VolumeMeshPayload, "properties" | "suppressedBodyIds"> & {
-    shellBodyIds: Set<number>;
-  },
-  log: (line: string) => void,
-): StoredMesh {
-  const shellRoutes = dto.shellRoutes ?? [];
+  suppressed: ReadonlySet<number>,
+): VolumeMeshParts<Node, Element> {
   // The store models nodes/elements as object lists; build them here from
   // the flat arrays (plain JS, no parsing — cheap relative to meshing).
-  const meshNodes: Node[] = new Array<Node>(dto.vertices.length / 3);
-  for (let i = 0; i < meshNodes.length; i++)
-    meshNodes[i] = {
+  const nodes: Node[] = new Array<Node>(dto.vertices.length / 3);
+  for (let i = 0; i < nodes.length; i++)
+    nodes[i] = {
       id: i,
       x: dto.vertices[3 * i],
       y: dto.vertices[3 * i + 1],
       z: dto.vertices[3 * i + 2],
     };
-  const meshElements: Element[] = new Array<Element>(dto.tetrahedra.length / 4);
-  for (let i = 0; i < meshElements.length; i++)
-    meshElements[i] = {
+  const elements: Element[] = new Array<Element>(dto.tetrahedra.length / 4);
+  for (let i = 0; i < elements.length; i++)
+    elements[i] = {
       id: i,
       type: "CTETRA",
       nodeIds: Array.from(dto.tetrahedra.subarray(4 * i, 4 * i + 4)),
@@ -95,38 +102,33 @@ export function storedMesh(
       // the store's properties at solve time (#353).
       propertyId: dto.bodyIds[i],
     };
+  return dropSuppressedBodies(
+    {
+      nodes,
+      elements,
+      surfaceTriangles: chunk3(dto.surfaceTriangles),
+      surfaceFaceIds: Array.from(dto.surfaceFaceIds),
+    },
+    suppressed,
+  );
+}
 
-  const suppressed = new Set(request.suppressedBodyIds ?? []);
+// The volume part plus the Shell body, on whichever path the engine took.
+function withShellBody(
+  volume: VolumeMeshParts<Node, Element>,
+  dto: FemMesh,
+  request: MeshRequest,
+  log: (line: string) => void,
+): StoredMesh {
+  const shellRoutes = dto.shellRoutes ?? [];
   const properties = request.properties ?? [];
   const { midSurface } = dto;
-  // On the CAD path the volume part holds only the bodies not meshed as a
-  // mid-surface: none, or only suppressed ones, leaves an empty volume part
-  // next to the shell, not an empty model.
-  const volume =
-    midSurface &&
-    meshElements.every((element) => suppressed.has(element.propertyId))
-      ? { nodes: [], elements: [], surfaceTriangles: [], surfaceFaceIds: [] }
-      : dropSuppressedBodies(
-          {
-            nodes: meshNodes,
-            elements: meshElements,
-            surfaceTriangles: chunk3(dto.surfaceTriangles),
-            surfaceFaceIds: Array.from(dto.surfaceFaceIds),
-          },
-          suppressed,
-        );
-  const { nodes, elements, surfaceTriangles, surfaceFaceIds } = volume;
-  if (suppressed.size > 0)
-    log(
-      `Suppressed bodies ${[...suppressed].join(", ")} left out: ${nodes.length} nodes, ${elements.length} elements remain`,
-    );
-
   if (midSurface) {
     const model = inStage("shell_idealisation", () =>
       buildCadShellModel(volume, midSurface, properties),
     );
     log(
-      `[shell] CAD mid-surface: ${model.links.facets.length} shell facets, ${elements.length} tetrahedra`,
+      `[shell] CAD mid-surface: ${model.links.facets.length} shell facets, ${volume.elements.length} tetrahedra`,
     );
     return {
       nodes: model.nodes,
@@ -141,22 +143,35 @@ export function storedMesh(
 
   const mixed = inStage("shell_idealisation", () =>
     buildMeshTimeShellModel(
-      nodes,
-      elements,
-      surfaceTriangles,
-      surfaceFaceIds,
+      volume.nodes,
+      volume.elements,
+      volume.surfaceTriangles,
+      volume.surfaceFaceIds,
       request.shellBodyIds,
       properties,
       log,
     ),
   );
   if (mixed) return { ...mixed, shellRoutes, midSurfaceLinks: null };
-  return {
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    shellRoutes,
-    midSurfaceLinks: null,
-  };
+  return { ...volume, shellRoutes, midSurfaceLinks: null };
+}
+
+export function storedMesh(
+  dto: FemMesh,
+  // The mesh request: the property table and the suppressed bodies, as the
+  // app sends them (VolumeMeshPayload; absent: none), and the Shell bodies.
+  request: MeshRequest,
+  log: (line: string) => void,
+): StoredMesh {
+  const suppressed = new Set(request.suppressedBodyIds ?? []);
+  const volume = volumePart(dto, suppressed);
+  if (suppressed.size > 0)
+    log(
+      `Suppressed bodies ${[...suppressed].join(", ")} left out: ${volume.nodes.length} nodes, ${volume.elements.length} elements remain`,
+    );
+  const stored = withShellBody(volume, dto, request, log);
+  if (stored.elements.length > 0) return stored;
+  if (suppressed.size === 0)
+    throw new Error("storedMesh: the engine returned a mesh without elements");
+  throw new Error(tr(meshMessages).allSuppressed([...suppressed].join(", ")));
 }
