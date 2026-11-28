@@ -6,7 +6,6 @@
 // CAD mid-surface of a Shell body (KOF-498).
 
 import { describe, expect, test } from "bun:test";
-import type { FemMesh } from "../../src/wasm/pkg/kofem_wasm";
 import { storedMesh } from "../../src/lib/storedMesh";
 import { dropSuppressedBodies } from "../../src/lib/suppressBodies";
 
@@ -43,6 +42,7 @@ const properties = [
   { id: 2, materialId: 1 },
 ];
 const quiet = () => undefined;
+type FemMesh = Parameters<typeof storedMesh>[0];
 
 describe("suppressed bodies", () => {
   test("leaving every element out of a volume part leaves it empty", () => {
