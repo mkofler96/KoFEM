@@ -106,7 +106,8 @@ impl FemError {
             | Self::LoadWithoutStiffness { .. }
             | Self::EmptyShellMesh
             | Self::Thickness { .. }
-            | Self::Contact { .. } => InvalidInput,
+            | Self::Contact { .. }
+            | Self::PartialHexTetInterface { .. } => InvalidInput,
             Self::VertexArrayLength { .. }
             | Self::TetArrayLength { .. }
             | Self::VertexOutOfRange { .. }
@@ -138,7 +139,8 @@ impl FemError {
             | Self::TopologyInput { .. }
             | Self::Convergence { .. }
             | Self::NewtonUnfinished { .. }
-            | Self::NonlinearInput { .. } => Internal,
+            | Self::NonlinearInput { .. }
+            | Self::PointOutsideElement { .. } => Internal,
         }
     }
 }

@@ -103,6 +103,29 @@ fn the_model_and_the_app_are_told_apart() {
     );
 }
 
+/// KOF-433: a hex face that tets meet on one half only is the user's mesh to
+/// fix; a probe point outside its element is the app's mistake.
+#[test]
+fn hex_tet_interface_and_probe_errors_are_classed() {
+    assert_eq!(
+        FemError::PartialHexTetInterface {
+            hex: 3,
+            face: 1,
+            triangles: 1
+        }
+        .class(),
+        FailureClass::InvalidInput
+    );
+    assert_eq!(
+        FemError::PointOutsideElement {
+            element: 2,
+            point: [0.0, 1.0, 2.0]
+        }
+        .class(),
+        FailureClass::Internal
+    );
+}
+
 #[test]
 fn the_class_reaches_the_browser_as_a_category_and_a_reason() {
     let singular = FailureClass::Numerical(NumericalReason::SingularMatrix);
