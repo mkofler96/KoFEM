@@ -151,6 +151,7 @@ describe("an entry on the lower face follows it onto a new mesh", () => {
         loadGroups: [pressureGroup(8)],
         tieGroups: [],
         couplingGroups: [],
+        contactGroups: [],
       },
       [
         [0, 1, 4],
