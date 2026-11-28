@@ -104,7 +104,7 @@ test("a face picked in the Mesh step meshes at its own size, and keeps it throug
   page,
 }) => {
   await importStepText(page, STRIP);
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByTestId("max-element-size").fill("5");
   await page.getByTestId("min-element-size").fill("0.1");
 
@@ -159,10 +159,7 @@ test("a face picked in the Mesh step meshes at its own size, and keeps it throug
   await page
     .locator('input[type="file"][accept=".vtu,.zip"]')
     .setInputFiles(file);
-  // Wait for the loaded mesh itself: openTree reads the tree once, and while
-  // the file still loads it would pick Mesh → Add, which the loaded mesh then
-  // replaces.
-  await page.getByTestId("tree-mesh-1").click();
+  await openTree(page, "mesh");
   await expect(page.getByTestId(`mesh-face-size-${hole}`)).toHaveText(
     "max 0.5 mm",
   );
@@ -174,7 +171,7 @@ test("removing the face size meshes as before (KOF-394) @pipeline", async ({
   page,
 }) => {
   await importStepText(page, STRIP);
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByTestId("max-element-size").fill("5");
   await page.getByTestId("min-element-size").fill("0.1");
   await generate(page);
@@ -199,7 +196,7 @@ test("a face size that is not a positive number is refused when meshing (KOF-394
   page,
 }) => {
   await importStepText(page, STRIP);
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByTestId("max-element-size").fill("5");
   await page.getByTestId("min-element-size").fill("0.1");
   await page.getByTestId("face-size-pick").click();

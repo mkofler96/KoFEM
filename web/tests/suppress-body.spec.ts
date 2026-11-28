@@ -11,7 +11,7 @@ import path from "path";
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { gotoApp, importStep } from "./fixtures/app";
-import { openBody, openTree } from "./fixtures/tree";
+import { openBody, openTree, type MeshEntry } from "./fixtures/tree";
 
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
 
@@ -35,9 +35,9 @@ const state = (page: Page) =>
     };
   });
 
-async function mesh(page: Page): Promise<void> {
+async function mesh(page: Page, entry: MeshEntry): Promise<void> {
   const before = (await state(page)).generation;
-  await openTree(page, "mesh");
+  await openTree(page, entry);
   await page
     .getByRole("button")
     .filter({ hasText: /generate mesh/i })
@@ -51,7 +51,7 @@ test("a suppressed body is left out of the mesh and comes back when unsuppressed
   page,
 }) => {
   await importStep(page, TWO_BOXES);
-  await mesh(page);
+  await mesh(page, "add-mesh");
   const full = await state(page);
   expect(full.bodies).toEqual([1, 2]);
 
@@ -65,7 +65,7 @@ test("a suppressed body is left out of the mesh and comes back when unsuppressed
     page.getByText("Re-mesh: suppressed Body 2 still in the mesh"),
   ).toBeVisible();
 
-  await mesh(page);
+  await mesh(page, "mesh");
   const without = await state(page);
   expect(without.bodies).toEqual([1]);
   expect(without.nodes).toBeLessThan(full.nodes);
@@ -82,7 +82,7 @@ test("a suppressed body is left out of the mesh and comes back when unsuppressed
   await expect(
     page.getByText("Re-mesh: restored Body 2 not in the mesh"),
   ).toBeVisible();
-  await mesh(page);
+  await mesh(page, "mesh");
   expect((await state(page)).bodies).toEqual([1, 2]);
 });
 
@@ -93,7 +93,7 @@ test("a suppression made after meshing still blocks the solve after save and loa
   page,
 }) => {
   await importStep(page, TWO_BOXES);
-  await mesh(page);
+  await mesh(page, "add-mesh");
   await openBody(page, 2);
   await page.getByTestId("body-suppressed-2").check();
 

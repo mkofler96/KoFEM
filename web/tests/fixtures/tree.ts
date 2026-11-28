@@ -45,21 +45,29 @@ async function openStudy(page: Page, kind: StudyKind): Promise<void> {
   );
 }
 
-// Open a step's editor: the mesh controls (the mesh, or Mesh → + Add before
-// there is one), the split tool (an edit of Body 1), or a study.
+// The mesh controls: "add-mesh" is Mesh → + Add, before the model has a mesh;
+// "mesh" is the mesh's own entry. The caller says which, because a mesh can
+// still be on its way (an opened analysis, a meshing that finishes) and replaces
+// + Add when it lands: a choice read off the tree of the moment clicks + Add
+// just before it goes, and waits for it forever (KOF-482).
+export type MeshEntry = "add-mesh" | "mesh";
+
+// Open a step's editor: the mesh controls, the split tool (an edit of Body 1),
+// or a study.
 export async function openTree(
   page: Page,
-  view: "split" | "mesh" | StudyKind,
+  view: "split" | MeshEntry | StudyKind,
 ): Promise<void> {
   if (view === "split") {
     await openBody(page, 1);
     return;
   }
+  if (view === "add-mesh") {
+    await page.getByTestId("tree-add-mesh").click();
+    return;
+  }
   if (view === "mesh") {
-    const mesh = page.getByTestId("tree-mesh-1");
-    await (
-      (await mesh.count()) > 0 ? mesh : page.getByTestId("tree-add-mesh")
-    ).click();
+    await page.getByTestId("tree-mesh-1").click();
     return;
   }
   await openStudy(page, view);

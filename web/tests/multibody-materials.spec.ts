@@ -13,6 +13,7 @@ import {
   openBody,
   openTree,
   setElementType,
+  type MeshEntry,
 } from "./fixtures/tree";
 
 interface Store {
@@ -41,7 +42,7 @@ const store = (page: import("@playwright/test").Page) =>
 async function importAndMeshFin(page: import("@playwright/test").Page) {
   await importStep(page, FIN_TWO_PARTS);
   await setElementType(page, 2, "shell");
-  await meshOnce(page);
+  await meshOnce(page, "add-mesh");
 }
 
 // applyMeshResult bumps fitViewTrigger, so waiting for it to advance pins the
@@ -57,9 +58,12 @@ const meshGeneration = (page: import("@playwright/test").Page) =>
       ).__kofemStore.getState().fitViewTrigger,
   );
 
-async function meshOnce(page: import("@playwright/test").Page) {
+async function meshOnce(
+  page: import("@playwright/test").Page,
+  entry: MeshEntry,
+) {
   const before = await meshGeneration(page);
-  await openTree(page, "mesh");
+  await openTree(page, entry);
   await page
     .getByRole("button")
     // "Generate mesh" before the first mesh, "Regenerate mesh" after.
@@ -260,7 +264,7 @@ test("a shell-idealised body stays one row that still owns its walls @pipeline",
 
   // Re-meshing rebuilds the sections instead of appending a second set: the
   // walls of the previous mesh no longer exist.
-  await meshOnce(page);
+  await meshOnce(page, "mesh");
   const remeshed = await store(page);
   expect(
     remeshed.properties.filter((p) => p.sourceBodyId === undefined),
