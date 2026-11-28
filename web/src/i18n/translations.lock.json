@@ -6055,6 +6055,62 @@
     "es": "451536f65e85",
     "pt": "b1016f81b706"
   },
+  "results.ts:resultsMessages.peakAt": {
+    "en": "c5c6a810f23c",
+    "de": "f5e77d1abaf0",
+    "fr": "098fe9498128",
+    "it": "769f4b6b4ffc",
+    "es": "c0c569234f3c",
+    "pt": "b0f5f82e60bc"
+  },
+  "results.ts:resultsMessages.peakElement": {
+    "en": "68e50fd4fb98",
+    "de": "7b9014f3281d",
+    "fr": "9812afc42fc6",
+    "it": "cf02a76b6a0a",
+    "es": "e04eeab36f1e",
+    "pt": "943ac2e3d856"
+  },
+  "results.ts:resultsMessages.peakLoad": {
+    "en": "bc7b279c2d25",
+    "de": "877dba04eb5e",
+    "fr": "d0bc439f1e58",
+    "it": "66125d2bd00c",
+    "es": "a652252386a0",
+    "pt": "cfadb6d0910a"
+  },
+  "results.ts:resultsMessages.peakOnBoundary": {
+    "en": "048c67fe08e5",
+    "de": "78ea53fa8c74",
+    "fr": "6702402487b5",
+    "it": "0ab99d4a3d32",
+    "es": "50fb0b9ac27f",
+    "pt": "a4a36bd50de2"
+  },
+  "results.ts:resultsMessages.peakSupport": {
+    "en": "456e7b5e5726",
+    "de": "54260da072c1",
+    "fr": "03e2cd8ffc2a",
+    "it": "d98ec17b05e5",
+    "es": "b84045c0dc98",
+    "pt": "f96f07b38988"
+  },
+  "results.ts:resultsMessages.peakUnknownNode": {
+    "en": "760898e5d0df",
+    "de": "c2b58b95c2b2",
+    "fr": "47afcd596e56",
+    "it": "e33fde6d50de",
+    "es": "3c57f7a6311b",
+    "pt": "c6530b3d70d2"
+  },
+  "results.ts:resultsMessages.peakUnreadable": {
+    "en": "cf418a4649b6",
+    "de": "7a594427c1db",
+    "fr": "f350b85d6f09",
+    "it": "edee5f39e156",
+    "es": "9317bda7ceb7",
+    "pt": "4a4fff756e2a"
+  },
   "results.ts:resultsMessages.percentile": {
     "en": "51d85195c417",
     "de": "51d85195c417",
@@ -6310,6 +6366,14 @@
     "it": "5ad878014c46",
     "es": "59717f1e5dd1",
     "pt": "318cf8520f15"
+  },
+  "results.ts:resultsMessages.show": {
+    "en": "2f3072b5d23b",
+    "de": "970fa1d71c72",
+    "fr": "93c6aac09986",
+    "it": "220e35a87e7e",
+    "es": "f5a93d30389d",
+    "pt": "f5a93d30389d"
   },
   "results.ts:resultsMessages.showRangeOnCut": {
     "en": "c42eb4547051",

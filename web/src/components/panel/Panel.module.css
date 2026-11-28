@@ -1353,6 +1353,41 @@ label.sectionHeadAction {
   display: block;
 }
 
+.peakRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 3px 0;
+}
+.peakRow .statVal {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.peakShow {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-family: inherit;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.peakShow:hover {
+  background: var(--hover);
+}
+.peakNote {
+  margin: 4px 0 10px;
+  padding: 6px 10px;
+  background: var(--warn-soft);
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
 /* Results → Reactions (KOF-387): a table of each support's force, the sum of
    the reactions and the applied load, then the balance check. */
 .reactionTable {
