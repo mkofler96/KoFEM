@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // KOF-497: after meshing, the Mesh step shows each body's mean element edge
-// length next to the max-size setting, and its volume and mass. The axial-bar
-// example is a 1000 × 100 × 100 mm steel bar: 1.00e7 mm³, 78.5 kg.
+// length, volume and mass. The axial-bar example is a 1000 × 100 × 100 mm
+// steel bar: 1.00e7 mm³, 78.5 kg.
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
@@ -49,8 +49,6 @@ test("the mesh step shows each body's mean edge, volume and mass @pipeline", asy
     await page.getByTestId("mesh-body-1-edge").textContent(),
   );
   expect(Math.abs(edge / regular - 1)).toBeLessThan(0.1);
-  // The same number stands next to the max-size field.
-  await expect(page.getByTestId("mesh-mean-edge")).toContainText(`${edge} mm`);
 });
 
 test("a body whose material has no density shows no mass @pipeline", async ({

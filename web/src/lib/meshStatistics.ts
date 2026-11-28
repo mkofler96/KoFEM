@@ -30,19 +30,22 @@ function solidOf(property: Property): number {
 
 // The density a body's mass is taken from, or none: a material nobody chose
 // (materialUnconfirmed) or one that no longer exists gives no density, never
-// a default one. A density of zero reaches Rust, which reads it as none.
+// a default one. The material store keeps 0 for a density not set.
 function densityOf(
   property: Property,
   materials: readonly Material[],
 ): number | undefined {
   if (property.materialUnconfirmed) return undefined;
-  return materials.find((m) => m.id === property.materialId)?.density;
+  const density = materials.find((m) => m.id === property.materialId)?.density;
+  return density === undefined || density === 0 ? undefined : density;
 }
+
+// The mesh stores corners only; the solver adds the quadratic nodes.
+const CORNERS = { CTETRA: 4, CHEXA: 8, CTRIA3: 3 } as const;
 
 /**
  * The mean element edge length, volume and mass of every body with elements,
- * in body id order. Elements are packed with their own node count (4 per
- * tetrahedron, 8 per hexahedron, as the mesh stores them).
+ * in body id order.
  */
 export function meshBodyStatistics(
   nodes: readonly Node[],
@@ -67,13 +70,21 @@ export function meshBodyStatistics(
   const facets: number[] = [];
   const facetBodies: number[] = [];
   const thicknesses: number[] = [];
-  let tetNodes = 4;
-  let hexNodes = 8;
   for (const element of elements) {
     const property = propertyById.get(element.propertyId);
     if (property === undefined)
       throw new Error(
         text.statisticsUnknownProperty(element.id, element.propertyId),
+      );
+    const corners = CORNERS[element.type];
+    if (element.nodeIds.length !== corners)
+      throw new Error(
+        text.statisticsNodeCount(
+          element.id,
+          element.type,
+          element.nodeIds.length,
+          corners,
+        ),
       );
     const at = element.nodeIds.map((id) => {
       const i = index.get(id);
@@ -83,11 +94,9 @@ export function meshBodyStatistics(
     });
     const body = solidOf(property);
     if (element.type === "CTETRA") {
-      tetNodes = at.length;
       tets.push(...at);
       tetBodies.push(body);
     } else if (element.type === "CHEXA") {
-      hexNodes = at.length;
       hexes.push(...at);
       hexBodies.push(body);
     } else {
@@ -110,9 +119,9 @@ export function meshBodyStatistics(
   const stats = rustBodyStatistics(
     points,
     Uint32Array.from(tets),
-    tetNodes,
+    CORNERS.CTETRA,
     Uint32Array.from(hexes),
-    hexNodes,
+    CORNERS.CHEXA,
     Uint32Array.from(facets),
     Float64Array.from(thicknesses),
     Uint32Array.from([...tetBodies, ...hexBodies, ...facetBodies]),

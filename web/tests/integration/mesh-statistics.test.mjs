@@ -96,6 +96,21 @@ describe("meshBodyStatistics", () => {
     ).toThrow(/99/);
   });
 
+  test("refuses an element with other than its corner nodes", () => {
+    const quadratic = {
+      ...tet(1),
+      nodeIds: [10, 11, 12, 13, 20, 21, 22, 10, 11, 12],
+    };
+    expect(() =>
+      meshBodyStatistics(
+        nodes,
+        [tet(1), quadratic],
+        [{ id: 1, materialId: 1 }],
+        [STEEL],
+      ),
+    ).toThrow(/10 nodes/);
+  });
+
   test("refuses a shell facet whose section has no thickness", () => {
     expect(() =>
       meshBodyStatistics(

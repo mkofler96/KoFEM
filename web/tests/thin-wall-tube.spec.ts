@@ -4,8 +4,7 @@
 // KOF-312: a thin-walled tube meshed with linear elements gets the thin-wall
 // pre-flight warning. A tube has no opposite planar faces, so only the
 // curved-wall pass finds it. Shell collapses curved walls too (KOF-448), so
-// the advice offers it as for a flat wall. The Mesh step's mean edge length
-// (KOF-497) sits beside it without repeating the warning.
+// the advice offers it as for a flat wall.
 
 import { test, expect } from "./coverage";
 import { annulusStep } from "../../examples/gallery/step-prism.mjs";

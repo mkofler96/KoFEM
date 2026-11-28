@@ -219,11 +219,10 @@ fn a_body_without_a_density_has_no_mass() {
         hexes: &hexes,
         ..mesh(&points, &bodies)
     };
-    // Body 1 has a material of density zero, body 2 no density at all.
-    let stats = body_statistics(&input, &[(1, 0.0)]).unwrap();
+    let stats = body_statistics(&input, &[(2, STEEL)]).unwrap();
     assert_eq!(stats[0].mass, None);
-    assert_eq!(stats[1].mass, None);
     close(stats[0].volume, 1.0);
+    close(stats[1].mass.unwrap(), STEEL);
 }
 
 /// Whether `input` is refused as invalid with a reason that names `about`.
@@ -274,6 +273,7 @@ fn malformed_input_is_rejected() {
         "node"
     ));
     assert!(rejected(&tets, &[(1, -1.0)], "density"));
+    assert!(rejected(&tets, &[(1, 0.0)], "density"));
     assert!(rejected(&tets, &[(1, f64::NAN)], "density"));
     assert!(rejected(&tets, &[(1, STEEL), (1, STEEL)], "twice"));
     let shell = BodyMesh {

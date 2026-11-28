@@ -1,16 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! What the Mesh step lists per body (KOF-497): the mean element edge length,
-//! the volume, and the mass from the body's density.
+//! Per-body mesh statistics (KOF-497): mean element edge length, volume, mass.
 //!
-//! On a thin wall the mesh is much finer than the max-size setting, so the
-//! mean edge length says what a size change really does. It is the mean over
-//! the body's distinct element edges, each counted once however many elements
-//! share it. The volume is that of the elements the solver integrates: its
-//! quadratic elements are subparametric, their geometry the straight-sided
-//! tetrahedron or trilinear hexahedron on their corners, so a body's volume
-//! and edges do not depend on the element order.
+//! Each distinct edge counts once per body, however many of its elements share
+//! it. Volumes and edges are taken from the corners: the solver's quadratic
+//! elements are subparametric, so they have the geometry of their corners.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -67,14 +62,13 @@ fn invalid(reason: String) -> FemError {
 
 /// The numbers of every body with elements in `mesh`, by body id. A body's
 /// mass is its volume times its entry in `densities` (body, density); a body
-/// without an entry, or with a density of zero (a material saved without one),
-/// has no mass rather than a mass of zero.
+/// without an entry has no mass.
 ///
 /// # Errors
 /// [`FemError::MeshStatisticsInput`] for an unsupported node count, a
 /// connectivity that is not whole elements or names a missing node, a body or
-/// thickness count that does not match the elements, a negative or non-finite
-/// density, or a body given two densities.
+/// thickness count that does not match the elements, a density that is not
+/// positive and finite, or a body given two densities.
 pub fn body_statistics(
     mesh: &BodyMesh,
     densities: &[(u32, f64)],
@@ -160,10 +154,7 @@ pub fn body_statistics(
                 elements: totals.elements,
                 mean_edge_length: length / count_as_f64(totals.edges.len()),
                 volume: totals.volume,
-                mass: density_of
-                    .get(&body)
-                    .filter(|&&density| density > 0.0)
-                    .map(|density| density * totals.volume),
+                mass: density_of.get(&body).map(|density| density * totals.volume),
             }
         })
         .collect())
@@ -172,9 +163,9 @@ pub fn body_statistics(
 fn check_densities(densities: &[(u32, f64)]) -> Result<BTreeMap<u32, f64>, FemError> {
     let mut by_body = BTreeMap::new();
     for &(body, density) in densities {
-        if !(density.is_finite() && density >= 0.0) {
+        if !(density.is_finite() && density > 0.0) {
             return Err(invalid(format!(
-                "body {body}: a density must be zero or positive, not {density}"
+                "body {body}: a density must be positive, not {density}"
             )));
         }
         if by_body.insert(body, density).is_some() {

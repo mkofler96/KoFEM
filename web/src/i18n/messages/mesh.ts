@@ -1069,14 +1069,6 @@ export const meshMessages = defineMessages({
     es: "Longitud media de las aristas de los elementos en la malla de este cuerpo. En paredes delgadas queda muy por debajo del tamaño máx.",
     pt: "Comprimento médio das arestas dos elementos na malha deste corpo. Em paredes finas fica bem abaixo do tamanho máx.",
   },
-  currentMeanEdge: {
-    en: (edge: string) => `Current mesh: mean edge ${edge} mm`,
-    de: (edge: string) => `Aktuelles Netz: mittlere Kante ${edge} mm`,
-    fr: (edge: string) => `Maillage actuel : arête moyenne ${edge} mm`,
-    it: (edge: string) => `Mesh attuale: lato medio ${edge} mm`,
-    es: (edge: string) => `Malla actual: arista media ${edge} mm`,
-    pt: (edge: string) => `Malha atual: aresta média ${edge} mm`,
-  },
   volume: {
     en: "Volume",
     de: "Volumen",
@@ -1144,6 +1136,20 @@ export const meshMessages = defineMessages({
       `el elemento ${element} pertenece al cuerpo ${property}, que el modelo no tiene`,
     pt: (element: number, property: number) =>
       `o elemento ${element} pertence ao corpo ${property}, que o modelo não tem`,
+  },
+  statisticsNodeCount: {
+    en: (element: number, type: string, count: number, corners: number) =>
+      `${type} element ${element} has ${count} nodes; the mesh stores its ${corners} corners`,
+    de: (element: number, type: string, count: number, corners: number) =>
+      `${type}-Element ${element} hat ${count} Knoten; das Netz speichert seine ${corners} Ecken`,
+    fr: (element: number, type: string, count: number, corners: number) =>
+      `l'élément ${type} ${element} a ${count} nœuds ; le maillage stocke ses ${corners} sommets`,
+    it: (element: number, type: string, count: number, corners: number) =>
+      `l'elemento ${type} ${element} ha ${count} nodi; la mesh memorizza i suoi ${corners} vertici`,
+    es: (element: number, type: string, count: number, corners: number) =>
+      `el elemento ${type} ${element} tiene ${count} nodos; la malla guarda sus ${corners} vértices`,
+    pt: (element: number, type: string, count: number, corners: number) =>
+      `o elemento ${type} ${element} tem ${count} nós; a malha guarda seus ${corners} vértices`,
   },
   statisticsNoThickness: {
     en: (element: number) =>

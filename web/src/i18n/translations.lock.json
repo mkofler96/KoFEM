@@ -2583,14 +2583,6 @@
     "es": "8edc3ff51f2b",
     "pt": "f42481d05f41"
   },
-  "mesh.ts:meshMessages.currentMeanEdge": {
-    "en": "1841bd4242da",
-    "de": "39a9658ee80a",
-    "fr": "30aa9f2b411f",
-    "it": "4e6c6e4a45fe",
-    "es": "f8b9faaf59e9",
-    "pt": "018f3bf1c767"
-  },
   "mesh.ts:meshMessages.droppedEntry": {
     "en": "9ce5794dae36",
     "de": "9ce5794dae36",
@@ -3246,6 +3238,14 @@
     "it": "c3479b0e8697",
     "es": "12829c38c36c",
     "pt": "00f3ce6e4c49"
+  },
+  "mesh.ts:meshMessages.statisticsNodeCount": {
+    "en": "c02d168af72c",
+    "de": "021dda13d869",
+    "fr": "84e7e948b6bb",
+    "it": "1572571eb0fd",
+    "es": "1923d5d0db21",
+    "pt": "a59f563cac9c"
   },
   "mesh.ts:meshMessages.statisticsUnknownNode": {
     "en": "33977f4144af",

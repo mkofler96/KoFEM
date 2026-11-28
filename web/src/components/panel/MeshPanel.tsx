@@ -50,8 +50,6 @@ function formatEstimate(measure: GeometryMeasure, size: string): string | null {
   return `${Math.round(count)}`;
 }
 
-// Three significant digits, as the model extent: enough to compare a mean edge
-// with the max size, or a mass with the real part's.
 function formatNumber(value: number, intlTag: string): string {
   return value.toLocaleString(intlTag, { maximumSignificantDigits: 3 });
 }
@@ -62,19 +60,6 @@ function formatMass(tonnes: number, intlTag: string): string {
   return kg >= 1
     ? `${formatNumber(kg, intlTag)} kg`
     : `${formatNumber(kg * 1000, intlTag)} g`;
-}
-
-// The mean edge of the current mesh as the max-size field's neighbour reads
-// it: one number, or the span over the bodies when they differ.
-function formatMeanEdges(
-  bodies: BodyMeshStatistics[],
-  intlTag: string,
-): string | null {
-  if (bodies.length === 0) return null;
-  const edges = bodies.map((b) => b.meanEdgeLength);
-  const low = formatNumber(Math.min(...edges), intlTag);
-  const high = formatNumber(Math.max(...edges), intlTag);
-  return low === high ? low : `${low}–${high}`;
 }
 
 function formatSizes({ max, min }: MeshSizes, text: MeshText): string {
@@ -149,12 +134,7 @@ export function MeshPanel() {
       {hasMesh && <MeshSummary statistics={statistics} />}
 
       {stepSurface ? (
-        <MeshSettings
-          hasMesh={hasMesh}
-          isMeshing={isMeshing}
-          mesh={mesh}
-          statistics={statistics}
-        />
+        <MeshSettings hasMesh={hasMesh} isMeshing={isMeshing} mesh={mesh} />
       ) : hasMesh ? (
         // A mesh with no geometry behind it (no example ships one; a model
         // opened from elsewhere can) cannot be re-meshed. Say so instead of
@@ -185,8 +165,7 @@ export function MeshPanel() {
   );
 }
 
-// What the current mesh is: its size, the element sizes it was made with, and
-// each body's mean edge, volume and mass (KOF-497).
+// What the current mesh is: its size and the element sizes it was made with.
 function MeshSummary({
   statistics,
 }: {
@@ -293,8 +272,6 @@ function MeshSummary({
   );
 }
 
-// One body's mean edge, volume and mass. A body without a density says so
-// instead of showing a mass of zero.
 function BodyStatisticsRows({
   name,
   statistics: { body, meanEdgeLength, volume, mass },
@@ -347,12 +324,10 @@ function MeshSettings({
   hasMesh,
   isMeshing,
   mesh,
-  statistics,
 }: {
   hasMesh: boolean;
   isMeshing: boolean;
   mesh: MeshControls;
-  statistics: MeshStatisticsReading | null;
 }) {
   const isRunning = useModelStore((s) => s.isRunning);
   const meshSizes = useModelStore((s) => s.meshSizes);
@@ -364,7 +339,6 @@ function MeshSettings({
   );
   const engine = useEngineGate();
   const text = useT(meshMessages);
-  const intlTag = useIntlTag();
   const {
     elementOrder,
     setElementOrder,
@@ -395,10 +369,6 @@ function MeshSettings({
   const ownSize = hasSeveralSolids(properties)
     ? solidsWithOwnSize(properties)
     : [];
-  const meanEdge =
-    hasMesh && statistics?.kind === "value"
-      ? formatMeanEdges(statistics.bodies, intlTag)
-      : null;
 
   return (
     <>
@@ -423,15 +393,6 @@ function MeshSettings({
         />
         <span className={styles.toleranceUnit}>mm</span>
       </div>
-      {meanEdge && (
-        <div
-          className={styles.hint}
-          data-testid="mesh-mean-edge"
-          title={text.meanEdgeTip}
-        >
-          {text.currentMeanEdge(meanEdge)}
-        </div>
-      )}
       {ownSize.length > 0 && (
         <div className={styles.applyAll}>
           <button
