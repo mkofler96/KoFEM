@@ -49,6 +49,7 @@ pub mod sparse;
 pub mod static_solve;
 pub mod stress;
 pub mod surface;
+pub mod tet_quality;
 pub mod thermal;
 pub mod tie;
 pub mod topology;
@@ -100,6 +101,7 @@ pub use static_solve::{
 };
 pub use stress::{corner_stress_tensors, stress_tensors, von_mises};
 pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};
+pub use tet_quality::{tet_quality, TetQuality};
 pub use thermal::{
     corner_stress_tensors_thermal, thermal_load, thermal_strain_at_centre,
     thermal_strains_at_centres,
