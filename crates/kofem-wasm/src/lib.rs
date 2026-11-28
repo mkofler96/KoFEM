@@ -15,6 +15,7 @@ mod convergence;
 mod failure;
 mod field;
 mod large_deformation;
+mod mesh_statistics;
 mod mixed;
 mod outline;
 mod report;
@@ -35,6 +36,7 @@ pub use convergence::{
 pub use failure::{record_panics, take_panic_message};
 pub use field::{check_field_expression, evaluate_field_expression};
 pub use large_deformation::{LargeDeformationRun, LargeDeformationSolution};
+pub use mesh_statistics::{mesh_body_statistics, MeshBodyStatistics};
 pub use mixed::MixedModel;
 pub use outline::{outer_faces, unique_edges, MeshOuterFaces};
 pub use report::report_stats;

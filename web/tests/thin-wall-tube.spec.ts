@@ -4,7 +4,8 @@
 // KOF-312: a thin-walled tube meshed with linear elements gets the thin-wall
 // pre-flight warning. A tube has no opposite planar faces, so only the
 // curved-wall pass finds it. Shell collapses curved walls too (KOF-448), so
-// the advice offers it as for a flat wall.
+// the advice offers it as for a flat wall. The Mesh step's mean edge length
+// (KOF-497) sits beside it without repeating the warning.
 
 import { test, expect } from "./coverage";
 import { annulusStep } from "../../examples/gallery/step-prism.mjs";
@@ -28,11 +29,14 @@ test("a thin tube with linear elements gets the thin-wall warning, with the Shel
   // The suggested element size, linear elements (the default).
   await meshButton.click();
   await expect(page.getByTestId("mesh-summary")).toBeVisible();
+  await expect(page.getByTestId("mesh-body-1-edge")).toContainText("mm");
+  await expect(page.getByText(/Thin wall/)).toHaveCount(0);
 
   await openTree(page, "static");
   const warning = page
     .getByTestId("check-fail")
     .filter({ hasText: "Thin wall on body 1" });
+  await expect(warning).toHaveCount(1);
   await expect(warning).toContainText("2.0 mm");
   await expect(warning).toContainText(
     "Use quadratic elements (Mesh panel) or set the body to Shell.",

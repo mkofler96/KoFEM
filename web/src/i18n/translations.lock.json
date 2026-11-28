@@ -2583,6 +2583,14 @@
     "es": "8edc3ff51f2b",
     "pt": "f42481d05f41"
   },
+  "mesh.ts:meshMessages.currentMeanEdge": {
+    "en": "1841bd4242da",
+    "de": "39a9658ee80a",
+    "fr": "30aa9f2b411f",
+    "it": "4e6c6e4a45fe",
+    "es": "f8b9faaf59e9",
+    "pt": "018f3bf1c767"
+  },
   "mesh.ts:meshMessages.droppedEntry": {
     "en": "9ce5794dae36",
     "de": "9ce5794dae36",
@@ -2767,6 +2775,14 @@
     "es": "6915f43c9147",
     "pt": "f28429085165"
   },
+  "mesh.ts:meshMessages.mass": {
+    "en": "f3384d9a9f12",
+    "de": "f2e797280850",
+    "fr": "f2e797280850",
+    "it": "48df13b0aa9c",
+    "es": "96d6051700bc",
+    "pt": "48df13b0aa9c"
+  },
   "mesh.ts:meshMessages.maxElementSize": {
     "en": "f3aa7a9e1eec",
     "de": "8923138fa1ed",
@@ -2798,6 +2814,22 @@
     "it": "f5f0e8c539d9",
     "es": "1d83aedec155",
     "pt": "39225e5f37ba"
+  },
+  "mesh.ts:meshMessages.meanEdge": {
+    "en": "51ef8a36af5e",
+    "de": "ceb9ae645d00",
+    "fr": "9fd0a75d6d00",
+    "it": "95e976e2eb6e",
+    "es": "eca4940c1fe3",
+    "pt": "2c00be14fdda"
+  },
+  "mesh.ts:meshMessages.meanEdgeTip": {
+    "en": "57a90698c9df",
+    "de": "2d00b92441e9",
+    "fr": "b0adb2475b0e",
+    "it": "bd7caac87f14",
+    "es": "f1adbe82aabf",
+    "pt": "6ae47355222f"
   },
   "mesh.ts:meshMessages.meshSettings": {
     "en": "d26465255da2",
@@ -2886,6 +2918,22 @@
     "it": "90a468b31d43",
     "es": "ef02d19694cb",
     "pt": "878ddc4b9e56"
+  },
+  "mesh.ts:meshMessages.noDensity": {
+    "en": "f3245ecc743c",
+    "de": "0335d4cb34a9",
+    "fr": "aacdd22479e4",
+    "it": "0589d5317973",
+    "es": "4692fd47e98c",
+    "pt": "f6049f5531a0"
+  },
+  "mesh.ts:meshMessages.noDensityTip": {
+    "en": "4b2b9ad7adbc",
+    "de": "ba0cbde04e72",
+    "fr": "7903f61d79c1",
+    "it": "221c0ac64ce3",
+    "es": "28430b9e3d48",
+    "pt": "7cde6a852434"
   },
   "mesh.ts:meshMessages.noFacePicked": {
     "en": "63a7a32d7399",
@@ -3191,6 +3239,38 @@
     "es": "32e6eb71a2bf",
     "pt": "2961883588af"
   },
+  "mesh.ts:meshMessages.statisticsNoThickness": {
+    "en": "0e6c6d25775e",
+    "de": "297f4fea86e8",
+    "fr": "64e39b563220",
+    "it": "c3479b0e8697",
+    "es": "12829c38c36c",
+    "pt": "00f3ce6e4c49"
+  },
+  "mesh.ts:meshMessages.statisticsUnknownNode": {
+    "en": "33977f4144af",
+    "de": "2068d90ccb36",
+    "fr": "68a971a43abb",
+    "it": "d11570b8ae60",
+    "es": "e12463b5568a",
+    "pt": "5c4907697447"
+  },
+  "mesh.ts:meshMessages.statisticsUnknownProperty": {
+    "en": "5436c77fb346",
+    "de": "3b67bfc71064",
+    "fr": "1dc8ca61cde0",
+    "it": "a1edf3b40e4a",
+    "es": "164d8fedeebf",
+    "pt": "8e702e7dfde8"
+  },
+  "mesh.ts:meshMessages.statisticsUnreadable": {
+    "en": "46ea3f1e4e53",
+    "de": "a62dfd12685a",
+    "fr": "16dcb6ea0769",
+    "it": "80e1b8147919",
+    "es": "8be7a9a8def7",
+    "pt": "7d6c8b6abae4"
+  },
   "mesh.ts:meshMessages.stopPickingFaces": {
     "en": "cdebac3599b4",
     "de": "e36af8e2be16",
@@ -3262,6 +3342,14 @@
     "it": "242146b05c8f",
     "es": "3cffc9ce34b4",
     "pt": "3fe6d352f09f"
+  },
+  "mesh.ts:meshMessages.volume": {
+    "en": "49c76fc49d2e",
+    "de": "be908f7bef13",
+    "fr": "49c76fc49d2e",
+    "it": "49c76fc49d2e",
+    "es": "be908f7bef13",
+    "pt": "49c76fc49d2e"
   },
   "mesh.ts:meshMessages.volumeMeshFailed": {
     "en": "7fdc9c32289c",
