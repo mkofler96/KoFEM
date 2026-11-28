@@ -17,6 +17,7 @@ import { track, workflowParams } from "../analytics";
 import { captureViews, type FigureImage, type ReportFigures } from "./figures";
 import { loadReportAssets } from "./assets";
 import { buildReport, type ReportStats } from "./buildReport";
+import { safetyFactors } from "../safetyFactor";
 import { renderReport } from "./renderReport";
 import { intlTag, tr } from "../../i18n/useLocale";
 import { reportMessages } from "../../i18n/messages/report";
@@ -73,7 +74,8 @@ export async function saveReport(): Promise<void> {
     elements,
     state.shellSurface,
   );
-  if (vonMises === null) throw new Error(text.noStress);
+  if (vonMises === null || result.vonMises === undefined)
+    throw new Error(text.noStress);
   const legend = state.reactionsShown
     ? reactionLegend(result, state.reactionsDisplay)
     : (fieldLegend(
@@ -105,6 +107,14 @@ export async function saveReport(): Promise<void> {
     meshSizes: state.meshSizes,
     result,
     stats: stats(result.displacements, vonMises),
+    // The yield strengths as they are now: setting one needs no new solve.
+    safety: safetyFactors(
+      result.vonMises,
+      nodes,
+      elements,
+      state.properties,
+      state.materials,
+    ),
     figures,
     assets,
     refinement: state.refinementStudy,

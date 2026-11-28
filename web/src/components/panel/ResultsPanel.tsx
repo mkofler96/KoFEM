@@ -25,6 +25,8 @@ import { isStressField, type ShellSurface } from "../../lib/stressFields";
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { useFieldPercentiles } from "../../hooks/useFieldPercentiles";
+import { useSafetyFactors } from "../../hooks/useSafetyFactors";
+import { SAFETY_PERCENTILE, safetyRowLabel } from "../../lib/safetyFactor";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
@@ -379,6 +381,78 @@ function PercentileRows({ symbol, unit }: { symbol: string; unit: string }) {
   ));
 }
 
+// A safety factor as Results shows it: three significant digits, ∞ where
+// nothing is stressed.
+const formatFactor = (factor: number): string =>
+  Number.isFinite(factor) ? factor.toPrecision(3) : "∞";
+
+// The safety factor against yield (KOF-496), for every material in use that
+// has a yield strength: one pair of rows for a model of one material, a pair
+// per body for a model of several. Nothing without a yield strength.
+function SafetyFactorSection() {
+  const readings = useSafetyFactors();
+  const properties = useModelStore((s) => s.properties);
+  const materials = useModelStore((s) => s.materials);
+  const text = useT(resultsMessages);
+  if (readings === null) return null;
+  if (readings.kind === "unreadable")
+    return (
+      <div className={styles.formNote}>
+        {text.safetyUnreadable(readings.reason)}
+      </div>
+    );
+  if (readings.rows.length === 0) return null;
+  return (
+    <div data-testid="safety-factors">
+      <div className={styles.sectionLabel}>{text.safetyFactor}</div>
+      {readings.rows.map((row) => {
+        const key = row.propertyId === null ? "model" : String(row.propertyId);
+        const title = safetyRowLabel(row, properties, materials);
+        const entries = [
+          {
+            id: "max",
+            label: text.safetyOnMax,
+            factor: row.maxFactor,
+            stress: row.maxVonMises,
+          },
+          {
+            id: "p99",
+            label: text.safetyOnPercentile(Math.round(SAFETY_PERCENTILE * 100)),
+            factor: row.p99Factor,
+            stress: row.p99VonMises,
+          },
+        ];
+        return (
+          <div key={key} data-testid={`safety-factor-${key}`}>
+            <div className={`${styles.formNote} ${styles.formNoteFull}`}>
+              {title}
+            </div>
+            {entries.map(({ id, label, factor, stress }) => (
+              <div
+                key={id}
+                className={styles.statRow}
+                title={text.safetyHint(
+                  String(row.yieldStrength),
+                  stress.toPrecision(4),
+                )}
+              >
+                <span className={styles.statKey}>{label}</span>
+                <span
+                  className={styles.statVal}
+                  data-testid={`safety-factor-${id}-${key}`}
+                  data-value={String(factor)}
+                >
+                  {formatFactor(factor)}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Result probes (KOF-389): the tool that places probes by clicking the model,
 // and a row per probe.
 function ProbeSection({ field }: { field: ResultType }) {
@@ -652,6 +726,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         <DeformScaleControl />
 
         {stats && <MinMaxSection field={resultType} />}
+
+        <SafetyFactorSection />
 
         <ProbeSection field={resultType} />
 

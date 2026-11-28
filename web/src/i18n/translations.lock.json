@@ -2439,6 +2439,30 @@
     "es": "603158a7e698",
     "pt": "603158a7e698"
   },
+  "materials.ts:materialsMessages.yieldInvalid": {
+    "en": "8b74ebe31f21",
+    "de": "aa79dc124625",
+    "fr": "5802ecccfa16",
+    "it": "89da61458068",
+    "es": "fdb89129396e",
+    "pt": "09e6c2e2c262"
+  },
+  "materials.ts:materialsMessages.yieldLabel": {
+    "en": "6ebabaac5d62",
+    "de": "c3f130cbe15f",
+    "fr": "415cdbbc2aec",
+    "it": "7237d6e4c040",
+    "es": "82d25760344f",
+    "pt": "f77f9dd0cf9b"
+  },
+  "materials.ts:materialsMessages.yieldTitle": {
+    "en": "7e40e35a58cd",
+    "de": "5f9164f7c701",
+    "fr": "568f9fb87966",
+    "it": "449417fbd057",
+    "es": "61e2b182e0c1",
+    "pt": "e42078b7f717"
+  },
   "materials.ts:materialsMessages.youngInvalid": {
     "en": "d555c9778007",
     "de": "9b5cfc80da79",
@@ -5199,6 +5223,30 @@
     "es": "ba2bb8a78b71",
     "pt": "36d97a44cf01"
   },
+  "report.ts:reportMessages.safetyMaterial": {
+    "en": "9557e451c82c",
+    "de": "9557e451c82c",
+    "fr": "9557e451c82c",
+    "it": "9557e451c82c",
+    "es": "9557e451c82c",
+    "pt": "9557e451c82c"
+  },
+  "report.ts:reportMessages.safetyOnMax": {
+    "en": "34b1c98d8c67",
+    "de": "db77ff4c80d0",
+    "fr": "9f1d0ff24069",
+    "it": "1240d76df019",
+    "es": "71b75ddee786",
+    "pt": "49011d85727c"
+  },
+  "report.ts:reportMessages.safetyOnP99": {
+    "en": "b9d10d7d6624",
+    "de": "034d5f540394",
+    "fr": "28e0bb78cb8d",
+    "it": "7266687cc679",
+    "es": "aea0682adaa2",
+    "pt": "ef1ae4d6affb"
+  },
   "report.ts:reportMessages.saveReport": {
     "en": "c4ae08be078e",
     "de": "1d7cb403b712",
@@ -6254,6 +6302,46 @@
     "it": "83fa27f517d7",
     "es": "f18b5f2213bf",
     "pt": "fd452e90ed1b"
+  },
+  "results.ts:resultsMessages.safetyFactor": {
+    "en": "95ed0babd7ad",
+    "de": "268211ee16e7",
+    "fr": "e62d320dece1",
+    "it": "32a9bf4f3c9c",
+    "es": "eeab5d7556bc",
+    "pt": "eeaf6243e81a"
+  },
+  "results.ts:resultsMessages.safetyHint": {
+    "en": "d074b4e10a0c",
+    "de": "2370c6ca28a2",
+    "fr": "551f8c0d2ccb",
+    "it": "12cb841e2067",
+    "es": "5d35b215065e",
+    "pt": "adbff6b2b04a"
+  },
+  "results.ts:resultsMessages.safetyOnMax": {
+    "en": "a006091c7d44",
+    "de": "32a346ceb4e6",
+    "fr": "e22654999cd1",
+    "it": "54d3451a9ec9",
+    "es": "bd10942fe25a",
+    "pt": "bd10942fe25a"
+  },
+  "results.ts:resultsMessages.safetyOnPercentile": {
+    "en": "96be85c43797",
+    "de": "73ec3c0c491a",
+    "fr": "0990e24fa31b",
+    "it": "53ef936c066b",
+    "es": "24b6d1a277b5",
+    "pt": "24b6d1a277b5"
+  },
+  "results.ts:resultsMessages.safetyUnreadable": {
+    "en": "0b6710d1c43a",
+    "de": "2a24cf77e2dd",
+    "fr": "d73a5ee2a0ca",
+    "it": "d4aa9ee3faa0",
+    "es": "6612f5a9e5c9",
+    "pt": "12a183e90946"
   },
   "results.ts:resultsMessages.sectionAxis": {
     "en": "f96cbac2f213",

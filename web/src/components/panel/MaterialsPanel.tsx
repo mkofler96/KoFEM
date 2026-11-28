@@ -37,6 +37,11 @@ function MaterialForm({
   const [expansion, setExpansion] = useState(
     mat?.expansion === undefined ? "" : String(mat.expansion),
   );
+  // Blank for a material without a yield strength; Results then show no
+  // safety factor for it.
+  const [yieldStrength, setYieldStrength] = useState(
+    mat?.yieldStrength === undefined ? "" : String(mat.yieldStrength),
+  );
   const [error, setError] = useState<string | null>(null);
   const text = useT(materialsMessages);
 
@@ -65,14 +70,24 @@ function MaterialForm({
       setError(text.expansionInvalid);
       return;
     }
+    const yieldValue =
+      yieldStrength.trim() === "" ? undefined : Number(yieldStrength);
+    if (
+      yieldValue !== undefined &&
+      (!Number.isFinite(yieldValue) || yieldValue <= 0)
+    ) {
+      setError(text.yieldInvalid);
+      return;
+    }
     onSave({
       // eslint-disable-next-line kofem/no-silent-fallback -- label for a material the user left unnamed; cosmetic, the physical constants above are all validated
       name: name || "Material",
       young: youngModulus,
       poisson: poissonRatio,
       density: densityValue,
-      // Always present, so clearing the field removes a saved α.
+      // Always present, so clearing a field removes the saved α or σy.
       expansion: expansionValue,
+      yieldStrength: yieldValue,
       color,
     });
   }
@@ -148,6 +163,20 @@ function MaterialForm({
           aria-label={text.expansionLabel}
           onChange={(e) => setExpansion(e.target.value)}
           title={text.expansionTitle}
+        />
+      </div>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>σy (MPa)</span>
+        <input
+          className={styles.formInput}
+          type="number"
+          value={yieldStrength}
+          step="10"
+          placeholder={text.expansionPlaceholder}
+          data-testid="material-yield"
+          aria-label={text.yieldLabel}
+          onChange={(e) => setYieldStrength(e.target.value)}
+          title={text.yieldTitle}
         />
       </div>
       <div className={styles.formBtns}>

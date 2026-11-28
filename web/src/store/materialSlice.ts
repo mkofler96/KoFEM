@@ -14,6 +14,9 @@ export interface Material {
   // Coefficient of thermal expansion α (1/°C), KOF-449. Absent: none set; a
   // temperature load on a body of this material is refused.
   expansion?: number;
+  // Yield strength (MPa), KOF-496. Absent: none set; Results then show no
+  // safety factor for the bodies of this material.
+  yieldStrength?: number;
   // Display colour (hex) used to paint the bodies this material is assigned to
   // in the geometry view, so the body ↔ material mapping is visible at a glance
   // (issue #353). Auto-picked from MATERIAL_PALETTE on creation; user-editable.

@@ -99,7 +99,7 @@ function elementWeight(
 // the colormap at stress concentrations (issue #215). Returned in node-array
 // order; the same field drives the colorbar range here and the vertex coloring
 // in MeshScene, so the two must stay identical.
-function nodeAveraged(
+export function nodeAveraged(
   perElement: (element: number) => number,
   nodes: Node[],
   elements: Element[],

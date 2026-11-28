@@ -27,7 +27,8 @@ import type { ReportAssets } from "./assets";
 import type { RefinementStudyRun } from "../../store/studySlice";
 import type { DensityResult } from "../../store/topOptSlice";
 import { verdictLine, type StudyLevel } from "../refinementStudy";
-import { solidName } from "../regions";
+import { safetyRowLabel, type SafetyFactorRow } from "../safetyFactor";
+import { elementBodyName, solidName } from "../regions";
 import { tr } from "../../i18n/useLocale";
 import { reportMessages } from "../../i18n/messages/report";
 
@@ -52,6 +53,9 @@ export interface ReportInput {
   meshSizes: MeshSizes | null;
   result: SolverResult | null;
   stats: ReportStats;
+  // The safety factors against yield; empty when no material has a yield
+  // strength.
+  safety: SafetyFactorRow[];
   figures: ReportFigures;
   assets: ReportAssets;
   // The mesh refinement study as the store holds it; reported once it is done.
@@ -106,6 +110,15 @@ export interface LoadRow {
   unit: "MPa" | "N" | "N mm";
 }
 
+// A safety factor pair as the report lists it: `key` is "model" or the
+// body's property id, `body` what the pair is taken over.
+export interface ReportSafetyRow {
+  key: string;
+  body: string;
+  maxFactor: number;
+  p99Factor: number;
+}
+
 export interface ReportDocument {
   modelName: string;
   // When the report was made, as the user's locale writes it, and the
@@ -126,6 +139,7 @@ export interface ReportDocument {
   // Null for a result that did not come from a solve here.
   run: SolveRun | null;
   stats: ReportStats;
+  safety: ReportSafetyRow[];
   reactions: ReactionSummary | null;
   appliedTotal: Vec3 | null;
   figures: ReportFigures;
@@ -141,14 +155,6 @@ const DOF_NAMES = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 // A number as the report prints it: four significant digits.
 export const reportNumber = (value: number): string =>
   String(Number(value.toPrecision(4)));
-
-function bodyName(properties: Property[], property: Property): string {
-  if (property.sourceBodyId === undefined)
-    return solidName(properties, property.id);
-  return tr(reportMessages).shellOf(
-    solidName(properties, property.sourceBodyId),
-  );
-}
 
 function bodyRows(input: ReportInput, run: SolveRun | null): BodyRow[] {
   const text = tr(reportMessages);
@@ -203,7 +209,7 @@ function bodyRows(input: ReportInput, run: SolveRun | null): BodyRow[] {
             : "solid";
       return {
         propertyId,
-        name: bodyName(properties, property),
+        name: elementBodyName(properties, property),
         material,
         family,
         thickness,
@@ -286,6 +292,12 @@ export function buildReport(input: ReportInput): ReportDocument {
     },
     run,
     stats: input.stats,
+    safety: input.safety.map((row) => ({
+      key: row.propertyId === null ? "model" : String(row.propertyId),
+      body: safetyRowLabel(row, input.properties, input.materials),
+      maxFactor: row.maxFactor,
+      p99Factor: row.p99Factor,
+    })),
     reactions,
     appliedTotal: reactions?.applied ?? null,
     figures: input.figures,

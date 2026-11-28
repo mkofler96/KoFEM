@@ -17,6 +17,7 @@ import { orderedDesignElements } from "./designElements";
 import { tr } from "../i18n/useLocale";
 import { geometryMessages } from "../i18n/messages/geometry";
 import { meshMessages } from "../i18n/messages/mesh";
+import { reportMessages } from "../i18n/messages/report";
 
 export type OptimizationRole = "design" | "solid" | "void";
 
@@ -87,6 +88,19 @@ export function solidName(properties: Property[], solidId: number): string {
   if (group.regions.length === 1) return text.bodyName(group.body);
   const k = group.regions.findIndex((r) => r.id === solidId) + 1;
   return text.bodyRegionName(group.body, k);
+}
+
+// What the user calls the body of an element property: the CAD solid's name,
+// or "Body 2, shell" for the shell sections a mesh derived from Body 2.
+export function elementBodyName(
+  properties: Property[],
+  property: Property,
+): string {
+  if (property.sourceBodyId === undefined)
+    return solidName(properties, property.id);
+  return tr(reportMessages).shellOf(
+    solidName(properties, property.sourceBodyId),
+  );
 }
 
 // The label of a region under its body in the model tree.

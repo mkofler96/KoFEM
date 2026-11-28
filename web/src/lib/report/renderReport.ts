@@ -217,6 +217,16 @@ function keyResults(doc: ReportDocument): string {
     value(text.maxVonMises, "report-max-von-mises", stats.maxVonMises, "MPa"),
     value(text.p99VonMises, "report-p99-von-mises", stats.p99VonMises, "MPa"),
   ];
+  for (const row of doc.safety)
+    for (const [label, id, factor] of [
+      [text.safetyOnMax, "max", row.maxFactor],
+      [text.safetyOnP99, "p99", row.p99Factor],
+    ] as const)
+      rows.push([
+        label,
+        `${Number.isFinite(factor) ? sig4(factor) : "∞"} · ${escapeHtml(row.body)}`,
+        ` data-testid="report-safety-${id}-${row.key}" data-value="${factor}"`,
+      ]);
   if (doc.reactions !== null) {
     const balance = reactionBalance(doc.reactions);
     const scale = reactionScale(doc.reactions);

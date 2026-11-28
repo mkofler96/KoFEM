@@ -437,6 +437,36 @@ export const reportMessages = defineMessages({
     es: "Tensión de von Mises máx. $σ_{\\u{vm}}$",
     pt: "Tensão de von Mises máx. $σ_{\\u{vm}}$",
   },
+  safetyOnMax: {
+    en: "Safety factor against yield on the max $σ_{\\u{vm}}$",
+    de: "Sicherheitsfaktor gegen Fließen auf die max. $σ_{\\u{vm}}$",
+    fr: "Coefficient de sécurité à la plastification sur $σ_{\\u{vm}}$ max.",
+    it: "Coefficiente di sicurezza allo snervamento su $σ_{\\u{vm}}$ max.",
+    es: "Factor de seguridad frente a la fluencia sobre $σ_{\\u{vm}}$ máx.",
+    pt: "Fator de segurança ao escoamento sobre $σ_{\\u{vm}}$ máx.",
+  },
+  safetyOnP99: {
+    en: "Safety factor against yield on the 99th percentile $σ_{\\u{vm}}$ by volume",
+    de: "Sicherheitsfaktor gegen Fließen auf das 99. Perzentil der $σ_{\\u{vm}}$ nach Volumen",
+    fr: "Coefficient de sécurité à la plastification sur le 99e centile de $σ_{\\u{vm}}$ en volume",
+    it: "Coefficiente di sicurezza allo snervamento sul 99° percentile di $σ_{\\u{vm}}$ per volume",
+    es: "Factor de seguridad frente a la fluencia sobre el percentil 99 de $σ_{\\u{vm}}$ por volumen",
+    pt: "Fator de segurança ao escoamento sobre o percentil 99 de $σ_{\\u{vm}}$ por volume",
+  },
+  safetyMaterial: {
+    en: (material: string, yieldStrength: string) =>
+      `${material}, ${yieldStrength} MPa`,
+    de: (material: string, yieldStrength: string) =>
+      `${material}, ${yieldStrength} MPa`,
+    fr: (material: string, yieldStrength: string) =>
+      `${material}, ${yieldStrength} MPa`,
+    it: (material: string, yieldStrength: string) =>
+      `${material}, ${yieldStrength} MPa`,
+    es: (material: string, yieldStrength: string) =>
+      `${material}, ${yieldStrength} MPa`,
+    pt: (material: string, yieldStrength: string) =>
+      `${material}, ${yieldStrength} MPa`,
+  },
   p99VonMises: {
     en: "Von Mises stress, 99th percentile of the nodes",
     de: "Von-Mises-Spannung, 99. Perzentil der Knoten",

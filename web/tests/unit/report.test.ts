@@ -115,6 +115,7 @@ function input(
     meshSizes: { max: 5, min: 0.5, regions: {} },
     result: solved,
     stats: { maxDisplacement: 1.5, maxVonMises: 200, p99VonMises: 150 },
+    safety: [],
     figures: {
       current: { src: "data:image/png;base64,AA", width: 400, height: 300 },
       isometric: { src: "data:image/png;base64,BB", width: 400, height: 300 },
@@ -372,6 +373,45 @@ describe("the printed report", () => {
       /<div class="figs">[\s\S]*?<\/div><\/section>/g,
     ) ?? [])
       expect(row).not.toContain("<table");
+  });
+
+  test("lists no safety factor without a yield strength", () => {
+    const html = renderReport(buildReport(base()));
+    expect(html).not.toContain("report-safety");
+  });
+
+  test("lists the safety factor on the max and p99 von Mises, per body when given per body", () => {
+    const row = {
+      materialId: 1,
+      yieldStrength: 250,
+      maxVonMises: 200,
+      p99VonMises: 100,
+      maxFactor: 1.25,
+      p99Factor: 2.5,
+    };
+    const model = renderReport(
+      buildReport({ ...base(), safety: [{ ...row, propertyId: null }] }),
+    );
+    expect(model).toContain('data-testid="report-safety-max-model"');
+    expect(model).toContain('data-value="1.25"');
+    expect(model).toContain('data-testid="report-safety-p99-model"');
+    expect(model).toContain('data-value="2.5"');
+
+    const perBody = buildReport({
+      ...base(),
+      safety: [{ ...row, propertyId: 1 }],
+    });
+    expect(perBody.safety).toEqual([
+      {
+        key: "1",
+        body: "Body 1 · Steel, 250 MPa",
+        maxFactor: 1.25,
+        p99Factor: 2.5,
+      },
+    ]);
+    const html = renderReport(perBody);
+    expect(html).toContain('data-testid="report-safety-max-1"');
+    expect(html).toContain("Body 1 · Steel, 250 MPa");
   });
 
   test("a refinement study adds its charts, verdict and levels", () => {
