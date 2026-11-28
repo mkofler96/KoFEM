@@ -3,6 +3,11 @@
 
 import { useModelStore } from "../../store/modelStore";
 import { useMesh } from "../../hooks/useMesh";
+import {
+  useMeshStatistics,
+  type MeshStatisticsReading,
+} from "../../hooks/useMeshStatistics";
+import type { BodyMeshStatistics } from "../../lib/meshStatistics";
 import { useEngineGate } from "../../store/engineStore";
 import {
   isCadBody,
@@ -43,6 +48,18 @@ function formatEstimate(measure: GeometryMeasure, size: string): string | null {
   if (count >= 1e6) return `${(count / 1e6).toPrecision(2)}M`;
   if (count >= 1e3) return `${Math.round(count / 1e3)}K`;
   return `${Math.round(count)}`;
+}
+
+function formatNumber(value: number, intlTag: string): string {
+  return value.toLocaleString(intlTag, { maximumSignificantDigits: 3 });
+}
+
+// Mass from tonnes (the app's N·mm·t system) in kg, or in g below 1 kg.
+function formatMass(tonnes: number, intlTag: string): string {
+  const kg = tonnes * 1000;
+  return kg >= 1
+    ? `${formatNumber(kg, intlTag)} kg`
+    : `${formatNumber(kg * 1000, intlTag)} g`;
 }
 
 function formatSizes({ max, min }: MeshSizes, text: MeshText): string {
@@ -97,6 +114,7 @@ export function MeshPanel() {
   const setRemeshNotice = useModelStore((s) => s.setRemeshNotice);
   const { stepSurface, isMeshing, meshError, setMeshError, logs, ...mesh } =
     useMesh();
+  const statistics = useMeshStatistics();
   const text = useT(meshMessages);
 
   return (
@@ -113,7 +131,7 @@ export function MeshPanel() {
         minElementSize={mesh.minElementSize}
       />
 
-      {hasMesh && <MeshSummary />}
+      {hasMesh && <MeshSummary statistics={statistics} />}
 
       {stepSurface ? (
         <MeshSettings hasMesh={hasMesh} isMeshing={isMeshing} mesh={mesh} />
@@ -148,7 +166,11 @@ export function MeshPanel() {
 }
 
 // What the current mesh is: its size and the element sizes it was made with.
-function MeshSummary() {
+function MeshSummary({
+  statistics,
+}: {
+  statistics: MeshStatisticsReading | null;
+}) {
   const nodeCount = useModelStore((s) => s.nodes.length);
   const elementCount = useModelStore((s) => s.elements.length);
   const meshSizes = useModelStore((s) => s.meshSizes);
@@ -233,7 +255,60 @@ function MeshSummary() {
             </div>
           );
         })}
+      {statistics?.kind === "unreadable" && (
+        <p className={styles.formNote} data-testid="mesh-statistics-error">
+          {text.statisticsUnreadable(statistics.reason)}
+        </p>
+      )}
+      {statistics?.kind === "value" &&
+        statistics.bodies.map((body) => (
+          <BodyStatisticsRows
+            key={body.body}
+            name={solidName(properties, body.body)}
+            statistics={body}
+          />
+        ))}
     </div>
+  );
+}
+
+function BodyStatisticsRows({
+  name,
+  statistics: { body, meanEdgeLength, volume, mass },
+}: {
+  name: string;
+  statistics: BodyMeshStatistics;
+}) {
+  const text = useT(meshMessages);
+  const intlTag = useIntlTag();
+  return (
+    <>
+      <div className={styles.sectionLabel}>{name}</div>
+      <div className={styles.statRow} title={text.meanEdgeTip}>
+        <span className={styles.statKey}>{text.meanEdge}</span>
+        <span className={styles.statVal} data-testid={`mesh-body-${body}-edge`}>
+          {formatNumber(meanEdgeLength, intlTag)} mm
+        </span>
+      </div>
+      <div className={styles.statRow}>
+        <span className={styles.statKey}>{text.volume}</span>
+        <span
+          className={styles.statVal}
+          data-testid={`mesh-body-${body}-volume`}
+        >
+          {formatNumber(volume, intlTag)} mm³
+        </span>
+      </div>
+      <div
+        className={styles.statRow}
+        title={mass === null ? text.noDensityTip : undefined}
+      >
+        <span className={styles.statKey}>{text.mass}</span>
+        <span className={styles.statVal} data-testid={`mesh-body-${body}-mass`}>
+          {mass === null ? text.noDensity : formatMass(mass, intlTag)}
+        </span>
+      </div>
+    </>
   );
 }
 

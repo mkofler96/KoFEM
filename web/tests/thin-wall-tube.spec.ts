@@ -28,11 +28,14 @@ test("a thin tube with linear elements gets the thin-wall warning, with the Shel
   // The suggested element size, linear elements (the default).
   await meshButton.click();
   await expect(page.getByTestId("mesh-summary")).toBeVisible();
+  await expect(page.getByTestId("mesh-body-1-edge")).toContainText("mm");
+  await expect(page.getByText(/Thin wall/)).toHaveCount(0);
 
   await openTree(page, "static");
   const warning = page
     .getByTestId("check-fail")
     .filter({ hasText: "Thin wall on body 1" });
+  await expect(warning).toHaveCount(1);
   await expect(warning).toContainText("2.0 mm");
   await expect(warning).toContainText(
     "Use quadratic elements (Mesh panel) or set the body to Shell.",

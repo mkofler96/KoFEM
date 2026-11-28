@@ -1053,4 +1053,116 @@ export const meshMessages = defineMessages({
     pt: (kept: string, dropped: string) =>
       `${kept} Apagados — selecione de novo: ${dropped}.`,
   },
+  meanEdge: {
+    en: "Mean edge",
+    de: "Mittl. Kante",
+    fr: "Arête moyenne",
+    it: "Lato medio",
+    es: "Arista media",
+    pt: "Aresta média",
+  },
+  meanEdgeTip: {
+    en: "Mean length of the element edges in this body's mesh. On thin walls it is far below the max size.",
+    de: "Mittlere Länge der Elementkanten im Netz dieses Körpers. An dünnen Wänden liegt sie weit unter der max. Größe.",
+    fr: "Longueur moyenne des arêtes des éléments du maillage de ce corps. Sur les parois minces, elle est bien inférieure à la taille max.",
+    it: "Lunghezza media dei lati degli elementi nella mesh di questo corpo. Sulle pareti sottili è molto inferiore alla dimensione max.",
+    es: "Longitud media de las aristas de los elementos en la malla de este cuerpo. En paredes delgadas queda muy por debajo del tamaño máx.",
+    pt: "Comprimento médio das arestas dos elementos na malha deste corpo. Em paredes finas fica bem abaixo do tamanho máx.",
+  },
+  volume: {
+    en: "Volume",
+    de: "Volumen",
+    fr: "Volume",
+    it: "Volume",
+    es: "Volumen",
+    pt: "Volume",
+  },
+  mass: {
+    en: "Mass",
+    de: "Masse",
+    fr: "Masse",
+    it: "Massa",
+    es: "Masa",
+    pt: "Massa",
+  },
+  noDensity: {
+    en: "No density",
+    de: "Keine Dichte",
+    fr: "Pas de masse volumique",
+    it: "Nessuna densità",
+    es: "Sin densidad",
+    pt: "Sem densidade",
+  },
+  noDensityTip: {
+    en: "This body's material has no density. Set one in Materials to see the mass.",
+    de: "Der Werkstoff dieses Körpers hat keine Dichte. Legen Sie unter Werkstoffe eine fest, um die Masse zu sehen.",
+    fr: "Le matériau de ce corps n'a pas de masse volumique. Définissez-en une dans Matériaux pour voir la masse.",
+    it: "Il materiale di questo corpo non ha densità. Impostala in Materiali per vedere la massa.",
+    es: "El material de este cuerpo no tiene densidad. Defina una en Materiales para ver la masa.",
+    pt: "O material deste corpo não tem densidade. Defina uma em Materiais para ver a massa.",
+  },
+  statisticsUnreadable: {
+    en: (reason: string) => `Body statistics unavailable: ${reason}`,
+    de: (reason: string) => `Körperwerte nicht verfügbar: ${reason}`,
+    fr: (reason: string) => `Valeurs par corps indisponibles : ${reason}`,
+    it: (reason: string) => `Valori per corpo non disponibili: ${reason}`,
+    es: (reason: string) => `Valores por cuerpo no disponibles: ${reason}`,
+    pt: (reason: string) => `Valores por corpo indisponíveis: ${reason}`,
+  },
+  statisticsUnknownNode: {
+    en: (element: number, node: number) =>
+      `element ${element} references node ${node}, which the mesh does not have`,
+    de: (element: number, node: number) =>
+      `Element ${element} verweist auf Knoten ${node}, den das Netz nicht hat`,
+    fr: (element: number, node: number) =>
+      `l'élément ${element} référence le nœud ${node}, absent du maillage`,
+    it: (element: number, node: number) =>
+      `l'elemento ${element} fa riferimento al nodo ${node}, che la mesh non ha`,
+    es: (element: number, node: number) =>
+      `el elemento ${element} hace referencia al nodo ${node}, que la malla no tiene`,
+    pt: (element: number, node: number) =>
+      `o elemento ${element} referencia o nó ${node}, que a malha não tem`,
+  },
+  statisticsUnknownProperty: {
+    en: (element: number, property: number) =>
+      `element ${element} belongs to body ${property}, which the model does not have`,
+    de: (element: number, property: number) =>
+      `Element ${element} gehört zu Körper ${property}, den das Modell nicht hat`,
+    fr: (element: number, property: number) =>
+      `l'élément ${element} appartient au corps ${property}, absent du modèle`,
+    it: (element: number, property: number) =>
+      `l'elemento ${element} appartiene al corpo ${property}, che il modello non ha`,
+    es: (element: number, property: number) =>
+      `el elemento ${element} pertenece al cuerpo ${property}, que el modelo no tiene`,
+    pt: (element: number, property: number) =>
+      `o elemento ${element} pertence ao corpo ${property}, que o modelo não tem`,
+  },
+  statisticsNodeCount: {
+    en: (element: number, type: string, count: number, corners: number) =>
+      `${type} element ${element} has ${count} nodes; the mesh stores its ${corners} corners`,
+    de: (element: number, type: string, count: number, corners: number) =>
+      `${type}-Element ${element} hat ${count} Knoten; das Netz speichert seine ${corners} Ecken`,
+    fr: (element: number, type: string, count: number, corners: number) =>
+      `l'élément ${type} ${element} a ${count} nœuds ; le maillage stocke ses ${corners} sommets`,
+    it: (element: number, type: string, count: number, corners: number) =>
+      `l'elemento ${type} ${element} ha ${count} nodi; la mesh memorizza i suoi ${corners} vertici`,
+    es: (element: number, type: string, count: number, corners: number) =>
+      `el elemento ${type} ${element} tiene ${count} nodos; la malla guarda sus ${corners} vértices`,
+    pt: (element: number, type: string, count: number, corners: number) =>
+      `o elemento ${type} ${element} tem ${count} nós; a malha guarda seus ${corners} vértices`,
+  },
+  statisticsNoThickness: {
+    en: (element: number) =>
+      `shell element ${element} has no thickness, so its volume is unknown`,
+    de: (element: number) =>
+      `Schalenelement ${element} hat keine Dicke, sein Volumen ist daher unbekannt`,
+    fr: (element: number) =>
+      `l'élément coque ${element} n'a pas d'épaisseur, son volume est donc inconnu`,
+    it: (element: number) =>
+      `l'elemento guscio ${element} non ha spessore, quindi il suo volume è ignoto`,
+    es: (element: number) =>
+      `el elemento lámina ${element} no tiene espesor, así que su volumen es desconocido`,
+    pt: (element: number) =>
+      `o elemento de casca ${element} não tem espessura, então seu volume é desconhecido`,
+  },
 });

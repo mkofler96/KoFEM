@@ -37,6 +37,7 @@ pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
 pub mod mesh_outline;
+pub mod mesh_statistics;
 pub mod mortar;
 pub mod nonlinear;
 pub mod piece;
@@ -80,6 +81,7 @@ pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, Pieces, TetMesh};
 pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
+pub use mesh_statistics::{body_statistics, BodyMesh, BodyStatistics};
 pub use mortar::{mortar_integrals, mortar_weights, MortarFace, MortarRow, SlaveIntegrals};
 pub use reactions::{
     fold_onto_vertices, fold_onto_vertices_at, load_on_held_nodes, nodal_residual,
