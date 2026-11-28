@@ -62,7 +62,7 @@ export default {
   quantity: "displacement under the load",
   unit: "mm",
   tolPct: 2,
-  figure: { field: "displacement", view: [-1, -0.5, -0.7], deform: true },
+  figure: { field: "displacement", view: [-0.8, -0.6, 0.9], deform: true },
   page: {
     summary:
       "The shell obstacle course's pinched cylinder: a thin cylinder between rigid diaphragms bent by two point loads, from curved shells.",
