@@ -2,39 +2,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Netgen meshing time per stage and the shape quality of the result
-// (KOF-456), for STEP files in test_files/. A benchmark, not a test: it
-// prints one table. tests/integration/meshing-bench.test.mjs checks what it
-// measures.
-//
-// The engine logs a line as it starts each Netgen stage (mesh_netgen.cpp);
-// a stage's time runs from its line to the next one, so no timer is compiled
-// into the engine. Step 3 includes the surface optimisation (optsteps_2d)
-// and step 4 the volume optimisation (optsteps_3d). Quality is each
-// tetrahedron's smallest dihedral angle and aspect ratio (1 when regular),
-// computed in the Rust module (kofem_fem::tet_quality).
+// (KOF-456). Stage times come from the line the engine logs as it starts each
+// stage, so no timer has to be compiled into the engine.
 //
 // Usage (from web/):
 //   bun tests/bench_meshing.mjs "<step file>:<max element size>[:<options JSON>]" ...
-// e.g. bun tests/bench_meshing.mjs "Wall Bracket.stp:3" 'Wall Bracket.stp:3:{"optsteps_3d":1}'
-// The options JSON overrides the app's meshing options (APP_OPTIONS) for that
-// run; the min element size defaults to a tenth of the max, as in the app.
+// e.g. bun tests/bench_meshing.mjs "Wall Bracket.stp:3" 'Wall Bracket.stp:3:{"optsteps_2d":1}'
 
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import {
+  NETGEN_OPTIONS,
+  TESSELLATION_OPTIONS,
+} from "../src/lib/engineOptions.ts";
+import { MIN_SIZE_RATIO } from "../src/lib/meshSizing.ts";
 import { loadEngine, loadFem } from "./support/wasm.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-
-/** The options the app's solver worker sends to generate_fem_mesh. */
-export const APP_OPTIONS = {
-  grading: 0.3,
-  second_order: false,
-  elementsperedge: 2.0,
-  elementspercurve: 2.0,
-  optsteps_2d: 3,
-  optsteps_3d: 3,
-};
 
 /** Netgen's stages, in order, as the benchmark names them. */
 export const STAGES = ["localSize", "edges", "surface", "volume"];
@@ -49,8 +34,8 @@ const STAGE_LINES = [
 ];
 
 /**
- * Meshes `step` (STEP bytes) in a fresh engine with the app's options plus
- * `options`, and times it.
+ * Meshes `step` (STEP bytes) in a fresh engine with the app's options, with
+ * `options` overriding them, and times it.
  *
  * @returns {Promise<{seconds: number, stages: Record<string, number>,
  *   vertices: Float64Array, tetrahedra: Uint32Array}>}
@@ -65,13 +50,13 @@ export async function meshTimed(step, options) {
   const engine = await loadEngine({ print: stamp, printErr: stamp });
   engine.tessellate_step(
     new Uint8Array(step),
-    JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
+    JSON.stringify(TESSELLATION_OPTIONS),
   );
   const started = performance.now();
   const mesh = engine.generate_fem_mesh(
     JSON.stringify({
-      min_element_size: options.max_element_size / 10,
-      ...APP_OPTIONS,
+      min_element_size: options.max_element_size / MIN_SIZE_RATIO,
+      ...NETGEN_OPTIONS,
       ...options,
     }),
   );

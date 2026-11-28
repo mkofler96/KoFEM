@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// The meshing benchmark's measurements (KOF-456), on a small part: the time
-// of each Netgen stage, read from the lines the engine logs as it starts
-// each one, and the shape quality of the tetrahedra from the Rust module.
-// The quality numerics are covered in crates/kofem-fem/tests/tet_quality.rs.
+// The meshing benchmark's measurements (KOF-456). It reads stage times from
+// the engine's log, so a reworded log line must fail here, not skew a
+// benchmark run silently.
 
 import { beforeAll, expect, test } from "bun:test";
 import { readFileSync } from "fs";
