@@ -77,9 +77,15 @@ export const ORDER = [...GROUPS.flatMap((g) => g.ids), "mbb-beam-topopt"];
 const caseIds = new Set(cases.map((c) => c.id));
 export const SHOWCASE_IDS = ORDER.filter((id) => !caseIds.has(id));
 
-const groupOf = new Map(GROUPS.flatMap((g) => g.ids.map((id) => [id, g])));
-if (groupOf.size !== GROUPS.reduce((n, g) => n + g.ids.length, 0))
-  throw new Error("an example is listed in more than one group");
+const groupOf = new Map();
+for (const g of GROUPS)
+  for (const id of g.ids) {
+    if (groupOf.has(id))
+      throw new Error(
+        `"${id}" is listed in group "${groupOf.get(id).id}" and in group "${g.id}"`,
+      );
+    groupOf.set(id, g);
+  }
 for (const c of cases) {
   const group = groupOf.get(c.id);
   if (!group) throw new Error(`case "${c.id}" is in no group`);

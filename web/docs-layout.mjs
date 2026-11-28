@@ -468,17 +468,16 @@ const STYLE = `
         content: "";
         position: absolute;
         left: 10px;
-        top: 13px;
+        top: 50%;
         width: 6px;
         height: 6px;
         border-right: 1.5px solid var(--muted);
         border-bottom: 1.5px solid var(--muted);
-        transform: rotate(-45deg);
+        transform: translateY(-50%) rotate(-45deg);
         transition: transform 0.15s;
       }
       .docs-group[open] > summary::before {
-        transform: rotate(45deg);
-        top: 11px;
+        transform: translateY(-50%) rotate(45deg);
       }
       .docs-group > summary:hover {
         background: var(--panel);
@@ -486,19 +485,12 @@ const STYLE = `
       .docs-group ul {
         margin: 2px 0 6px 16px;
       }
-      /* A group inside a section: indented like the section's entries. */
       .docs-group .docs-group {
         margin: 0 0 0 16px;
       }
       .docs-group .docs-group > summary {
         font-weight: 500;
         color: var(--body);
-      }
-      .docs-group .docs-group > summary::before {
-        top: 12px;
-      }
-      .docs-group .docs-group[open] > summary::before {
-        top: 10px;
       }
       .docs-toc {
         font-size: 13.5px;

@@ -998,7 +998,6 @@ export function renderExamplePage(
   const prev = entries[index - 1];
   const next = entries[index + 1];
   const section = SECTIONS.find((sec) => sec.id === sectionOf(e));
-  // A validation case counts within its group, an example within Examples.
   const siblings = e.group
     ? entries.filter((x) => x.group?.id === e.group.id)
     : entries.filter((x) => sectionOf(x) === section.id);
