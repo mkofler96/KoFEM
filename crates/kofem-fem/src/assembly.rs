@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::count::node_index;
+use crate::count::index_as_u32;
 use crate::mesh::TetMesh;
 use crate::sparse::CsrMatrix;
 
@@ -35,7 +35,7 @@ pub(crate) fn neighbours_of<'mesh>(
     }
     for (node, list) in neighbours.iter_mut().enumerate() {
         if list.is_empty() {
-            list.push(node_index(node));
+            list.push(index_as_u32(node));
         }
         list.sort_unstable();
         list.dedup();

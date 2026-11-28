@@ -7,6 +7,7 @@
 // boundaryRebuild; ties, couplings and the face-pick session have their own
 // slices (tieSlice, couplingSlice, pickSlice).
 
+import type { MidSurfaceLinks } from "../lib/cadShell";
 import type { TemperatureLoad } from "../workers/solverTypes";
 import type { SliceCreator } from "./modelStore";
 import type { Element, Node } from "./geometrySlice";
@@ -96,6 +97,7 @@ function rebuildAllLoads(s: {
   nodes: Node[];
   elements: Element[];
   couplingGroups: CouplingGroup[];
+  midSurfaceLinks: MidSurfaceLinks | null;
   loads: Load[];
   surfaceLoads: SurfaceLoad[];
 }): void {
@@ -104,6 +106,7 @@ function rebuildAllLoads(s: {
     s.loadGroups,
     s.elements,
     s.couplingGroups,
+    s.midSurfaceLinks,
   );
 }
 

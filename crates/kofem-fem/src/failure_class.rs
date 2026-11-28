@@ -107,6 +107,7 @@ impl FemError {
             | Self::EmptyShellMesh
             | Self::Thickness { .. }
             | Self::Contact { .. }
+            | Self::ContactUnheld { .. }
             | Self::PartialHexTetInterface { .. } => InvalidInput,
             Self::VertexArrayLength { .. }
             | Self::TetArrayLength { .. }

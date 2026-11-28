@@ -39,7 +39,7 @@ use std::collections::HashSet;
 
 use crate::amg::LevelInfo;
 use crate::cg::{solve_pcg_with, CgSettings};
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, index_as_u32};
 use crate::coupled_static::{
     prepare_mixed_static, CoupledReduction, MixedPreconditioner, PreparedMixed,
 };
@@ -290,7 +290,7 @@ fn boundary_faces(mesh: &TetMesh) -> Vec<MasterFace> {
 }
 
 fn sorted_key(corners: &[usize]) -> Vec<u32> {
-    let mut key: Vec<u32> = corners.iter().map(|&corner| to_u32(corner)).collect();
+    let mut key: Vec<u32> = corners.iter().map(|&corner| index_as_u32(corner)).collect();
     key.sort_unstable();
     key
 }
@@ -668,15 +668,6 @@ fn distance(lhs: [f64; 3], rhs: [f64; 3]) -> f64 {
     dot(offset, offset).sqrt()
 }
 
-fn to_u32(index: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "node indices of a TetMesh fit in u32 (MAX_NODES)"
-    )]
-    let narrow = index as u32;
-    narrow
-}
-
 /// What the elimination did with the ties, for the solve log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TieReport {
@@ -852,7 +843,7 @@ pub fn prepare_tied_static(
         });
     }
     let (couplings, report) = tie_couplings(mesh, ties, fixed_dofs, fixed_values)?;
-    let wide = |dof: u32| to_u32(DOFS_PER_NODE * (dof as usize / 3) + dof as usize % 3);
+    let wide = |dof: u32| index_as_u32(DOFS_PER_NODE * (dof as usize / 3) + dof as usize % 3);
     let wide_dofs: Vec<u32> = fixed_dofs.iter().map(|&dof| wide(dof)).collect();
     let mut wide_forces = vec![0.0; DOFS_PER_NODE * mesh.node_count()];
     for (dof, &force) in forces.iter().enumerate() {

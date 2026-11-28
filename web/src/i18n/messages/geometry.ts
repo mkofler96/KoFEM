@@ -253,6 +253,60 @@ export const geometryMessages = defineMessages({
     es: "Sólido usa tetraedros. Lámina usa las superficies medias de las paredes y conserva material sólido en las uniones planas. Divide primero las regiones gruesas o curvas en cuerpos sólidos separados.",
     pt: "Sólido usa tetraedros. Casca usa as superfícies médias das paredes e mantém material sólido nas junções planas. Divida antes as regiões espessas ou curvas em corpos sólidos separados.",
   },
+  shellRouteMesh: {
+    en: (face: number, why: string) =>
+      `Mid-surface from the volume mesh, because face ${face} ${why}.`,
+    de: (face: number, why: string) =>
+      `Mittelfläche aus dem Volumennetz, weil Fläche ${face} ${why}.`,
+    fr: (face: number, why: string) =>
+      `Surface moyenne issue du maillage volumique, car la face ${face} ${why}.`,
+    it: (face: number, why: string) =>
+      `Superficie media dalla mesh di volume, perché la faccia ${face} ${why}.`,
+    es: (face: number, why: string) =>
+      `Superficie media a partir de la malla de volumen, porque la cara ${face} ${why}.`,
+    pt: (face: number, why: string) =>
+      `Superfície média a partir da malha de volume, porque a face ${face} ${why}.`,
+  },
+  shellRouteNoThinWall: {
+    en: "is in no wall thin enough for a shell",
+    de: "in keiner Wand liegt, die dünn genug für eine Schale ist",
+    fr: "n'appartient à aucune paroi assez mince pour une coque",
+    it: "non appartiene a nessuna parete abbastanza sottile per un guscio",
+    es: "no pertenece a ninguna pared lo bastante delgada para una lámina",
+    pt: "não pertence a nenhuma parede fina o bastante para uma casca",
+  },
+  shellRouteNoOppositeFace: {
+    en: "has no opposite face at a constant distance",
+    de: "keine gegenüberliegende Fläche in konstantem Abstand hat",
+    fr: "n'a pas de face opposée à distance constante",
+    it: "non ha una faccia opposta a distanza costante",
+    es: "no tiene una cara opuesta a distancia constante",
+    pt: "não tem uma face oposta a distância constante",
+  },
+  shellRouteVaryingThickness: {
+    en: "faces walls of different thickness",
+    de: "Wänden unterschiedlicher Dicke gegenüberliegt",
+    fr: "fait face à des parois d'épaisseurs différentes",
+    it: "è di fronte a pareti di spessore diverso",
+    es: "está frente a paredes de distinto espesor",
+    pt: "está diante de paredes de espessuras diferentes",
+  },
+  shellRouteUnsupportedSurface: {
+    en: "is neither flat nor cylindrical",
+    de: "weder eben noch zylindrisch ist",
+    fr: "n'est ni plane ni cylindrique",
+    it: "non è né piana né cilindrica",
+    es: "no es plana ni cilíndrica",
+    pt: "não é plana nem cilíndrica",
+  },
+  shellRoutePartialOverlap: {
+    en: "is not fully covered by the face opposite",
+    de: "von der gegenüberliegenden Fläche nicht ganz überdeckt wird",
+    fr: "n'est pas entièrement couverte par la face opposée",
+    it: "non è interamente coperta dalla faccia opposta",
+    es: "no está cubierta del todo por la cara opuesta",
+    pt: "não é totalmente coberta pela face oposta",
+  },
   solid: {
     en: "Solid",
     de: "Volumen",

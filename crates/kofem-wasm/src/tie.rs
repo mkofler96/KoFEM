@@ -4,6 +4,7 @@
 //! Browser bindings for constraint ties (`kofem_fem::tie`) and their dual
 //! mortar weights (`kofem_fem::mortar`).
 
+use kofem_fem::index_as_u32;
 use kofem_fem::{mortar_weights, MortarFace, MortarRow};
 use wasm_bindgen::prelude::*;
 
@@ -142,7 +143,10 @@ impl MortarTies {
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn slaves(&self) -> Vec<u32> {
-        self.rows.iter().map(|row| to_u32(row.slave)).collect()
+        self.rows
+            .iter()
+            .map(|row| index_as_u32(row.slave))
+            .collect()
     }
 
     #[wasm_bindgen(getter)]
@@ -153,7 +157,7 @@ impl MortarTies {
         offsets.push(0);
         for row in &self.rows {
             end += row.masters.len();
-            offsets.push(to_u32(end));
+            offsets.push(index_as_u32(end));
         }
         offsets
     }
@@ -163,7 +167,7 @@ impl MortarTies {
     pub fn masters(&self) -> Vec<u32> {
         self.rows
             .iter()
-            .flat_map(|row| row.masters.iter().map(|&master| to_u32(master)))
+            .flat_map(|row| row.masters.iter().map(|&master| index_as_u32(master)))
             .collect()
     }
 
@@ -197,13 +201,4 @@ pub fn tie_mortar_weights(
 ) -> Result<MortarTies, JsError> {
     let rows = mortar_weights(&slave.faces, &master.faces, limit).map_err(|error| to_js(&error))?;
     Ok(MortarTies { rows })
-}
-
-fn to_u32(index: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "node indices come from u32 arrays"
-    )]
-    let narrow = index as u32;
-    narrow
 }

@@ -36,6 +36,8 @@ add_executable(kofem_wasm_emcc
     cpp/geometry_edit.cpp
     cpp/face_properties.cpp
     cpp/mesh_netgen.cpp
+    cpp/mesh_sizes.cpp
+    cpp/mid_surface.cpp
     cpp/mesh_overlap.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp

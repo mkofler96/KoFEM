@@ -25,6 +25,7 @@
 
 import type {
   Constraint,
+  Element,
   Node,
   Property,
   SolveModel,
@@ -580,4 +581,39 @@ export function unheldBodiesMessage(
   properties: Property[],
 ): string | null {
   return freeMotionMessage(looseComponents(fem, input), properties);
+}
+
+// A body only contact holds, refused by the contact solve because its load
+// drives it in a motion nothing holds (KOF-501): a node of it, and the motion
+// as a line, or an axis where it turns, given as the pre-check gives its
+// directions (a coordinate axis exactly, otherwise largest component
+// positive).
+export interface UnheldByContact {
+  nodeId: number;
+  direction: Vec3;
+  turns: boolean;
+}
+
+// The refusal for `unheld`, e.g. "Body 2 is held only by contact, which
+// cannot stop it: its load would make it move along Y. Add a support or
+// connect it to another body."
+export function contactUnheldMessage(
+  unheld: UnheldByContact,
+  elements: readonly Pick<Element, "nodeIds" | "propertyId">[],
+  properties: Property[],
+): string {
+  const element = elements.find((candidate) =>
+    candidate.nodeIds.includes(unheld.nodeId),
+  );
+  if (!element)
+    throw new Error(
+      `Node ${unheld.nodeId} of the body the contact cannot hold is in no element — the model is inconsistent`,
+    );
+  const phrase = motionPhrase({
+    labels: [element.propertyId],
+    translations: unheld.turns ? [] : [unheld.direction],
+    rotationAxes: unheld.turns ? [unheld.direction] : [],
+  });
+  const text = tr(refusalMessages);
+  return `${text.contactCannotHold(bodyNumber(properties, element.propertyId), phrase)} ${text.holdOneBody}`;
 }

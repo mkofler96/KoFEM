@@ -90,6 +90,10 @@ export interface SurfaceLoad {
   pressure?: number;
   name?: string;
   unmatchedSelections?: number;
+  // Per face: the area it stands for, per unit of its own area. A shell
+  // facet loaded from a curved CAD face off the mid-surface carries that
+  // face's area (KOF-498). Absent: every face its own area.
+  areaScales?: number[];
 }
 export interface ParseStepPayload {
   bytes: Uint8Array;

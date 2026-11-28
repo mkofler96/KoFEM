@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { tr } from "../i18n/useLocale";
-import { meshMessages } from "../i18n/messages/mesh";
-
 // The store and the worker each declare their own node/element types; the
 // filter only needs ids, connectivity and the body.
 interface MeshNode {
@@ -68,7 +65,8 @@ function tetFaces(n: number[]): [number, number, number][] {
 // make the system singular), and every boundary triangle no remaining tet owns.
 // A face a kept body shared with a suppressed one stays — it is now that kept
 // body's outer surface. Nodes and elements are renumbered densely, the way the
-// mesher numbers them.
+// mesher numbers them. A volume part can lose every element: it may not be the
+// whole model, so the caller decides whether anything is left to analyse.
 export function dropSuppressedBodies<N extends MeshNode, E extends MeshElement>(
   mesh: VolumeMeshParts<N, E>,
   suppressed: ReadonlySet<number>,
@@ -77,8 +75,6 @@ export function dropSuppressedBodies<N extends MeshNode, E extends MeshElement>(
   const kept = mesh.elements.filter(
     (el) => el.propertyId === undefined || !suppressed.has(el.propertyId),
   );
-  if (kept.length === 0)
-    throw new Error(tr(meshMessages).allSuppressed([...suppressed].join(", ")));
 
   const newId = new Map<number, number>();
   const nodes: N[] = [];

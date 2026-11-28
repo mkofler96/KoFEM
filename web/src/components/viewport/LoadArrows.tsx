@@ -31,6 +31,7 @@ export function LoadArrows({ topology, showResult }: LoadArrowsProps) {
   const loadGroups = useModelStore((s) => s.loadGroups);
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const midSurfaceLinks = useModelStore((s) => s.midSurfaceLinks);
   const { nodeMap, modelSize, hexElements, tetElements, triElements } =
     topology;
 
@@ -112,6 +113,7 @@ export function LoadArrows({ topology, showResult }: LoadArrowsProps) {
       // Only the bodies on screen.
       elements: [...tetElements, ...hexElements, ...triElements],
       couplingGroups,
+      midSurfaceLinks,
     });
     if (byNode.size === 0) return [];
     let maxMag = 0;
@@ -148,6 +150,7 @@ export function LoadArrows({ topology, showResult }: LoadArrowsProps) {
     hexElements,
     triElements,
     couplingGroups,
+    midSurfaceLinks,
   ]);
 
   if (showResult) return null;

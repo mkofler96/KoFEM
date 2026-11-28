@@ -10,8 +10,11 @@
 use std::collections::BTreeSet;
 
 use kofem_fem::count_as_f64;
+use kofem_fem::index_as_u32;
 use kofem_shellize::coupled_model::{CoupledModel, ExplicitCoupledModel};
 use kofem_shellize::geometry::Vec3;
+use kofem_shellize::mid_surface::SHELL_BODY_WALL_SHARE;
+use kofem_shellize::walls::MAX_WALL_SLACK;
 use kofem_shellize::{
     build_coupled_model, build_explicit_coupled_model, build_shell_transition_model,
     detect_curved_walls, detect_wall_pairs, extract_thin_wall_shells, face_props, shell_body_tets,
@@ -24,17 +27,8 @@ fn to_js(error: &ShellizeError) -> JsError {
     JsError::new(&error.to_string())
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "every index came in as a u32 or was created from one; the module's 4 GB memory \
-              cannot hold 2^32 vertices"
-)]
-fn index_u32(index: usize) -> u32 {
-    index as u32
-}
-
 fn indices(values: impl IntoIterator<Item = usize>) -> Vec<u32> {
-    values.into_iter().map(index_u32).collect()
+    values.into_iter().map(index_as_u32).collect()
 }
 
 fn flat<const N: usize>(groups: &[[usize; N]]) -> Vec<u32> {
@@ -281,6 +275,34 @@ impl ShellSet {
     #[must_use]
     pub fn triangle_source(&self) -> Vec<i32> {
         self.shells.triangle_source.clone()
+    }
+}
+
+/// The thickest wall that counts as thin for a body marked Shell:
+/// `max(maxWall, bodyShare × the body's bounding-box diagonal) × (1 + slack)`. The engine's
+/// CAD mid-surface (KOF-498) takes the same rule, so the app passes it these
+/// numbers rather than keeping its own.
+#[wasm_bindgen]
+pub struct ThinWallRule {
+    max_wall: f64,
+    body_share: f64,
+    slack: f64,
+}
+
+getters!(ThinWallRule {
+    "maxWall" => max_wall: f64,
+    "bodyShare" => body_share: f64,
+    "slack" => slack: f64,
+});
+
+/// The thin-wall rule of [`extract_thin_wall_shells`] for bodies marked Shell.
+#[wasm_bindgen(js_name = shellThinWallRule)]
+#[must_use]
+pub fn shell_thin_wall_rule() -> ThinWallRule {
+    ThinWallRule {
+        max_wall: ExtractOptions::default().max_wall,
+        body_share: SHELL_BODY_WALL_SHARE,
+        slack: MAX_WALL_SLACK,
     }
 }
 
@@ -548,10 +570,10 @@ impl From<&[TieCouplingReport]> for TieReports {
         for report in reports {
             let (kind, side, values) = drop_wire(report.drop);
             wire.names.push(report.name.clone());
-            wire.coupled.push(index_u32(report.coupled));
-            wire.partners.push(index_u32(report.partners));
-            wire.shared.push(index_u32(report.shared));
-            wire.unmapped.push(index_u32(report.unmapped));
+            wire.coupled.push(index_as_u32(report.coupled));
+            wire.partners.push(index_as_u32(report.partners));
+            wire.shared.push(index_as_u32(report.shared));
+            wire.unmapped.push(index_as_u32(report.unmapped));
             wire.gap.push(report.gap);
             wire.drop_kind.push(kind.to_owned());
             wire.drop_side.push(side.to_owned());

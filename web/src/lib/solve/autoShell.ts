@@ -22,6 +22,7 @@ import type {
 } from "../../workers/solverTypes.js";
 import type { ShellMesh } from "./contracts.js";
 import { coupledMaterials } from "../coupledMaterials.js";
+import { requireShellBodyMaterial, shellSections } from "../shellSections.js";
 import { buildReferenceCouplings, referencePointIds } from "../coupling.js";
 import {
   extractThinWallShells,
@@ -90,14 +91,6 @@ export function requireOneShellBody(shellBodyIds: Set<number>): void {
     throw new Error(
       tr(refusalMessages).severalShellBodies([...shellBodyIds].join(", ")),
     );
-}
-
-// The material of the body marked Shell, which its PSHELLs inherit. A body
-// missing from the property table has none to give (KOF-413).
-function shellBodyMaterial(cadBodies: Property[], bodyId: number): number {
-  const prop = cadBodies.find((p) => p.id === bodyId);
-  if (!prop) throw new Error(tr(refusalMessages).shellBodyNoMaterial(bodyId));
-  return prop.materialId;
 }
 
 // Flat 0-based mesh for the shellize pipeline, built from the store model.
@@ -251,11 +244,8 @@ export function buildMeshTimeShellModel(
   requireMatchingSurface(surfaceTriangles, surfaceFaceIds);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
   if (tetElements.length !== elements.length) return null;
-  // The PSHELLs inherit the Shell body's material: look it up before the
-  // idealisation runs, so a missing one fails fast and names the body.
-  const cadBodies = properties.filter((p) => p.sourceBodyId === undefined);
   const [shellBodyId] = shellBodyIds;
-  const shellMaterialId = shellBodyMaterial(cadBodies, shellBodyId);
+  requireShellBodyMaterial(properties, shellBodyId);
 
   const vid = buildVertexIndexer(nodes);
   const mesh = buildShellizeMesh(
@@ -288,28 +278,14 @@ export function buildMeshTimeShellModel(
       z: model.pool[3 * i + 2],
     });
 
-  // Properties: the CAD bodies keep their own ids (materials stay assigned); one
-  // PSHELL per distinct wall thickness, inheriting the shelled body's material.
-  // The PSHELLs of an earlier mesh are dropped first — they describe walls that
-  // no longer exist, and carrying them over made every re-mesh append another
-  // dead body to the list.
-  const nextId = cadBodies.reduce((mx, p) => Math.max(mx, p.id), 0) + 1;
-  const thkKey = (t: number) => Number(t.toFixed(6));
-  const propOfThk = new Map<number, number>();
-  const outProperties: Property[] = cadBodies.map((p) => ({ ...p }));
-  for (const t of model.thicknesses) {
-    const key = thkKey(t);
-    if (propOfThk.has(key)) continue;
-    const pid = nextId + propOfThk.size;
-    propOfThk.set(key, pid);
-    outProperties.push({
-      id: pid,
-      materialId: shellMaterialId,
-      thickness: key,
-      discretization: "shell",
-      sourceBodyId: shells.shellBody,
-    });
-  }
+  // Properties: one PSHELL per distinct wall thickness (lib/shellSections).
+  const sections = shellSections(
+    properties,
+    model.thicknesses.map((thickness) => ({
+      body: shells.shellBody,
+      thickness,
+    })),
+  );
 
   // Elements: retained solid tets (their body's property) then the shell facets
   // (their thickness's PSHELL).
@@ -327,11 +303,7 @@ export function buildMeshTimeShellModel(
       propertyId: model.tetBody[e],
     });
   for (let t = 0; t < model.triangles.length / 3; t++) {
-    const pid = propOfThk.get(thkKey(model.thicknesses[t]));
-    if (pid === undefined)
-      throw new Error(
-        `mesh-time shell: facet ${t} has thickness ${model.thicknesses[t]} with no PSHELL property`,
-      );
+    const pid = sections.propertyOf(shells.shellBody, model.thicknesses[t]);
     outElements.push({
       id: outElements.length,
       type: "CTRIA3",
@@ -360,21 +332,18 @@ export function buildMeshTimeShellModel(
       transition.mesh.surfFace,
     );
 
-  const thkList = [...propOfThk.keys()]
-    .sort((a, b) => a - b)
-    .map((t) => `${t} mm`)
-    .join(", ");
+  const thkList = sections.thicknesses.map((t) => `${t} mm`).join(", ");
   log(
     `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ` +
       `${model.shellPool.length} shell nodes, ${model.triangles.length / 3} facets ` +
-      `(${propOfThk.size} thickness section(s): ${thkList}), ` +
+      `(${sections.thicknesses.length} thickness section(s): ${thkList}), ` +
       `${model.tets.length / 4} solid tets retained, ${model.coupling.ref.length} couplings`,
   );
 
   return {
     nodes: poolNodes,
     elements: outElements,
-    properties: outProperties,
+    properties: sections.properties,
     surfaceTriangles: poolSurfTris,
     surfaceFaceIds: poolSurfFaces,
   };

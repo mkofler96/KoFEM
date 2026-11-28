@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::count::{count_as_f64, node_index};
+use crate::count::{count_as_f64, index_as_u32};
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex_jacobian, HEX27_RULE_POINTS, HEX8_RULE_POINTS,
 };
@@ -605,7 +605,7 @@ impl TetMesh {
         self.edges
             .binary_search(&pair)
             .ok()
-            .map(|index| node_index(self.vertex_count + index))
+            .map(|index| index_as_u32(self.vertex_count + index))
     }
 
     /// Corner coordinates of tetrahedron `tet` (also element `tet`).

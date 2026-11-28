@@ -7,10 +7,10 @@
 // already includes MFEM and Embind).
 #pragma once
 
+#include <TopoDS_Shape.hxx>
+
 #include <array>
 #include <vector>
-
-class TopoDS_Shape;
 
 // Build a netgen::OCCGeometry directly from an already-transferred OCCT shape.
 // Equivalent to Ng_OCC_Load_STEP but without re-reading and re-translating the
@@ -27,20 +27,25 @@ struct KofemFaceMaxSize {
     double max_size;
 };
 
-// Set the maximum element sizes Netgen meshes `shape` with. Entry k of
-// `solid_max_sizes` is the max size (mm) of solid k+1 in TopExp order — the
-// mesh domain, i.e. the body id. Netgen limits each domain's tetrahedra to its
-// size, and each face and edge to the smallest size of the solids it bounds.
-// Each of `face_max_sizes` further limits its face and the face's edges; Netgen
-// grades the volume from the faces' surface elements out to the solid's size.
-// Netgen reads these sizes from a static table keyed by shape, so call this
-// before every mesh: every solid, face and edge is set, and nothing from an
-// earlier mesh carries over. Netgen's global maxh still caps every size, so set
-// it to at least the largest solid size. Both lists empty resets every size to
-// Netgen's default (no limit), which meshes exactly as if no size had ever been
-// set. An empty `solid_max_sizes` with face sizes leaves the solids unlimited.
-void kofem_set_max_sizes(const TopoDS_Shape& shape, const std::vector<double>& solid_max_sizes,
-                         const std::vector<KofemFaceMaxSize>& face_max_sizes);
+// A maximum element size (mm) for one solid, face or edge.
+struct KofemShapeMaxSize {
+    TopoDS_Shape shape;
+    double max_size;
+};
+
+// Set the maximum element sizes Netgen meshes `meshed` with: each listed
+// shape's size, and no limit for every other solid, face and edge of `meshed`.
+// Netgen reads sizes from a static table keyed by shape, so call this before
+// every mesh: nothing from an earlier mesh carries over. Netgen's global maxh
+// still caps every size. An empty list meshes exactly as if no size had ever
+// been set. Which sizes to set is mesh_sizes.h's business.
+void kofem_apply_max_sizes(const TopoDS_Shape& meshed, const std::vector<KofemShapeMaxSize>& sizes);
+
+// The faces and the solids of a netgen::OCCGeometry, in Netgen's own order: entry
+// k is what face index k + 1 of a surface element, or domain k + 1 of a volume
+// element, refers to.
+std::vector<TopoDS_Shape> kofem_occ_geometry_faces(void* geom);
+std::vector<TopoDS_Shape> kofem_occ_geometry_solids(void* geom);
 
 // OCC face index (1-based) of surface element i (1-based) of an Ng_Mesh.
 // Netgen records the owning CAD face of every surface element it generates;

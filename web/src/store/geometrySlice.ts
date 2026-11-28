@@ -24,7 +24,8 @@ import {
   DEFAULT_MIN_ELEMENT_SIZE,
   suggestElementSizes,
 } from "../lib/meshSizing";
-import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
+import type { MeshOverlap, ShellRoute } from "../wasm/pkg/kofem_wasm";
+import { shellFaceNodes, type MidSurfaceLinks } from "../lib/cadShell";
 import type { CadFaceProperties } from "../lib/cadFaceProperties";
 import {
   detectInterfaces,
@@ -325,6 +326,13 @@ export interface GeometrySlice {
   // sorted-vertex-key lookup to match them to tet boundary triangles correctly.
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
+  // The links of a Shell body's CAD mid-surface (lib/cadShell, KOF-498): each
+  // facet's top and bottom CAD face, each rim edge's side face. null when no
+  // Shell body took the CAD path.
+  midSurfaceLinks: MidSurfaceLinks | null;
+  // How the mesh meshed each body marked Shell: the CAD path, or the
+  // mesh-based one and why (empty without Shell bodies).
+  shellRoutes: ShellRoute[];
   stepImportError: string | null;
   // The body-to-body interfaces of the geometry (lib/interfaces), detected
   // whenever the geometry changes; each carries the user's interface type.
@@ -452,6 +460,12 @@ export interface GeometrySlice {
     properties?: Property[] | null,
     // The bodies the mesh request left out as suppressed.
     meshSuppressedIds?: number[],
+    // The Shell bodies' routes and, on the CAD path, the mid-surface links.
+    // Absent for a mesh without Shell bodies, which clears both.
+    shell?: {
+      midSurfaceLinks: MidSurfaceLinks | null;
+      shellRoutes: ShellRoute[];
+    },
   ): void;
 }
 
@@ -500,6 +514,8 @@ function dropAnalysis(s: ModelState): void {
   s.meshSizes = null;
   s.surfaceTriangles = null;
   s.surfaceFaceIds = null;
+  s.midSurfaceLinks = null;
+  s.shellRoutes = [];
   s.bcGroups = [];
   s.loadGroups = [];
   s.tieGroups = [];
@@ -559,6 +575,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   volMesh: null,
   surfaceTriangles: null,
   surfaceFaceIds: null,
+  midSurfaceLinks: null,
+  shellRoutes: [],
   stepImportError: null,
   interfaces: [],
   geometryHistory: [],
@@ -907,6 +925,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     surfaceFaceIds,
     properties,
     meshSuppressedIds,
+    shell,
   ) =>
     set((s) => {
       s.nodes = nodes;
@@ -916,6 +935,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       if (properties) s.properties = properties;
       s.surfaceTriangles = surfaceTriangles ?? null;
       s.surfaceFaceIds = surfaceFaceIds ?? null;
+      s.midSurfaceLinks = shell?.midSurfaceLinks ?? null;
+      s.shellRoutes = shell?.shellRoutes ?? [];
       // Groups picked on whole CAD faces follow those faces onto the new mesh
       // (lib/remeshGroups); the rest are cleared and named in the notice. The
       // id counters run on, so a carried group's id is never handed out again.
@@ -937,9 +958,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
             elements,
             surfaceTriangles: surfaceTriangles ?? null,
             surfaceFaceIds: surfaceFaceIds ?? null,
+            midSurfaceLinks: shell?.midSurfaceLinks ?? null,
           },
           before.stepSurface,
         ).nodesByFace,
+        shell?.midSurfaceLinks
+          ? shellFaceNodes(shell.midSurfaceLinks, elements)
+          : new Map(),
       );
       // A carried coupling's reference point is a node of the new mesh too.
       const meshNodes = [...nodes, ...carried.referenceNodes];
@@ -959,6 +984,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         carried.loadGroups,
         elements,
         carried.couplingGroups,
+        s.midSurfaceLinks,
       );
       s.remeshNotice = remeshNotice(carried);
       s.result = null;

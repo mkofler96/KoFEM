@@ -47,7 +47,7 @@ pub use shellize::{
 pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
-use kofem_fem::contact::{ContactCg, ContactInterface, ContactPair};
+use kofem_fem::contact::ContactCg;
 use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonSettings, NewtonStatus};
 use kofem_fem::{
     assemble_stiffness, corner_stress_tensors, fold_onto_vertices, fold_onto_vertices_at,
@@ -741,23 +741,6 @@ impl ElasticModel {
         let stiffness = self
             .stiffness
             .with("startContactSolve", |assembled| Ok(assembled.clone()))?;
-        let boundary = self
-            .boundary
-            .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
-        let pairs = contacts
-            .sides
-            .iter()
-            .enumerate()
-            .map(|(index, (side_a, side_b))| {
-                ContactPair::between(&self.mesh, boundary, side_a, side_b).map_err(|error| {
-                    with_class(
-                        JsError::new(&format!("contact pair {index}: {error}")),
-                        &error,
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let interface = ContactInterface::new(&self.mesh, &pairs).map_err(|error| to_js(&error))?;
         let vertex_ties = if ties.slaves.is_empty() {
             None
         } else {
@@ -773,13 +756,14 @@ impl ElasticModel {
                 .map_err(|error| to_js(&error))?,
             )
         };
-        let solver = ContactCg::new(
+        let solver = ContactCg::from_picked_surfaces(
             &self.mesh,
-            interface,
+            &contacts.sides,
             vertex_ties,
             options.settings,
             options.preconditioner,
-        );
+        )
+        .map_err(|error| to_js(&error))?;
         let run = NewtonRun::start(
             LinearElastic::new(stiffness),
             solver,
@@ -796,6 +780,7 @@ impl ElasticModel {
         .map_err(|error| to_js(&error))?;
         Ok(ContactRun {
             run,
+            unheld: None,
             status: NewtonStatus::Solving {
                 increment: 1,
                 iteration: 1,

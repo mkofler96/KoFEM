@@ -472,31 +472,37 @@ fn a_contact_holds_a_pressed_block_along_its_normal() {
     assert_free(&free[0], &[2], &[ALONG_Z], &[]);
 }
 
+/// Frictionless contact cannot hold the block's slide and spin, but the
+/// contact solve holds a body only contact supports with weak springs and
+/// refuses a load nothing holds, so the check leaves such a body to it.
 #[test]
-fn a_frictionless_contact_leaves_the_slide_and_the_spin_free() {
+fn a_body_in_contact_is_left_to_the_contact_solve() {
     let (model, _) = stacked_with_contact();
-    let free = model.free();
-    assert_eq!(free.len(), 1);
-    assert_free(&free[0], &[2], &[ALONG_X, ALONG_Y], &[ALONG_Z]);
+    assert_eq!(model.free(), vec![]);
 }
 
 #[test]
-fn a_contact_surface_without_a_whole_element_face_is_refused() {
+fn a_body_tied_to_a_body_in_contact_is_left_to_the_contact_solve() {
     let (mut model, upper) = stacked_with_contact();
-    let edge = model.on_plane(&model.on_plane(&upper, 2, 1.0), 0, 0.0);
-    model.contacts[0].surface = edge;
-    let result = free_rigid_motions(&RigidBodyModel {
-        positions: &model.positions,
-        element_offsets: &model.offsets,
-        element_nodes: &model.nodes,
-        element_labels: &model.labels,
-        rotational_nodes: &model.rotational,
-        links: &model.links,
-        contacts: &model.contacts,
-        fixed_dofs: &model.fixed,
+    let lid = model.block([0.0, 0.0, 2.0], [1, 1, 1], 3);
+    model.links.push(RigidLink {
+        primary: model.on_plane(&upper, 2, 2.0),
+        secondary: model.on_plane(&lid, 2, 2.0),
+        dof_mask: 0b111,
     });
-    assert!(
-        matches!(&result, Err(FemError::RigidBodyInput { reason }) if reason.contains("contact 0")),
-        "{result:?}"
+    assert_eq!(model.free(), vec![]);
+}
+
+#[test]
+fn a_loose_body_away_from_the_contact_is_still_reported() {
+    let (mut model, _) = stacked_with_contact();
+    model.block([3.0, 0.0, 0.0], [1, 1, 1], 3);
+    let free = model.free();
+    assert_eq!(free.len(), 1);
+    assert_free(
+        &free[0],
+        &[3],
+        &[ALONG_X, ALONG_Y, ALONG_Z],
+        &[ALONG_X, ALONG_Y, ALONG_Z],
     );
 }

@@ -355,6 +355,11 @@ describe("buckets and categories", () => {
       "Bodies 1 and 3 can still rotate about (0.71, 0.71, 0). Add supports or connect them to other bodies.",
       "unheld_body",
     ],
+    // A body only contact holds that its load lifts off (KOF-501).
+    [
+      "Body 1 is held only by contact, which cannot stop it: its load would make it move along Z.",
+      "unheld_body",
+    ],
     ["something nobody anticipated", "unknown"],
   ])("error category of %p is %s", (message, category) => {
     expect(categorizeError(new Error(message))).toBe(category);

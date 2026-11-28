@@ -9,6 +9,7 @@
 
 import type {
   ContactPairs,
+  ContactRun,
   ContactSolution,
   ElasticModel,
   SolveOptions,
@@ -34,6 +35,38 @@ const CG_STEP = 50;
 // event loop.
 const YIELD_AFTER_MS = 200;
 
+// The contact solve refused a body only contact holds: its load drives it in
+// a motion nothing holds. `vertex` is one of its vertices (indexed as the
+// solve's), `direction` the motion's unit direction, or its axis where it
+// `turns`.
+export class ContactUnheldError extends Error {
+  constructor(
+    readonly vertex: number,
+    readonly direction: [number, number, number],
+    readonly turns: boolean,
+    cause: unknown,
+  ) {
+    super(
+      `the contact cannot hold the body of vertex ${vertex} along (${direction.join(", ")})`,
+      { cause },
+    );
+  }
+}
+
+// `err`, thrown by `run.advance`, as a ContactUnheldError where the run says
+// it refused a body only contact holds.
+function unheldOr(run: ContactRun, err: unknown): unknown {
+  const vertex = run.unheldNode;
+  const direction = run.unheldDirection;
+  if (vertex === undefined || direction === undefined) return err;
+  return new ContactUnheldError(
+    vertex,
+    [direction[0], direction[1], direction[2]],
+    run.unheldTurns,
+    err,
+  );
+}
+
 // The contact pairs as the Rust module takes them: each side's vertices.
 export function contactPairs(
   fem: ContactFemModule,
@@ -56,7 +89,9 @@ export function contactPairs(
 
 // Solve `elastic` (assembled) with contact over `pairs` and the ties `ties`
 // (an empty table for none); `options` sets each correction's tolerance,
-// preconditioner and CG budget. The caller frees the solution.
+// preconditioner and CG budget. The caller frees the solution. Throws a
+// ContactUnheldError for a body only contact holds that its load drives in a
+// motion nothing holds.
 export async function runContactSolve(
   elastic: ElasticModel,
   pairs: ContactPairs,
@@ -80,7 +115,12 @@ export async function runContactSolve(
   try {
     let lastYield = performance.now();
     for (;;) {
-      const converged = run.advance(CG_STEP);
+      let converged: boolean;
+      try {
+        converged = run.advance(CG_STEP);
+      } catch (err) {
+        throw unheldOr(run, err);
+      }
       if (converged) {
         finished = true;
         return run.finish();

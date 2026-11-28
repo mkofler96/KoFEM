@@ -15,6 +15,10 @@
 //     force is E·A·(push − gap)/(2L), carried as a uniform pressure across
 //     the non-matching interface;
 //   - for tetrahedra and hexahedra, with both preconditioners.
+//
+// With box B unsupported and pushed by a force instead (KOF-501), only the
+// contact holds it, and only along x: it is pressed onto box A across the
+// gap all the same, and a load across the contact is refused by name.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { solveSolidInRust } from "../../src/lib/solve/amg.ts";
@@ -47,10 +51,11 @@ const KUHN = [
   [0, 5, 1, 6],
 ];
 
-// Box A (x ∈ [0, 10], 2×2 across) and box B (x ∈ [10.5, 20.5], 3×3 across).
-function gappedBoxes(elementType) {
+// Box A (x ∈ [0, 10], 2×2 across) and box B (x ∈ [10.5, 20.5], 3×3 across,
+// or `acrossB` × `acrossB`).
+function gappedBoxes(elementType, acrossB = 3) {
   const boxA = boxHexMesh(LENGTH, SIDE, SIDE, 4, 2, 2);
-  const boxB = boxHexMesh(LENGTH, SIDE, SIDE, 4, 3, 3);
+  const boxB = boxHexMesh(LENGTH, SIDE, SIDE, 4, acrossB, acrossB);
   const nodes = [];
   boxA.vertices.forEach((v, i) =>
     nodes.push({ id: i, x: v[0], y: v[1], z: v[2] }),
@@ -94,8 +99,40 @@ const properties = [
   { id: 2, materialId: 1 },
 ];
 
-async function solve(elementType, push, method) {
-  const { nodes, elements } = gappedBoxes(elementType);
+// The facing surfaces as one contact, or as two split at y = SIDE / 2.
+const facing = (nodes, split) => {
+  const sides = (keep) => [
+    { nodeIds: onPlane(nodes.filter(keep), LENGTH) },
+    { nodeIds: onPlane(nodes.filter(keep), LENGTH + GAP) },
+  ];
+  const pair = (name, [facesA, facesB]) => ({
+    name,
+    facesA: [facesA],
+    facesB: [facesB],
+  });
+  return split
+    ? [
+        pair(
+          "Contact1",
+          sides((node) => node.y <= SIDE / 2),
+        ),
+        pair(
+          "Contact2",
+          sides((node) => node.y >= SIDE / 2),
+        ),
+      ]
+    : [
+        pair(
+          "Contact1",
+          sides(() => true),
+        ),
+      ];
+};
+
+// `split`: the facing surfaces as two contacts meeting at y = SIDE / 2;
+// "half": only the half y ≤ SIDE / 2 picked.
+async function solve(elementType, push, method, split = false) {
+  const { nodes, elements } = gappedBoxes(elementType, split ? 4 : 3);
   const constraints = [];
   for (const node of nodes) {
     if (node.x === 0) constraints.push({ nodeId: node.id, dof: 0 });
@@ -104,13 +141,8 @@ async function solve(elementType, push, method) {
   }
   for (const nodeId of onPlane(nodes, 2 * LENGTH + GAP))
     constraints.push({ nodeId, dof: 0, prescribedValue: -push });
-  const contacts = [
-    {
-      name: "Contact1",
-      facesA: [{ nodeIds: onPlane(nodes, LENGTH) }],
-      facesB: [{ nodeIds: onPlane(nodes, LENGTH + GAP) }],
-    },
-  ];
+  const contacts =
+    split === "half" ? facing(nodes, true).slice(0, 1) : facing(nodes, split);
   const logs = [];
   const vid = buildVertexIndexer(nodes);
   const result = await solveSolidInRust(
@@ -186,4 +218,141 @@ describe("contact between two boxes across a gap", () => {
         );
       });
     }
+});
+
+// Box A on its rollers, box B on nothing, a force `[fx, fy]` spread over box
+// B's far end, or the loads `endLoads(end nodes)` there.
+function solveResting(elementType, [fx, fy], method, endLoads) {
+  const { nodes, elements } = gappedBoxes(elementType);
+  const constraints = [];
+  for (const node of nodes) {
+    if (node.id >= ID_OFFSET) continue;
+    if (node.x === 0) constraints.push({ nodeId: node.id, dof: 0 });
+    if (node.y === 0) constraints.push({ nodeId: node.id, dof: 1 });
+    if (node.z === 0) constraints.push({ nodeId: node.id, dof: 2 });
+  }
+  const endNodes = nodes.filter(
+    (node) => Math.abs(node.x - (2 * LENGTH + GAP)) < 1e-9,
+  );
+  const loads = endLoads
+    ? endLoads(endNodes)
+    : endNodes.flatMap(({ id: nodeId }) => [
+        { nodeId, dof: 0, value: fx / endNodes.length },
+        { nodeId, dof: 1, value: fy / endNodes.length },
+      ]);
+  const vid = buildVertexIndexer(nodes);
+  return solveSolidInRust(
+    fem,
+    {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads,
+      contacts: [
+        {
+          name: "Contact1",
+          facesA: [{ nodeIds: onPlane(nodes, LENGTH) }],
+          facesB: [{ nodeIds: onPlane(nodes, LENGTH + GAP) }],
+        },
+      ],
+    },
+    1,
+    method,
+    vid,
+    vid,
+    undefined,
+    neverAsk,
+    () => undefined,
+  );
+}
+
+const PUSH = 1000;
+
+describe("a box only the contact holds", () => {
+  for (const elementType of ["CHEXA", "CTETRA"])
+    for (const method of ["amg", "gauss-seidel"]) {
+      test(`${elementType}, ${method}: pressed onto the other box across the gap`, async () => {
+        const { contact } = await solveResting(elementType, [-PUSH, 0], method);
+        expect(contact.closed.every((closed) => closed === 1)).toBe(true);
+        // The end load is lumped evenly over the end nodes, not as a uniform
+        // traction, so the pressure is not uniform; the force is the push.
+        expect(Math.abs(contact.force - PUSH) / PUSH).toBeLessThan(1e-5);
+        expect(contact.pressure.every((pressure) => pressure > 0)).toBe(true);
+      });
+    }
+
+  test("a load across the contact is refused, naming the body and the motion", async () => {
+    await expect(solveResting("CHEXA", [-PUSH, 10], "amg")).rejects.toThrow(
+      "Body 2 is held only by contact, which cannot stop it: its load would make it move along Y. " +
+        "Add a support or connect it to another body.",
+    );
+  });
+
+  test("a box pulled off the contact is refused", async () => {
+    await expect(solveResting("CHEXA", [PUSH, 0], "amg")).rejects.toThrow(
+      "Body 2 is held only by contact, which cannot stop it: its load would make it move along X.",
+    );
+  });
+});
+
+for (const sense of [1, -1])
+  test(`a twist about the contact normal is refused as a rotation (sense ${sense})`, async () => {
+    // Opposite forces along y on the top and bottom edges of box B's end: a
+    // couple about x, which a flat frictionless contact cannot take. Either
+    // way round it is a rotation about X.
+    const twist = (end) =>
+      end
+        .filter((node) => node.z === 0 || node.z === SIDE)
+        .map((node) => ({
+          nodeId: node.id,
+          dof: 1,
+          value: (node.z === 0 ? 10 : -10) * sense,
+        }));
+    await expect(
+      solveResting("CHEXA", [-PUSH, 0], "amg", (end) => [
+        ...end.map((node) => ({
+          nodeId: node.id,
+          dof: 0,
+          value: -PUSH / end.length,
+        })),
+        ...twist(end),
+      ]),
+    ).rejects.toThrow(
+      "Body 2 is held only by contact, which cannot stop it: its load would make it rotate about X.",
+    );
+  });
+
+// One surface picked as two contacts meeting at y = 2, a grid line of both
+// boxes: the nodes on it take both contacts' shares as one condition, so the
+// boxes are the same two bars in series.
+test("two contacts meeting at an edge act as one", async () => {
+  const push = 2 * GAP;
+  const { result } = await solve("CHEXA", push, "amg", true);
+  const { contact } = result;
+  const area = SIDE * SIDE;
+  const expected = (YOUNG * area * (push - GAP)) / (2 * LENGTH);
+  expect(contact.closed.every((closed) => closed === 1)).toBe(true);
+  expect(contact.nodeIds).toHaveLength(25);
+  expect(Math.abs(contact.force - expected) / expected).toBeLessThan(1e-5);
+  for (const pressure of contact.pressure)
+    expect(
+      Math.abs(pressure - expected / area) / (expected / area),
+    ).toBeLessThan(1e-5);
+});
+
+// Only half of the facing surfaces picked: the other half would pass through
+// box A, so the contact grows over it, and the boxes are the same two bars
+// in series as with the whole surface picked.
+test("a contact picked on half the facing surfaces grows over the rest", async () => {
+  const push = 2 * GAP;
+  const { result, logs } = await solve("CHEXA", push, "amg", "half");
+  const { contact } = result;
+  const area = SIDE * SIDE;
+  const expected = (YOUNG * area * (push - GAP)) / (2 * LENGTH);
+  expect(contact.nodeIds).toHaveLength(25);
+  expect(contact.closed.every((closed) => closed === 1)).toBe(true);
+  expect(Math.abs(contact.force - expected) / expected).toBeLessThan(1e-5);
+  expect(logs.some((line) => line.startsWith("Contact grew over"))).toBe(true);
 });

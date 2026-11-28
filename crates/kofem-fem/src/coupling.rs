@@ -29,6 +29,7 @@
 //! * Tie: a solid node follows the surface it is tied to,
 //!   `u = Σ wᵢ uᵢ` with Σ wᵢ = 1, in its translations (see [`crate::tie`]).
 
+use crate::count::index_as_u32;
 use crate::extremum::largest;
 use std::collections::BTreeMap;
 
@@ -539,7 +540,7 @@ impl CouplingConstraints {
         if self.row_of[dof] != NO_ROW {
             return Err(FemError::CouplingDofConflict { node, component });
         }
-        self.row_of[dof] = to_u32(self.rows.len());
+        self.row_of[dof] = index_as_u32(self.rows.len());
         self.rows.push(row);
         self.dof_of_row.push(dof);
         Ok(())
@@ -713,15 +714,6 @@ fn patch_weights(
         return Err(fail("the weights sum to zero".into()));
     }
     Ok(weights)
-}
-
-fn to_u32(index: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "at most one row per DOF, and DOFs fit in u32 (checked by the caller)"
-    )]
-    let narrow = index as u32;
-    narrow
 }
 
 fn sub(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {

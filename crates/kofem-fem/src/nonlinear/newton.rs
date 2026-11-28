@@ -285,7 +285,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                     let progress = self
                         .solver
                         .advance(cg_budget)
-                        .map_err(|error| self.tangent_failure(&error))?;
+                        .map_err(|error| self.tangent_failure(error))?;
                     let cg_iterations = cg_iterations + progress.iterations;
                     self.report.cg_iterations += progress.iterations;
                     if !progress.ready {
@@ -299,7 +299,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                     // of the tangent is spent.
                     self.solver
                         .finish()
-                        .map_err(|error| self.tangent_failure(&error))?;
+                        .map_err(|error| self.tangent_failure(error))?;
                     self.checked = true;
                     self.phase = Phase::Evaluated;
                 }
@@ -307,7 +307,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
                     let progress = self
                         .solver
                         .advance(cg_budget)
-                        .map_err(|error| self.tangent_failure(&error))?;
+                        .map_err(|error| self.tangent_failure(error))?;
                     let cg_iterations = cg_iterations + progress.iterations;
                     self.report.cg_iterations += progress.iterations;
                     if !progress.ready {
@@ -429,7 +429,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let settled = self
             .solver
             .settle(&self.displacements, residual, tangent, &self.supports)
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         if settled.residual.len() != self.displacements.len() {
             return Err(FemError::DisplacementLength {
                 len: settled.residual.len(),
@@ -501,7 +501,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let residual = self.out_of_balance();
         self.solver
             .start(tangent, residual, &prescribed)
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         self.phase = Phase::Solving { cg_iterations: 0 };
         Ok(())
     }
@@ -519,7 +519,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let held = self.supports.with_values(|_, _| 0.0);
         self.solver
             .start(tangent, probe(self.displacements.len()), &held)
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         self.phase = Phase::Checking { cg_iterations: 0 };
         Ok(())
     }
@@ -528,7 +528,7 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
         let (correction, tangent) = self
             .solver
             .finish()
-            .map_err(|error| self.tangent_failure(&error))?;
+            .map_err(|error| self.tangent_failure(error))?;
         if correction.len() != self.displacements.len() {
             return Err(FemError::DisplacementLength {
                 len: correction.len(),
@@ -588,7 +588,11 @@ impl<P: NonlinearProblem, S: TangentSolver> NewtonRun<P, S> {
     /// not positive definite, on a problem whose tangent varies and away from
     /// the undeformed state (where the tangent is the linear stiffness, and
     /// such a tangent means the model is not held), is the stability limit.
-    fn tangent_failure(&self, error: &FemError) -> FemError {
+    /// A contact solver's verdict on the model reaches the user as it is.
+    fn tangent_failure(&self, error: FemError) -> FemError {
+        if matches!(error, FemError::ContactUnheld { .. }) {
+            return error;
+        }
         let indefinite = matches!(
             error,
             FemError::NotPositiveDefinite { .. } | FemError::CoarseNotPositiveDefinite { .. }

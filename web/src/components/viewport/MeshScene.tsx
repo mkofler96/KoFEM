@@ -20,7 +20,7 @@ import { useModelStore } from "../../store/modelStore";
 import { resolveHighlightedBody } from "../../lib/bodyHighlight";
 import { isInterfaceActive } from "../../lib/interfaces";
 import { useMeshTopology } from "./useMeshTopology";
-import { useFacePick } from "./useFacePick";
+import { useCadFacePick, useFacePick } from "./useFacePick";
 import { GeometryLayer } from "./GeometryLayer";
 import { FitCamera } from "./FitCamera";
 import { FemMeshLayer } from "./FemMeshLayer";
@@ -48,6 +48,10 @@ export function MeshScene() {
   const faceSizePicking = useModelStore((s) => s.faceSizePicking);
   const properties = useModelStore((s) => s.properties);
   const probing = useModelStore((s) => s.probing);
+  const shellRoutes = useModelStore((s) => s.shellRoutes);
+  const midSurfaceLinks = useModelStore((s) => s.midSurfaceLinks);
+  const selectedFace = useModelStore((s) => s.selectedFace);
+  const pendingFaces = useModelStore((s) => s.pendingFaces);
   const addProbe = useModelStore((s) => s.addProbe);
   // The interface to show: the hovered row, else the one open in the panel —
   // unless one of its bodies is suppressed: its faces are then out of the
@@ -85,6 +89,22 @@ export function MeshScene() {
     topology.boundaryMeshTopo,
     getPos,
     topology.shellRim,
+  );
+
+  const onCadFacePick = useCadFacePick();
+  // The Shell bodies whose mid-surface came from their CAD faces (KOF-498):
+  // their CAD geometry is drawn see-through over the mesh, and supports and
+  // loads are picked on it.
+  const cadShellBodies = useMemo(
+    () => shellRoutes.filter((r) => r.path === "cad").map((r) => r.body),
+    [shellRoutes],
+  );
+  const pickedCadFaces = useMemo(
+    () =>
+      [...pendingFaces, ...(selectedFace ? [selectedFace] : [])].flatMap((f) =>
+        f.cadFaceId === undefined ? [] : [f.cadFaceId],
+      ),
+    [pendingFaces, selectedFace],
   );
 
   // The factor the displacements are drawn at (KOF-383): the automatic one or
@@ -253,6 +273,21 @@ export function MeshScene() {
           highlightInterface={highlightInterface}
         />
       )}
+      {!showResult &&
+        !showStepSurface &&
+        midSurfaceLinks !== null &&
+        cadShellBodies.length > 0 && (
+          <GeometryLayer
+            wireframe={false}
+            highlightBodyId={null}
+            highlightInterface={null}
+            ghost={{
+              bodies: cadShellBodies,
+              onFacePick: onCadFacePick,
+              pickedFaceIds: pickedCadFaces,
+            }}
+          />
+        )}
       <MeshOverlapLayer />
     </group>
   );

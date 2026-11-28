@@ -53,6 +53,7 @@ import {
   buildFromRecipe,
   nodalVonMises,
   rustFem,
+  scaledLocalSizes,
   withMesh,
 } from "./lib/pipeline.mjs";
 import { analyseStudy } from "./lib/rates.mjs";
@@ -183,12 +184,18 @@ async function expectedFailureRow(c) {
 
 // One level of a convergence study: the case's recipe with only the mesher
 // settings changed (`level` is the max element size, mm).
-async function studyLevel(caseId, level, order) {
+async function studyLevel(caseId, level, order, scaleLocalSizes) {
   const c = cases.find((x) => x.id === caseId);
   if (!c) throw new Error(`convergence study: unknown case "${caseId}"`);
   const build = await buildFromRecipe(
     caseId,
-    withMesh(c.recipe, { maxElementSize: level, order }),
+    withMesh(c.recipe, {
+      maxElementSize: level,
+      order,
+      ...(scaleLocalSizes
+        ? { localSizes: scaledLocalSizes(c.recipe.mesh, level) }
+        : {}),
+    }),
   );
   return { fe: build.fe, mesh: buildMeshStats(build) };
 }
@@ -294,7 +301,12 @@ if (report) {
       const ref = rowOf(s.caseId);
       const points = [];
       for (const level of s.levels) {
-        const { fe, mesh } = await studyLevel(s.caseId, level, s.order);
+        const { fe, mesh } = await studyLevel(
+          s.caseId,
+          level,
+          s.order,
+          s.scaleLocalSizes === true,
+        );
         const errPct = relErrPct(fe, ref.reference);
         const ci =
           mesh.order === ref.mesh.order &&

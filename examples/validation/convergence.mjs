@@ -17,7 +17,12 @@
 // long as one level of the study is the case's own mesh:
 //
 //   recipeStudy({ id, caseId, title, note, dimension, expect | (expect: null, noRate),
-//                 series: [{ label, caseId, order: 1 | 2, levels: [mm, …] }] })
+//                 series: [{ label, caseId, order: 1 | 2, levels: [mm, …],
+//                            scaleLocalSizes? }] })
+//
+// With scaleLocalSizes, the case's face sizes (mesh.localSizes) follow each
+// level in their ratio to its max element size, so a refined hole edge stays
+// refined in proportion instead of fixed.
 //
 // Rates (lib/rates.mjs, KOF-399): each series' observed rate is fitted over
 // its finest levels against the result extrapolated to zero element size,
@@ -251,16 +256,16 @@ export default [
     id: "plate-with-hole-shell",
     caseId: "plate-with-hole-shell",
     title: "Plate with a hole, shell triangles",
-    note: "Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the one stress each of the one or two triangles that meet there reports. On the finest meshes the peak node is shared by more triangles and reads low.",
+    note: "Kt rises steadily towards Howland's 3.14 from below as the plate and its hole edge are refined together, the hole edge at h/8: −2.2 % at 4 mm, −0.8 % at 1 mm, within a few hundredths of a percent at 0.5 mm.",
     expect: null,
-    noRate:
-      "The peak stress is read from the one or two triangles at the cut edge, whose size does not shrink with the maximum element size, so it has no rate to observe.",
+    noRate: NAFEMS_STRESS_SHELL,
     series: [
       {
         label: "Shell (linear)",
         caseId: "plate-with-hole-shell",
         order: 1,
-        levels: [4, 2.5, 2, 1.5, 1, 0.75, 0.5],
+        levels: [4, 2, 1, 0.5],
+        scaleLocalSizes: true,
       },
     ],
   }),

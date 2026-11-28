@@ -540,6 +540,20 @@ export const refusalMessages = defineMessages({
     pt: (bodies: string, motion: string) =>
       `Os corpos ${bodies} ainda podem ${motion}.`,
   },
+  contactCannotHold: {
+    en: (body: number, motion: string) =>
+      `Body ${body} is held only by contact, which cannot stop it: its load would make it ${motion}.`,
+    de: (body: number, motion: string) =>
+      `Körper ${body} wird nur durch Kontakt gehalten, und der hält ihn nicht: Seine Last würde ihn ${motion}.`,
+    fr: (body: number, motion: string) =>
+      `Le corps ${body} n'est tenu que par le contact, qui ne peut pas le retenir : sa charge le ferait ${motion}.`,
+    it: (body: number, motion: string) =>
+      `Il corpo ${body} è tenuto solo dal contatto, che non può trattenerlo: il suo carico lo farebbe ${motion}.`,
+    es: (body: number, motion: string) =>
+      `El cuerpo ${body} solo está sujeto por el contacto, que no puede retenerlo: su carga lo haría ${motion}.`,
+    pt: (body: number, motion: string) =>
+      `O corpo ${body} só é segurado pelo contato, que não consegue retê-lo: a carga o faria ${motion}.`,
+  },
   holdOneBody: {
     en: "Add a support or connect it to another body.",
     de: "Fügen Sie eine Lagerung hinzu oder verbinden Sie ihn mit einem anderen Körper.",

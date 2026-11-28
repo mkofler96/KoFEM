@@ -10,8 +10,10 @@ import {
   pickPointNodeId,
   nearestReferencePoint,
   toggleFaceSelection,
+  snapToAxis,
   SELECTION_NOUN,
 } from "../../lib/facePick";
+import { cadShellPick } from "../../lib/cadShell";
 import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
 import { rimEdgeKey, type ShellRim } from "../../lib/shellRim";
 
@@ -96,22 +98,7 @@ export function useFacePick(
     // that selection becomes solver input. Substituting +Y for a missing normal
     // would silently snap the pick to the wrong face — drop the pick instead.
     if (!e.face) return;
-    const normal = e.face.normal.clone().normalize();
-    const ax = Math.abs(normal.x),
-      ay = Math.abs(normal.y),
-      az = Math.abs(normal.z);
-    let axis: "X" | "Y" | "Z";
-    let isMax: boolean;
-    if (ax >= ay && ax >= az) {
-      axis = "X";
-      isMax = normal.x > 0;
-    } else if (ay >= ax && ay >= az) {
-      axis = "Y";
-      isMax = normal.y > 0;
-    } else {
-      axis = "Z";
-      isMax = normal.z > 0;
-    }
+    const { axis, isMax } = snapToAxis(e.face.normal);
 
     // Current selection = accumulated pending faces plus the active one.
     // Re-selecting an already-picked face toggles it off instead of adding a
@@ -152,6 +139,47 @@ export function useFacePick(
   }
 
   return pickMode ? handleFacePick : undefined;
+}
+
+// Picking handler for the CAD faces of a Shell body on the CAD mid-surface
+// path (KOF-498), drawn transparent over its mid-surface. The CAD geometry is
+// the ground truth: a click selects the whole CAD face under the cursor, and
+// the face's links say which nodes it is. Face mode takes a top or bottom
+// face (its facets), Edge mode a side face (the rim it collapsed to). A click
+// on a face of the other kind is left alone, so it reaches the mesh behind.
+// Point mode picks mesh nodes only, so it has no handler here.
+export function useCadFacePick():
+  ((cadFaceId: number, e: ThreeEvent<MouseEvent>) => void) | undefined {
+  const pickMode = useModelStore((s) => s.pickMode);
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const links = useModelStore((s) => s.midSurfaceLinks);
+  const elements = useModelStore((s) => s.elements);
+  const selectedFace = useModelStore((s) => s.selectedFace);
+  const pendingFaces = useModelStore((s) => s.pendingFaces);
+  const setSelectedFace = useModelStore((s) => s.setSelectedFace);
+  const setPendingFaces = useModelStore((s) => s.setPendingFaces);
+  if (!pickMode || !links || pickGeometry === "point") return undefined;
+
+  return (cadFaceId, e) => {
+    const pick = cadShellPick(links, elements, cadFaceId);
+    if (pick?.geometry !== pickGeometry || !e.face) return;
+    e.stopPropagation();
+    const current = selectedFace
+      ? [...pendingFaces, selectedFace]
+      : pendingFaces;
+    const next = toggleFaceSelection(
+      current,
+      {
+        nodeIds: pick.nodeIds,
+        ...snapToAxis(e.face.normal),
+        label: "",
+        cadFaceId,
+      },
+      SELECTION_NOUN[pickGeometry],
+    );
+    setPendingFaces(next.slice(0, -1));
+    setSelectedFace(next.length > 0 ? next[next.length - 1] : null);
+  };
 }
 
 // Picking handler for a coupling's REFERENCE POINT marker — the second of the

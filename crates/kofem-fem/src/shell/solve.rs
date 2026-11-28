@@ -6,6 +6,7 @@
 use crate::amg::{Preconditioner, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{eliminate_dirichlet, Dirichlet};
+use crate::count::index_as_u32;
 use crate::error::FemError;
 use crate::incomplete_cholesky::IncompleteCholesky;
 use crate::shell::assembly::SHELL_NODE_DOFS;
@@ -124,11 +125,7 @@ pub fn prepare_shell_static(
             return Err(FemError::LoadOnUnusedVertex { vertex });
         }
         for dof in first..first + SHELL_NODE_DOFS {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "ShellMesh::new caps the vertex count at MAX_SHELL_VERTICES, so every DOF fits in u32"
-            )]
-            dofs.push(dof as u32);
+            dofs.push(index_as_u32(dof));
             values.push(0.0);
         }
     }
