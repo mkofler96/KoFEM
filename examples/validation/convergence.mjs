@@ -430,4 +430,38 @@ export default [
       },
     ],
   }),
+  recipeStudy({
+    id: "scordelis-lo-roof",
+    caseId: "scordelis-lo-roof",
+    title: "Scordelis–Lo roof, curved shell triangles",
+    note: "The free-edge deflection rises to the reference from below and settles about 0.6 % short of it.",
+    expect: null,
+    noRate:
+      "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "scordelis-lo-roof",
+        order: 1,
+        levels: [4000, 2000, 1000, 500, 250],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "pinched-cylinder",
+    caseId: "pinched-cylinder",
+    title: "Pinched cylinder, curved shell triangles",
+    note: "The displacement under the load settles within 0.2 % of the reference.",
+    expect: null,
+    noRate:
+      "The read-out is a displacement under a point load on a shell of flat facets; the rate check covers solid meshes only.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "pinched-cylinder",
+        order: 1,
+        levels: [40, 20, 10, 5, 2.5],
+      },
+    ],
+  }),
 ];

@@ -52,6 +52,8 @@ import nafemsLe5 from "./nafems-le5.mjs";
 import nafemsLe6 from "./nafems-le6.mjs";
 import nafemsLe7 from "./nafems-le7.mjs";
 import nafemsLe8 from "./nafems-le8.mjs";
+import scordelisLoRoof from "./scordelis-lo-roof.mjs";
+import pinchedCylinder from "./pinched-cylinder.mjs";
 import { validateRecipe } from "../lib/recipe.mjs";
 
 const CASE_KEYS = new Set([
@@ -138,4 +140,6 @@ export default [
   nafemsLe8,
   nafemsLe10,
   nafemsLe11,
+  scordelisLoRoof,
+  pinchedCylinder,
 ].map(register);

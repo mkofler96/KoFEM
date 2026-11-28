@@ -52,4 +52,10 @@ export const REF = {
     "M. A. Puso and T. A. Laursen, “A mortar segment-to-segment contact method for large deformation solid mechanics”, <cite>Computer Methods in Applied Mechanics and Engineering</cite> 193 (2004) 601–629.",
   wohlmuth:
     "B. I. Wohlmuth, “A mortar finite element method using dual spaces for the Lagrange multiplier”, <cite>SIAM Journal on Numerical Analysis</cite> 38 (2000) 989–1012.",
+  macnealHarder:
+    "R. H. MacNeal and R. L. Harder, “A proposed standard set of problems to test finite element accuracy”, <cite>Finite Elements in Analysis and Design</cite> 1 (1985) 3–20.",
+  belytschko1985:
+    "T. Belytschko, H. Stolarski, W. K. Liu, N. Carpenter and J. S.-J. Ong, “Stress projection for membrane and shear locking in shell finite elements”, <cite>Computer Methods in Applied Mechanics and Engineering</cite> 51 (1985) 221–258.",
+  scordelisLo:
+    "A. C. Scordelis and K. S. Lo, “Computer analysis of cylindrical shells”, <cite>Journal of the American Concrete Institute</cite> 61 (1964) 539–561.",
 };
