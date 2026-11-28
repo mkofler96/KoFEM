@@ -11,9 +11,6 @@
 //               decline or leave. Nothing is written to storage.
 // - denied, disabled (no measurement ID), or no loader at all → dropped.
 //
-// A per-session event (the first completed solve) is sent once per browser
-// tab; the flag that says so is written to sessionStorage only when it is sent.
-//
 // No event carries model data. Parameters are a closed set of enums (format,
 // workflow, error category, duration bucket) plus the public gallery example
 // id; raw error messages, file names, sizes and results never leave the page.
@@ -130,8 +127,6 @@ export interface AnalyticsEvents {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
   };
-  // The GA4 key event: the first completed solve of a browser-tab session,
-  // whereas solve_completed counts every solve (KOF-491).
   first_solve_completed: WorkflowParams & {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
@@ -172,9 +167,10 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 // Parameter values must look like an enum or a gallery id. A raw error message
 // or file name fails this and is refused rather than sent.
 const SAFE_VALUE = /^[A-Za-z0-9_-]{1,64}$/;
-// Sent at most once per browser-tab session, so a reload does not repeat them
-// and a new tab starts over. The mark is a flag in sessionStorage, written only
-// when the event is sent, so never without consent, and gone with the tab.
+// GA4's key event, so sent at most once per browser-tab session, or repeat
+// solves would inflate conversions (KOF-491). The flag in sessionStorage is
+// written only when the event is sent, so never without consent, and is gone
+// with the tab.
 const PER_SESSION: ReadonlySet<string> = new Set<AnalyticsEventName>([
   "first_solve_completed",
 ]);
@@ -193,8 +189,6 @@ function consent(): ConsentState | undefined {
     : window.__kofemAnalyticsConsent;
 }
 
-// Claims the tab session's one send of a per-session event. Without
-// sessionStorage the event is not sent: a key event must never be counted twice.
 function claimSession(name: string): boolean {
   const key = SESSION_MARK_PREFIX + name;
   try {
@@ -274,10 +268,6 @@ export function trackOnce<E extends AnalyticsEventName>(
   track(name, params);
 }
 
-/**
- * A completed solve: `solve_completed` every time, for usage counts, and
- * `first_solve_completed` once per tab session, for GA4's key event.
- */
 export function trackSolveCompleted(
   params: AnalyticsEvents["solve_completed"],
 ): void {

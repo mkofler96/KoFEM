@@ -145,8 +145,6 @@ describe("consent gating", () => {
   });
 });
 
-// GA4 counts first_solve_completed as the key event, so it must fire at most
-// once per browser-tab session however many solves complete (KOF-491).
 describe("first solve of a session", () => {
   const solved = {
     workflow: "example",

@@ -273,8 +273,6 @@ test.describe("workflow events", () => {
     expect(after.map((e) => e.name)).not.toContain("solve_failed");
   });
 
-  // GA4's key event is first_solve_completed, so repeat solves must not
-  // inflate it; solve_completed still counts each one (KOF-491).
   test("repeat solves: one first_solve_completed per tab session", async ({
     page,
   }) => {
@@ -300,7 +298,6 @@ test.describe("workflow events", () => {
       events.find((e) => e.name === "solve_completed")?.params,
     );
 
-    // A reload keeps the tab's session: its solve is not a first one.
     await page.reload();
     await ready();
     await triggerSolve(page);
