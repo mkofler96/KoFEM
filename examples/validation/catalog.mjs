@@ -26,38 +26,79 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const SITE_DIR = join(here, "../gallery/site");
 export const SHOWCASE_DIR = join(here, "../gallery/showcase");
 
-export const ORDER = [
-  "axial-bar",
-  "surface-pressure",
-  "cantilever-beam",
-  "beam-torsion",
-  "shaft-torsion",
-  "plate-with-hole",
-  "plate-with-hole-shell",
-  "cooks-membrane",
-  "cooks-membrane-incompressible",
-  "tie-patch-test",
-  "tie-lame-cylinder",
-  "tie-cantilever",
-  "nafems-le1",
-  "nafems-le2",
-  "nafems-le3",
-  "nafems-le4",
-  "nafems-le5",
-  "nafems-le6",
-  "nafems-le7",
-  "nafems-le8",
-  "nafems-le10",
-  "nafems-le11",
-  "mbb-beam-topopt",
+// The validation cases in groups, so the contents and /examples/ list them
+// under a heading each. `namePrefix` is what every name in the group starts
+// with; the contents leave it out under the group's heading, which says it.
+export const GROUPS = [
+  {
+    id: "analytical",
+    name: "Analytical solutions",
+    ids: [
+      "axial-bar",
+      "surface-pressure",
+      "cantilever-beam",
+      "beam-torsion",
+      "shaft-torsion",
+      "plate-with-hole",
+      "plate-with-hole-shell",
+    ],
+  },
+  {
+    id: "cook",
+    name: "Cook's membrane",
+    ids: ["cooks-membrane", "cooks-membrane-incompressible"],
+  },
+  {
+    id: "ties",
+    name: "Tied meshes",
+    ids: ["tie-patch-test", "tie-lame-cylinder", "tie-cantilever"],
+  },
+  {
+    id: "nafems",
+    name: "NAFEMS benchmarks",
+    namePrefix: "NAFEMS ",
+    ids: [
+      "nafems-le1",
+      "nafems-le2",
+      "nafems-le3",
+      "nafems-le4",
+      "nafems-le5",
+      "nafems-le6",
+      "nafems-le7",
+      "nafems-le8",
+      "nafems-le10",
+      "nafems-le11",
+    ],
+  },
 ];
+
+export const ORDER = [...GROUPS.flatMap((g) => g.ids), "mbb-beam-topopt"];
 
 const caseIds = new Set(cases.map((c) => c.id));
 export const SHOWCASE_IDS = ORDER.filter((id) => !caseIds.has(id));
 
-for (const c of cases)
-  if (!ORDER.includes(c.id))
-    throw new Error(`case "${c.id}" is missing from the example order`);
+const groupOf = new Map();
+for (const g of GROUPS)
+  for (const id of g.ids) {
+    if (groupOf.has(id))
+      throw new Error(
+        `"${id}" is listed in group "${groupOf.get(id).id}" and in group "${g.id}"`,
+      );
+    groupOf.set(id, g);
+  }
+for (const c of cases) {
+  const group = groupOf.get(c.id);
+  if (!group) throw new Error(`case "${c.id}" is in no group`);
+  if (group.namePrefix && !c.name.startsWith(group.namePrefix))
+    throw new Error(
+      `case "${c.id}" is in group "${group.id}", so its name must start with "${group.namePrefix}"`,
+    );
+}
+for (const id of groupOf.keys())
+  if (!caseIds.has(id))
+    throw new Error(
+      `group "${groupOf.get(id).id}" lists "${id}", which is not a validation case`,
+    );
 for (const id of Object.keys(showcaseRecipes))
   if (!SHOWCASE_IDS.includes(id))
     throw new Error(
@@ -91,7 +132,14 @@ export function catalog(rows) {
     const row = rowById.get(id);
     if (!row) throw new Error(`no published row for case "${id}"`);
     const c = cases.find((x) => x.id === id);
-    return { ...row, kind: "case", page: c.page, recipe: c.recipe };
+    const g = groupOf.get(id);
+    return {
+      ...row,
+      kind: "case",
+      page: c.page,
+      recipe: c.recipe,
+      group: { id: g.id, name: g.name, namePrefix: g.namePrefix ?? "" },
+    };
   });
 }
 

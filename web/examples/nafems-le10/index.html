@@ -236,7 +236,7 @@
       .docs-group {
         margin: 14px 0 0;
       }
-      .docs-group summary {
+      .docs-group > summary {
         position: relative;
         list-style: none;
         cursor: pointer;
@@ -245,30 +245,36 @@
         font-weight: 600;
         color: var(--text);
       }
-      .docs-group summary::-webkit-details-marker {
+      .docs-group > summary::-webkit-details-marker {
         display: none;
       }
-      .docs-group summary::before {
+      .docs-group > summary::before {
         content: "";
         position: absolute;
         left: 10px;
-        top: 13px;
+        top: 50%;
         width: 6px;
         height: 6px;
         border-right: 1.5px solid var(--muted);
         border-bottom: 1.5px solid var(--muted);
-        transform: rotate(-45deg);
+        transform: translateY(-50%) rotate(-45deg);
         transition: transform 0.15s;
       }
-      .docs-group[open] summary::before {
-        transform: rotate(45deg);
-        top: 11px;
+      .docs-group[open] > summary::before {
+        transform: translateY(-50%) rotate(45deg);
       }
-      .docs-group summary:hover {
+      .docs-group > summary:hover {
         background: var(--panel);
       }
       .docs-group ul {
         margin: 2px 0 6px 16px;
+      }
+      .docs-group .docs-group {
+        margin: 0 0 0 16px;
+      }
+      .docs-group .docs-group > summary {
+        font-weight: 500;
+        color: var(--body);
       }
       .docs-toc {
         font-size: 13.5px;
@@ -290,7 +296,7 @@
         margin: 0 0 24px;
         font-size: 15px;
       }
-      .docs-menu summary {
+      .docs-menu > summary {
         padding: 9px 14px;
         color: var(--text);
         font-weight: 500;
@@ -673,15 +679,15 @@
         border-radius: 8px;
         margin-bottom: 10px;
       }
-      .examples h3 {
+      .examples :is(h3, h4) {
         font-size: 16.5px;
         margin: 0 0 4px;
       }
-      main .examples h3 a {
+      main .examples :is(h3, h4) a {
         color: var(--text);
         text-decoration: none;
       }
-      .examples h3 a:hover {
+      .examples :is(h3, h4) a:hover {
         color: var(--accent);
       }
       .examples p {
@@ -814,7 +820,9 @@
         </ul>
         <details class="docs-group" data-section="validation" open>
           <summary>Validation</summary>
-          <ul>
+          <details class="docs-group" data-group="analytical">
+            <summary>Analytical solutions</summary>
+            <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
@@ -822,22 +830,38 @@
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="cook">
+            <summary>Cook's membrane</summary>
+            <ul>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
             <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="ties">
+            <summary>Tied meshes</summary>
+            <ul>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
-            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
-            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
-            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
-            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
-            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
-            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
-            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
-            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
-            <li><a href="/examples/nafems-le10/" aria-current="page">NAFEMS LE10: thick plate under pressure</a></li>
-            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
-          </ul>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="nafems" open>
+            <summary>NAFEMS benchmarks</summary>
+            <ul>
+            <li><a href="/examples/nafems-le1/">LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/" aria-current="page">LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">LE11: solid cylinder/taper/sphere, temperature loading</a></li>
+            </ul>
+          </details>
         </details>
         <details class="docs-group" data-section="examples">
           <summary>Examples</summary>
@@ -855,7 +879,9 @@
         </ul>
         <details class="docs-group" data-section="validation" open>
           <summary>Validation</summary>
-          <ul>
+          <details class="docs-group" data-group="analytical">
+            <summary>Analytical solutions</summary>
+            <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
@@ -863,22 +889,38 @@
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="cook">
+            <summary>Cook's membrane</summary>
+            <ul>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
             <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="ties">
+            <summary>Tied meshes</summary>
+            <ul>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
-            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
-            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
-            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
-            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
-            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
-            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
-            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
-            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
-            <li><a href="/examples/nafems-le10/" aria-current="page">NAFEMS LE10: thick plate under pressure</a></li>
-            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
-          </ul>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="nafems" open>
+            <summary>NAFEMS benchmarks</summary>
+            <ul>
+            <li><a href="/examples/nafems-le1/">LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/" aria-current="page">LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">LE11: solid cylinder/taper/sphere, temperature loading</a></li>
+            </ul>
+          </details>
         </details>
         <details class="docs-group" data-section="examples">
           <summary>Examples</summary>
@@ -889,7 +931,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 21 of 22</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / <a href="/examples/#nafems">NAFEMS benchmarks</a> / 9 of 10</p>
       <h1>NAFEMS LE10: thick plate under pressure</h1>
       <div class="lede">
         <p>The planform of <a href="/examples/nafems-le1/">LE1</a>, now a
