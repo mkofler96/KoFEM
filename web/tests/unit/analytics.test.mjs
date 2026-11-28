@@ -16,6 +16,7 @@ import {
   setWorkflow,
   track,
   trackOnce,
+  trackSolveCompleted,
   workflowParams,
 } from "../../src/lib/analytics.ts";
 import {
@@ -32,6 +33,12 @@ import { solveMessages } from "../../src/i18n/messages/solve.ts";
 // A window with just what the loader and the utility touch.
 const sent = [];
 const win = new EventTarget();
+// The tab's sessionStorage: emptied for a new tab, kept across a reload.
+const tabStorage = new Map();
+win.sessionStorage = {
+  getItem: (key) => (tabStorage.has(key) ? tabStorage.get(key) : null),
+  setItem: (key, value) => tabStorage.set(key, String(value)),
+};
 const hadWindow = "window" in globalThis;
 const previousWindow = globalThis.window;
 beforeAll(() => {
@@ -51,6 +58,7 @@ function setConsent(state) {
 }
 function fresh(state) {
   resetAnalyticsForTests();
+  tabStorage.clear();
   delete win.gtag;
   sent.length = 0;
   setConsent(state);
@@ -134,6 +142,113 @@ describe("consent gating", () => {
     trackOnce("solver_opened", opened);
     trackOnce("solver_opened", opened);
     expect(sent).toHaveLength(1);
+  });
+});
+
+// GA4 counts first_solve_completed as the key event, so it must fire at most
+// once per browser-tab session however many solves complete (KOF-491).
+describe("first solve of a session", () => {
+  const solved = {
+    workflow: "example",
+    example_id: "axial-bar",
+    analysis_type: "static",
+    duration_bucket: "lt_1s",
+  };
+  const names = () => sent.map((event) => event.name);
+
+  test("the first solve sends solve_completed and first_solve_completed", () => {
+    fresh("granted");
+    trackSolveCompleted(solved);
+    expect(names()).toEqual(["solve_completed", "first_solve_completed"]);
+    expect(sent[1].params).toEqual(sent[0].params);
+  });
+
+  test("a second and third solve send solve_completed only", () => {
+    fresh("granted");
+    trackSolveCompleted(solved);
+    trackSolveCompleted({ ...solved, analysis_type: "topology" });
+    trackSolveCompleted(solved);
+    expect(names()).toEqual([
+      "solve_completed",
+      "first_solve_completed",
+      "solve_completed",
+      "solve_completed",
+    ]);
+  });
+
+  test("a reload in the same tab is the same session", () => {
+    fresh("granted");
+    trackSolveCompleted(solved);
+    resetAnalyticsForTests();
+    sent.length = 0;
+    trackSolveCompleted(solved);
+    expect(names()).toEqual(["solve_completed"]);
+  });
+
+  test("a new tab is a new session", () => {
+    fresh("granted");
+    trackSolveCompleted(solved);
+    fresh("granted");
+    trackSolveCompleted(solved);
+    expect(names()).toEqual(["solve_completed", "first_solve_completed"]);
+  });
+
+  test("without consent neither event is sent and nothing is stored", () => {
+    fresh("denied");
+    trackSolveCompleted(solved);
+    trackSolveCompleted(solved);
+    expect(sent).toHaveLength(0);
+    expect(tabStorage.size).toBe(0);
+  });
+
+  test("declined, then accepted in the same tab: the next solve is the first sent", () => {
+    fresh(undefined);
+    trackSolveCompleted(solved);
+    setConsent("denied");
+    expect(tabStorage.size).toBe(0);
+    setConsent("granted");
+    trackSolveCompleted(solved);
+    expect(names()).toEqual(["solve_completed", "first_solve_completed"]);
+  });
+
+  test("without sessionStorage the key event is withheld, not repeated", () => {
+    fresh("granted");
+    const storage = win.sessionStorage;
+    const errors = [];
+    const original = console.error;
+    win.sessionStorage = {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+      setItem: () => {
+        throw new Error("SecurityError");
+      },
+    };
+    console.error = (message) => errors.push(message);
+    try {
+      trackSolveCompleted(solved);
+    } finally {
+      win.sessionStorage = storage;
+      console.error = original;
+    }
+    expect(names()).toEqual(["solve_completed"]);
+    expect(errors).toHaveLength(1);
+  });
+
+  test("pending: solves while the banner waits queue one first solve", () => {
+    fresh(undefined);
+    trackSolveCompleted(solved);
+    trackSolveCompleted(solved);
+    expect(sent).toHaveLength(0);
+    expect(tabStorage.size).toBe(0);
+    setConsent("granted");
+    trackSolveCompleted(solved);
+    expect(names()).toEqual([
+      "solve_completed",
+      "first_solve_completed",
+      "solve_completed",
+      "solve_completed",
+    ]);
   });
 });
 

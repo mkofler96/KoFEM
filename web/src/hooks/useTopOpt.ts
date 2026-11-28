@@ -27,6 +27,7 @@ import {
   classifyFailure,
   startTimer,
   track,
+  trackSolveCompleted,
   workflowParams,
 } from "../lib/analytics";
 import {
@@ -363,7 +364,7 @@ export function useTopOpt() {
           iterations,
           run: settings,
         });
-        track("solve_completed", {
+        trackSolveCompleted({
           ...workflow,
           analysis_type: "topology",
           duration_bucket: elapsed(),

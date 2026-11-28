@@ -30,6 +30,7 @@ import {
   classifyFailure,
   startTimer,
   track,
+  trackSolveCompleted,
   workflowParams,
 } from "../lib/analytics";
 import {
@@ -316,7 +317,7 @@ export function useSolver() {
     }>("solve", payload)
       .then(({ displacements, vonMises, stress, reactions, contact }) => {
         setResult({ displacements, vonMises, stress, reactions, contact, run });
-        track("solve_completed", {
+        trackSolveCompleted({
           ...workflow,
           analysis_type: "static",
           duration_bucket: elapsed(),
