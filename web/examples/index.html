@@ -333,7 +333,7 @@
       .docs-group {
         margin: 14px 0 0;
       }
-      .docs-group summary {
+      .docs-group > summary {
         position: relative;
         list-style: none;
         cursor: pointer;
@@ -342,10 +342,10 @@
         font-weight: 600;
         color: var(--text);
       }
-      .docs-group summary::-webkit-details-marker {
+      .docs-group > summary::-webkit-details-marker {
         display: none;
       }
-      .docs-group summary::before {
+      .docs-group > summary::before {
         content: "";
         position: absolute;
         left: 10px;
@@ -357,15 +357,29 @@
         transform: rotate(-45deg);
         transition: transform 0.15s;
       }
-      .docs-group[open] summary::before {
+      .docs-group[open] > summary::before {
         transform: rotate(45deg);
         top: 11px;
       }
-      .docs-group summary:hover {
+      .docs-group > summary:hover {
         background: var(--panel);
       }
       .docs-group ul {
         margin: 2px 0 6px 16px;
+      }
+      /* A group inside a section: indented like the section's entries. */
+      .docs-group .docs-group {
+        margin: 0 0 0 16px;
+      }
+      .docs-group .docs-group > summary {
+        font-weight: 500;
+        color: var(--body);
+      }
+      .docs-group .docs-group > summary::before {
+        top: 12px;
+      }
+      .docs-group .docs-group[open] > summary::before {
+        top: 10px;
       }
       .docs-toc {
         font-size: 13.5px;
@@ -387,7 +401,7 @@
         margin: 0 0 24px;
         font-size: 15px;
       }
-      .docs-menu summary {
+      .docs-menu > summary {
         padding: 9px 14px;
         color: var(--text);
         font-weight: 500;
@@ -770,15 +784,15 @@
         border-radius: 8px;
         margin-bottom: 10px;
       }
-      .examples h3 {
+      .examples :is(h3, h4) {
         font-size: 16.5px;
         margin: 0 0 4px;
       }
-      main .examples h3 a {
+      main .examples :is(h3, h4) a {
         color: var(--text);
         text-decoration: none;
       }
-      .examples h3 a:hover {
+      .examples :is(h3, h4) a:hover {
         color: var(--accent);
       }
       .examples p {
@@ -908,7 +922,9 @@
         </ul>
         <details class="docs-group" data-section="validation">
           <summary>Validation</summary>
-          <ul>
+          <details class="docs-group" data-group="analytical">
+            <summary>Analytical solutions</summary>
+            <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
@@ -916,22 +932,38 @@
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="cook">
+            <summary>Cook's membrane</summary>
+            <ul>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
             <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="ties">
+            <summary>Tied meshes</summary>
+            <ul>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
-            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
-            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
-            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
-            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
-            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
-            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
-            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
-            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
-            <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
-            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
-          </ul>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="nafems">
+            <summary>NAFEMS benchmarks</summary>
+            <ul>
+            <li><a href="/examples/nafems-le1/">LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/">LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">LE11: solid cylinder/taper/sphere, temperature loading</a></li>
+            </ul>
+          </details>
         </details>
         <details class="docs-group" data-section="examples">
           <summary>Examples</summary>
@@ -949,7 +981,9 @@
         </ul>
         <details class="docs-group" data-section="validation">
           <summary>Validation</summary>
-          <ul>
+          <details class="docs-group" data-group="analytical">
+            <summary>Analytical solutions</summary>
+            <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
@@ -957,22 +991,38 @@
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="cook">
+            <summary>Cook's membrane</summary>
+            <ul>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
             <li><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></li>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="ties">
+            <summary>Tied meshes</summary>
+            <ul>
             <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
             <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
             <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
-            <li><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></li>
-            <li><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></li>
-            <li><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></li>
-            <li><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></li>
-            <li><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></li>
-            <li><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></li>
-            <li><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></li>
-            <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
-            <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
-            <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
-          </ul>
+            </ul>
+          </details>
+          <details class="docs-group" data-group="nafems">
+            <summary>NAFEMS benchmarks</summary>
+            <ul>
+            <li><a href="/examples/nafems-le1/">LE1: elliptic membrane</a></li>
+            <li><a href="/examples/nafems-le2/">LE2: cylindrical shell patch</a></li>
+            <li><a href="/examples/nafems-le3/">LE3: hemisphere with point loads</a></li>
+            <li><a href="/examples/nafems-le4/">LE4: hyperbolic shell</a></li>
+            <li><a href="/examples/nafems-le5/">LE5: Z-section cantilever</a></li>
+            <li><a href="/examples/nafems-le6/">LE6: skew plate</a></li>
+            <li><a href="/examples/nafems-le7/">LE7: cylinder with hemispherical cap</a></li>
+            <li><a href="/examples/nafems-le8/">LE8: axisymmetric shell under pressure</a></li>
+            <li><a href="/examples/nafems-le10/">LE10: thick plate under pressure</a></li>
+            <li><a href="/examples/nafems-le11/">LE11: solid cylinder/taper/sphere, temperature loading</a></li>
+            </ul>
+          </details>
         </details>
         <details class="docs-group" data-section="examples">
           <summary>Examples</summary>
@@ -998,136 +1048,147 @@
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
       </p>
+      
+      <h3 id="analytical">Analytical solutions</h3>
       <ul class="examples">
         <li data-entry="axial-bar">
           <a href="/examples/axial-bar/" tabindex="-1" aria-hidden="true"><img src="/examples/axial-bar.png" width="1200" height="402" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/axial-bar/">Axial bar in tension</a></h3>
+          <h4><a href="/examples/axial-bar/">Axial bar in tension</a></h4>
           <p>Uniform tension. Checks material, supports and how a face load reaches the nodes.</p>
           <p class="meta">Tip extension δ: 0.47380&nbsp;mm, −0.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="surface-pressure">
           <a href="/examples/surface-pressure/" tabindex="-1" aria-hidden="true"><img src="/examples/surface-pressure.png" width="1200" height="432" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/surface-pressure/">Bar under end pressure</a></h3>
+          <h4><a href="/examples/surface-pressure/">Bar under end pressure</a></h4>
           <p>The bar pushed by a pressure. Checks the sign and the per-area scaling of pressure loads.</p>
           <p class="meta">Tip displacement u: −4.7380&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm, −0.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="cantilever-beam">
           <a href="/examples/cantilever-beam/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever-beam.png" width="1200" height="523" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></h3>
+          <h4><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></h4>
           <p>Bending on quadratic elements; linear ones lock and are far too stiff.</p>
           <p class="meta">Tip deflection δ: −1.9040&nbsp;mm, −0.04&nbsp;% from the reference</p>
         </li>
         <li data-entry="beam-torsion">
           <a href="/examples/beam-torsion/" tabindex="-1" aria-hidden="true"><img src="/examples/beam-torsion.png" width="1200" height="461" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/beam-torsion/">Square beam under torsion</a></h3>
+          <h4><a href="/examples/beam-torsion/">Square beam under torsion</a></h4>
           <p>Torsion of a square section, which warps. The clamp holds the warping back.</p>
           <p class="meta">Angle of twist θ: 8.8561&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad, +0.74&nbsp;% from the reference</p>
         </li>
         <li data-entry="shaft-torsion">
           <a href="/examples/shaft-torsion/" tabindex="-1" aria-hidden="true"><img src="/examples/shaft-torsion.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></h3>
+          <h4><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></h4>
           <p>Torsion of a tube. Straight-sided elements make the circle a polygon.</p>
           <p class="meta">Angle of twist θ: 1.4774&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad, +1.97&nbsp;% from the reference</p>
         </li>
         <li data-entry="plate-with-hole">
           <a href="/examples/plate-with-hole/" tabindex="-1" aria-hidden="true"><img src="/examples/plate-with-hole.png" width="1200" height="720" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/plate-with-hole/">Plate with a hole</a></h3>
+          <h4><a href="/examples/plate-with-hole/">Plate with a hole</a></h4>
           <p>Kirsch's stress concentration at a hole, in a strip of finite width. A peak stress, read as the app shows it.</p>
           <p class="meta">Stress-concentration factor Kt: 3.1268, −0.42&nbsp;% from the reference</p>
         </li>
         <li data-entry="plate-with-hole-shell">
           <a href="/examples/plate-with-hole-shell/" tabindex="-1" aria-hidden="true"><img src="/examples/plate-with-hole-shell.png" width="1200" height="720" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></h3>
+          <h4><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></h4>
           <p>The solid page's strip with a hole, as a shell mid-surface: Howland's Kt = 3.14 from linear shell triangles.</p>
           <p class="meta">Stress-concentration factor Kt: 3.1142, −0.82&nbsp;% from the reference</p>
         </li>
+      </ul>
+      <h3 id="cook">Cook's membrane</h3>
+      <ul class="examples">
         <li data-entry="cooks-membrane">
           <a href="/examples/cooks-membrane/" tabindex="-1" aria-hidden="true"><img src="/examples/cooks-membrane.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cooks-membrane/">Cook's membrane</a></h3>
+          <h4><a href="/examples/cooks-membrane/">Cook's membrane</a></h4>
           <p>Tapered, skewed cantilever in shear. A standard distortion benchmark.</p>
           <p class="meta">Loaded-edge deflection: 23.936&nbsp;mm, −0.10&nbsp;% from the reference</p>
         </li>
         <li data-entry="cooks-membrane-incompressible">
           <a href="/examples/cooks-membrane-incompressible/" tabindex="-1" aria-hidden="true"><img src="/examples/cooks-membrane-incompressible.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></h3>
+          <h4><a href="/examples/cooks-membrane-incompressible/">Cook's membrane, nearly incompressible</a></h4>
           <p>Rubber-like material in plane strain: linear tetrahedra lock, quadratic tetrahedra get the answer.</p>
           <p class="meta">Top-corner deflection: 8.0474&nbsp;mm, −0.34&nbsp;% from the reference; linear tetrahedra −43.30&nbsp;%, a known limitation</p>
         </li>
+      </ul>
+      <h3 id="ties">Tied meshes</h3>
+      <ul class="examples">
         <li data-entry="tie-patch-test">
           <a href="/examples/tie-patch-test/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-patch-test.png" width="1200" height="733" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/tie-patch-test/">Tie patch test</a></h3>
+          <h4><a href="/examples/tie-patch-test/">Tie patch test</a></h4>
           <p>Uniform tension across a tie between non-matching meshes. The exact answer is reproduced to round-off.</p>
           <p class="meta">Largest von Mises stress: 100.00&nbsp;MPa, +0.00&nbsp;% from the reference</p>
         </li>
         <li data-entry="tie-lame-cylinder">
           <a href="/examples/tie-lame-cylinder/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-lame-cylinder.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></h3>
+          <h4><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></h4>
           <p>Internal pressure in a cylinder made of two tied rings with non-matching curved meshes.</p>
           <p class="meta">Bore radial displacement u(a): 0.045620&nbsp;mm, −0.65&nbsp;% from the reference</p>
         </li>
         <li data-entry="tie-cantilever">
           <a href="/examples/tie-cantilever/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-cantilever.png" width="1200" height="523" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/tie-cantilever/">Tied cantilever beam</a></h3>
+          <h4><a href="/examples/tie-cantilever/">Tied cantilever beam</a></h4>
           <p>Bending across a tie between non-matching quadratic meshes, at mid-span.</p>
           <p class="meta">Tip deflection δ: −1.9045&nbsp;mm, −0.46&nbsp;% from the reference</p>
         </li>
+      </ul>
+      <h3 id="nafems">NAFEMS benchmarks</h3>
+      <ul class="examples">
         <li data-entry="nafems-le1">
           <a href="/examples/nafems-le1/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le1.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></h3>
+          <h4><a href="/examples/nafems-le1/">NAFEMS LE1: elliptic membrane</a></h4>
           <p>The NAFEMS elliptic membrane in plane stress: σyy = 92.7 MPa at the sharp end of the inner ellipse, from quadratic tetrahedra.</p>
           <p class="meta">Tangential stress σyy at D: 94.226&nbsp;MPa, +1.65&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le2">
           <a href="/examples/nafems-le2/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le2.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></h3>
+          <h4><a href="/examples/nafems-le2/">NAFEMS LE2: cylindrical shell patch</a></h4>
           <p>The NAFEMS cylindrical shell patch under an edge moment: a uniform 60 MPa bending stress, from curved shells.</p>
           <p class="meta">Tangential stress at E, outer surface: 60.902&nbsp;MPa, +1.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le3">
           <a href="/examples/nafems-le3/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le3.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></h3>
+          <h4><a href="/examples/nafems-le3/">NAFEMS LE3: hemisphere with point loads</a></h4>
           <p>The NAFEMS pinched hemisphere with an 18° hole: 185 mm radial displacement under 2 kN, from curved shells.</p>
           <p class="meta">Radial displacement at A: 186.72&nbsp;mm, +0.93&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le4">
           <a href="/examples/nafems-le4/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le4.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></h3>
+          <h4><a href="/examples/nafems-le4/">NAFEMS LE4: hyperbolic shell</a></h4>
           <p>The NAFEMS hyperbolic shell of revolution under internal pressure: σ = −50 MPa meridional at the waist, from curved shells.</p>
           <p class="meta">Meridional stress at K, mid-surface: −50.295&nbsp;MPa, +0.59&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le5">
           <a href="/examples/nafems-le5/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le5.png" width="1200" height="488" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></h3>
+          <h4><a href="/examples/nafems-le5/">NAFEMS LE5: Z-section cantilever</a></h4>
           <p>The NAFEMS Z-section cantilever under torque: the warping stress the clamped root raises, from shells welded at the L-corners.</p>
           <p class="meta">Axial stress at A, mid-surface: −109.40&nbsp;MPa, +1.30&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le6">
           <a href="/examples/nafems-le6/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le6.png" width="1200" height="470" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></h3>
+          <h4><a href="/examples/nafems-le6/">NAFEMS LE6: skew plate</a></h4>
           <p>The NAFEMS 30° skew plate under pressure: the bending stress at its centre, from flat shells.</p>
           <p class="meta">Max principal stress at E, lower surface: 0.80820&nbsp;MPa, +0.77&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le7">
           <a href="/examples/nafems-le7/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le7.png" width="1200" height="762" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></h3>
+          <h4><a href="/examples/nafems-le7/">NAFEMS LE7: cylinder with hemispherical cap</a></h4>
           <p>The NAFEMS pressure vessel, a cylinder closed by a hemisphere: σzz = 25.9 MPa on the outer surface near the junction, from curved shells.</p>
           <p class="meta">Axial stress at D, outer surface: 26.029&nbsp;MPa, +0.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le8">
           <a href="/examples/nafems-le8/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le8.png" width="1200" height="785" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></h3>
+          <h4><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></h4>
           <p>The NAFEMS pressurised shell of revolution with a knuckle and a dished end: the hoop stress at the knuckle, from curved shells.</p>
           <p class="meta">Hoop stress at D, outer surface: 85.757&nbsp;MPa, −9.25&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le10">
           <a href="/examples/nafems-le10/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le10.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></h3>
+          <h4><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></h4>
           <p>The NAFEMS thick elliptic plate under pressure: σyy = −5.38 MPa on the upper face at D, from quadratic tetrahedra.</p>
           <p class="meta">Direct stress σyy at D: −5.3684&nbsp;MPa, −0.22&nbsp;% from the reference</p>
         </li>
         <li data-entry="nafems-le11">
           <a href="/examples/nafems-le11/" tabindex="-1" aria-hidden="true"><img src="/examples/nafems-le11.png" width="1200" height="900" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></h3>
+          <h4><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></h4>
           <p>The NAFEMS solid of revolution under a linear temperature field: σzz = −105 MPa at A, from quadratic tetrahedra and a temperature change.</p>
           <p class="meta">Direct stress σzz at A: −103.77&nbsp;MPa, −1.17&nbsp;% from the reference</p>
         </li>

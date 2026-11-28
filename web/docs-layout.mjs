@@ -452,7 +452,7 @@ const STYLE = `
       .docs-group {
         margin: 14px 0 0;
       }
-      .docs-group summary {
+      .docs-group > summary {
         position: relative;
         list-style: none;
         cursor: pointer;
@@ -461,10 +461,10 @@ const STYLE = `
         font-weight: 600;
         color: var(--text);
       }
-      .docs-group summary::-webkit-details-marker {
+      .docs-group > summary::-webkit-details-marker {
         display: none;
       }
-      .docs-group summary::before {
+      .docs-group > summary::before {
         content: "";
         position: absolute;
         left: 10px;
@@ -476,15 +476,29 @@ const STYLE = `
         transform: rotate(-45deg);
         transition: transform 0.15s;
       }
-      .docs-group[open] summary::before {
+      .docs-group[open] > summary::before {
         transform: rotate(45deg);
         top: 11px;
       }
-      .docs-group summary:hover {
+      .docs-group > summary:hover {
         background: var(--panel);
       }
       .docs-group ul {
         margin: 2px 0 6px 16px;
+      }
+      /* A group inside a section: indented like the section's entries. */
+      .docs-group .docs-group {
+        margin: 0 0 0 16px;
+      }
+      .docs-group .docs-group > summary {
+        font-weight: 500;
+        color: var(--body);
+      }
+      .docs-group .docs-group > summary::before {
+        top: 12px;
+      }
+      .docs-group .docs-group[open] > summary::before {
+        top: 10px;
       }
       .docs-toc {
         font-size: 13.5px;
@@ -506,7 +520,7 @@ const STYLE = `
         margin: 0 0 24px;
         font-size: 15px;
       }
-      .docs-menu summary {
+      .docs-menu > summary {
         padding: 9px 14px;
         color: var(--text);
         font-weight: 500;
@@ -889,15 +903,15 @@ const STYLE = `
         border-radius: 8px;
         margin-bottom: 10px;
       }
-      .examples h3 {
+      .examples :is(h3, h4) {
         font-size: 16.5px;
         margin: 0 0 4px;
       }
-      main .examples h3 a {
+      main .examples :is(h3, h4) a {
         color: var(--text);
         text-decoration: none;
       }
-      .examples h3 a:hover {
+      .examples :is(h3, h4) a:hover {
         color: var(--accent);
       }
       .examples p {

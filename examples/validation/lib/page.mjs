@@ -115,6 +115,18 @@ export function contentsOrder(entries) {
   );
 }
 
+/** The validation entries by group (../catalog.mjs GROUPS), in order. */
+function validationGroups(entries) {
+  const groups = new Map();
+  for (const e of entries.filter((x) => sectionOf(x) === "validation")) {
+    if (!e.group) throw new Error(`validation case "${e.id}" has no group`);
+    if (!groups.has(e.group.id))
+      groups.set(e.group.id, { ...e.group, entries: [] });
+    groups.get(e.group.id).entries.push(e);
+  }
+  return [...groups.values()];
+}
+
 const current = (yes) => (yes ? ' aria-current="page"' : "");
 
 /**
@@ -123,23 +135,34 @@ const current = (yes) => (yes ? ' aria-current="page"' : "");
  * and open with a click (no script needed).
  */
 function contentsList(entries, currentId) {
-  const currentSection = currentId
-    ? sectionOf(entries.find((e) => e.id === currentId))
+  const currentEntry = currentId
+    ? entries.find((e) => e.id === currentId)
     : null;
+  const open = (yes) => (yes ? " open" : "");
+  const link = (e, name) => `
+            <li><a href="${pageUrl(e.id)}"${current(e.id === currentId)}>${esc(name)}</a></li>`;
+  const groups = validationGroups(entries)
+    .map(
+      (g) => `
+          <details class="docs-group" data-group="${g.id}"${open(currentEntry?.group?.id === g.id)}>
+            <summary>${esc(g.name)}</summary>
+            <ul>${g.entries.map((e) => link(e, e.name.slice(g.namePrefix.length))).join("")}
+            </ul>
+          </details>`,
+    )
+    .join("");
+  const examples = `
+          <ul>${entries
+            .filter((e) => sectionOf(e) === "examples")
+            .map((e) => link(e, e.name))
+            .join("")}
+          </ul>`;
   return `<ul>
           <li><a href="/examples/"${current(currentId === null)}>Overview</a></li>
         </ul>${SECTIONS.map(
           (sec) => `
-        <details class="docs-group" data-section="${sec.id}"${sec.id === currentSection ? " open" : ""}>
-          <summary>${sec.name}</summary>
-          <ul>${entries
-            .filter((e) => sectionOf(e) === sec.id)
-            .map(
-              (e) => `
-            <li><a href="${pageUrl(e.id)}"${current(e.id === currentId)}>${esc(e.name)}</a></li>`,
-            )
-            .join("")}
-          </ul>
+        <details class="docs-group" data-section="${sec.id}"${open(currentEntry !== null && sectionOf(currentEntry) === sec.id)}>
+          <summary>${sec.name}</summary>${sec.id === "validation" ? groups : examples}
         </details>`,
         ).join("")}`;
 }
@@ -715,24 +738,28 @@ export function renderIndexPage(data, allEntries) {
   const passed = benchmarks.filter((e) => e.pass).length;
   const description = `Free finite element examples that open and solve in your browser. Each validation case is compared with a known result from theory or the literature.`;
 
-  const item = (e) => {
+  const item = (e, level) => {
     const line = hasReference(e)
       ? `${esc(capitalise(e.quantity))}: ${withUnit(num(e.fe), e.unit)}, ${errHtml(e.errPct)} from the reference${e.expectedFailure ? `; ${ORDER_NAMES[e.expectedFailure.order].toLowerCase()} ${errHtml(e.expectedFailure.errPct)}, a known limitation` : ""}`
       : esc(e.headline);
     return `
         <li data-entry="${e.id}">
           <a href="${pageUrl(e.id)}" tabindex="-1" aria-hidden="true"><img src="${imagePath(e.id)}" width="${e.figure.width}" height="${e.figure.height}" alt="" loading="lazy" /></a>
-          <h3><a href="${pageUrl(e.id)}">${esc(e.name)}</a></h3>
+          <h${level}><a href="${pageUrl(e.id)}">${esc(e.name)}</a></h${level}>
           <p>${esc(e.page.summary)}</p>
           <p class="meta">${line}</p>
         </li>`;
   };
-  const list = (sec) =>
-    `<ul class="examples">${entries
-      .filter((e) => sectionOf(e) === sec)
-      .map(item)
-      .join("")}
+  const list = (items, level) =>
+    `<ul class="examples">${items.map((e) => item(e, level)).join("")}
       </ul>`;
+  const groups = validationGroups(entries)
+    .map(
+      (g) => `
+      <h3 id="${g.id}">${esc(g.name)}</h3>
+      ${list(g.entries, 4)}`,
+    )
+    .join("");
 
   const body = `
       <h1>Examples and validation</h1>
@@ -750,11 +777,14 @@ export function renderIndexPage(data, allEntries) {
         <a href="/examples/results.json">results.json</a> ·
         <a href="${REPO}/tree/develop/examples">source</a>
       </p>
-      ${list("validation")}
+      ${groups}
 
       <h2 id="examples">Examples</h2>
       <p>Models without a closed-form answer, which show what KoFEM can do.</p>
-      ${list("examples")}
+      ${list(
+        entries.filter((e) => sectionOf(e) === "examples"),
+        3,
+      )}
 
       <h2 id="results">Results</h2>
       <p>Difference = (KoFEM − reference) / reference.</p>
@@ -968,7 +998,17 @@ export function renderExamplePage(
   const prev = entries[index - 1];
   const next = entries[index + 1];
   const section = SECTIONS.find((sec) => sec.id === sectionOf(e));
-  const inSection = entries.filter((x) => sectionOf(x) === section.id);
+  // A validation case counts within its group, an example within Examples.
+  const siblings = e.group
+    ? entries.filter((x) => x.group?.id === e.group.id)
+    : entries.filter((x) => sectionOf(x) === section.id);
+  const crumbs = [
+    `<a href="/examples/#${section.id}">${section.name}</a>`,
+    ...(e.group
+      ? [`<a href="/examples/#${e.group.id}">${esc(e.group.name)}</a>`]
+      : []),
+    `${siblings.indexOf(e) + 1} of ${siblings.length}`,
+  ];
 
   const sections = [];
   // The page's own sections, for "On this page".
@@ -1046,7 +1086,7 @@ export function renderExamplePage(
       ${DISCLAIMER}`);
 
   const body = `
-      <p class="crumbs"><a href="/examples/#${section.id}">${section.name}</a> / ${inSection.indexOf(e) + 1} of ${inSection.length}</p>
+      <p class="crumbs">${crumbs.join(" / ")}</p>
       <h1>${esc(e.name)}</h1>
       <div class="lede">${text.intro(ctx)}
       </div>${

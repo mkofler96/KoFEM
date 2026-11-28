@@ -82,7 +82,8 @@ test("/examples/ lists every example, links its page and shows the results", asy
   expect([...order].sort()).toEqual([...IDS].sort());
   for (const id of order) {
     const entry = page.locator(`li[data-entry="${id}"]`);
-    await expect(entry.getByRole("heading", { level: 3 })).toBeVisible();
+    // Level 4 under a validation group's heading, level 3 under Examples.
+    await expect(entry.getByRole("heading")).toBeVisible();
     await expect(entry.getByRole("link").last()).toHaveAttribute(
       "href",
       `/examples/${id}/`,
@@ -289,6 +290,69 @@ test("the contents open only the section of the current page", async ({
   await page.goto("/examples/mbb-beam-topopt/");
   await expect(group("examples")).toHaveAttribute("open", "");
   await expect(group("validation")).not.toHaveAttribute("open");
+});
+
+test("the validation contents are grouped, and only the current page's group is open", async ({
+  page,
+}) => {
+  for (const list of [".docs-nav", ".docs-menu"]) {
+    const group = (id: string) =>
+      page.locator(
+        `${list} details[data-section="validation"] details[data-group="${id}"]`,
+      );
+    await page.goto("/examples/nafems-le3/");
+    await expect(group("nafems")).toHaveAttribute("open", "");
+    for (const other of ["analytical", "cook", "ties"])
+      await expect(group(other)).not.toHaveAttribute("open");
+    // The group's heading names NAFEMS, so its entries leave it out.
+    await expect(group("nafems").locator("summary")).toHaveText(
+      "NAFEMS benchmarks",
+    );
+    await expect(group("nafems").locator('a[aria-current="page"]')).toHaveText(
+      "LE3: hemisphere with point loads",
+    );
+    await expect(group("nafems").locator("a")).toHaveCount(
+      IDS.filter((id) => id.startsWith("nafems-")).length,
+    );
+
+    await page.goto("/examples/cantilever-beam/");
+    await expect(group("analytical")).toHaveAttribute("open", "");
+    await expect(group("nafems")).not.toHaveAttribute("open");
+  }
+});
+
+test("a validation page says which group it belongs to", async ({ page }) => {
+  await page.goto("/examples/nafems-le3/");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "NAFEMS LE3: hemisphere with point loads",
+    }),
+  ).toBeVisible();
+  const crumbs = page.locator(".crumbs");
+  await expect(crumbs).toHaveText("Validation / NAFEMS benchmarks / 3 of 10");
+  await expect(
+    crumbs.getByRole("link", { name: "NAFEMS benchmarks" }),
+  ).toHaveAttribute("href", "/examples/#nafems");
+});
+
+test("/examples/ lists the validation cases under their group's heading", async ({
+  page,
+}) => {
+  await page.goto("/examples/");
+  const groups = page.locator("h3[id] + ul.examples");
+  await expect(groups).toHaveCount(4);
+  const listed = (id: string) =>
+    page
+      .locator(`h3#${id} + ul.examples li[data-entry]`)
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-entry") ?? ""));
+  expect((await listed("nafems")).sort()).toEqual(
+    IDS.filter((id) => id.startsWith("nafems-")).sort(),
+  );
+  expect((await listed("ties")).sort()).toEqual(
+    IDS.filter((id) => id.startsWith("tie-")).sort(),
+  );
+  await expect(page.locator("h3#nafems")).toHaveText("NAFEMS benchmarks");
 });
 
 test("the pages are light by default and remember a switch to dark", async ({
