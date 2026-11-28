@@ -6087,6 +6087,62 @@
     "es": "451536f65e85",
     "pt": "b1016f81b706"
   },
+  "results.ts:resultsMessages.peakAt": {
+    "en": "c5c6a810f23c",
+    "de": "f5e77d1abaf0",
+    "fr": "098fe9498128",
+    "it": "769f4b6b4ffc",
+    "es": "c0c569234f3c",
+    "pt": "b0f5f82e60bc"
+  },
+  "results.ts:resultsMessages.peakElement": {
+    "en": "68e50fd4fb98",
+    "de": "7b9014f3281d",
+    "fr": "9812afc42fc6",
+    "it": "cf02a76b6a0a",
+    "es": "e04eeab36f1e",
+    "pt": "943ac2e3d856"
+  },
+  "results.ts:resultsMessages.peakLoad": {
+    "en": "bc7b279c2d25",
+    "de": "877dba04eb5e",
+    "fr": "d0bc439f1e58",
+    "it": "66125d2bd00c",
+    "es": "a652252386a0",
+    "pt": "cfadb6d0910a"
+  },
+  "results.ts:resultsMessages.peakOnBoundary": {
+    "en": "048c67fe08e5",
+    "de": "78ea53fa8c74",
+    "fr": "6702402487b5",
+    "it": "0ab99d4a3d32",
+    "es": "50fb0b9ac27f",
+    "pt": "a4a36bd50de2"
+  },
+  "results.ts:resultsMessages.peakSupport": {
+    "en": "456e7b5e5726",
+    "de": "54260da072c1",
+    "fr": "03e2cd8ffc2a",
+    "it": "d98ec17b05e5",
+    "es": "b84045c0dc98",
+    "pt": "f96f07b38988"
+  },
+  "results.ts:resultsMessages.peakUnknownNode": {
+    "en": "760898e5d0df",
+    "de": "c2b58b95c2b2",
+    "fr": "47afcd596e56",
+    "it": "e33fde6d50de",
+    "es": "3c57f7a6311b",
+    "pt": "c6530b3d70d2"
+  },
+  "results.ts:resultsMessages.peakUnreadable": {
+    "en": "cf418a4649b6",
+    "de": "7a594427c1db",
+    "fr": "f350b85d6f09",
+    "it": "edee5f39e156",
+    "es": "9317bda7ceb7",
+    "pt": "4a4fff756e2a"
+  },
   "results.ts:resultsMessages.percentile": {
     "en": "51d85195c417",
     "de": "51d85195c417",
@@ -6374,6 +6430,14 @@
     "it": "5ad878014c46",
     "es": "59717f1e5dd1",
     "pt": "318cf8520f15"
+  },
+  "results.ts:resultsMessages.show": {
+    "en": "2f3072b5d23b",
+    "de": "970fa1d71c72",
+    "fr": "93c6aac09986",
+    "it": "220e35a87e7e",
+    "es": "f5a93d30389d",
+    "pt": "f5a93d30389d"
   },
   "results.ts:resultsMessages.showRangeOnCut": {
     "en": "c42eb4547051",
@@ -7015,6 +7079,38 @@
     "es": "5cd73385c0a3",
     "pt": "5b1d0ac5d1fa"
   },
+  "shell.ts:statusMessages.faceAxis": {
+    "en": "c95a65a10dd0",
+    "de": "ef936e403178",
+    "fr": "569dbb198daf",
+    "it": "f65d0b1c4338",
+    "es": "428ea5ec3540",
+    "pt": "22cee12f0517"
+  },
+  "shell.ts:statusMessages.faceCone": {
+    "en": "fda44e495cda",
+    "de": "88dc83a33f30",
+    "fr": "126d94a3fa82",
+    "it": "4d033babac00",
+    "es": "4d033babac00",
+    "pt": "fda44e495cda"
+  },
+  "shell.ts:statusMessages.faceCylinder": {
+    "en": "c849acf1e631",
+    "de": "7d2fe148497a",
+    "fr": "7d5a1b1b7e0a",
+    "it": "9cd56acb095f",
+    "es": "9cd56acb095f",
+    "pt": "9cd56acb095f"
+  },
+  "shell.ts:statusMessages.faceLabel": {
+    "en": "91be53a69f19",
+    "de": "4815ab1746b8",
+    "fr": "91be53a69f19",
+    "it": "1007fa2a9915",
+    "es": "280b8e28d8fb",
+    "pt": "91be53a69f19"
+  },
   "shell.ts:statusMessages.faceLoads": {
     "en": "eadee24633d1",
     "de": "58b80af58725",
@@ -7023,13 +7119,37 @@
     "es": "a07960daca4c",
     "pt": "b1837d018ba5"
   },
-  "shell.ts:statusMessages.meshOk": {
-    "en": "e998564af64d",
-    "de": "74d8798e1fa7",
-    "fr": "c4c4a1246598",
-    "it": "e998564af64d",
-    "es": "51be30dea2bb",
-    "pt": "24dcd5119558"
+  "shell.ts:statusMessages.faceNormal": {
+    "en": "7b707adec540",
+    "de": "81ca97f03aa6",
+    "fr": "2da7cad99a98",
+    "it": "2da7cad99a98",
+    "es": "7b707adec540",
+    "pt": "7b707adec540"
+  },
+  "shell.ts:statusMessages.faceOther": {
+    "en": "2975a55d350b",
+    "de": "44d8ff9c859a",
+    "fr": "8c51d4da5490",
+    "it": "8a356e132bbb",
+    "es": "3300c2f92804",
+    "pt": "156860d01bb7"
+  },
+  "shell.ts:statusMessages.facePlane": {
+    "en": "1048b88588f8",
+    "de": "508064ff8ad6",
+    "fr": "b1e4518582dd",
+    "it": "70913c3d4cab",
+    "es": "7edf220133c2",
+    "pt": "7edf220133c2"
+  },
+  "shell.ts:statusMessages.faceVector": {
+    "en": "830c18f453cb",
+    "de": "d4c2523cadbb",
+    "fr": "f18b0a2f18a2",
+    "it": "d4c2523cadbb",
+    "es": "d4c2523cadbb",
+    "pt": "d4c2523cadbb"
   },
   "shell.ts:statusMessages.noWarranty": {
     "en": "e8a974375228",
@@ -7095,38 +7215,6 @@
     "es": "88445a72e2cc",
     "pt": "c71bfe6e6583"
   },
-  "shell.ts:statusMessages.pick": {
-    "en": "cd5cda4a61d5",
-    "de": "4f95b935a772",
-    "fr": "657f6a058b0e",
-    "it": "ae8f97dd1833",
-    "es": "1e9023e86963",
-    "pt": "1a884455de05"
-  },
-  "shell.ts:statusMessages.pickEdge": {
-    "en": "06e314e50415",
-    "de": "1bc7cbb21c25",
-    "fr": "6ab4ce9882ce",
-    "it": "c892c6ca7048",
-    "es": "38a5b899f3f1",
-    "pt": "4f8722e8b8de"
-  },
-  "shell.ts:statusMessages.pickFace": {
-    "en": "9031ef768175",
-    "de": "a7919249a956",
-    "fr": "27d5e9c1e2b6",
-    "it": "26439103048b",
-    "es": "936525aa27cf",
-    "pt": "40950fb723ee"
-  },
-  "shell.ts:statusMessages.pickPoint": {
-    "en": "fec09f6948e2",
-    "de": "b2ff019132da",
-    "fr": "b822dc812c6f",
-    "it": "8b2cad2cb4ab",
-    "es": "8b2cad2cb4ab",
-    "pt": "ae3e1bd1f1bf"
-  },
   "shell.ts:statusMessages.projectionOrthographic": {
     "en": "ae932ec954f2",
     "de": "e84b2c570000",
@@ -7158,46 +7246,6 @@
     "it": "36957a571436",
     "es": "e55628cbe5f6",
     "pt": "d62a52983dbf"
-  },
-  "shell.ts:statusMessages.purposeBc": {
-    "en": "0b6c72e5f447",
-    "de": "c7408f6775bb",
-    "fr": "27b435a2618a",
-    "it": "66661112fa53",
-    "es": "19d800556c03",
-    "pt": "98591ef8ffbb"
-  },
-  "shell.ts:statusMessages.purposeContact": {
-    "en": "2f621f0871c6",
-    "de": "3fd09af4325b",
-    "fr": "2f621f0871c6",
-    "it": "b42bf9ff5d6f",
-    "es": "55ad71fdd628",
-    "pt": "01153e0fab8e"
-  },
-  "shell.ts:statusMessages.purposeCoupling": {
-    "en": "11e807647ade",
-    "de": "c0684b13e982",
-    "fr": "9f331383882c",
-    "it": "ba582bcd0513",
-    "es": "cc54d3f2f1c3",
-    "pt": "d0a7c797da68"
-  },
-  "shell.ts:statusMessages.purposeLoad": {
-    "en": "4bfa544227e9",
-    "de": "7b49cd59ddbf",
-    "fr": "a6880965e0e1",
-    "it": "75a81dde8499",
-    "es": "6fdbdaa48fa8",
-    "pt": "6fdbdaa48fa8"
-  },
-  "shell.ts:statusMessages.purposeTie": {
-    "en": "8dda3e389220",
-    "de": "ad0d9c0eb728",
-    "fr": "9f5b806d6957",
-    "it": "28a918d28595",
-    "es": "2d9500e8aff7",
-    "pt": "af24a48c8761"
   },
   "shell.ts:statusMessages.reprGeometry": {
     "en": "3708068b429f",
@@ -7255,22 +7303,6 @@
     "es": "60ce84b5abf3",
     "pt": "3d26bbf3e720"
   },
-  "shell.ts:statusMessages.selected": {
-    "en": "4ef91985e464",
-    "de": "bf8ea4c12da4",
-    "fr": "ab10b9452346",
-    "it": "67dff527a62e",
-    "es": "ff8e432c1e54",
-    "pt": "06414f03840e"
-  },
-  "shell.ts:statusMessages.solved": {
-    "en": "e92f60f4dde0",
-    "de": "44d586702350",
-    "fr": "9ebd58c47e65",
-    "it": "a031c1234748",
-    "es": "56780c054e64",
-    "pt": "2a62baac3297"
-  },
   "shell.ts:statusMessages.undeformed": {
     "en": "82dbcb069ebf",
     "de": "a9aef8162e0a",
@@ -7302,6 +7334,54 @@
     "it": "d0d7281a3434",
     "es": "d0d7281a3434",
     "pt": "d6c502769bc2"
+  },
+  "solve.ts:solveMessages.adviceInvertedElement": {
+    "en": "1c5f7c83b47f",
+    "de": "5df3b81f7d55",
+    "fr": "141306cf3523",
+    "it": "6971c8ef7d60",
+    "es": "9ed151731e89",
+    "pt": "e8ee545fce89"
+  },
+  "solve.ts:solveMessages.adviceNewtonNotConverged": {
+    "en": "61afc5e38069",
+    "de": "acfc1ac69e1e",
+    "fr": "1d8c9a66ec0b",
+    "it": "5e6e57cabd08",
+    "es": "66174891d913",
+    "pt": "1420cb2f304d"
+  },
+  "solve.ts:solveMessages.adviceNonFiniteResult": {
+    "en": "39cf3e16e8cb",
+    "de": "b5350c6fb2f9",
+    "fr": "6808f8f1c2db",
+    "it": "506e210f4844",
+    "es": "8218e7e6c67e",
+    "pt": "9837fd371a64"
+  },
+  "solve.ts:solveMessages.adviceNotConverged": {
+    "en": "f5e782753bef",
+    "de": "4748c1efb36b",
+    "fr": "87ce75183e7f",
+    "it": "18ac58dfd0f9",
+    "es": "fb42bc3d70e7",
+    "pt": "96b5b16acc99"
+  },
+  "solve.ts:solveMessages.adviceSingularMatrix": {
+    "en": "57134f25bdcd",
+    "de": "16a9a5c7f33b",
+    "fr": "39815a8cacd4",
+    "it": "afd550371418",
+    "es": "0829461ef3a4",
+    "pt": "a64a4948fe80"
+  },
+  "solve.ts:solveMessages.adviceUnstableTangent": {
+    "en": "bd2c4f3ff427",
+    "de": "137e3a9c4c32",
+    "fr": "a36eae41c1d1",
+    "it": "23be919f7067",
+    "es": "969eb1db5ca1",
+    "pt": "e8cb9beddbde"
   },
   "solve.ts:solveMessages.amgCouplings": {
     "en": "6ece3f652001",

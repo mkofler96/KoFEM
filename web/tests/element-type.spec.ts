@@ -43,7 +43,7 @@ test("an import makes every body Solid; Shell is chosen per body", async ({
   ]);
 
   // The mesh controls carry no shell settings of their own.
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await expect(page.getByTestId("max-element-size")).toBeVisible();
   await expect(page.getByText("Automatic shell detection")).toHaveCount(0);
 });

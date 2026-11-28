@@ -134,7 +134,7 @@ test("split a body into regions: one body, connected, each meshed at its own siz
   await page.getByTestId("tree-region-2").click();
   await page.getByTestId("region-role-2").selectOption("solid");
 
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByTestId("max-element-size").fill("20");
   await page.getByTestId("min-element-size").fill("2");
   await page.getByRole("button", { name: /generate mesh/i }).click();
@@ -254,7 +254,7 @@ const MID_SPLIT: [string, (page: Page) => Promise<void>][] = [
     "closes the tool",
     (page) => page.getByRole("button", { name: "Close" }).click(),
   ],
-  ["leaves the split tool", (page) => openTree(page, "mesh")],
+  ["leaves the split tool", (page) => openTree(page, "add-mesh")],
   [
     "switches to Bodies",
     (page) => page.getByTestId("split-mode-bodies").click(),

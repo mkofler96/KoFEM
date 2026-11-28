@@ -1,12 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Browser bindings for the statistics of a result field
-//! (`kofem_fem::field_statistics`): the volume-weighted percentiles the
-//! Results panel lists next to the field's min and max, and the safety
-//! factors against yield.
+//! Browser bindings for the statistics of a result field the Results panel
+//! lists: the volume-weighted percentiles next to its min and max
+//! (`kofem_fem::field_statistics`), where the field peaks, with the idealised
+//! supports and loads on that node (`kofem_fem::field_peak`), and the safety
+//! factors against yield (`kofem_fem::safety_factor`).
 
-use kofem_fem::{ElementMesh, SafetyFactor, SafetyInput, SafetyScope, StatisticsMesh};
+use kofem_fem::{
+    BoundaryGroup, Condition, CouplingSurface, ElementMesh, PeakInput, PickGeometry, SafetyFactor,
+    SafetyInput, SafetyScope, Selection, StatisticsMesh,
+};
 use wasm_bindgen::prelude::*;
 
 use crate::to_js;
@@ -180,4 +184,145 @@ pub fn safety_factors(
     )
     .map_err(|error| to_js(&error))?;
     Ok(SafetyFactorRows { rows })
+}
+
+/// The support, load and coupling groups for `fieldPeak`, added one group at
+/// a time: `support` or `load` opens a group, and each `select` adds a pick to
+/// the group opened last.
+#[wasm_bindgen]
+#[derive(Default)]
+pub struct PeakConditions {
+    groups: Vec<BoundaryGroup>,
+    couplings: Vec<CouplingSurface>,
+}
+
+#[wasm_bindgen]
+impl PeakConditions {
+    #[wasm_bindgen(constructor)]
+    #[must_use]
+    pub fn new() -> PeakConditions {
+        PeakConditions::default()
+    }
+
+    /// Open a support group that holds `dofs` (0–2 translations, 3–5
+    /// rotations).
+    pub fn support(&mut self, dofs: &[u32]) {
+        self.groups.push(BoundaryGroup {
+            condition: Condition::Support {
+                dofs: dofs.to_vec(),
+            },
+            selections: Vec::new(),
+        });
+    }
+
+    /// Open a load group.
+    pub fn load(&mut self) {
+        self.groups.push(BoundaryGroup {
+            condition: Condition::Load,
+            selections: Vec::new(),
+        });
+    }
+
+    /// Add a pick of the node indices `nodes` to the group opened last.
+    /// `geometry` is "face", "edge" or "point", or undefined for a pick saved
+    /// before its kind was recorded.
+    ///
+    /// # Errors
+    /// No group opened yet, or an unknown `geometry`.
+    pub fn select(&mut self, geometry: Option<String>, nodes: &[u32]) -> Result<(), JsError> {
+        let geometry = match geometry {
+            None => PickGeometry::Unrecorded,
+            Some(kind) => pick_geometry(&kind)?,
+        };
+        let group = self
+            .groups
+            .last_mut()
+            .ok_or_else(|| JsError::new("a pick needs a support or load group to belong to"))?;
+        group.selections.push(Selection {
+            geometry,
+            nodes: nodes.to_vec(),
+        });
+        Ok(())
+    }
+
+    /// Add the coupling of the reference point `reference` to the surface
+    /// nodes `nodes`.
+    pub fn coupling(&mut self, reference: u32, nodes: &[u32]) {
+        self.couplings.push(CouplingSurface {
+            reference,
+            nodes: nodes.to_vec(),
+        });
+    }
+}
+
+fn pick_geometry(kind: &str) -> Result<PickGeometry, JsError> {
+    match kind {
+        "face" => Ok(PickGeometry::Face),
+        "edge" => Ok(PickGeometry::Edge),
+        "point" => Ok(PickGeometry::Point),
+        other => Err(JsError::new(&format!(
+            "a pick is a face, an edge or a point, got \"{other}\""
+        ))),
+    }
+}
+
+/// Where a nodal field peaks (from `fieldPeak`).
+#[wasm_bindgen]
+pub struct FieldPeak {
+    peak: kofem_fem::FieldPeak,
+}
+
+#[wasm_bindgen]
+impl FieldPeak {
+    /// The node's index in the field; the first such node on a tie.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn node(&self) -> usize {
+        self.peak.node
+    }
+
+    /// The node's coordinates, x, y, z.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn at(&self) -> Vec<f64> {
+        self.peak.at.to_vec()
+    }
+
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn value(&self) -> f64 {
+        self.peak.value
+    }
+
+    /// The idealised groups that hold the node, by the order they were
+    /// added, ascending.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn idealised(&self) -> Vec<usize> {
+        self.peak.idealised.clone()
+    }
+}
+
+/// Where `values` (one per node at `points`, x, y, z each) is largest, and
+/// which of the idealised groups in `conditions` hold that node.
+/// `shell_triangles` holds three node indices per shell facet.
+///
+/// # Errors
+/// The checks of [`kofem_fem::field_peak`].
+#[wasm_bindgen(js_name = fieldPeak)]
+pub fn field_peak(
+    points: &[f64],
+    values: &[f64],
+    shell_triangles: &[u32],
+    conditions: &PeakConditions,
+) -> Result<FieldPeak, JsError> {
+    kofem_fem::field_peak(&PeakInput {
+        points,
+        values,
+        shell_triangles,
+        groups: &conditions.groups,
+        couplings: &conditions.couplings,
+    })
+    .map(|peak| FieldPeak { peak })
+    .map_err(|error| to_js(&error))
 }

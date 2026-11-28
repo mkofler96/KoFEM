@@ -65,8 +65,27 @@ use wasm_bindgen::prelude::*;
 
 use stiffness::{Loan, Stiffness};
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = Reflect, js_name = set)]
+    fn reflect_set(target: &JsValue, key: &str, value: &str) -> bool;
+}
+
 fn to_js(error: &FemError) -> JsError {
-    JsError::new(&error.to_string())
+    with_class(JsError::new(&error.to_string()), error)
+}
+
+/// `js_error` with `error`'s class set on it as `failureClass` and, for a
+/// numerical failure, `numericalReason` (KOF-490): the app reads these, never
+/// the message.
+fn with_class(js_error: JsError, error: &FemError) -> JsError {
+    let class = error.class();
+    let target = JsValue::from(js_error.clone());
+    reflect_set(&target, "failureClass", class.category());
+    if let Some(reason) = class.reason() {
+        reflect_set(&target, "numericalReason", reason);
+    }
+    js_error
 }
 
 /// Values per support in a `supportReactions` result: force, moment about the
@@ -672,6 +691,21 @@ impl ElasticModel {
             tie_report: Some(report),
         })
     }
+
+    /// Hexes solved as transition elements (`kofem_fem::transition`): each
+    /// has a face that meets two tet triangles.
+    #[wasm_bindgen(getter, js_name = transitionElements)]
+    #[must_use]
+    pub fn transition_elements(&self) -> usize {
+        let mut hexes: Vec<usize> = self
+            .mesh
+            .interface_faces()
+            .iter()
+            .map(|face| face.hex)
+            .collect();
+        hexes.dedup();
+        hexes.len()
+    }
 }
 
 #[wasm_bindgen]
@@ -715,8 +749,12 @@ impl ElasticModel {
             .iter()
             .enumerate()
             .map(|(index, (side_a, side_b))| {
-                ContactPair::between(&self.mesh, boundary, side_a, side_b)
-                    .map_err(|error| JsError::new(&format!("contact pair {index}: {error}")))
+                ContactPair::between(&self.mesh, boundary, side_a, side_b).map_err(|error| {
+                    with_class(
+                        JsError::new(&format!("contact pair {index}: {error}")),
+                        &error,
+                    )
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         let interface = ContactInterface::new(&self.mesh, &pairs).map_err(|error| to_js(&error))?;

@@ -7,7 +7,12 @@
 // the undeformed model and the CAD tessellation as before.
 
 import { expect, test } from "bun:test";
-import { fitViewBox } from "../../src/lib/fitView";
+import {
+  boundingSphere,
+  fitViewBox,
+  nodeFrame,
+  NODE_FRAME_SHARE,
+} from "../../src/lib/fitView";
 
 // A 10 mm bar along x whose tip node moves 4 mm down in y.
 const nodes = [
@@ -76,4 +81,42 @@ test("a displacement field that does not match the nodes is an error", () => {
       },
     }),
   ).toThrow(/3 nodes/);
+});
+
+// Results → Show (KOF-495) frames one node as drawn: on the deformed shape at
+// the drawn scale, with a share of the model around it.
+test("framing a node centres it as drawn, deformed at the drawn scale", () => {
+  const input = {
+    nodes,
+    stepSurface,
+    deformed: { displacements, scale: 2, showUndeformed: true },
+  };
+  const frame = nodeFrame(input, 1);
+  expect(frame.center).toEqual([10, -8, 0]);
+  const halfDiagonal = Math.sqrt(10 ** 2 + 9 ** 2 + 1 ** 2) / 2;
+  expect(frame.radius).toBeCloseTo(NODE_FRAME_SHARE * halfDiagonal, 12);
+  expect(NODE_FRAME_SHARE).toBeLessThan(1);
+});
+
+test("framing a node of the undeformed model centres it where it is", () => {
+  const frame = nodeFrame({ nodes, stepSurface: null, deformed: null }, 2);
+  expect(frame.center).toEqual([10, 1, 1]);
+});
+
+test("framing a node the model does not have is refused", () => {
+  expect(() =>
+    nodeFrame({ nodes, stepSurface: null, deformed: null }, 3),
+  ).toThrow(/node 3/);
+});
+
+// Fit view and Show frame the same sphere around a box.
+test("the sphere around a box is centred on it, with half its diagonal", () => {
+  const sphere = boundingSphere({ min: [0, 0, 0], max: [2, 4, 4] });
+  expect(sphere).toEqual({ center: [1, 2, 2], radius: 3 });
+});
+
+test("a box without extent has no sphere to frame", () => {
+  expect(() => boundingSphere({ min: [5, 5, 5], max: [5, 5, 5] })).toThrow(
+    /nothing to frame/,
+  );
 });

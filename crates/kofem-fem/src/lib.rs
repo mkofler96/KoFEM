@@ -28,7 +28,9 @@ pub mod coupling;
 pub mod element;
 pub mod error;
 pub mod extremum;
+pub mod failure_class;
 pub mod field_expression;
+pub mod field_peak;
 pub mod field_statistics;
 pub mod hyperelastic;
 pub mod incomplete_cholesky;
@@ -37,6 +39,7 @@ pub mod mesh;
 pub mod mesh_outline;
 pub mod mortar;
 pub mod nonlinear;
+pub mod piece;
 pub mod reactions;
 pub mod report;
 pub mod rigid_body;
@@ -50,6 +53,7 @@ pub mod surface;
 pub mod thermal;
 pub mod tie;
 pub mod topology;
+pub mod transition;
 
 pub use amg::{
     AmgSettings, LevelInfo, NodeBlock, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel,
@@ -66,13 +70,18 @@ pub use coupled_static::{
 };
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;
+pub use failure_class::{FailureClass, NumericalReason, INTERNAL_FORCE};
 pub use field_expression::{FieldExpression, FieldExpressionError};
+pub use field_peak::{
+    field_peak, BoundaryGroup, Condition, CouplingSurface, FieldPeak, PeakInput, PickGeometry,
+    Selection,
+};
 pub use field_statistics::{
     grouped_element_statistics, nodal_percentiles, ElementMesh, GroupStatistics, StatisticsMesh,
 };
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
-pub use mesh::{ElementOrder, ElementShape, TetMesh};
+pub use mesh::{ElementOrder, ElementShape, Pieces, TetMesh};
 pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
 pub use mortar::{mortar_integrals, mortar_weights, MortarFace, MortarRow, SlaveIntegrals};
 pub use reactions::{
@@ -103,3 +112,4 @@ pub use tie::{
     node_ties, prepare_tied_static, solve_tied_static, tie_couplings, NodeTie, PreparedTied,
     TieReport, TiedSolution, VertexTies,
 };
+pub use transition::{find_interface_faces, Diagonal, InterfaceFace};

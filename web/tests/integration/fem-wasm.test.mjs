@@ -18,10 +18,11 @@
 // thick that carries a pressure surface load (6-node faces) and a prescribed
 // displacement (extended to the edge nodes, as in MFEM).
 //
-// Hexahedra (8- and 27-node) follow, on a distorted hex cantilever and on a
-// mixed one (tets at the root, hexes at the tip, two materials), loaded by a
-// total force on quadrilateral faces and a pressure on warped ones, and on a
-// bar whose tip hex is collapsed into a wedge.
+// Hexahedra (8- and 27-node) follow, on a distorted hex cantilever loaded by
+// a total force on quadrilateral faces and a pressure on warped ones, and on a
+// bar whose tip hex is collapsed into a wedge. Mixed tet/hex meshes are not
+// compared: MFEM's hex/tet interface did not conform (KOF-433);
+// hex-tet-interface.test.mjs checks them against exact fields.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { boxHexMesh } from "../../../examples/validation/lib/mesh.mjs";
@@ -464,15 +465,13 @@ describe("quadratic tetrahedra", () => {
   });
 });
 
-// ── Hexahedra (8- and 27-node) and a mixed tet/hex mesh ───────────────────────
-// A cantilever of hexes, and one whose root half is Kuhn tets (steel) and tip
-// half hexes (aluminium), sharing the vertices between them. Every vertex off
-// the two end planes is moved, so the hexes are not parallelepipeds and the
-// top faces are warped quadrilaterals: the element and face integration rules
-// must match MFEM's, not only be exact on boxes. Loads: a total force on the
-// tip quadrilaterals and a pressure on the top (quadrilaterals, and the tets'
-// triangles), with the root clamped.
-describe("hexahedra and mixed meshes", () => {
+// ── Hexahedra (8- and 27-node) ────────────────────────────────────────────────
+// A cantilever of hexes. Every vertex off the two end planes is moved, so the
+// hexes are not parallelepipeds and the top faces are warped quadrilaterals:
+// the element and face integration rules must match MFEM's, not only be exact
+// on boxes. Loads: a total force on the tip quadrilaterals and a pressure on
+// the top quadrilaterals, with the root clamped.
+describe("hexahedra", () => {
   const HEX_TOP = [4, 5, 6, 7];
   function distortedHexBox(
     length,
@@ -629,7 +628,6 @@ describe("hexahedra and mixed meshes", () => {
   }
 
   const steel = { young_modulus: YOUNG, poisson_ratio: POISSON };
-  const aluminium = { young_modulus: 70000, poisson_ratio: 0.33 };
   const DIVISIONS_X = 20;
   const DIVISIONS_Z = 2;
   const hexBeam = distortedHexBox(
@@ -684,62 +682,6 @@ describe("hexahedra and mixed meshes", () => {
         bcs,
         solveReference(allHexes, order, [steel], bcs),
         order === 2 ? HELD_FACE_NODES : EXACT,
-      );
-    },
-  );
-
-  // Root half tets, tip half hexes.
-  const mixedTets = [];
-  const mixedHexes = [];
-  const mixedTop = [];
-  hexBeam.box.hexahedra.forEach((hex, index) => {
-    const column = Math.floor(index / (2 * DIVISIONS_Z));
-    const onTop = index % DIVISIONS_Z === DIVISIONS_Z - 1;
-    if (column < DIVISIONS_X / 2) {
-      for (const tet of KUHN) {
-        const corners = tet.map((corner) => hex[HEX_OF_CUBE_CORNER[corner]]);
-        mixedTets.push(...corners);
-        const top = corners.filter((vertex) =>
-          HEX_TOP.some((corner) => hex[corner] === vertex),
-        );
-        if (onTop && top.length === 3) mixedTop.push(top);
-      }
-    } else {
-      mixedHexes.push(...hex);
-      if (onTop) mixedTop.push(HEX_TOP.map((corner) => hex[corner]));
-    }
-  });
-  const mixed = {
-    points: hexBeam.points,
-    vertices: hexBeam.vertices,
-    tets: mixedTets,
-    hexes: mixedHexes,
-    attributes: [
-      ...Array.from({ length: mixedTets.length / 4 }, () => 1),
-      ...Array.from({ length: mixedHexes.length / 8 }, () => 2),
-    ],
-  };
-
-  test("mixed top: two triangles per tet cell, one quadrilateral per hex", () => {
-    expect(mixedTop.filter((face) => face.length === 3)).toHaveLength(
-      2 * (DIVISIONS_X / 2) * 2,
-    );
-    expect(mixedTop.filter((face) => face.length === 4)).toHaveLength(
-      (DIVISIONS_X / 2) * 2,
-    );
-  });
-
-  test.each([1, 2])(
-    "mixed tet/hex cantilever, order %i: Rust matches MFEM",
-    (order) => {
-      const bcs = hexLoads(mixedTop);
-      compareSolid(
-        "mixed tet/hex cantilever",
-        mixed,
-        order,
-        [steel, aluminium],
-        bcs,
-        solveReference(mixed, order, [steel, aluminium], bcs),
       );
     },
   );

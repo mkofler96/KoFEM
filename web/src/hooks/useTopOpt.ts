@@ -24,7 +24,7 @@ import {
 } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
-  categorizeError,
+  classifyFailure,
   startTimer,
   track,
   workflowParams,
@@ -43,6 +43,7 @@ import {
   topOptTieRefusal,
 } from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { failureNotice, plainNotice } from "../lib/solve/failureAdvice";
 import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import { tr, useT } from "../i18n/useLocale";
 import { optimizeMessages } from "../i18n/messages/optimize";
@@ -311,7 +312,11 @@ export function useTopOpt() {
     // re-check the settings here rather than trust the caller.
     if (!settings) {
       setError(
-        tr(optimizeMessages).settingsInvalid(Object.values(errors).join("; ")),
+        plainNotice(
+          tr(optimizeMessages).settingsInvalid(
+            Object.values(errors).join("; "),
+          ),
+        ),
       );
       return;
     }
@@ -368,12 +373,18 @@ export function useTopOpt() {
         // A cancel terminated the worker; the resulting rejection is expected.
         if (cancelled) return;
         console.error("[topopt] optimization failed:", err.message);
-        setError(tr(optimizeMessages).optimizationError(err.message));
+        const failure = classifyFailure(err);
+        setError(
+          failureNotice(
+            failure,
+            tr(optimizeMessages).optimizationError(err.message),
+          ),
+        );
         track("solve_failed", {
           ...workflow,
           analysis_type: "topology",
           duration_bucket: elapsed(),
-          error_category: categorizeError(err),
+          ...failure,
         });
       })
       .finally(() => {
@@ -413,7 +424,7 @@ export function useTopOpt() {
     state.clearTopOptRunRequest();
     if (state.isOptimizing) return;
     if (allOk) optimize();
-    else setError(tr(optimizeMessages).rerunBlocked);
+    else setError(plainNotice(tr(optimizeMessages).rerunBlocked));
   });
 
   const stressSummary = topOpt.stressConstraint

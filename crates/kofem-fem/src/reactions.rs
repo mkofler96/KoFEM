@@ -115,7 +115,9 @@ pub fn widen_translations(values: &[f64]) -> Vec<f64> {
 /// equally between its two ends, each hex face node's among the face's four
 /// corners, each hex centre's among the hex's eight corners. Every added node
 /// sits at the mean of the corners it splits among, so the fold keeps both
-/// the sum and the moment about any point. A linear mesh's values come back
+/// the sum and the moment about any point. A node a transition element adds
+/// splits among its hex's eight corners; it is free and inside the body, so
+/// a solved residual vanishes there. A linear mesh's vertex values come back
 /// unchanged.
 ///
 /// # Errors
@@ -207,6 +209,10 @@ fn fold(
             node += 1;
         }
     }
+    // The nodes a transition element adds lie inside its hex.
+    for (added, corners) in mesh.transition_nodes() {
+        spread(added, corners);
+    }
     Ok(folded)
 }
 
@@ -266,7 +272,8 @@ pub fn load_on_held_nodes(
         add(node, face);
         node += 1;
     }
-    // A hex centre is never held: no support reaches inside an element.
+    // A hex centre is never held, nor a node a transition element adds: no
+    // support reaches inside an element.
     Ok(total)
 }
 

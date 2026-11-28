@@ -219,7 +219,8 @@ fn mixed_cantilever() -> (TetMesh, Vec<u32>, Vec<f64>) {
             tip.push(vertex);
         }
     }
-    let mut forces = vec![0.0; vertices.len()];
+    // The hexes beside the tets add a centre node each (KOF-433).
+    let mut forces = vec![0.0; mesh.dof_count()];
     for &vertex in &tip {
         forces[3 * vertex + 1] = -1.0 / tip.len() as f64;
     }

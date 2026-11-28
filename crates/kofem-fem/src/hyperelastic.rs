@@ -38,14 +38,10 @@
 //! Loads keep their direction and magnitude as the body deforms (dead loads).
 
 use crate::assembly::{node_neighbours, scatter};
-use crate::element::{
-    add_isotropic_point, cube_rule, degree_two_points, hex27_reference_gradients,
-    hex8_reference_gradients, hex_gradients, tet10_gradients, tet4_gradients, HEX27_RULE_POINTS,
-    HEX8_RULE_POINTS,
-};
 use crate::error::FemError;
-use crate::mesh::{cross, determinant, ElementOrder, ElementShape, TetMesh};
+use crate::mesh::{cross, determinant, dot, TetMesh};
 use crate::nonlinear::NonlinearProblem;
+use crate::piece::PiecePoint;
 use crate::sparse::CsrMatrix;
 use crate::stress::{check_length, corner_count, displacement_gradient, Location};
 
@@ -92,51 +88,24 @@ impl NonlinearProblem for NeoHookean {
         }
         let mut force = vec![0.0; dof_count];
         for element in 0..self.mesh.element_count() {
-            let nodes = self.mesh.element_nodes(element);
-            match (self.mesh.shape(element), self.mesh.order()) {
-                (ElementShape::Tetrahedron, ElementOrder::Linear) => {
-                    let (gradients, volume) = tet4_gradients(&self.mesh.corners(element));
-                    let contribution: Contribution<4, 12> = integrate(
-                        std::iter::once((gradients, volume)),
-                        &self.mesh,
-                        element,
-                        displacements,
-                    )?;
-                    contribution.add_to(tangent, &mut force, &self.neighbours, element, nodes);
-                }
-                (ElementShape::Tetrahedron, ElementOrder::Quadratic) => {
-                    let (corner_gradients, volume) = tet4_gradients(&self.mesh.corners(element));
-                    let points = degree_two_points()
-                        .map(|point| (tet10_gradients(&corner_gradients, point), 0.25 * volume));
-                    let contribution: Contribution<10, 30> =
-                        integrate(points.into_iter(), &self.mesh, element, displacements)?;
-                    contribution.add_to(tangent, &mut force, &self.neighbours, element, nodes);
-                }
-                (ElementShape::Hexahedron, ElementOrder::Linear) => {
-                    let corners = self.mesh.hex_corners(element - self.mesh.tets().len());
-                    let points = cube_rule(HEX8_RULE_POINTS)
-                        .into_iter()
-                        .map(|(point, weight)| {
-                            let (gradients, scale) =
-                                hex_gradients(&corners, &hex8_reference_gradients(point), point);
-                            (gradients, weight * scale)
-                        });
-                    let contribution: Contribution<8, 24> =
-                        integrate(points, &self.mesh, element, displacements)?;
-                    contribution.add_to(tangent, &mut force, &self.neighbours, element, nodes);
-                }
-                (ElementShape::Hexahedron, ElementOrder::Quadratic) => {
-                    let corners = self.mesh.hex_corners(element - self.mesh.tets().len());
-                    let points = cube_rule(HEX27_RULE_POINTS)
-                        .into_iter()
-                        .map(|(point, weight)| {
-                            let (gradients, scale) =
-                                hex_gradients(&corners, &hex27_reference_gradients(point), point);
-                            (gradients, weight * scale)
-                        });
-                    let contribution: Contribution<27, 81> =
-                        integrate(points, &self.mesh, element, displacements)?;
-                    contribution.add_to(tangent, &mut force, &self.neighbours, element, nodes);
+            let lame = self.mesh.material(element).lame();
+            for piece in self.mesh.pieces(element) {
+                let nodal = piece.local_values(displacements, 3);
+                let (mut piece_force, mut piece_tangent) =
+                    integrate(&piece.stiffness_points(), &nodal, lame, element)?;
+                piece.fold_rows(&mut piece_force, 3);
+                piece.fold_matrix(&mut piece_tangent);
+                scatter(
+                    tangent,
+                    &self.neighbours,
+                    element,
+                    piece.nodes,
+                    &piece_tangent,
+                );
+                for (&node, local) in piece.nodes.iter().zip(piece_force.as_chunks::<3>().0) {
+                    for axis in 0..3 {
+                        force[3 * node as usize + axis] += local[axis];
+                    }
                 }
             }
         }
@@ -144,63 +113,22 @@ impl NonlinearProblem for NeoHookean {
     }
 }
 
-/// One element's internal force and tangent, `N` nodes and `DOFS` = 3·`N`
-/// DOFs ordered (node, component).
-struct Contribution<const N: usize, const DOFS: usize> {
-    force: [f64; DOFS],
-    tangent: Box<[[f64; DOFS]; DOFS]>,
-}
-
-impl<const N: usize, const DOFS: usize> Contribution<N, DOFS> {
-    fn add_to(
-        &self,
-        tangent: &mut CsrMatrix,
-        force: &mut [f64],
-        neighbours: &[Vec<u32>],
-        element: usize,
-        nodes: &[u32],
-    ) {
-        scatter(
-            tangent,
-            neighbours,
-            element,
-            nodes,
-            self.tangent.as_flattened(),
-        );
-        for (local, &node) in nodes.iter().enumerate() {
-            for axis in 0..3 {
-                force[3 * node as usize + axis] += self.force[3 * local + axis];
-            }
-        }
-    }
-}
-
-/// Integrate one element's force and tangent over `points`: the undeformed
-/// shape-function gradients and volume weight of each integration point.
-fn integrate<const N: usize, const DOFS: usize>(
-    points: impl Iterator<Item = ([[f64; 3]; N], f64)>,
-    mesh: &TetMesh,
+/// One piece's internal force (3 per node) and tangent (row-major over the
+/// same DOFs), integrated over `points` — the undeformed shape-function
+/// gradients and volume weight of each integration point — from the piece's
+/// nodal displacements `nodal` (3 per node).
+fn integrate(
+    points: &[(PiecePoint, Vec<[f64; 3]>, f64)],
+    nodal: &[f64],
+    lame: (f64, f64),
     element: usize,
-    displacements: &[f64],
-) -> Result<Contribution<N, DOFS>, FemError> {
-    debug_assert_eq!(DOFS, 3 * N);
-    let nodes = mesh.element_nodes(element);
-    let nodal: [[f64; 3]; N] = std::array::from_fn(|local| {
-        let base = 3 * nodes[local] as usize;
-        [
-            displacements[base],
-            displacements[base + 1],
-            displacements[base + 2],
-        ]
-    });
-    let lame = mesh.material(element).lame();
-    let mut contribution = Contribution {
-        force: [0.0; DOFS],
-        tangent: Box::new([[0.0; DOFS]; DOFS]),
-    };
-    for (reference, weight) in points {
+) -> Result<(Vec<f64>, Vec<f64>), FemError> {
+    let width = nodal.len();
+    let mut force = vec![0.0; width];
+    let mut tangent = vec![0.0; width * width];
+    for (_, reference, weight) in points {
         let mut gradient = [[0.0; 3]; 3];
-        for (motion, shape) in nodal.iter().zip(&reference) {
+        for (motion, shape) in nodal.as_chunks::<3>().0.iter().zip(reference) {
             for (row, entries) in gradient.iter_mut().enumerate() {
                 for (col, entry) in entries.iter_mut().enumerate() {
                     *entry += motion[row] * shape[col];
@@ -209,39 +137,41 @@ fn integrate<const N: usize, const DOFS: usize>(
         }
         let state = PointState::new(&gradient, lame, element)?;
         // g_a = F⁻ᵀ·G_a.
-        let spatial: [[f64; 3]; N] = reference.map(|shape| {
-            std::array::from_fn(|axis| {
-                (0..3)
-                    .map(|inner| state.inverse[inner][axis] * shape[inner])
-                    .sum()
+        let spatial: Vec<[f64; 3]> = reference
+            .iter()
+            .map(|shape| {
+                std::array::from_fn(|axis| {
+                    (0..3)
+                        .map(|inner| state.inverse[inner][axis] * shape[inner])
+                        .sum()
+                })
             })
-        });
+            .collect();
         let volume = state.jacobian * weight;
-        add_isotropic_point(
-            &mut contribution.tangent,
-            &spatial,
-            volume,
-            (state.lambda, state.mu),
-        );
         for (node_a, grad_a) in spatial.iter().enumerate() {
             let stressed: [f64; 3] = std::array::from_fn(|row| {
                 (0..3).map(|col| state.cauchy[row][col] * grad_a[col]).sum()
             });
             for axis in 0..3 {
-                contribution.force[3 * node_a + axis] += volume * stressed[axis];
+                force[3 * node_a + axis] += volume * stressed[axis];
             }
             for (node_b, grad_b) in spatial.iter().enumerate() {
-                let geometric = volume
-                    * (0..3)
-                        .map(|axis| stressed[axis] * grad_b[axis])
-                        .sum::<f64>();
-                for axis in 0..3 {
-                    contribution.tangent[3 * node_a + axis][3 * node_b + axis] += geometric;
+                // The isotropic term with (λ', μ'), then the geometric one.
+                let shared = state.mu * dot(*grad_a, *grad_b);
+                let geometric: f64 = (0..3).map(|axis| stressed[axis] * grad_b[axis]).sum();
+                for row in 0..3 {
+                    for col in 0..3 {
+                        let diagonal = if row == col { shared + geometric } else { 0.0 };
+                        tangent[width * (3 * node_a + row) + 3 * node_b + col] += volume
+                            * (state.lambda * grad_a[row] * grad_b[col]
+                                + state.mu * grad_a[col] * grad_b[row]
+                                + diagonal);
+                    }
                 }
             }
         }
     }
-    Ok(contribution)
+    Ok((force, tangent))
 }
 
 /// The Neo-Hookean state at one point of one element.
