@@ -88,7 +88,7 @@ test.describe("Tutorial figure capture", () => {
     await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
     const meshErr = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh OK")).toBeVisible(),
+      expect(page.getByTestId("mesh-summary")).toBeVisible(),
       meshErr.waitFor({ state: "visible" }).then(async () => {
         throw new Error(
           `Volume meshing failed: ${await meshErr.textContent()}`,

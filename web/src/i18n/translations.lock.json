@@ -5815,14 +5815,6 @@
     "es": "d4c2523cadbb",
     "pt": "d4c2523cadbb"
   },
-  "shell.ts:statusMessages.meshOk": {
-    "en": "e998564af64d",
-    "de": "74d8798e1fa7",
-    "fr": "c4c4a1246598",
-    "it": "e998564af64d",
-    "es": "51be30dea2bb",
-    "pt": "24dcd5119558"
-  },
   "shell.ts:statusMessages.noWarranty": {
     "en": "e8a974375228",
     "de": "593ed514fb77",
@@ -5974,14 +5966,6 @@
     "it": "afe914ffbbbb",
     "es": "60ce84b5abf3",
     "pt": "3d26bbf3e720"
-  },
-  "shell.ts:statusMessages.solved": {
-    "en": "e92f60f4dde0",
-    "de": "44d586702350",
-    "fr": "9ebd58c47e65",
-    "it": "a031c1234748",
-    "es": "56780c054e64",
-    "pt": "2a62baac3297"
   },
   "shell.ts:statusMessages.undeformed": {
     "en": "82dbcb069ebf",

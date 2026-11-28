@@ -3,10 +3,16 @@
 
 // What the status bar is about (KOF-493): while any tool picks faces (a
 // support, load, tie or coupling; a mesh face size; a face split) it describes
-// the CAD face picked last, and nothing else.
+// the CAD face picked last, and nothing else. Otherwise it shows the counts of
+// the step the model tree is on: the mesh's in Mesh, the supports' and loads'
+// in Boundary conditions, none elsewhere.
 
 import { describe, expect, test } from "bun:test";
-import { isPicking, pickedCadFaceId } from "../../src/lib/statusContext";
+import {
+  isPicking,
+  pickedCadFaceId,
+  stepCounts,
+} from "../../src/lib/statusContext";
 import type { StatusPickState } from "../../src/lib/statusContext";
 
 const idle: StatusPickState = {
@@ -83,5 +89,47 @@ describe("pickedCadFaceId", () => {
     expect(
       pickedCadFaceId({ ...idle, splitPicking: true, splitFaceIds: [7, 3] }),
     ).toBe(3);
+  });
+});
+
+describe("stepCounts", () => {
+  const counts = {
+    nodes: 3144,
+    hexes: 0,
+    tets: 9570,
+    fixedNodes: 75,
+    faceLoads: 1,
+    nodalLoadDofs: 150,
+  };
+
+  test("the Mesh step shows the mesh's nodes and elements", () => {
+    expect(stepCounts("mesh", counts)).toEqual([
+      { kind: "nodes", value: 3144 },
+      { kind: "tets", value: 9570 },
+    ]);
+  });
+
+  test("Boundary conditions show fixed nodes and loads, face loads first", () => {
+    expect(stepCounts("boundary", counts)).toEqual([
+      { kind: "fixedNodes", value: 75 },
+      { kind: "faceLoads", value: 1 },
+      { kind: "nodalLoadDofs", value: 150 },
+    ]);
+  });
+
+  test("other steps show no counts", () => {
+    for (const group of [
+      "geometry",
+      "materials",
+      "studies",
+      "results",
+    ] as const)
+      expect(stepCounts(group, counts)).toEqual([]);
+  });
+
+  test("a count of zero is left out", () => {
+    expect(
+      stepCounts("boundary", { ...counts, fixedNodes: 0, nodalLoadDofs: 0 }),
+    ).toEqual([{ kind: "faceLoads", value: 1 }]);
   });
 });

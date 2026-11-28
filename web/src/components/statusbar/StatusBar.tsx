@@ -10,7 +10,12 @@ import type { Projection } from "../../lib/projection";
 import { EngineStatus } from "./EngineStatus";
 import { useIntlTag, useT } from "../../i18n/useLocale";
 import { statusMessages } from "../../i18n/messages/shell";
-import { isPicking, pickedCadFaceId } from "../../lib/statusContext";
+import {
+  isPicking,
+  pickedCadFaceId,
+  stepCounts,
+} from "../../lib/statusContext";
+import type { CountKind } from "../../lib/statusContext";
 import { cadFaceLabel } from "../../lib/cadFaceProperties";
 import type { CadFaceProperties } from "../../lib/cadFaceProperties";
 import { MODEL_UNITS } from "../../lib/modelUnits";
@@ -18,16 +23,15 @@ import styles from "./StatusBar.module.css";
 
 type StatusText = (typeof statusMessages)["en"];
 
-// The face and nodal-DOF load counts, faces first.
-function loadCountLabels(
-  text: StatusText,
-  nodalLoadDofs: number,
-  faceLoads: number,
-): string[] {
-  const parts: string[] = [];
-  if (faceLoads > 0) parts.push(text.faceLoads(faceLoads));
-  if (nodalLoadDofs > 0) parts.push(text.nodalLoadDofs(nodalLoadDofs));
-  return parts;
+function countLabel(text: StatusText, kind: CountKind, value: number): string {
+  return {
+    nodes: () => text.nodes(value),
+    hexes: () => `${value} CHEXA`,
+    tets: () => `${value} CTETRA`,
+    fixedNodes: () => text.nodesFixed(value),
+    faceLoads: () => text.faceLoads(value),
+    nodalLoadDofs: () => text.nodalLoadDofs(value),
+  }[kind]();
 }
 
 function pickedCadFace(
@@ -173,6 +177,7 @@ export function StatusBar() {
   const result = useModelStore((s) => s.result);
   const mode = useModelStore((s) => s.mode);
   const picking = useModelStore(isPicking);
+  const treeGroup = useModelStore((s) => s.treeSelection.group);
   const pickedFaceId = useModelStore(pickedCadFaceId);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
@@ -204,16 +209,14 @@ export function StatusBar() {
 
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
-  const modelCounts = [
-    ...(nodes.length > 0 ? [text.nodes(nodes.length)] : []),
-    ...(hexCount > 0 ? [`${hexCount} CHEXA`] : []),
-    ...(tetCount > 0 ? [`${tetCount} CTETRA`] : []),
-    ...(constraints.length > 0
-      ? [text.nodesFixed(new Set(constraints.map((c) => c.nodeId)).size)]
-      : []),
-    ...loadCountLabels(text, loads.length, surfaceLoads.length),
-  ];
-  const meshOk = nodes.length > 0;
+  const counts = stepCounts(treeGroup, {
+    nodes: nodes.length,
+    hexes: hexCount,
+    tets: tetCount,
+    fixedNodes: new Set(constraints.map((c) => c.nodeId)).size,
+    faceLoads: surfaceLoads.length,
+    nodalLoadDofs: loads.length,
+  }).map(({ kind, value }) => countLabel(text, kind, value));
 
   // Load glyphs are only drawn outside the deformed-result view. Moment arrows
   // look identical in both display modes (they have no per-node form), so the
@@ -225,7 +228,7 @@ export function StatusBar() {
 
   return (
     <div className={styles.bar} data-testid="status-bar">
-      {/* Left: the face being picked while a tool picks, else the model */}
+      {/* Left: the face being picked while a tool picks, else the step's counts */}
       <div className={styles.left}>
         {picking
           ? pickedLabel && (
@@ -237,7 +240,7 @@ export function StatusBar() {
                 {pickedLabel}
               </span>
             )
-          : modelCounts.map((count, i) => (
+          : counts.map((count, i) => (
               <Fragment key={count}>
                 {i > 0 && <span className={styles.sep}>·</span>}
                 <span className={styles.stat}>{count}</span>
@@ -349,17 +352,6 @@ export function StatusBar() {
 
       {/* Right */}
       <div className={styles.right}>
-        {result ? (
-          <span className={styles.resultChip}>
-            <span className={styles.okDot} />
-            {text.solved}
-          </span>
-        ) : meshOk ? (
-          <span className={styles.meshChip}>
-            <span className={styles.okDot} />
-            {text.meshOk}
-          </span>
-        ) : null}
         <EngineStatus />
         <span className={styles.muted}>
           {MODEL_UNITS.length} · {MODEL_UNITS.force} · {MODEL_UNITS.stress} ·{" "}

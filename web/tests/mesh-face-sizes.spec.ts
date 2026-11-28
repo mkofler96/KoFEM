@@ -159,6 +159,9 @@ test("a face picked in the Mesh step meshes at its own size, and keeps it throug
   await page
     .locator('input[type="file"][accept=".vtu,.zip"]')
     .setInputFiles(file);
+  // openTree picks the mesh entry or "+ Add" by which exists, so wait until
+  // the loaded analysis has put its mesh in the tree.
+  await expect(page.getByTestId("tree-mesh-1")).toBeVisible();
   await openTree(page, "mesh");
   await expect(page.getByTestId(`mesh-face-size-${hole}`)).toHaveText(
     "max 0.5 mm",

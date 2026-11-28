@@ -5,6 +5,7 @@
 // is — its CAD face id, surface type (a cylinder with its diameter), area and
 // normal or axis — measured by the engine on the CAD geometry, and shows
 // nothing else: no pick prompt (the panel gives it) and no mesh counts.
+// Otherwise it shows only the counts of the step the model tree is on.
 // Driven on the hollow shaft example: a tube rᵢ = 30, rₒ = 50 mm, 500 mm long
 // along z, whose faces are 1 the outer cylinder, 2 the bore, 3 the end z = 0
 // and 4 the end z = 500 (annulusStep in examples/gallery/step-prism.mjs).
@@ -27,8 +28,10 @@ test("the status bar describes the face picked for a support, and only that @pip
   page,
 }) => {
   await openShaft(page);
+  // The example opens on its study, which has no counts of its own.
   const bar = page.getByTestId("status-bar");
-  await expect(bar).toContainText(/\d+ nodes/);
+  await expect(bar).not.toContainText(/\d+ nodes/);
+  await expect(bar).not.toContainText("Mesh OK");
 
   await addBoundary(page, "bc");
   await expect(bar).not.toContainText(/\d+ nodes/);
@@ -63,7 +66,8 @@ test("the status bar describes the face picked for a mesh face size @pipeline", 
   await openShaft(page);
   await openTree(page, "mesh");
   const bar = page.getByTestId("status-bar");
-  await expect(bar).toContainText(/\d+ nodes/);
+  await expect(bar).toContainText(/\d+ nodes.*\d+ CTETRA/);
+  await expect(bar).not.toContainText("fixed");
 
   await page.getByTestId("face-size-pick").click();
   await expect(bar).not.toContainText(/\d+ nodes/);

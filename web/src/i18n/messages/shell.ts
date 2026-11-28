@@ -716,22 +716,6 @@ export const statusMessages = defineMessages({
     es: "Cargas nodales",
     pt: "Cargas nodais",
   },
-  solved: {
-    en: "Solved · converged",
-    de: "Gelöst · konvergiert",
-    fr: "Résolu · convergé",
-    it: "Risolto · convergente",
-    es: "Resuelto · convergido",
-    pt: "Resolvido · convergiu",
-  },
-  meshOk: {
-    en: "Mesh OK",
-    de: "Netz OK",
-    fr: "Maillage OK",
-    it: "Mesh OK",
-    es: "Malla OK",
-    pt: "Malha OK",
-  },
   noWarrantyTip: {
     en: "No warranty — FEM results are approximations. Verify independently before relying on them.",
     de: "Keine Gewährleistung — FEM-Ergebnisse sind Näherungen. Prüfen Sie sie unabhängig, bevor Sie sich darauf verlassen.",

@@ -147,15 +147,6 @@
   text-decoration: underline;
 }
 
-.meshChip,
-.resultChip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #15803d;
-  white-space: nowrap;
-}
-
 .okDot {
   width: 6px;
   height: 6px;
