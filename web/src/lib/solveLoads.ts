@@ -23,11 +23,10 @@ type ShellNodalLoad = {
 //   pressure        — -p·n̂·A/3 per facet node, n̂ the facet winding normal
 //                     (a shell has no outward side; + pushes against n̂)
 // The area each face of a surface load stands for, per unit of its own
-// (SurfaceLoad.areaScales), one entry per face.
+// (SurfaceLoad.areaScales), one entry per face. Without scales every face
+// stands for its own area; only a curved CAD shell face's load has them.
 export function faceAreaScales(sl: SurfaceLoad): number[] {
-  if (!sl.areaScales)
-    // eslint-disable-next-line kofem/no-silent-fallback -- areaScales is optional by contract: absent means every face stands for its own area, which every load but a curved CAD shell face's is
-    return sl.faces.map(() => 1);
+  if (!sl.areaScales) return sl.faces.map(() => 1);
   if (sl.areaScales.length !== sl.faces.length)
     throw new Error(
       `surface load: ${sl.areaScales.length} area scales for ${sl.faces.length} faces`,
