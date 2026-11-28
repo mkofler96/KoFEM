@@ -7303,6 +7303,54 @@
     "es": "d0d7281a3434",
     "pt": "d6c502769bc2"
   },
+  "solve.ts:solveMessages.adviceInvertedElement": {
+    "en": "1c5f7c83b47f",
+    "de": "5df3b81f7d55",
+    "fr": "141306cf3523",
+    "it": "6971c8ef7d60",
+    "es": "9ed151731e89",
+    "pt": "e8ee545fce89"
+  },
+  "solve.ts:solveMessages.adviceNewtonNotConverged": {
+    "en": "61afc5e38069",
+    "de": "acfc1ac69e1e",
+    "fr": "1d8c9a66ec0b",
+    "it": "5e6e57cabd08",
+    "es": "66174891d913",
+    "pt": "1420cb2f304d"
+  },
+  "solve.ts:solveMessages.adviceNonFiniteResult": {
+    "en": "39cf3e16e8cb",
+    "de": "b5350c6fb2f9",
+    "fr": "6808f8f1c2db",
+    "it": "506e210f4844",
+    "es": "8218e7e6c67e",
+    "pt": "9837fd371a64"
+  },
+  "solve.ts:solveMessages.adviceNotConverged": {
+    "en": "f5e782753bef",
+    "de": "4748c1efb36b",
+    "fr": "87ce75183e7f",
+    "it": "18ac58dfd0f9",
+    "es": "fb42bc3d70e7",
+    "pt": "96b5b16acc99"
+  },
+  "solve.ts:solveMessages.adviceSingularMatrix": {
+    "en": "57134f25bdcd",
+    "de": "16a9a5c7f33b",
+    "fr": "39815a8cacd4",
+    "it": "afd550371418",
+    "es": "0829461ef3a4",
+    "pt": "a64a4948fe80"
+  },
+  "solve.ts:solveMessages.adviceUnstableTangent": {
+    "en": "bd2c4f3ff427",
+    "de": "137e3a9c4c32",
+    "fr": "a36eae41c1d1",
+    "it": "23be919f7067",
+    "es": "969eb1db5ca1",
+    "pt": "e8cb9beddbde"
+  },
   "solve.ts:solveMessages.amgCouplings": {
     "en": "6ece3f652001",
     "de": "a61050a868eb",

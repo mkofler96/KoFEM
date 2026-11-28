@@ -17,7 +17,13 @@
 
 import type { CadFormat } from "./cadFormat";
 import { inEnglish } from "../i18n/english";
-import { WorkerTaskError, type FailureStage } from "./workerError";
+import {
+  rustFailureClass,
+  WorkerCrashError,
+  WorkerTaskError,
+  type FailureStage,
+  type RustFailureClass,
+} from "./workerError";
 
 export type Workflow = "cad_import" | "example" | "saved_file" | "none";
 export type ErrorCategory =
@@ -33,8 +39,10 @@ export type ErrorCategory =
   // The engine's import failed in a way no rule above recognises.
   | "import_failure"
   | "resource_limit"
+  // numerical_reason says how (KOF-490).
   | "numerical_failure"
   | "geometry_defect"
+  | "degenerate_element"
   // Netgen gave up on the shape (KOF-311).
   | "mesher_failure"
   // OCCT could not triangulate the shape.
@@ -49,12 +57,31 @@ export type ErrorCategory =
   | "solver_failure"
   // A WASM trap or abort: a code bug in the engine, not the visitor's model.
   | "engine_crash"
-  // The worker itself died or answered nothing usable.
+  // The worker itself died, refused the task or answered nothing usable.
   | "worker_failure"
   | "engine_unavailable"
+  // A language's text could not be fetched (KOF-490).
+  | "app_load_failure"
   // The visitor ended the task, e.g. New model while meshing.
   | "cancelled"
   | "unknown";
+// The reasons of crates/kofem-fem/src/failure_class.rs (KOF-490).
+export const NUMERICAL_REASONS = [
+  "singular_matrix",
+  "not_converged",
+  "newton_not_converged",
+  "unstable_tangent",
+  "inverted_element",
+  "non_finite_result",
+] as const;
+export type NumericalReason = (typeof NUMERICAL_REASONS)[number];
+// The category a failure is sent with; a numerical failure always carries its
+// reason.
+export type FailureClass =
+  | { error_category: PlainCategory }
+  | { error_category: "numerical_failure"; numerical_reason: NumericalReason };
+// A category with no reason to carry: every one but numerical_failure.
+type PlainCategory = Exclude<ErrorCategory, "numerical_failure">;
 export type DurationBucket =
   "lt_1s" | "1_5s" | "5_15s" | "15_60s" | "1_5min" | "gt_5min";
 export type ModelType = "solid" | "shell" | "mixed";
@@ -103,8 +130,7 @@ export interface AnalyticsEvents {
   solve_failed: WorkflowParams & {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
-    error_category: ErrorCategory;
-  };
+  } & FailureClass;
   results_viewed: WorkflowParams;
   // Results → Save report (KOF-391): that a report was saved, never what it
   // says.
@@ -256,8 +282,9 @@ export function startTimer(): () => DurationBucket {
 }
 
 // Ordered: the first matching rule wins. Matched against the worker's error
-// text, which is never sent — only the category is.
-const ERROR_RULES: [ErrorCategory, RegExp][] = [
+// text, which is never sent — only the category is. A FemError is classed by
+// the Rust module instead (RUST_CATEGORY below).
+const ERROR_RULES: [PlainCategory, RegExp][] = [
   [
     "resource_limit",
     /out of memory|Aborted\(OOM\)|Cannot enlarge memory|memory allocation|Array buffer allocation failed|bad_alloc|exceeds the limit|too many elements/i,
@@ -276,8 +303,10 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
   ],
   [
     "worker_failure",
-    /Worker crashed|Worker error|worker .*terminated|WASM module not initialised/i,
+    /Worker crashed|Worker error|worker .*terminated|WASM module not initialised|worker is busy/i,
   ],
+  // i18n/loadLocale.ts fetches a language's text on demand.
+  ["app_load_failure", /text of KoFEM (could not be loaded|is incomplete)/i],
   ["unsupported_format", /unsupported|not a (STEP|IGES)/i],
   ["parse_error", /invalid (STEP|IGES) file|ReadFile failed|ISO-10303/i],
   // Before geometry_defect: an IGES file of free surfaces names the closed
@@ -297,27 +326,53 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
     /Ng_\w+ failed|Ng_NewMesh|NgException|Geomsearch|hash-position|OCCGeometry construction failed/i,
   ],
   ["tessellation_failure", /BRepMesh\w* .*failed|produced no triangles/i],
-  // Before numerical_failure and invalid_input: the refusals of
-  // lib/solve/refusals.ts, amg.ts, route.ts and autoShell.ts (KOF-418).
+  // Before invalid_input: the refusals of lib/solve/refusals.ts, amg.ts,
+  // route.ts and autoShell.ts (KOF-418).
   [
     "unsupported_model",
     /does not support|cannot solve this model|solve with linear elements only|supports solid models only|the shell solver cannot apply|can be idealised as shells today|works on tetrahedral meshes only/i,
   ],
   ["shell_idealisation_failure", /Shell idealisation failed/i],
-  // Before numerical_failure: the rigid-body check (lib/solve/rigidBody.ts).
+  // The rigid-body check (lib/solve/rigidBody.ts, KOF-388).
   ["unheld_body", /can still (move along|rotate about)/i],
-  [
-    "numerical_failure",
-    /did not converge|diverg|singular|NaN|ill-conditioned|zero pivot|not positive definite|rigid[- ]body|unconstrained/i,
-  ],
   [
     "invalid_input",
     /No geometry|must be|must not|no (solid|shell) element|no property|no material|degenerate|zero total|carries no|cannot be|missing|invalid|cannot fill/i,
   ],
 ];
 
+// The categories of crates/kofem-fem/src/failure_class.rs; "numerical" comes
+// with a reason.
+const RUST_CATEGORY = {
+  invalid_input: "invalid_input",
+  degenerate_element: "degenerate_element",
+  resource_limit: "resource_limit",
+  unsupported_model: "unsupported_model",
+  internal: "solver_failure",
+} as const satisfies Record<string, PlainCategory>;
+
+function isRustCategory(value: string): value is keyof typeof RUST_CATEGORY {
+  return Object.hasOwn(RUST_CATEGORY, value);
+}
+
+function isNumericalReason(value: string): value is NumericalReason {
+  return (NUMERICAL_REASONS as readonly string[]).includes(value);
+}
+
+function fromRust({ category, reason }: RustFailureClass): FailureClass {
+  if (category === "numerical" && reason !== null && isNumericalReason(reason))
+    return { error_category: "numerical_failure", numerical_reason: reason };
+  if (isRustCategory(category) && reason === null)
+    return { error_category: RUST_CATEGORY[category] };
+  // The page and the Rust module are built together, so this is a bug.
+  console.error(
+    `[analytics] the Rust module sent an unknown failure class: ${category} / ${String(reason)}`,
+  );
+  return { error_category: "unknown" };
+}
+
 // What a failure in each step is when its text matches no rule above.
-const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
+const STAGE_CATEGORY: Record<FailureStage, PlainCategory> = {
   geometry_reload: "tessellation_failure",
   meshing: "mesher_failure",
   shell_idealisation: "shell_idealisation_failure",
@@ -325,18 +380,32 @@ const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
   solving: "solver_failure",
 };
 
-/** Map an error to a fixed category. The message itself stays in the browser. */
-export function categorizeError(err: unknown): ErrorCategory {
+/**
+ * Map an error to a fixed category, and a numerical failure to its reason.
+ * The message itself stays in the browser.
+ */
+export function classifyFailure(err: unknown): FailureClass {
+  const rust =
+    err instanceof WorkerTaskError ? err.rustClass : rustFailureClass(err);
+  if (rust !== null) return fromRust(rust);
   const text =
     err instanceof WorkerTaskError
       ? `${err.name}: ${err.english}`
       : inEnglish(
           err instanceof Error ? `${err.name}: ${err.message}` : String(err),
         );
-  for (const [category, re] of ERROR_RULES) if (re.test(text)) return category;
+  for (const [category, re] of ERROR_RULES)
+    if (re.test(text)) return { error_category: category };
+  if (err instanceof WorkerCrashError)
+    return { error_category: "worker_failure" };
   if (err instanceof WorkerTaskError && err.stage !== null)
-    return STAGE_CATEGORY[err.stage];
-  return "unknown";
+    return { error_category: STAGE_CATEGORY[err.stage] };
+  return { error_category: "unknown" };
+}
+
+/** `classifyFailure`'s category alone, for events without a reason. */
+export function categorizeError(err: unknown): ErrorCategory {
+  return classifyFailure(err).error_category;
 }
 
 /** Solid, shell or mixed, from the element types of a mesh. */

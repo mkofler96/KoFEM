@@ -1084,6 +1084,12 @@ label.sectionHeadAction {
 
 .errorBanner span {
   flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.errorBanner .errorAdvice {
+  display: block;
+  margin-bottom: 4px;
 }
 
 .errorBanner button {

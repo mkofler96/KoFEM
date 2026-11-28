@@ -17,6 +17,7 @@ import { DensityThresholdControl } from "./DensityThresholdControl";
 import { NotConvergedNotice } from "./NotConvergedNotice";
 import { useT } from "../../i18n/useLocale";
 import { optimizeMessages } from "../../i18n/messages/optimize";
+import { FailureBanner } from "./FailureBanner";
 import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
 
@@ -65,10 +66,11 @@ export function TopOptResult({ footer }: { footer: ReactNode }) {
       <div className={styles.tabContent}>
         <div className={own.result}>
           {error && (
-            <div className={styles.errorBanner}>
-              <span>{error}</span>
-              <button onClick={() => setError(null)}>×</button>
-            </div>
+            <FailureBanner
+              notice={error}
+              onClose={() => setError(null)}
+              testId="topopt-error"
+            />
           )}
           {isOptimizing ? (
             <div className={own.hint} data-testid="topopt-run-status">
