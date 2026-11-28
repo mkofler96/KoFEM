@@ -120,6 +120,7 @@ impl FemError {
             | Self::ConnectivityLength { .. }
             | Self::ReactionInput { .. }
             | Self::ReportField { .. }
+            | Self::BoundarySummary { .. }
             | Self::ReducedSystem
             | Self::DofOutOfRange { .. }
             | Self::ConstraintValueCount { .. }

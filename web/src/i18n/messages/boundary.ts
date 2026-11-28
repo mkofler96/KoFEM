@@ -244,6 +244,76 @@ export const boundaryMessages = defineMessages({
     es: "Quitar cara",
     pt: "Remover face",
   },
+  // The group card's summary of what it applies (KOF-494).
+  summaryNoFaces: {
+    en: "No faces selected",
+    de: "Keine Flächen gewählt",
+    fr: "Aucune face sélectionnée",
+    it: "Nessuna faccia selezionata",
+    es: "Ninguna cara seleccionada",
+    pt: "Nenhuma face selecionada",
+  },
+  summaryNoValue: {
+    en: "No value set",
+    de: "Kein Wert gesetzt",
+    fr: "Aucune valeur définie",
+    it: "Nessun valore impostato",
+    es: "Ningún valor definido",
+    pt: "Nenhum valor definido",
+  },
+  summaryNotMeasured: {
+    en: "Area not measured: the selection is not whole CAD faces",
+    de: "Fläche nicht gemessen: die Auswahl besteht nicht aus ganzen CAD-Flächen",
+    fr: "Aire non mesurée : la sélection n'est pas faite de faces CAO entières",
+    it: "Area non misurata: la selezione non è fatta di facce CAD intere",
+    es: "Área no medida: la selección no son caras CAD completas",
+    pt: "Área não medida: a seleção não é feita de faces CAD inteiras",
+  },
+  summaryNoGeometry: {
+    en: "Area not measured: the CAD geometry is not loaded. Import the STEP file to measure it",
+    de: "Fläche nicht gemessen: die CAD-Geometrie ist nicht geladen. Importieren Sie die STEP-Datei, um sie zu messen",
+    fr: "Aire non mesurée : la géométrie CAO n'est pas chargée. Importez le fichier STEP pour la mesurer",
+    it: "Area non misurata: la geometria CAD non è caricata. Importa il file STEP per misurarla",
+    es: "Área no medida: la geometría CAD no está cargada. Importe el archivo STEP para medirla",
+    pt: "Área não medida: a geometria CAD não está carregada. Importe o arquivo STEP para medi-la",
+  },
+  summaryAppliedEach: {
+    en: (count: number, total: string) =>
+      `applied to each of ${count} selections → ${total}`,
+    de: (count: number, total: string) =>
+      `auf jede von ${count} Auswahlen angewendet → ${total}`,
+    fr: (count: number, total: string) =>
+      `appliqué à chacune des ${count} sélections → ${total}`,
+    it: (count: number, total: string) =>
+      `applicato a ciascuna di ${count} selezioni → ${total}`,
+    es: (count: number, total: string) =>
+      `aplicado a cada una de ${count} selecciones → ${total}`,
+    pt: (count: number, total: string) =>
+      `aplicado a cada uma de ${count} seleções → ${total}`,
+  },
+  summarySameFace: {
+    en: (labels: string) => `${labels} are the same face, counted once`,
+    de: (labels: string) => `${labels} sind dieselbe Fläche, einmal gezählt`,
+    fr: (labels: string) => `${labels} sont la même face, comptée une fois`,
+    it: (labels: string) =>
+      `${labels} sono la stessa faccia, contata una volta`,
+    es: (labels: string) => `${labels} son la misma cara, contada una vez`,
+    pt: (labels: string) => `${labels} são a mesma face, contada uma vez`,
+  },
+  summarySameFaceMoment: {
+    en: (labels: string) =>
+      `${labels} are the same face: its area counts once, but the moment is applied to each`,
+    de: (labels: string) =>
+      `${labels} sind dieselbe Fläche: ihre Fläche zählt einmal, das Moment wirkt aber auf jede`,
+    fr: (labels: string) =>
+      `${labels} sont la même face : son aire compte une fois, mais le moment s'applique à chacune`,
+    it: (labels: string) =>
+      `${labels} sono la stessa faccia: la sua area conta una volta, ma il momento si applica a ciascuna`,
+    es: (labels: string) =>
+      `${labels} son la misma cara: su área cuenta una vez, pero el momento se aplica a cada una`,
+    pt: (labels: string) =>
+      `${labels} são a mesma face: a área conta uma vez, mas o momento é aplicado a cada uma`,
+  },
   addFaceTo: {
     en: (name: string) => `Add face to ${name}`,
     de: (name: string) => `Fläche zu ${name} hinzufügen`,

@@ -18,6 +18,7 @@
 
 pub mod amg;
 pub mod assembly;
+pub mod boundary_summary;
 pub mod cg;
 pub mod constraints;
 pub mod contact;
@@ -58,6 +59,10 @@ pub use amg::{
     AmgSettings, LevelInfo, NodeBlock, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel,
 };
 pub use assembly::assemble_stiffness;
+pub use boundary_summary::{
+    force_summary, moment_summary, pressure_summary, selected_area, ForceSummary, MomentSummary,
+    PressureSummary, SelectedArea,
+};
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
 pub use count::{count_as_f64, index_as_u32};

@@ -896,6 +896,21 @@ label.sectionHeadAction {
   flex-shrink: 0;
 }
 
+.bcGroupSummary {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.bcGroupWarning {
+  margin-top: 2px;
+  color: var(--warn);
+}
+
 .bcGroupMeta {
   font-size: 11px;
   color: var(--muted);

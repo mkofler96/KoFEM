@@ -3,6 +3,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 import type { BcFaceEntry } from "../../store/modelStore";
+import type { SummaryText } from "../../lib/groupSummary";
 import { requestDelete } from "../../store/confirmDelete";
 import { useT } from "../../i18n/useLocale";
 import { boundaryMessages } from "../../i18n/messages/boundary";
@@ -15,6 +16,7 @@ import styles from "./Panel.module.css";
 export function GroupCard({
   name,
   meta,
+  summary,
   dotClassName,
   editTitle,
   deleteTitle,
@@ -28,6 +30,8 @@ export function GroupCard({
 }: {
   name: string;
   meta: string;
+  // Absent on groups that have none, and while the Rust module loads.
+  summary?: SummaryText;
   dotClassName: string;
   editTitle: string;
   deleteTitle: string;
@@ -71,6 +75,19 @@ export function GroupCard({
           </button>
         </div>
       </div>
+      {summary && (
+        <div className={styles.bcGroupSummary} data-testid="group-summary">
+          <div title={summary.hint}>{summary.summary}</div>
+          {summary.warning && (
+            <div
+              className={styles.bcGroupWarning}
+              data-testid="group-summary-warning"
+            >
+              {summary.warning}
+            </div>
+          )}
+        </div>
+      )}
       {onRename && <GroupNameField name={name} onRename={onRename} />}
       {editForm}
       {faces.map((face) => (
