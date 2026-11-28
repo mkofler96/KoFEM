@@ -832,9 +832,11 @@ fn mixed_mesh_numbers_tets_first_and_stores_both_parts_energy() {
         .iter()
         .filter(|&&node| node as usize >= mesh.vertex_count())
         .count();
-    // The x = 1 plane: 3×3 vertices, 12 grid edges between them.
+    // The x = 1 plane: 3×3 vertices, 12 grid edges between them, and the
+    // diagonal of each of its 4 quads, which the hexes' transition pieces
+    // share with the tets.
     assert_eq!(shared.len() - interface_edges, 9);
-    assert_eq!(interface_edges, 12);
+    assert_eq!(interface_edges, 12 + 4);
 }
 
 /// The mixed mesh's boundary has triangles (tet faces) and quadrilaterals (hex

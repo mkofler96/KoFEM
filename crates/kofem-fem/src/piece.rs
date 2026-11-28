@@ -309,7 +309,7 @@ pub(crate) fn corner_samples(
     element: usize,
     corner: usize,
 ) -> Vec<(PieceRef<'_>, PiecePoint, f64)> {
-    let node = mesh.element_nodes(element)[corner];
+    let node = mesh.element_corners(element)[corner];
     let mut samples: Vec<(PieceRef<'_>, PiecePoint, f64)> = mesh
         .pieces(element)
         .filter_map(|piece| {
@@ -330,12 +330,12 @@ pub(crate) fn corner_samples(
     samples
 }
 
-/// The stiffness of `element` over [`TetMesh::solved_nodes`], row-major
+/// The stiffness of `element` over [`TetMesh::element_nodes`], row-major
 /// (3·node + component): its pieces' stiffnesses added up.
 #[must_use]
 pub fn element_stiffness(mesh: &TetMesh, element: usize) -> Vec<f64> {
     let material = mesh.material(element);
-    let nodes = mesh.solved_nodes(element);
+    let nodes = mesh.element_nodes(element);
     let width = 3 * nodes.len();
     let mut matrix = vec![0.0; width * width];
     for piece in mesh.pieces(element) {
@@ -366,12 +366,12 @@ pub fn element_stiffness(mesh: &TetMesh, element: usize) -> Vec<f64> {
 }
 
 /// The shape-function gradients of `element` at its centre, over
-/// [`TetMesh::solved_nodes`]: for a transition element, the volume mean of
+/// [`TetMesh::element_nodes`]: for a transition element, the volume mean of
 /// its pieces' gradients at their centres, so that `∇u = Σ u_a ⊗ g_a` is the
 /// mean gradient [`centre_samples`] gives.
 #[must_use]
 pub fn centre_gradients(mesh: &TetMesh, element: usize) -> Vec<[f64; 3]> {
-    let nodes = mesh.solved_nodes(element);
+    let nodes = mesh.element_nodes(element);
     let mut gradients = vec![[0.0; 3]; nodes.len()];
     for (piece, point, weight) in centre_samples(mesh, element) {
         let mut local: Vec<f64> = piece.gradients(point).0.into_iter().flatten().collect();

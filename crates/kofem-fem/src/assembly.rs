@@ -1,32 +1,41 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::count::node_index;
 use crate::mesh::TetMesh;
 use crate::sparse::CsrMatrix;
 
-/// Most nodes one scatter takes: a quadratic transition element (27 nodes of
-/// its own, 8 risers, 12 side-triangle centres and 6 pyramid centres).
-const MAX_ELEMENT_NODES: usize = 64;
+/// Most nodes of one element: the 27-node hexahedron.
+const MAX_ELEMENT_NODES: usize = 27;
 
-/// Sorted neighbour list of every node (including itself): the nodes it shares
-/// an element with. A vertex no element uses lists only itself, so its rows
+/// Sorted neighbour list of every node (including itself): the nodes it
+/// shares an element with. A vertex no element uses lists only itself, so its rows
 /// keep a (zero) diagonal block for the solve to hold it.
 #[must_use]
 pub fn node_neighbours(mesh: &TetMesh) -> Vec<Vec<u32>> {
-    let mut neighbours: Vec<Vec<u32>> = vec![Vec::new(); mesh.node_count()];
+    neighbours_of(mesh, mesh.node_count(), |element| {
+        mesh.element_nodes(element)
+    })
+}
+
+/// Sorted neighbour list of each of `count` nodes (itself included): the
+/// nodes it shares an element with, as `nodes_of(element)` lists them. A node
+/// no element lists has only itself.
+pub(crate) fn neighbours_of<'mesh>(
+    mesh: &'mesh TetMesh,
+    count: usize,
+    nodes_of: impl Fn(usize) -> &'mesh [u32],
+) -> Vec<Vec<u32>> {
+    let mut neighbours: Vec<Vec<u32>> = vec![Vec::new(); count];
     for element in 0..mesh.element_count() {
-        let nodes = mesh.solved_nodes(element);
+        let nodes = nodes_of(element);
         for &node in nodes {
             neighbours[node as usize].extend_from_slice(nodes);
         }
     }
     for (node, list) in neighbours.iter_mut().enumerate() {
         if list.is_empty() {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "TetMesh caps the node count at MAX_NODES"
-            )]
-            list.push(node as u32);
+            list.push(node_index(node));
         }
         list.sort_unstable();
         list.dedup();

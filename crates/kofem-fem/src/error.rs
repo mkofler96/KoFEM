@@ -267,8 +267,6 @@ pub enum FemError {
     NonlinearInput { reason: String },
     #[error("contact: {reason}")]
     Contact { reason: String },
-    #[error("the point {point:?} is not inside element {element}")]
-    PointOutsideElement { element: usize, point: [f64; 3] },
     #[error(
         "hexahedron {hex} meets tetrahedra on {triangles} of the four triangles its face {face} \
          splits into along either diagonal: a hex face must meet tetrahedra on both halves of \

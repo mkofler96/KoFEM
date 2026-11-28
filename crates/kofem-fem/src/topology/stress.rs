@@ -294,7 +294,7 @@ impl SimpModel {
             }
             let dofs: Vec<usize> = self
                 .mesh
-                .solved_nodes(element)
+                .element_nodes(element)
                 .iter()
                 .flat_map(|&node| (0..3).map(move |component| 3 * node as usize + component))
                 .collect();

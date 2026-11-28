@@ -139,8 +139,7 @@ impl FemError {
             | Self::TopologyInput { .. }
             | Self::Convergence { .. }
             | Self::NewtonUnfinished { .. }
-            | Self::NonlinearInput { .. }
-            | Self::PointOutsideElement { .. } => Internal,
+            | Self::NonlinearInput { .. } => Internal,
         }
     }
 }

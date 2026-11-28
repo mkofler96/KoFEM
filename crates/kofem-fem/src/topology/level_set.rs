@@ -33,6 +33,7 @@
 //! the convergence plot and live streaming work as for SIMP.
 
 use crate::amg::SymmetricGaussSeidel;
+use crate::assembly::neighbours_of;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
 use crate::count::count_as_f64;
 use crate::element::{
@@ -205,7 +206,7 @@ pub fn level_set_density(mesh: &TetMesh, phi: &[f64]) -> Result<Vec<f64>, FemErr
 fn density_of(mesh: &TetMesh, phi: &[f64]) -> Vec<f64> {
     (0..mesh.element_count())
         .map(|element| {
-            let nodes = mesh.element_nodes(element);
+            let nodes = mesh.element_corners(element);
             let at = |local: usize| phi[nodes[local] as usize];
             match mesh.shape(element) {
                 ElementShape::Tetrahedron => tet_positive_fraction([at(0), at(1), at(2), at(3)]),
@@ -282,7 +283,7 @@ impl LevelSetOptimizer {
                         "passive {which} element index {element} is out of range [0, {count})"
                     )));
                 }
-                for &vertex in mesh.element_nodes(element) {
+                for &vertex in mesh.element_corners(element) {
                     let slot = &mut pins[vertex as usize];
                     if *slot != Pin::Free && *slot != pin {
                         return Err(topology_error(format!(
@@ -421,7 +422,7 @@ impl LevelSetOptimizer {
         let mesh = self.model.mesh();
         let mut forcing = vec![0.0; self.phi.len()];
         for (element, &element_energy) in energy.iter().enumerate() {
-            let nodes = mesh.element_nodes(element);
+            let nodes = mesh.element_corners(element);
             let share = element_energy / mean_density / count_as_f64(nodes.len());
             for &node in nodes {
                 forcing[node as usize] += share;
@@ -618,13 +619,16 @@ fn check_settings(settings: &LevelSetSettings) -> Result<(), FemError> {
 /// linear H1 space of `mesh`, one row per vertex. A vertex no element uses
 /// gets an identity row in both, so it keeps its value.
 fn scalar_operators(mesh: &TetMesh, diffusion: f64) -> (CsrMatrix, CsrMatrix) {
-    let neighbours = vertex_neighbours(mesh);
+    // The level set lives on the vertices, on each element's corners.
+    let neighbours = neighbours_of(mesh, mesh.vertex_count(), |element| {
+        mesh.element_corners(element)
+    });
     let mut mass = CsrMatrix::from_node_blocks(&neighbours, 1);
     let mut laplacian = mass.clone();
     let tet_count = mesh.tets().len();
     let rule = cube_rule(3);
     for element in 0..mesh.element_count() {
-        let nodes = mesh.element_nodes(element);
+        let nodes = mesh.element_corners(element);
         let (element_mass, element_laplacian) = match mesh.shape(element) {
             ElementShape::Tetrahedron => tet_matrices(&mesh.corners(element)),
             ElementShape::Hexahedron => hex_matrices(&mesh.hex_corners(element - tet_count), &rule),
@@ -649,32 +653,6 @@ fn scalar_operators(mesh: &TetMesh, diffusion: f64) -> (CsrMatrix, CsrMatrix) {
         *value += diffusion * diffusive;
     }
     (mass, operator)
-}
-
-/// Sorted neighbour list of every vertex (itself included): the vertices it
-/// shares an element with. The level set lives on the vertices, on each
-/// element's own corners, so the nodes a transition element adds inside a hex
-/// (KOF-433) have no row.
-fn vertex_neighbours(mesh: &TetMesh) -> Vec<Vec<u32>> {
-    let mut neighbours: Vec<Vec<u32>> = vec![Vec::new(); mesh.vertex_count()];
-    for element in 0..mesh.element_count() {
-        let corners = mesh.element_nodes(element);
-        for &corner in corners {
-            neighbours[corner as usize].extend_from_slice(corners);
-        }
-    }
-    for (vertex, list) in neighbours.iter_mut().enumerate() {
-        if list.is_empty() {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "TetMesh caps the node count at MAX_NODES"
-            )]
-            list.push(vertex as u32);
-        }
-        list.sort_unstable();
-        list.dedup();
-    }
-    neighbours
 }
 
 /// Consistent mass `V/20·(1 + δ_ij)` and Laplacian `V·∇N_i·∇N_j` of a linear

@@ -60,8 +60,8 @@ export function mixedCantilever() {
 
 async function bootstrapMixedCantilever(page: Page): Promise<void> {
   await page.goto("/app/");
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofemStore?: unknown }).__kofemStore,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofemStore?: unknown }).__kofemStore),
   );
   await page.evaluate((model) => {
     type FaceArg = { label: string; nodeIds: number[] };
@@ -146,8 +146,6 @@ test("a hex/tet cantilever solves with its interface hexes as transition element
   // The solve log is on the study's panel; the solve opened the result.
   await openTree(page, "static");
   await expect(
-    page.getByText(
-      "4 hexahedron face(s) meet tetrahedra: 4 hexahedra are solved as transition elements (pyramids and tetrahedra), so the displacement is continuous across the interface",
-    ),
+    page.getByText("4 hexahedra joined to tetrahedra by transition elements"),
   ).toBeVisible();
 });

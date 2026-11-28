@@ -133,7 +133,7 @@ describe("hex/tet interface through the app's solid solve", () => {
         expect(
           log.some((line) =>
             line.startsWith(
-              "9 hexahedron face(s) meet tetrahedra: 9 hexahedra are solved as transition elements",
+              "9 hexahedra joined to tetrahedra by transition elements",
             ),
           ),
           log.join("\n"),
@@ -221,7 +221,9 @@ describe("hex/tet interface through the app's topology optimization", () => {
       );
       expect(
         logs.some((line) =>
-          line.startsWith("[topopt] 9 hexahedron face(s) meet tetrahedra"),
+          line.startsWith(
+            "[topopt] 9 hexahedra joined to tetrahedra by transition elements",
+          ),
         ),
         logs.join("\n"),
       ).toBe(true);

@@ -29,9 +29,9 @@
 
 use std::collections::HashMap;
 
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, node_index};
 use crate::error::FemError;
-use crate::mesh::{local_hex_edge, ElementOrder, EDGES_OF_HEX, FACES_OF_HEX};
+use crate::mesh::{local_hex_edge, ElementOrder, TetMesh, EDGES_OF_HEX, FACES_OF_HEX};
 use crate::piece::{Blend, Piece, PieceGeometry};
 
 /// Which diagonal of a hex face the tets split it along, by the positions in
@@ -180,19 +180,6 @@ pub(crate) struct Transitions {
     pub(crate) added_in: Vec<usize>,
 }
 
-/// The mesh data [`split_hexes`] reads.
-pub(crate) struct HexData<'a> {
-    pub(crate) order: ElementOrder,
-    /// All nodes so far (vertices, then any added by the element order).
-    pub(crate) points: &'a [[f64; 3]],
-    pub(crate) hexes: &'a [[u32; 8]],
-    pub(crate) tet_count: usize,
-    /// The nodes of hexahedron k (8 or 27, in element order).
-    pub(crate) hex_nodes: &'a dyn Fn(usize) -> &'a [u32],
-    /// The edge node between two vertices (quadratic meshes).
-    pub(crate) edge_node: &'a dyn Fn(u32, u32) -> u32,
-}
-
 /// The faces of [`FACES_OF_HEX`] holding each edge of [`EDGES_OF_HEX`].
 fn faces_of_edge(edge: usize) -> [usize; 2] {
     let [first, second] = EDGES_OF_HEX[edge];
@@ -215,7 +202,7 @@ fn mean(points: &[[f64; 3]]) -> [f64; 3] {
 /// numbering the nodes it adds from `first_node`.
 pub(crate) fn split_hexes(
     interfaces: &[InterfaceFace],
-    data: &HexData<'_>,
+    mesh: &TetMesh,
     first_node: usize,
 ) -> Transitions {
     let mut transitions = Transitions {
@@ -232,29 +219,20 @@ pub(crate) fn split_hexes(
             interface[interfaces[end].face] = Some(interfaces[end].diagonal);
             end += 1;
         }
-        let split = split_one(hex, interface, data, first_node, &mut transitions);
+        let split = split_one(hex, interface, mesh, first_node, &mut transitions);
         transitions.splits.push(split);
         start = end;
     }
     transitions
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "the mesh checks the node count against MAX_NODES after the split"
-)]
-fn node_number(index: usize) -> u32 {
-    index as u32
-}
-
 /// One transition hex while its pieces are built: its nodes, its apex and,
 /// on a quadratic mesh, the nodes added inside it.
-struct HexInside<'a, 'mesh> {
-    data: &'a HexData<'mesh>,
+struct HexInside<'mesh> {
+    mesh: &'mesh TetMesh,
+    hex: usize,
     corners: [u32; 8],
     corner_points: [[f64; 3]; 8],
-    /// The hex's own nodes (8 or 27).
-    own: &'mesh [u32],
     apex: u32,
     apex_point: [f64; 3],
     /// Quadratic: the node halfway from each corner to the apex.
@@ -267,13 +245,14 @@ struct HexInside<'a, 'mesh> {
     pyramid_centre: [Option<u32>; 6],
 }
 
-impl HexInside<'_, '_> {
+impl HexInside<'_> {
     fn quadratic(&self) -> bool {
-        self.data.order == ElementOrder::Quadratic
+        self.mesh.order() == ElementOrder::Quadratic
     }
 
     fn hex_edge_node(&self, first: usize, second: usize) -> u32 {
-        self.own[8 + local_hex_edge(first, second)]
+        self.mesh
+            .hex_edge_node(self.hex, local_hex_edge(first, second))
     }
 
     /// The edge node between hex corners `first` and `second`: the hex's own
@@ -282,7 +261,11 @@ impl HexInside<'_, '_> {
         if EDGES_OF_HEX.contains(&[first.min(second), first.max(second)]) {
             self.hex_edge_node(first, second)
         } else {
-            (self.data.edge_node)(self.corners[first], self.corners[second])
+            self.mesh
+                .edge_node(self.corners[first], self.corners[second])
+                .unwrap_or_else(|| {
+                    unreachable!("an interface diagonal is an edge of the tets beside it")
+                })
         }
     }
 
@@ -338,7 +321,11 @@ impl HexInside<'_, '_> {
             nodes.extend(base.map(|corner| self.riser[corner]));
             // FACES_OF_HEX of the piece: the base, the collapsed top, then the
             // side over base corners (k, k + 1).
-            nodes.push(self.own[20 + face]);
+            nodes.push(
+                self.mesh
+                    .hex_face_node(self.hex, face)
+                    .unwrap_or_else(|| unreachable!("a face without an interface has a face node")),
+            );
             nodes.push(self.apex);
             for k in 0..4 {
                 let edge = local_hex_edge(base[k], base[(k + 1) % 4]);
@@ -385,34 +372,35 @@ impl HexInside<'_, '_> {
 
 /// Add the apex and (quadratic) the nodes inside transition hex `hex` to
 /// `out`, numbered from `first_node`.
-fn hex_inside<'a, 'mesh>(
+fn hex_inside<'mesh>(
     hex: usize,
     interface: [Option<Diagonal>; 6],
-    data: &'a HexData<'mesh>,
+    mesh: &'mesh TetMesh,
     first_node: usize,
     out: &mut Transitions,
-) -> HexInside<'a, 'mesh> {
-    let corners = data.hexes[hex];
-    let own = (data.hex_nodes)(hex);
-    let corner_points = corners.map(|vertex| data.points[vertex as usize]);
+) -> HexInside<'mesh> {
+    let corners = mesh.hexes()[hex];
+    let points = mesh.node_coordinates();
+    let corner_points = corners.map(|vertex| points[vertex as usize]);
     let mut add = |at: [f64; 3]| -> u32 {
-        let node = node_number(first_node + out.added.len());
+        let node = node_index(first_node + out.added.len());
         out.added.push(at);
         out.added_in.push(hex);
         node
     };
-    let quadratic = data.order == ElementOrder::Quadratic;
+    let quadratic = mesh.order() == ElementOrder::Quadratic;
     let (apex, apex_point) = if quadratic {
-        (own[26], data.points[own[26] as usize])
+        let centre = mesh.hex_centre_node(hex);
+        (centre, points[centre as usize])
     } else {
         let centre = mean(&corner_points);
         (add(centre), centre)
     };
     let mut inside = HexInside {
-        data,
+        mesh,
+        hex,
         corners,
         corner_points,
-        own,
         apex,
         apex_point,
         riser: [apex; 8],
@@ -450,11 +438,11 @@ fn hex_inside<'a, 'mesh>(
 fn split_one(
     hex: usize,
     interface: [Option<Diagonal>; 6],
-    data: &HexData<'_>,
+    mesh: &TetMesh,
     first_node: usize,
     out: &mut Transitions,
 ) -> Split {
-    let inside = hex_inside(hex, interface, data, first_node, out);
+    let inside = hex_inside(hex, interface, mesh, first_node, out);
     let mut pieces = Vec::new();
     for (face, diagonal) in interface.iter().enumerate() {
         if let Some(diagonal) = diagonal {
@@ -468,18 +456,17 @@ fn split_one(
             pieces.push(inside.pyramid(face));
         }
     }
-    let own = inside.own;
     let mut nodes: Vec<u32> = Vec::new();
-    for &node in own
-        .iter()
-        .chain(pieces.iter().flat_map(|piece| &piece.nodes))
+    for node in mesh
+        .own_hex_nodes(hex)
+        .chain(pieces.iter().flat_map(|piece| piece.nodes.iter().copied()))
     {
         if !nodes.contains(&node) {
             nodes.push(node);
         }
     }
     Split {
-        element: data.tet_count + hex,
+        element: mesh.tets().len() + hex,
         nodes,
         pieces,
     }

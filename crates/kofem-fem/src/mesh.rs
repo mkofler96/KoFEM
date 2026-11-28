@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, node_index};
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex_jacobian, HEX27_RULE_POINTS, HEX8_RULE_POINTS,
 };
 use crate::error::FemError;
 use crate::material::Isotropic;
 use crate::piece::{Piece, PieceGeometry, PieceRef};
-use crate::transition::{find_interface_faces, split_hexes, HexData, InterfaceFace, Split};
+use crate::transition::{find_interface_faces, split_hexes, InterfaceFace, Split};
 
 /// Polynomial order of the displacement field on each element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -315,33 +315,7 @@ impl TetMesh {
             return Ok(self);
         }
         let first_node = self.nodes.len();
-        let transitions = {
-            let hex_nodes = |hex: usize| self.element_nodes(self.tets.len() + hex);
-            let edge_node = |first: u32, second: u32| -> u32 {
-                let pair = [first.min(second), first.max(second)];
-                let index = self.edges.binary_search(&pair).unwrap_or_else(|_| {
-                    unreachable!("an interface diagonal is an edge of the tets beside it")
-                });
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "the quadratic mesh checked its node count against MAX_NODES"
-                )]
-                let node = (self.vertex_count + index) as u32;
-                node
-            };
-            split_hexes(
-                &self.interfaces,
-                &HexData {
-                    order: self.order,
-                    points: &self.nodes,
-                    hexes: &self.hexes,
-                    tet_count: self.tets.len(),
-                    hex_nodes: &hex_nodes,
-                    edge_node: &edge_node,
-                },
-                first_node,
-            )
-        };
+        let transitions = split_hexes(&self.interfaces, &self, first_node);
         let node_count = first_node + transitions.added.len();
         if node_count > MAX_NODES {
             return Err(FemError::TooManyNodes {
@@ -416,17 +390,14 @@ impl TetMesh {
             for [first, second] in EDGES_OF_HEX {
                 element_nodes.push(edge_node(hex[first], hex[second]));
             }
-            let centre = node_number(first_centre + index);
             for (face, local) in FACES_OF_HEX.into_iter().enumerate() {
-                // An interface face has no node: its slot repeats the centre,
-                // which the transition's pieces meet at.
                 element_nodes.push(if self.is_interface_face(index, face) {
-                    centre
+                    NO_NODE
                 } else {
                     face_node(hex, local)
                 });
             }
-            element_nodes.push(centre);
+            element_nodes.push(node_number(first_centre + index));
         }
         let mean = |corners: &[u32]| mean_point(&self.nodes, corners);
         let added: Vec<[f64; 3]> = edges
@@ -560,11 +531,30 @@ impl TetMesh {
 
     /// The nodes of `element`: its corners, then (quadratic) its edge nodes in
     /// [`EDGES_OF_TET`] / [`EDGES_OF_HEX`] order and, for a hex, its face
-    /// nodes in [`FACES_OF_HEX`] order and its centre node. An interface face
-    /// of a transition hex has no node; its slot repeats the centre. The
-    /// nodes a transition's field also uses are in [`TetMesh::solved_nodes`].
+    /// nodes in [`FACES_OF_HEX`] order and its centre node. A transition hex
+    /// ([`crate::transition`]) lists its corners, then the other nodes its
+    /// pieces use, once each: its interface faces have no node.
     #[must_use]
     pub fn element_nodes(&self, element: usize) -> &[u32] {
+        match self.split_of(element) {
+            Some(split) => &split.nodes,
+            None => self.layout(element),
+        }
+    }
+
+    /// The corner vertices of `element`: 4 for a tet, 8 for a hex.
+    #[must_use]
+    pub fn element_corners(&self, element: usize) -> &[u32] {
+        let corners = match self.shape(element) {
+            ElementShape::Tetrahedron => 4,
+            ElementShape::Hexahedron => 8,
+        };
+        &self.layout(element)[..corners]
+    }
+
+    /// The element's nodes in its shape's order; [`NO_NODE`] in the slot of
+    /// an interface face.
+    fn layout(&self, element: usize) -> &[u32] {
         let tet_nodes = ElementShape::Tetrahedron.node_count(self.order);
         let (start, count) = if element < self.tets.len() {
             (tet_nodes * element, tet_nodes)
@@ -576,6 +566,46 @@ impl TetMesh {
             )
         };
         &self.element_nodes[start..start + count]
+    }
+
+    /// Of a quadratic mesh: the node on edge `edge` ([`EDGES_OF_HEX`]) of
+    /// hexahedron `hex`.
+    pub(crate) fn hex_edge_node(&self, hex: usize, edge: usize) -> u32 {
+        debug_assert_eq!(self.order, ElementOrder::Quadratic);
+        self.layout(self.tets.len() + hex)[8 + edge]
+    }
+
+    /// Of a quadratic mesh: the node of face `face` ([`FACES_OF_HEX`]) of
+    /// hexahedron `hex`, none for an interface face.
+    pub(crate) fn hex_face_node(&self, hex: usize, face: usize) -> Option<u32> {
+        debug_assert_eq!(self.order, ElementOrder::Quadratic);
+        let node = self.layout(self.tets.len() + hex)[20 + face];
+        (node != NO_NODE).then_some(node)
+    }
+
+    /// Of a quadratic mesh: the centre node of hexahedron `hex`.
+    pub(crate) fn hex_centre_node(&self, hex: usize) -> u32 {
+        debug_assert_eq!(self.order, ElementOrder::Quadratic);
+        self.layout(self.tets.len() + hex)[26]
+    }
+
+    /// The nodes hexahedron `hex` has of its own (corners, and at order 2 its
+    /// edge, face and centre nodes), whether or not it is split.
+    pub(crate) fn own_hex_nodes(&self, hex: usize) -> impl Iterator<Item = u32> + '_ {
+        self.layout(self.tets.len() + hex)
+            .iter()
+            .copied()
+            .filter(|&node| node != NO_NODE)
+    }
+
+    /// Of a quadratic mesh: the node of the edge between two vertices, if the
+    /// mesh has that edge.
+    pub(crate) fn edge_node(&self, first: u32, second: u32) -> Option<u32> {
+        let pair = [first.min(second), first.max(second)];
+        self.edges
+            .binary_search(&pair)
+            .ok()
+            .map(|index| node_index(self.vertex_count + index))
     }
 
     /// Corner coordinates of tetrahedron `tet` (also element `tet`).
@@ -653,19 +683,9 @@ impl TetMesh {
         };
         PieceRef {
             geometry,
-            nodes: self.element_nodes(element),
+            nodes: self.layout(element),
             order: self.order,
             blends: &[],
-        }
-    }
-
-    /// Every node the field of `element` uses: its own nodes, and those a
-    /// transition element adds.
-    #[must_use]
-    pub fn solved_nodes(&self, element: usize) -> &[u32] {
-        match self.split_of(element) {
-            Some(split) => &split.nodes,
-            None => self.element_nodes(element),
         }
     }
 
@@ -764,6 +784,10 @@ fn sorted_triangles(interfaces: &[InterfaceFace], hexes: &[[u32; 8]]) -> Vec<[u3
     triangles.sort_unstable();
     triangles
 }
+
+/// The layout slot of a hex face without a node: an interface face, which
+/// the tets beside it and the transition's pieces split.
+const NO_NODE: u32 = u32::MAX;
 
 /// Largest node count whose DOF numbers (3·node + component) fit in `u32`,
 /// the index type of the sparse matrix columns and of the JS interface.

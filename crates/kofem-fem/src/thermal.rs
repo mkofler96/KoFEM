@@ -24,7 +24,7 @@
 
 use crate::element::{degree_three_points, CENTROID};
 use crate::error::FemError;
-use crate::mesh::{ElementOrder, ElementShape, TetMesh};
+use crate::mesh::{ElementOrder, TetMesh};
 use crate::piece::{centre_samples, PieceGeometry, PiecePoint, PieceRef};
 
 /// Check one α per element and one ΔT per node, all finite.
@@ -184,7 +184,7 @@ pub fn thermal_strain_at_centre(
     // Only this element's values are checked, so a caller may recover one
     // element after another without rescanning the arrays.
     check_lengths(mesh, alpha, delta_t)?;
-    let nodes = mesh.solved_nodes(element);
+    let nodes = mesh.element_nodes(element);
     check_finite(
         std::iter::once(&alpha[element]),
         nodes.iter().map(|node| &delta_t[*node as usize]),
@@ -226,13 +226,9 @@ pub fn corner_stress_tensors_thermal(
     let mut tensors = crate::stress::corner_stress_tensors(mesh, displacements)?;
     let mut corner = 0;
     for (element, &expansion) in alpha.iter().enumerate() {
-        let corners = match mesh.shape(element) {
-            ElementShape::Tetrahedron => 4,
-            ElementShape::Hexahedron => 8,
-        };
         let (lambda, mu) = mesh.material(element).lame();
         let stiffness = (3.0 * lambda + 2.0 * mu) * expansion;
-        for &node in &mesh.element_nodes(element)[..corners] {
+        for &node in mesh.element_corners(element) {
             let thermal = stiffness * delta_t[node as usize];
             for component in &mut tensors[corner][..3] {
                 *component -= thermal;

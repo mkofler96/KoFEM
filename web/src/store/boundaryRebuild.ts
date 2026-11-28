@@ -125,12 +125,7 @@ export function loadableFaceKeys(elements: FaceElements): ReadonlySet<string> {
   return loadable;
 }
 
-// The keys of the solid elements' surface faces: the faces one solid element
-// owns, less every hex face that meets two tet triangles split along one of
-// its diagonals, and those triangles. The solve joins such a face to the
-// tets through a transition element (crates/kofem-fem/src/transition.rs), so
-// it lies inside the body. Kept in TypeScript because the store builds loads
-// without the Rust module loaded.
+// TypeScript because the store builds loads without the Rust module.
 export function solidSurfaceFaceKeys(elements: FaceElements): Set<string> {
   const owners = new Map<string, number>();
   const hexFaces: number[][] = [];

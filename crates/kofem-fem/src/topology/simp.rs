@@ -20,9 +20,8 @@ use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::count::count_as_f64;
-use crate::element::{cube_rule, hex8_reference_gradients, hex_gradients};
 use crate::error::FemError;
-use crate::mesh::{signed_volume, ElementOrder, ElementShape, TetMesh};
+use crate::mesh::{ElementOrder, ElementShape, TetMesh};
 use crate::piece::element_stiffness;
 use crate::sparse::CsrMatrix;
 
@@ -280,7 +279,7 @@ impl SimpModel {
     /// Global DOFs of `element`, in its stiffness order.
     pub(crate) fn element_dofs(&self, element: usize) -> impl Iterator<Item = usize> + '_ {
         self.mesh
-            .solved_nodes(element)
+            .element_nodes(element)
             .iter()
             .flat_map(|&node| (0..3).map(move |component| 3 * node as usize + component))
     }
@@ -476,26 +475,20 @@ impl ElementCache {
         let tet_count = mesh.tets().len();
         for element in 0..element_count {
             cache.offsets.push(cache.stiffness.len());
-            // A transition element's stiffness is its pieces' (KOF-433).
             cache
                 .stiffness
                 .extend_from_slice(&element_stiffness(mesh, element));
-            match mesh.shape(element) {
-                ElementShape::Tetrahedron => {
-                    let corners = mesh.corners(element);
-                    cache.volumes.push(signed_volume(&corners).abs());
-                    cache.centroids.push(mean_point(&corners));
-                }
-                ElementShape::Hexahedron => {
-                    let corners = mesh.hex_corners(element - tet_count);
-                    cache.volumes.push(hex_volume(&corners));
-                    cache.centroids.push(mean_point(&corners));
-                }
-            }
+            cache
+                .volumes
+                .push(mesh.pieces(element).map(|piece| piece.volume()).sum());
+            cache.centroids.push(match mesh.shape(element) {
+                ElementShape::Tetrahedron => mean_point(&mesh.corners(element)),
+                ElementShape::Hexahedron => mean_point(&mesh.hex_corners(element - tet_count)),
+            });
             push_positions(
                 pattern,
                 neighbours,
-                mesh.solved_nodes(element),
+                mesh.element_nodes(element),
                 &mut cache.positions,
             );
         }
@@ -507,17 +500,6 @@ impl ElementCache {
 pub(super) fn mean_point<const N: usize>(corners: &[[f64; 3]; N]) -> [f64; 3] {
     let count = count_as_f64(N);
     std::array::from_fn(|axis| corners.iter().map(|corner| corner[axis]).sum::<f64>() / count)
-}
-
-/// Volume of a trilinear hex: ∫|det J| over the unit cube. det J is of degree
-/// two in each reference coordinate, so the 2³-point Gauss rule is exact.
-fn hex_volume(corners: &[[f64; 3]; 8]) -> f64 {
-    cube_rule(2)
-        .into_iter()
-        .map(|(point, weight)| {
-            weight * hex_gradients(corners, &hex8_reference_gradients(point), point).1
-        })
-        .sum()
 }
 
 /// Append, for every entry of an element stiffness over `nodes` (row-major,

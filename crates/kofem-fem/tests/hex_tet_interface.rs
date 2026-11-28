@@ -28,14 +28,16 @@
 )]
 mod support;
 
+use kofem_fem::element::{hex8_reference_gradients, hex8_shape, hex_jacobian};
 use kofem_fem::hyperelastic::NeoHookean;
 use kofem_fem::nonlinear::{solve_newton, DirichletCg, NewtonSettings};
+use kofem_fem::piece::{PieceGeometry, PiecePoint};
 use kofem_fem::topology::level_set::{optimize_level_set, LevelSetSettings};
 use kofem_fem::topology::{SimpModel, SimpPreconditioner, SimpSolver};
 use kofem_fem::{
-    assemble_stiffness, corner_stress_tensors_thermal, displacement_at, outer_faces, solve_static,
-    stress_tensors, thermal_load, AmgSettings, BoundaryFaces, CgSettings, ElementOrder, FemError,
-    Isotropic, PreconditionerChoice, StoppingRule, SurfaceLoadKind, TetMesh,
+    assemble_stiffness, corner_stress_tensors_thermal, outer_faces, solve_static, stress_tensors,
+    thermal_load, AmgSettings, BoundaryFaces, CgSettings, ElementOrder, FemError, Isotropic,
+    PreconditionerChoice, StoppingRule, SurfaceLoadKind, TetMesh,
 };
 use support::KUHN;
 
@@ -254,6 +256,117 @@ fn points_on(bar: &Bar, quad: [u32; 4]) -> Vec<[f64; 3]> {
     points
 }
 
+/// How far outside a piece, in local coordinates, a point may lie and still
+/// count as inside: round-off of a point on a face.
+const INSIDE: f64 = 1e-9;
+
+fn sub(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
+    std::array::from_fn(|axis| lhs[axis] - rhs[axis])
+}
+
+fn dot(lhs: [f64; 3], rhs: [f64; 3]) -> f64 {
+    (0..3).map(|axis| lhs[axis] * rhs[axis]).sum()
+}
+
+fn cross(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
+    [
+        lhs[1] * rhs[2] - lhs[2] * rhs[1],
+        lhs[2] * rhs[0] - lhs[0] * rhs[2],
+        lhs[0] * rhs[1] - lhs[1] * rhs[0],
+    ]
+}
+
+/// Barycentric coordinates of `point` in the tetrahedron, if inside.
+fn barycentric(corners: &[[f64; 3]; 4], point: [f64; 3]) -> Option<[f64; 4]> {
+    let [first, second, third] = [1, 2, 3].map(|corner| sub(corners[corner], corners[0]));
+    let offset = sub(point, corners[0]);
+    let volume = dot(first, cross(second, third));
+    let along = [
+        dot(offset, cross(second, third)) / volume,
+        dot(first, cross(offset, third)) / volume,
+        dot(first, cross(second, offset)) / volume,
+    ];
+    let local = [
+        1.0 - along[0] - along[1] - along[2],
+        along[0],
+        along[1],
+        along[2],
+    ];
+    local
+        .iter()
+        .all(|&coordinate| coordinate >= -INSIDE)
+        .then_some(local)
+}
+
+/// Unit-cube coordinates of `point` under the hex's trilinear map, by
+/// Newton's method from the centre, if inside.
+fn hex_local(corners: &[[f64; 3]; 8], point: [f64; 3]) -> Option<[f64; 3]> {
+    let mut local = [0.5; 3];
+    for _ in 0..50 {
+        let mapped = hex8_shape(local)
+            .iter()
+            .zip(corners)
+            .fold([0.0; 3], |sum, (&weight, corner)| {
+                std::array::from_fn(|axis| sum[axis] + weight * corner[axis])
+            });
+        let residual = sub(point, mapped);
+        if dot(residual, residual).sqrt() <= 1e-13 {
+            return local
+                .iter()
+                .all(|&coordinate| (-INSIDE..=1.0 + INSIDE).contains(&coordinate))
+                .then_some(local);
+        }
+        let jacobian = hex_jacobian(corners, &hex8_reference_gradients(local));
+        let column = |axis: usize| [jacobian[0][axis], jacobian[1][axis], jacobian[2][axis]];
+        let det = dot(column(0), cross(column(1), column(2)));
+        if det == 0.0 {
+            return None;
+        }
+        // Cramer's rule for J·step = residual.
+        let step = [
+            dot(residual, cross(column(1), column(2))) / det,
+            dot(column(0), cross(residual, column(2))) / det,
+            dot(column(0), cross(column(1), residual)) / det,
+        ];
+        local = std::array::from_fn(|axis| local[axis] + step[axis]);
+    }
+    None
+}
+
+/// The displacement `element`'s own field gives at `point` — for a
+/// transition element, that of the piece holding it — or none when the
+/// point is outside the element. Two elements sharing a face agree there
+/// exactly when the field is continuous across it.
+fn displacement_at(
+    mesh: &TetMesh,
+    element: usize,
+    point: [f64; 3],
+    displacements: &[f64],
+) -> Option<[f64; 3]> {
+    mesh.pieces(element).find_map(|piece| {
+        let local = match piece.geometry {
+            PieceGeometry::Tetrahedron(corners) => {
+                barycentric(&corners, point).map(PiecePoint::Tetrahedron)
+            }
+            PieceGeometry::Hexahedron(corners) => {
+                hex_local(&corners, point).map(PiecePoint::Hexahedron)
+            }
+        }?;
+        let values = piece.local_values(displacements, 3);
+        let mut value = [0.0; 3];
+        for (weight, motion) in piece
+            .shape_values(local)
+            .iter()
+            .zip(values.as_chunks::<3>().0)
+        {
+            for (axis, entry) in value.iter_mut().enumerate() {
+                *entry += weight * motion[axis];
+            }
+        }
+        Some(value)
+    })
+}
+
 /// The largest jump of the displacement across the interface, from the hex's
 /// field to the field of the tet on the other side, relative to the largest
 /// displacement.
@@ -267,7 +380,7 @@ fn largest_jump(bar: &Bar, displacements: &[f64]) -> f64 {
             let from_hex = displacement_at(&bar.mesh, hex, point, displacements)
                 .expect("the point is on the hex's face");
             let from_tet = (0..bar.tets.len())
-                .find_map(|tet| displacement_at(&bar.mesh, tet, point, displacements).ok())
+                .find_map(|tet| displacement_at(&bar.mesh, tet, point, displacements))
                 .expect("a tet holds the point");
             for axis in 0..3 {
                 jump = jump.max((from_hex[axis] - from_tet[axis]).abs());
@@ -633,4 +746,20 @@ fn the_level_set_method_runs_on_transition_elements() {
     .expect("the level-set run");
     assert_eq!(result.density.len(), bar.tets.len() + bar.hexes.len());
     assert_eq!(result.level_set.len(), bar.mesh.vertex_count());
+}
+
+/// The design volume is the volume solved: a transition element's pieces
+/// follow the tets' triangles, not the hex's warped face, so its volume is
+/// its pieces'. The distorted bar's elements tile the 2 × 1 × 1 box.
+#[test]
+fn simp_volumes_are_the_volumes_solved() {
+    let bar = bar([4, 3, 3], true, ElementOrder::Linear);
+    let (fixed, forces) = simp_case(&bar);
+    let model = SimpModel::new(bar.mesh.clone(), &fixed, forces, SimpSolver::default())
+        .expect("a SIMP model");
+    let total: f64 = model.volumes().iter().sum();
+    assert!(
+        (total - 2.0).abs() < 1e-12,
+        "the element volumes add up to {total}, not the box's 2"
+    );
 }

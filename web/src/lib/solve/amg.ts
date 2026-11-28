@@ -631,18 +631,13 @@ export function createRustSolidModel(
   };
 }
 
-// The solve log's line on hexes that meet tets on a face (KOF-433): each is
-// solved as a transition element, pyramids and tets that join it to the
-// tets, so the displacement stays continuous; null when there are none.
 export function transitionNote(
-  elastic: Pick<ElasticModel, "interfaceFaces" | "transitionElements">,
+  elastic: Pick<ElasticModel, "transitionElements">,
 ): string | null {
-  if (elastic.interfaceFaces === 0) return null;
-  return (
-    `${elastic.interfaceFaces} hexahedron face(s) meet tetrahedra: ` +
-    `${elastic.transitionElements} hexahedra are solved as transition elements (pyramids and tetrahedra), ` +
-    `so the displacement is continuous across the interface`
-  );
+  const count = elastic.transitionElements;
+  return count === 0
+    ? null
+    : `${count} hexahedra joined to tetrahedra by transition elements`;
 }
 
 // The element kinds a model has, e.g. "24 tetrahedra and 4 hexahedra".

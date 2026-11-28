@@ -147,7 +147,6 @@ impl BoundaryFaces {
         }
         let mut quads = Vec::with_capacity(6 * mesh.hexes().len());
         for (index, hex) in mesh.hexes().iter().enumerate() {
-            let nodes = mesh.element_nodes(mesh.tets().len() + index);
             let points = mesh.hex_corners(index);
             let inside =
                 [0, 1, 2].map(|axis| points.iter().map(|point| point[axis]).sum::<f64>() / 8.0);
@@ -161,9 +160,11 @@ impl BoundaryFaces {
                 if mesh.order() == ElementOrder::Quadratic {
                     for side in 0..4 {
                         let edge = local_hex_edge(local[side], local[(side + 1) % 4]);
-                        face_nodes[4 + side] = nodes[8 + edge];
+                        face_nodes[4 + side] = mesh.hex_edge_node(index, edge);
                     }
-                    face_nodes[8] = nodes[20 + face];
+                    face_nodes[8] = mesh.hex_face_node(index, face).unwrap_or_else(|| {
+                        unreachable!("only an interface face, skipped above, has no node")
+                    });
                 }
                 quads.push(QuadFace {
                     key: sorted(corners),
