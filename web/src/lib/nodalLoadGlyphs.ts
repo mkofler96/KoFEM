@@ -15,10 +15,10 @@ import {
   type NamedLoadGroup,
 } from "../store/boundaryGroups";
 import {
-  HEX_FACE_INDICES,
-  TET_FACE_INDICES,
+  faceKey,
   rebuildLoads,
   rebuildSurfaceLoads,
+  solidSurfaceFaceKeys,
 } from "../store/boundaryRebuild";
 
 type Vec3 = [number, number, number];
@@ -57,11 +57,8 @@ function areaNormal(c: readonly Vec3[]): Vec3 {
   return [n[0] / 2, n[1] / 2, n[2] / 2];
 }
 
-const faceKey = (ids: readonly number[]) =>
-  [...ids].sort((a, b) => a - b).join(",");
-
 // The faces a load can act on, by vertex-set key: a solid's boundary faces
-// (owned by one element) and every shell facet.
+// (owned by one element, less a hex/tet interface) and every shell facet.
 interface MeshSurface {
   solid: ReadonlySet<string>;
   shell: ReadonlySet<string>;
@@ -74,23 +71,13 @@ function meshSurface(
   elements: readonly Element[],
   couplingGroups: readonly CouplingGroup[],
 ): MeshSurface {
-  const solidCount = new Map<string, number>();
   const shell = new Set<string>();
   const visibleNodes = new Set<number>();
   for (const el of elements) {
     for (const id of el.nodeIds) visibleNodes.add(id);
-    if (el.type === "CTRIA3") {
-      shell.add(faceKey(el.nodeIds));
-      continue;
-    }
-    const local = el.type === "CTETRA" ? TET_FACE_INDICES : HEX_FACE_INDICES;
-    for (const lf of local) {
-      const key = faceKey(lf.map((i) => el.nodeIds[i]));
-      solidCount.set(key, (solidCount.get(key) ?? 0) + 1);
-    }
+    if (el.type === "CTRIA3") shell.add(faceKey(el.nodeIds));
   }
-  const solid = new Set<string>();
-  for (const [key, n] of solidCount) if (n === 1) solid.add(key);
+  const solid = solidSurfaceFaceKeys(elements);
   return {
     solid,
     shell,

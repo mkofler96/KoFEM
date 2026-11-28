@@ -103,6 +103,21 @@ fn the_model_and_the_app_are_told_apart() {
     );
 }
 
+/// KOF-433: a hex face that tets meet on one half only is the user's mesh to
+/// fix.
+#[test]
+fn a_partial_hex_tet_interface_is_the_users_mesh_to_fix() {
+    assert_eq!(
+        FemError::PartialHexTetInterface {
+            hex: 3,
+            face: 1,
+            triangles: 1
+        }
+        .class(),
+        FailureClass::InvalidInput
+    );
+}
+
 #[test]
 fn the_class_reaches_the_browser_as_a_category_and_a_reason() {
     let singular = FailureClass::Numerical(NumericalReason::SingularMatrix);

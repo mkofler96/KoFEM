@@ -771,8 +771,9 @@ fn linear_hex_cantilever_converges_with_refinement() {
 
 /// Tets and hexes in one mesh: the tets are elements 0.., the hexes follow,
 /// each with its own material; a quadratic mesh shares the edge nodes of the
-/// interface between them, and a uniform strain stores exactly the energy of
-/// both parts.
+/// interface between them (the hexes beside the tets are transition
+/// elements, KOF-433), and a uniform strain stores exactly the energy of both
+/// parts.
 #[test]
 fn mixed_mesh_numbers_tets_first_and_stores_both_parts_energy() {
     let size = [2.0, 1.0, 1.0];
@@ -807,7 +808,16 @@ fn mixed_mesh_numbers_tets_first_and_stores_both_parts_energy() {
         let shift: Vec<f64> = (0..mesh.dof_count())
             .map(|dof| [1.0, -2.0, 0.5][dof % 3])
             .collect();
-        assert!(energy(&stiffness, &shift).abs() < 1e-9);
+        // Round-off only, against the energy scale (λ+2μ)·|shift|²·volume: the
+        // hexes beside the tets are split into pieces (KOF-433), whose sums
+        // round off more than one hex's.
+        let (lambda, mu) = steel().lame();
+        let scale = (lambda + 2.0 * mu) * (1.0 + 4.0 + 0.25) * 2.0;
+        assert!(
+            energy(&stiffness, &shift).abs() < 1e-14 * scale,
+            "{order:?}: a rigid translation stores {}",
+            energy(&stiffness, &shift)
+        );
     }
     // At order 2 the interface edges carry one node, used by both kinds.
     let mesh = mixed_mesh(&grid, 1, ElementOrder::Quadratic);
@@ -822,14 +832,16 @@ fn mixed_mesh_numbers_tets_first_and_stores_both_parts_energy() {
         .iter()
         .filter(|&&node| node as usize >= mesh.vertex_count())
         .count();
-    // The x = 1 plane: 3×3 vertices, 12 grid edges between them.
+    // The x = 1 plane: 3×3 vertices, 12 grid edges between them, and the
+    // diagonal of each of its 4 quads, which the hexes' transition pieces
+    // share with the tets.
     assert_eq!(shared.len() - interface_edges, 9);
-    assert_eq!(interface_edges, 12);
+    assert_eq!(interface_edges, 12 + 4);
 }
 
 /// The mixed mesh's boundary has triangles (tet faces) and quadrilaterals (hex
-/// faces); a load can select both, and the hex face against two tet
-/// triangles is not part of it.
+/// faces), and a load can select both; the hex face against two tet
+/// triangles is inside the body (KOF-433), so a load on it is refused.
 #[test]
 fn mixed_mesh_loads_triangles_and_quadrilaterals_together() {
     let size = [2.0, 1.0, 1.0];
@@ -850,8 +862,6 @@ fn mixed_mesh_loads_triangles_and_quadrilaterals_together() {
     }
     let quads = quad_side(&mesh, 2, size[2]);
     assert_eq!((triangles.len(), quads.len()), (2, 1));
-    let interface = quad_side(&mesh, 0, 1.0);
-    assert_eq!(interface.len(), 1);
     let boundary = BoundaryFaces::new(&mesh);
     let mut forces = vec![0.0; mesh.dof_count()];
     let report = boundary
@@ -859,19 +869,32 @@ fn mixed_mesh_loads_triangles_and_quadrilaterals_together() {
             &mesh,
             0,
             &triangles,
-            &[quads[0], interface[0]],
+            &[quads[0]],
             SurfaceLoadKind::Pressure(3.0),
             &mut forces,
         )
         .expect("applies");
-    // The interface quad has two tet triangles on its other side: in MFEM's
-    // mesh it is still a boundary face, so it is matched and loaded too.
-    assert_eq!(report.matched, 4);
+    assert_eq!(report.matched, 3);
     let total: f64 = forces.iter().skip(2).step_by(3).sum();
     assert!((total + 3.0 * 2.0).abs() < 1e-9, "top resultant {total}");
-    let along: f64 = forces.iter().step_by(3).sum();
-    // The interface quad's outward normal (from the hex) is −x.
-    assert!((along - 3.0).abs() < 1e-9, "interface resultant {along}");
+
+    let interface = quad_side(&mesh, 0, 1.0);
+    assert_eq!(interface.len(), 1);
+    let on_interface = boundary.apply(
+        &mesh,
+        0,
+        &[],
+        &[interface[0]],
+        SurfaceLoadKind::Pressure(3.0),
+        &mut forces,
+    );
+    assert!(
+        matches!(
+            on_interface,
+            Err(FemError::SurfaceLoadUnmatched { unmatched: 1, .. })
+        ),
+        "a load on the hex/tet interface is refused, got {on_interface:?}"
+    );
 }
 
 #[test]

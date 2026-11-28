@@ -23,3 +23,12 @@ pub fn count_as_f64(count: usize) -> f64 {
     let exact = count as f64;
     exact
 }
+
+/// `index` (a node, or a count of nodes) as the `u32` the sparse matrices and
+/// the JS interface carry. Exact for every node of a mesh: the mesh caps its
+/// nodes at [`MAX_NODES`](crate::mesh::MAX_NODES), whose DOFs fit in `u32`.
+#[must_use]
+pub fn node_index(index: usize) -> u32 {
+    u32::try_from(index)
+        .unwrap_or_else(|_| unreachable!("node {index} is past MAX_NODES, which fits in u32"))
+}
