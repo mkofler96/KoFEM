@@ -3693,7 +3693,7 @@
       "rates": {
         "reference": null,
         "series": [],
-        "noRate": "The read-out is a displacement under a point load on a shell of flat facets; the rate check covers solid meshes only."
+        "noRate": "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only."
       }
     }
   ]
