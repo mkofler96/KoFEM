@@ -50,7 +50,7 @@ const MODES: usize = 6;
 /// the largest (and of 1) marks a free motion. Free motions come out at
 /// rounding level (~1e-16); a real hold is no weaker than the lever arm of a
 /// support relative to the model size, so the gap between the two is wide.
-const FREE_TOLERANCE: f64 = 1e-9;
+pub(crate) const FREE_TOLERANCE: f64 = 1e-9;
 
 /// A component whose free motions are below this, as a fraction of a unit free
 /// motion of its cluster, does not move in it.
@@ -762,9 +762,16 @@ fn describe(block: Vec<Vec<f64>>) -> Option<Directions> {
     })
 }
 
-fn normalized(vector: [f64; 3]) -> [f64; 3] {
+pub(crate) fn normalized(vector: [f64; 3]) -> [f64; 3] {
     let norm = vector.iter().map(|value| value * value).sum::<f64>().sqrt();
     [vector[0] / norm, vector[1] / norm, vector[2] / norm]
+}
+
+/// The line along `vector` (not zero) as [`FreeMotion`] reports one: a
+/// coordinate axis where it is one to round-off, otherwise a unit vector with
+/// its largest component positive.
+pub(crate) fn line_direction(vector: [f64; 3]) -> [f64; 3] {
+    axis_basis(&[normalized(vector)])[0]
 }
 
 /// An orthonormal basis of the span of `vectors` (orthonormal already), made of

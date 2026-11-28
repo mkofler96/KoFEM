@@ -1296,6 +1296,59 @@ fn a_load_along_the_contact_that_nothing_holds_is_refused() {
     );
 }
 
+/// The motion names a line, the way the rigid-body check reports one: a
+/// load the negative way along x is the same motion along x.
+#[test]
+fn a_load_the_negative_way_is_refused_along_the_same_line() {
+    let (error, _) = unheld(-1.0, TRACTION);
+    assert!(
+        matches!(
+            error,
+            FemError::ContactUnheld {
+                motion: UnheldMotion::Along([1.0, 0.0, 0.0]),
+                ..
+            }
+        ),
+        "refused along x, got {error:?}"
+    );
+}
+
+/// A load across the contact at an angle: what the contact holds (the
+/// normal, and turning about the in-plane axes) is no part of the motion, so
+/// it lies in the contact plane along the load.
+#[test]
+fn a_slanted_load_along_the_contact_is_refused_along_its_own_direction() {
+    let (model, dofs, values) = resting_at(Shape::Hex, Shape::Tet, GAP);
+    let mut forces = top_load(&model, 0.6, TRACTION);
+    let along_y = model.top_traction(|_, _| 0.8);
+    for node in 0..model.vertices.len() {
+        forces[3 * node + 1] = along_y[3 * node + 2];
+    }
+    let error = try_solve(
+        &model.mesh,
+        interface(&model),
+        &dofs,
+        &values,
+        &forces,
+        1,
+        PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+    )
+    .err()
+    .expect("the slanted load is refused");
+    let FemError::ContactUnheld {
+        motion: UnheldMotion::Along(direction),
+        ..
+    } = error
+    else {
+        panic!("refused as a motion along a direction, got {error:?}");
+    };
+    assert_eq!(direction[2], 0.0, "in the contact plane, got {direction:?}");
+    assert!(
+        (direction[0] - 0.6).abs() <= 1e-6 && (direction[1] - 0.8).abs() <= 1e-6,
+        "along the load (0.6, 0.8, 0), got {direction:?}"
+    );
+}
+
 #[test]
 fn a_body_pulled_off_the_contact_is_refused() {
     let (error, _) = unheld(0.0, -TRACTION);

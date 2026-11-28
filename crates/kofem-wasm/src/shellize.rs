@@ -20,21 +20,14 @@ use kofem_shellize::{
 };
 use wasm_bindgen::prelude::*;
 
+use crate::to_u32;
+
 fn to_js(error: &ShellizeError) -> JsError {
     JsError::new(&error.to_string())
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "every index came in as a u32 or was created from one; the module's 4 GB memory \
-              cannot hold 2^32 vertices"
-)]
-fn index_u32(index: usize) -> u32 {
-    index as u32
-}
-
 fn indices(values: impl IntoIterator<Item = usize>) -> Vec<u32> {
-    values.into_iter().map(index_u32).collect()
+    values.into_iter().map(to_u32).collect()
 }
 
 fn flat<const N: usize>(groups: &[[usize; N]]) -> Vec<u32> {
@@ -548,10 +541,10 @@ impl From<&[TieCouplingReport]> for TieReports {
         for report in reports {
             let (kind, side, values) = drop_wire(report.drop);
             wire.names.push(report.name.clone());
-            wire.coupled.push(index_u32(report.coupled));
-            wire.partners.push(index_u32(report.partners));
-            wire.shared.push(index_u32(report.shared));
-            wire.unmapped.push(index_u32(report.unmapped));
+            wire.coupled.push(to_u32(report.coupled));
+            wire.partners.push(to_u32(report.partners));
+            wire.shared.push(to_u32(report.shared));
+            wire.unmapped.push(to_u32(report.unmapped));
             wire.gap.push(report.gap);
             wire.drop_kind.push(kind.to_owned());
             wire.drop_side.push(side.to_owned());

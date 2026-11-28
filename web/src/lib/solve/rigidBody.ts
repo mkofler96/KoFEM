@@ -583,12 +583,11 @@ export function unheldBodiesMessage(
   return freeMotionMessage(looseComponents(fem, input), properties);
 }
 
-// cos 5°: a direction this close to a coordinate axis is named as the axis.
-const NEAR_AXIS = 0.996;
-
 // A body only contact holds, refused by the contact solve because its load
 // drives it in a motion nothing holds (KOF-501): a node of it, and the motion
-// as a unit direction, or a unit axis where it turns.
+// as a line, or an axis where it turns, given as the pre-check gives its
+// directions (a coordinate axis exactly, otherwise largest component
+// positive).
 export interface UnheldByContact {
   nodeId: number;
   direction: Vec3;
@@ -610,26 +609,10 @@ export function contactUnheldMessage(
     throw new Error(
       `Node ${unheld.nodeId} of the body the contact cannot hold is in no element — the model is inconsistent`,
     );
-  // The phrase names a line, not a sense ("move along X"), so the direction
-  // is turned to point its largest component the positive way, as the
-  // pre-check reports its directions. The springs' share of a held motion
-  // tilts it a little, so within NEAR_AXIS of an axis it is that axis.
-  const largest = unheld.direction.reduce((best, component) =>
-    Math.abs(component) > Math.abs(best) ? component : best,
-  );
-  const axis = unheld.direction.indexOf(largest);
-  // + 0 turns a negated zero into a plain one.
-  const positive = (component: number) =>
-    (largest < 0 ? -component : component) + 0;
-  const [x, y, z] = unheld.direction;
-  const line: Vec3 =
-    Math.abs(largest) >= NEAR_AXIS
-      ? [axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0]
-      : [positive(x), positive(y), positive(z)];
   const phrase = motionPhrase({
     labels: [element.propertyId],
-    translations: unheld.turns ? [] : [line],
-    rotationAxes: unheld.turns ? [line] : [],
+    translations: unheld.turns ? [] : [unheld.direction],
+    rotationAxes: unheld.turns ? [unheld.direction] : [],
   });
   const text = tr(refusalMessages);
   return `${text.contactCannotHold(bodyNumber(properties, element.propertyId), phrase)} ${text.holdOneBody}`;

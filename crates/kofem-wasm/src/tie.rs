@@ -7,7 +7,7 @@
 use kofem_fem::{mortar_weights, MortarFace, MortarRow};
 use wasm_bindgen::prelude::*;
 
-use crate::to_js;
+use crate::{to_js, to_u32};
 
 /// Constraint ties for `ElasticModel.startTiedSolve`, in CSR form: vertex
 /// `slaves[k]` follows Σ `weights[i]` · u(`masters[i]`) over
@@ -197,13 +197,4 @@ pub fn tie_mortar_weights(
 ) -> Result<MortarTies, JsError> {
     let rows = mortar_weights(&slave.faces, &master.faces, limit).map_err(|error| to_js(&error))?;
     Ok(MortarTies { rows })
-}
-
-fn to_u32(index: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "node indices come from u32 arrays"
-    )]
-    let narrow = index as u32;
-    narrow
 }

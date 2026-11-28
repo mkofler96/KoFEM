@@ -55,7 +55,10 @@
 //! against its crossing a gap, is gone after one correction but for the
 //! springs' share. Where the load drives a body in a motion nothing holds,
 //! the force out of balance on it stays from one correction to the next, and
-//! the solve is refused with that motion ([`FemError::ContactUnheld`]).
+//! the solve is refused with that motion ([`FemError::ContactUnheld`]). Only
+//! the part of that force that nothing on the body can react is measured:
+//! the closed nodes' normals and the supported DOFs react the rest, which
+//! still holds the springs' share of the motions they hold.
 //!
 //! The pressure of a closed node is its share of the force the out-of-balance
 //! residual leaves along its normal, pⱼ = nⱼ · rⱼ / Dⱼⱼ; the same pressure
@@ -119,10 +122,13 @@ use crate::coupled_static::{
 };
 use crate::coupling::{Coupling, DOFS_PER_NODE};
 use crate::error::FemError;
-use crate::mesh::{ElementOrder, TetMesh};
+use crate::mesh::{cross, ElementOrder, TetMesh};
 use crate::mortar::{mortar_integrals, MortarFace, SlaveIntegrals};
 use crate::nonlinear::{Settled, SolveProgress, TangentSolver};
-use crate::rigid_body::{free_rigid_motions, DisjointSets, RigidBodyModel, RigidLink};
+use crate::rigid_body::{
+    free_rigid_motions, line_direction, normalized, DisjointSets, RigidBodyModel, RigidLink,
+    FREE_TOLERANCE,
+};
 use crate::sparse::CsrMatrix;
 use crate::static_solve::PreconditionerChoice;
 use crate::surface::BoundaryFaces;
@@ -139,8 +145,9 @@ const STABILISATION: f64 = 1e-9;
 /// in a motion nothing holds: a held one keeps about the springs' share.
 const STALLED: f64 = 0.5;
 
-/// Below this many times the solve's tolerance and the load, a resultant is
-/// round-off and says nothing about a motion.
+/// Below this many times the solve's tolerance and the load, or the
+/// round-off in a body's internal force, a resultant is round-off and says
+/// nothing about a motion.
 const RESULTANT_FLOOR: f64 = 10.0;
 
 /// A node behind an outer face of the other body by more than this fraction
@@ -168,11 +175,6 @@ const SAME_SURFACE: f64 = 0.984_807_753;
 /// other contact's slave side, and gives up its condition. A node half-way
 /// across a master face from the shared edge keeps half.
 const KEPT_WEIGHT: f64 = 0.25;
-
-/// A direction component below this is taken as zero, so that a motion along
-/// a coordinate axis is reported as exactly that axis: the springs' share of
-/// a held motion leaves a trace in the direction of an unheld one.
-const AXIS_SNAP: f64 = 1e-3;
 
 fn contact_error(reason: String) -> FemError {
     FemError::Contact { reason }
@@ -361,9 +363,10 @@ impl From<SlaveIntegrals> for SlaveNode {
     }
 }
 
-/// The rigid motion a load drives a body in that nothing holds: along a unit
-/// direction, or about a unit axis through the body. A coordinate axis is
-/// given exactly.
+/// The rigid motion a load drives a body in that nothing holds: along a line,
+/// or about an axis through the body. Both are unit vectors given the way
+/// the rigid-body check gives its directions: a coordinate axis exactly,
+/// otherwise with the largest component positive.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnheldMotion {
     Along([f64; 3]),
@@ -491,16 +494,47 @@ impl LooseBody {
         sum
     }
 
-    /// The motion a resultant drives: along its force, or about its moment
-    /// where that is the larger.
-    fn motion(resultant: [f64; 6]) -> UnheldMotion {
-        let force = [resultant[0], resultant[1], resultant[2]];
-        let moment = [resultant[3], resultant[4], resultant[5]];
+    /// The force and moment / size of a unit force along `direction` at
+    /// `point`.
+    fn wrench(&self, point: [f64; 3], direction: [f64; 3]) -> [f64; 6] {
+        let arm: [f64; 3] = std::array::from_fn(|axis| point[axis] - self.center[axis]);
+        let moment = cross(arm, direction);
+        [
+            direction[0],
+            direction[1],
+            direction[2],
+            moment[0] / self.size,
+            moment[1] / self.size,
+            moment[2] / self.size,
+        ]
+    }
+
+    /// The motion a resultant nothing reacts drives: along its force, or
+    /// about its moment where that is the larger.
+    fn motion(unheld: [f64; 6]) -> UnheldMotion {
+        let force = [unheld[0], unheld[1], unheld[2]];
+        let moment = [unheld[3], unheld[4], unheld[5]];
         if dot(force, force) >= dot(moment, moment) {
-            UnheldMotion::Along(snapped(force))
+            UnheldMotion::Along(line_direction(force))
         } else {
-            UnheldMotion::About(snapped(moment))
+            UnheldMotion::About(line_direction(moment))
         }
+    }
+
+    /// The round-off in the body's internal force `tangent · displacements`:
+    /// machine precision times Σ |Kᵢⱼ| |uⱼ| over its rows. A body carried
+    /// rigidly across a gap has internal forces that cancel to this.
+    fn round_off(&self, tangent: &CsrMatrix, displacements: &[f64]) -> f64 {
+        let columns = tangent.columns();
+        let values = tangent.values();
+        let magnitude: f64 = self
+            .nodes
+            .iter()
+            .flat_map(|&node| (0..3).map(move |axis| 3 * node + axis))
+            .flat_map(|row| tangent.row_range(row))
+            .map(|entry| (values[entry] * displacements[columns[entry] as usize]).abs())
+            .sum();
+        f64::EPSILON * magnitude
     }
 
     /// The spring on each of the body's DOFs for `tangent`.
@@ -514,26 +548,16 @@ impl LooseBody {
     }
 }
 
-/// `vector` as a unit vector, components below [`AXIS_SNAP`] of it zeroed.
-fn snapped(vector: [f64; 3]) -> [f64; 3] {
-    let length = dot(vector, vector).sqrt();
-    let kept = vector.map(|component| {
-        if component.abs() < AXIS_SNAP * length {
-            0.0
-        } else {
-            component
+/// `resultant` less its part in the span of `held`, an orthonormal basis.
+fn unheld_part(resultant: [f64; 6], held: &[[f64; 6]]) -> [f64; 6] {
+    let mut rest = resultant;
+    for basis in held {
+        let along: f64 = (0..6).map(|index| rest[index] * basis[index]).sum();
+        for index in 0..6 {
+            rest[index] -= along * basis[index];
         }
-    });
-    let length = dot(kept, kept).sqrt();
-    kept.map(|component| component / length)
-}
-
-fn cross(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
-    [
-        lhs[1] * rhs[2] - lhs[2] * rhs[1],
-        lhs[2] * rhs[0] - lhs[0] * rhs[2],
-        lhs[0] * rhs[1] - lhs[1] * rhs[0],
-    ]
+    }
+    rest
 }
 
 /// What one active set update did.
@@ -1120,18 +1144,28 @@ impl Setup {
         force
     }
 
-    /// Refuse a loose body whose out-of-balance resultant under `free` kept
-    /// more than [`STALLED`] of the last one, both measured under one active
-    /// set with the springs out of the balance (see the module notes).
-    /// Resultants below `floor` are round-off.
+    /// Refuse a loose body whose out-of-balance resultant under `free`, less
+    /// what holds the body, kept more than [`STALLED`] of the last one, both
+    /// measured under one active set with the springs out of the balance (see
+    /// the module notes). Resultants below `floor`, or below
+    /// [`RESULTANT_FLOOR`] times the round-off in a body's internal force
+    /// under `tangent` and `displacements`, are round-off.
     fn check_held(
         &mut self,
         free: &[f64],
         points: &[[f64; 3]],
+        supports: &Dirichlet,
+        (tangent, displacements): (&CsrMatrix, &[f64]),
         floor: f64,
     ) -> Result<(), FemError> {
-        for body in &mut self.loose {
-            let now = body.resultant_of(free, points);
+        let held: Vec<Vec<[f64; 6]>> = self
+            .loose
+            .iter()
+            .map(|body| self.holding(body, points, supports))
+            .collect();
+        for (body, held) in self.loose.iter_mut().zip(&held) {
+            let now = unheld_part(body.resultant_of(free, points), held);
+            let floor = floor.max(RESULTANT_FLOOR * body.round_off(tangent, displacements));
             if let Some(before) = body.resultant.replace(now) {
                 if norm(&now) > floor && norm(&now) > STALLED * norm(&before) {
                     return Err(FemError::ContactUnheld {
@@ -1142,6 +1176,77 @@ impl Setup {
             }
         }
         Ok(())
+    }
+
+    /// An orthonormal basis of the resultants (force, moment / size) that can
+    /// act on `body` without moving it: a closed node's pressure along its
+    /// normal, on the body's slave node or its masters, and a support's
+    /// reaction on each DOF it holds.
+    fn holding(
+        &self,
+        body: &LooseBody,
+        points: &[[f64; 3]],
+        supports: &Dirichlet,
+    ) -> Vec<[f64; 6]> {
+        let on_body = |node: usize| body.nodes.binary_search(&node).is_ok();
+        let pressures = self
+            .nodes
+            .iter()
+            .filter(|active| active.closed)
+            .map(|active| {
+                let slave = &self.slaves[active.index];
+                let mut wrench = [0.0; 6];
+                let mut add = |node: usize, weight: f64| {
+                    let unit = body.wrench(points[node], active.normal);
+                    for index in 0..6 {
+                        wrench[index] += weight * unit[index];
+                    }
+                };
+                if on_body(slave.node) {
+                    add(slave.node, 1.0);
+                }
+                for (&master, &weight) in slave.masters.iter().zip(&slave.weights) {
+                    if on_body(master) {
+                        add(master, weight);
+                    }
+                }
+                wrench
+            });
+        let reactions = body.nodes.iter().flat_map(|&node| {
+            (0..3)
+                .filter(move |&axis| supports.value(3 * node + axis).is_some())
+                .map(move |axis| {
+                    let mut direction = [0.0; 3];
+                    direction[axis] = 1.0;
+                    body.wrench(points[node], direction)
+                })
+        });
+        let mut basis: Vec<[f64; 6]> = Vec::new();
+        for wrench in pressures.chain(reactions) {
+            if basis.len() == 6 {
+                break;
+            }
+            let length = norm(&wrench);
+            if length == 0.0 {
+                continue;
+            }
+            let rest = unheld_part(wrench, &basis);
+            let left = norm(&rest);
+            if left > FREE_TOLERANCE * length {
+                basis.push(rest.map(|value| value / left));
+            }
+        }
+        basis
+    }
+
+    /// `residual` less the springs' force: what the iterate leaves out of
+    /// balance.
+    fn balance(&self, residual: &[f64]) -> Vec<f64> {
+        residual
+            .iter()
+            .zip(&self.spring_force)
+            .map(|(force, spring)| force - spring)
+            .collect()
     }
 
     /// The tangent with the loose bodies' springs, or `None` without loose
@@ -1226,11 +1331,7 @@ impl TangentSolver for ContactCg {
         if !setup.released {
             setup.spring_force = setup.springs_at(displacements, tangent, supports);
         }
-        let balance: Vec<f64> = residual
-            .iter()
-            .zip(&setup.spring_force)
-            .map(|(force, spring)| force - spring)
-            .collect();
+        let balance = setup.balance(&residual);
         let mut free = setup.measure(displacements, &widen(&balance))?;
         let update = setup.update_active_set(self.cg.relative_tolerance, displacements);
         let load = setup.imposed_load(tangent, supports);
@@ -1250,7 +1351,13 @@ impl TangentSolver for ContactCg {
             }
         } else if setup.released {
             let floor = RESULTANT_FLOOR * self.cg.relative_tolerance * setup.load_scale;
-            setup.check_held(&free, self.mesh.vertices(), floor)?;
+            setup.check_held(
+                &free,
+                self.mesh.vertices(),
+                supports,
+                (tangent, displacements),
+                floor,
+            )?;
         } else if self.corrections > 0 {
             // The springs' share is still in this iterate and its reactions:
             // the next corrections take it out.
@@ -1258,7 +1365,13 @@ impl TangentSolver for ContactCg {
             setup.spring_force.fill(0.0);
             free = setup.measure(displacements, &widen(&residual))?;
             let floor = RESULTANT_FLOOR * self.cg.relative_tolerance * setup.load_scale;
-            setup.check_held(&free, self.mesh.vertices(), floor)?;
+            setup.check_held(
+                &free,
+                self.mesh.vertices(),
+                supports,
+                (tangent, displacements),
+                floor,
+            )?;
             release = true;
         }
         Ok(Settled {
@@ -1315,13 +1428,7 @@ impl TangentSolver for ContactCg {
             &constraints,
             &dofs,
             &values,
-            &widen(
-                &residual
-                    .iter()
-                    .zip(&setup.spring_force)
-                    .map(|(force, spring)| force - spring)
-                    .collect::<Vec<f64>>(),
-            ),
+            &widen(&setup.balance(&residual)),
             self.preconditioner,
         )?;
         let run = PcgRun::start(
@@ -1453,17 +1560,11 @@ fn merged(first: &SlaveNode, second: &SlaveNode) -> SlaveNode {
     });
     SlaveNode {
         node: first.node,
-        normal: unit(weighted),
+        normal: normalized(weighted),
         masters: weights.keys().copied().collect(),
         weights: weights.values().copied().collect(),
         area,
     }
-}
-
-/// `vector` scaled to unit length.
-fn unit(vector: [f64; 3]) -> [f64; 3] {
-    let length = dot(vector, vector).sqrt();
-    vector.map(|component| component / length)
 }
 
 impl From<MortarFace> for OuterFace {

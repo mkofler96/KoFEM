@@ -10,7 +10,7 @@ use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonStatus};
 use kofem_fem::FemError;
 use wasm_bindgen::prelude::*;
 
-use crate::{to_js, ElasticSolution};
+use crate::{to_js, to_u32, ElasticSolution};
 
 /// Contact pairs for `ElasticModel.startContactSolve`: each pair is two
 /// picked surfaces, given by their vertices. The solve finds the boundary
@@ -80,18 +80,11 @@ impl ContactRun {
     #[wasm_bindgen(getter, js_name = unheldNode)]
     #[must_use]
     pub fn unheld_node(&self) -> Option<u32> {
-        self.unheld.map(|(node, _)| {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "vertex indices come from u32 arrays"
-            )]
-            let narrow = node as u32;
-            narrow
-        })
+        self.unheld.map(|(node, _)| to_u32(node))
     }
 
-    /// The motion its load drives it in: a unit direction, or with
-    /// `unheldTurns` a unit axis.
+    /// The motion its load drives it in: a line, or with `unheldTurns` an
+    /// axis, both as [`UnheldMotion`] gives them.
     #[wasm_bindgen(getter, js_name = unheldDirection)]
     #[must_use]
     pub fn unheld_direction(&self) -> Option<Vec<f64>> {
@@ -241,18 +234,7 @@ impl ContactSolution {
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn nodes(&self) -> Vec<u32> {
-        self.state
-            .nodes
-            .iter()
-            .map(|&node| {
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "vertex indices come from u32 arrays"
-                )]
-                let narrow = node as u32;
-                narrow
-            })
-            .collect()
+        self.state.nodes.iter().map(|&node| to_u32(node)).collect()
     }
 
     /// Contact pressure per slave vertex (force per area, ≥ 0 pressing).

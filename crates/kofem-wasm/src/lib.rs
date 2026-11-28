@@ -71,6 +71,16 @@ extern "C" {
     fn reflect_set(target: &JsValue, key: &str, value: &str) -> bool;
 }
 
+/// A vertex, DOF or row index as the u32 the app's typed arrays hold.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "every index came in as a u32 or was created from one; the module's 4 GB memory \
+              cannot hold 2^32 vertices"
+)]
+pub(crate) fn to_u32(index: usize) -> u32 {
+    index as u32
+}
+
 fn to_js(error: &FemError) -> JsError {
     with_class(JsError::new(&error.to_string()), error)
 }
