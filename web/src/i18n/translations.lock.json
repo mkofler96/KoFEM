@@ -2095,6 +2095,54 @@
     "es": "544cadeffddc",
     "pt": "da5b4a3c07f7"
   },
+  "geometry.ts:geometryMessages.shellRouteMesh": {
+    "en": "035f07651819",
+    "de": "58c5ffbb785d",
+    "fr": "bc1fccb67612",
+    "it": "81c59da9dda3",
+    "es": "27bb25a1a7f3",
+    "pt": "e1e57f774fd2"
+  },
+  "geometry.ts:geometryMessages.shellRouteNoOppositeFace": {
+    "en": "288f7f58cc72",
+    "de": "2803dd9c514e",
+    "fr": "7426783e7f47",
+    "it": "ceb806d5b888",
+    "es": "a0a1d9faced3",
+    "pt": "5b71a93e7323"
+  },
+  "geometry.ts:geometryMessages.shellRouteNoThinWall": {
+    "en": "8f423bc6ab56",
+    "de": "fcece826df96",
+    "fr": "11b00b0d9bea",
+    "it": "522b734e90c3",
+    "es": "0ad11e9fdb9b",
+    "pt": "3a71c02157d8"
+  },
+  "geometry.ts:geometryMessages.shellRoutePartialOverlap": {
+    "en": "d366372e66eb",
+    "de": "afd86ccecbd5",
+    "fr": "1eeae4814564",
+    "it": "bd58dbb3c9f0",
+    "es": "17529112b38f",
+    "pt": "bca30673de1d"
+  },
+  "geometry.ts:geometryMessages.shellRouteUnsupportedSurface": {
+    "en": "2b280958ad1b",
+    "de": "c984d3e8b298",
+    "fr": "8c4cca663827",
+    "it": "968bb50416dd",
+    "es": "8e9301f4f08d",
+    "pt": "d69e0e9c2a56"
+  },
+  "geometry.ts:geometryMessages.shellRouteVaryingThickness": {
+    "en": "56c632b50fab",
+    "de": "79ac22cb3ada",
+    "fr": "8d5167c080ac",
+    "it": "4e81c4c581d1",
+    "es": "64469cf2be98",
+    "pt": "4b908e9034f4"
+  },
   "geometry.ts:geometryMessages.shellSections": {
     "en": "d3d0cb16531f",
     "de": "6e05ce31c878",

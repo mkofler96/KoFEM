@@ -6,6 +6,7 @@
 // group (boundarySlice, couplingSlice, geometrySlice on re-mesh) and the
 // whole-model lifecycle actions rebuild through these.
 
+import type { MidSurfaceLinks } from "../lib/cadShell";
 import type { Element, Node } from "./geometrySlice";
 import type { PickGeometry } from "../lib/facePick";
 import { referencePointIds } from "../lib/coupling";
@@ -54,6 +55,10 @@ export interface SurfaceLoad {
   pressure?: number;
   name?: string;
   unmatchedSelections?: number;
+  // Per face: the area it stands for, per unit of its own area. A shell
+  // facet loaded from a curved CAD face off the mid-surface carries that
+  // face's area (KOF-498). Absent: every face its own area.
+  areaScales?: number[];
 }
 
 export function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
@@ -329,14 +334,23 @@ export function rebuildSurfaceLoads(
   loadGroups: NamedLoadGroup[],
   elements: Element[],
   couplingGroups: CouplingGroup[] = [],
+  // A CAD mid-surface's links (lib/cadShell, KOF-498): a selection on a
+  // shell's bottom face loads its facets wound the other way, along that
+  // face's outward normal, so a pressure on it pushes into the plate.
+  midSurfaceLinks: MidSurfaceLinks | null = null,
 ): SurfaceLoad[] {
   const refPoints = referencePointIds(couplingGroups);
   const loadable = loadableFaceKeys(elements);
+  const bottomFaces = new Set(midSurfaceLinks?.facets.map((f) => f.bottom));
+  const areaRatio = new Map(
+    midSurfaceLinks?.areaRatios.map((r) => [r.face, r.ratio]),
+  );
   const result: SurfaceLoad[] = [];
   for (const g of loadGroups) {
     const kind = loadKind(g);
     if (kind === "moment") continue; // moments stay as equivalent point loads
     const faces: number[][] = [];
+    const areaScales: number[] = [];
     const seen = new Set<string>();
     let selections = 0;
     let unmatchedSelections = 0;
@@ -349,23 +363,36 @@ export function rebuildSurfaceLoads(
       // would either double-apply the load or drop it without a word.
       if (isNodalFace(f, refPoints)) continue;
       selections++;
-      const spanned = loadedFaces(f, elements, loadable);
+      const reversed =
+        f.cadFaceId !== undefined && bottomFaces.has(f.cadFaceId);
+      const ratio =
+        f.cadFaceId === undefined ? undefined : areaRatio.get(f.cadFaceId);
+      const spanned = loadedFaces(f, elements, loadable).map((face) =>
+        reversed && face.length === 3 ? [face[0], face[2], face[1]] : face,
+      );
       // A selection that spans no face would vanish from the load, and its
       // share of a total force move to the other selections. Count it, for the
       // solve to refuse (surfaceLoadRefusal).
       if (spanned.length === 0) unmatchedSelections++;
       for (const face of spanned) {
-        const key = faceKey(face);
+        // A shell facet loaded from both sides is two loads.
+        const key = `${faceKey(face)}${reversed ? "-" : "+"}`;
         if (seen.has(key)) continue;
         seen.add(key);
         faces.push(face);
+        areaScales.push(face.length === 3 && ratio !== undefined ? ratio : 1);
       }
     }
     // A group of nodal selections only is rebuildLoads' alone. Any other group
     // is kept, even with no faces, so it reaches the solve and is refused by
     // name rather than skipped.
     if (selections === 0) continue;
-    const named = { faces, name: g.name, unmatchedSelections };
+    const named = {
+      faces,
+      name: g.name,
+      unmatchedSelections,
+      ...(areaScales.some((scale) => scale !== 1) ? { areaScales } : {}),
+    };
     if (kind === "pressure") {
       result.push({ type: "pressure", pressure: g.totalForce, ...named });
     } else {

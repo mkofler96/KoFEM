@@ -18,6 +18,8 @@
 //   geometry_edit.cpp — split faces / bodies with a plane, Boolean-combine
 //                       bodies (both return STEP bytes)
 //   mesh_netgen.cpp   — Netgen OCC surface + tetrahedral volume meshing
+//   mesh_sizes.cpp    — element sizes per solid, face and edge
+//   mid_surface.cpp   — CAD mid-surfaces of Shell bodies (face pairing)
 //   face_properties.cpp — per-face CAD properties: type, area, normal or axis
 //   json_util.cpp     — manual JSON in/out helpers
 //   wasm_util.cpp     — WASM memory diagnostics + typed-array returns
@@ -31,6 +33,7 @@
 #include "geometry_cache.h"
 #include "geometry_edit.h"
 #include "mesh_netgen.h"
+#include "mid_surface.h"
 #include "tessellate.h"
 
 // ── Embind registrations ──────────────────────────────────────────────────────
@@ -38,6 +41,7 @@
 EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("tessellate_step",        &tessellate_step);
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
+    emscripten::function("plan_shell_bodies",      &plan_shell_bodies);
     emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("split_geometry",         &split_geometry);
     emscripten::function("boolean_geometry",       &boolean_geometry);

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { MidSurfaceLinks } from "./cadShell";
+import type { ShellRoute } from "../wasm/pkg/kofem_wasm";
 import type { LargeDeformation, TemperatureLoad } from "../workers/solverTypes";
 import {
   DEFAULT_LOAD_INCREMENTS,
@@ -116,6 +118,8 @@ export interface AnalysisState {
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
+  midSurfaceLinks: MidSurfaceLinks | null;
+  shellRoutes: ShellRoute[];
   result: {
     displacements: Float64Array;
     vonMises?: Float64Array;
@@ -190,6 +194,11 @@ interface KofemFieldDataV1 {
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
+  // A Shell body's CAD mid-surface links and the Shell bodies' routes
+  // (KOF-498). Written only when there are some; absent in files written
+  // before, whose shells came from the mesh-based path.
+  midSurfaceLinks?: MidSurfaceLinks;
+  shellRoutes?: ShellRoute[];
   // Topology-optimization setup. Absent in files written before TO existed.
   topOpt?: TopOptSettingsState;
   // Absent in files written before the order was saved; they were solved with
@@ -417,6 +426,10 @@ export function serializeAnalysis(state: AnalysisState): string {
     volMesh: state.volMesh,
     surfaceTriangles: state.surfaceTriangles,
     surfaceFaceIds: state.surfaceFaceIds,
+    ...(state.midSurfaceLinks
+      ? { midSurfaceLinks: state.midSurfaceLinks }
+      : {}),
+    ...(state.shellRoutes.length > 0 ? { shellRoutes: state.shellRoutes } : {}),
     topOpt: state.topOpt,
     elementOrder: state.elementOrder,
     ...(state.largeDeformation
@@ -989,6 +1002,8 @@ export function parseAnalysisFile(text: string): AnalysisState {
     volMesh: meta.volMesh,
     surfaceTriangles: meta.surfaceTriangles,
     surfaceFaceIds: meta.surfaceFaceIds,
+    midSurfaceLinks: meta.midSurfaceLinks ?? null,
+    shellRoutes: meta.shellRoutes ?? [],
     result,
     resultType: meta.resultType,
     topOpt: meta.topOpt,

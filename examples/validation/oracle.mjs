@@ -15,6 +15,10 @@
 // only in the Rust solver (KOF-318), so those cases are checked against their
 // closed-form reference by run.mjs alone, and are listed here as such.
 //
+// An entry whose model an example no longer builds is kept as `retired`, with
+// the reason and the mesh it was computed on: the C++ solvers are gone, so it
+// cannot be recomputed, and run.mjs checks the example against its reference.
+//
 // Run from web/ after `bun run wasm:prepare`:
 //
 //   bun run validate:oracle
@@ -63,6 +67,7 @@ const maxOf = (values) => values.reduce((a, b) => Math.max(a, b), 0);
 function storedEntry(row) {
   const was = stored.examples.find((r) => r.id === row.id);
   if (!was) throw new Error(`${REFERENCE} has no entry for "${row.id}"`);
+  if (was.retired) return was;
   if (was.nodes !== row.nodes || was.elements !== row.elements)
     throw new Error(
       `${row.id}: the mesh has ${row.nodes} nodes and ${row.elements} elements, the C++ reference was computed on ${was.nodes} and ${was.elements} — the stored comparison no longer applies`,
@@ -83,6 +88,9 @@ async function staticRow(id, recipe) {
     order: payload.elementOrder,
   };
   const was = storedEntry(row);
+  // A reference whose model the example no longer builds, kept with why.
+  if (was.retired)
+    return { ...row, path: was.path, oracle: `retired — ${was.retired}` };
   if (route.path === "solid" && constraintTieCount(payload.tieGroups) > 0)
     return { ...row, path: "Rust AMG CG, MPC tie", oracle: was.oracle };
   if (!was.reference)

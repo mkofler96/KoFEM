@@ -6,7 +6,8 @@
 // (hooks/useRefinementStudy) both mesh through here, so a study level meshes
 // exactly as the Mesh button would at the same sizes.
 
-import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
+import type { MeshOverlap, ShellRoute } from "../wasm/pkg/kofem_wasm";
+import type { MidSurfaceLinks } from "./cadShell";
 import {
   isCadBody,
   MESH_KIND_LABEL,
@@ -83,6 +84,10 @@ export interface VolumeMesh {
   surfaceFaceIds: number[] | null;
   // The bodies the request left out as suppressed.
   suppressedBodyIds: number[];
+  // One route per body marked Shell, and the links of the CAD mid-surface
+  // when a Shell body took that path (KOF-498).
+  shellRoutes: ShellRoute[];
+  midSurfaceLinks: MidSurfaceLinks | null;
 }
 
 export type VolumeMeshReply =
@@ -125,6 +130,8 @@ export async function runVolumeMesh(
         properties?: Property[];
         surfaceTriangles: [number, number, number][] | null;
         surfaceFaceIds: number[] | null;
+        shellRoutes: ShellRoute[];
+        midSurfaceLinks: MidSurfaceLinks | null;
       }
     | { overlaps: MeshOverlap[] }
   >("volume_mesh", {
@@ -138,8 +145,9 @@ export async function runVolumeMesh(
       max_size: size,
     })),
     // Bodies the user marked Shell, plus the property table: meshing
-    // idealises them to a mid-surface shell mesh and returns the mixed
-    // CTRIA3 + CTETRA model (#397). Only CAD bodies can be idealised — the
+    // idealises them to a mid-surface shell mesh — from the CAD faces where
+    // they pair (KOF-498), else from the volume mesh — and returns the
+    // CTRIA3 (+ CTETRA) model (#397). Only CAD bodies can be idealised — the
     // PSHELLs a previous mesh derived are shells already, and passing their
     // ids would send the thin-wall extraction hunting for bodies the fresh
     // mesh has never heard of.
@@ -177,5 +185,6 @@ export function applyVolumeMesh(
     mesh.surfaceFaceIds,
     mesh.properties,
     mesh.suppressedBodyIds,
+    { midSurfaceLinks: mesh.midSurfaceLinks, shellRoutes: mesh.shellRoutes },
   );
 }

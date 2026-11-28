@@ -85,6 +85,7 @@ export function useMeshTopology(): MeshTopology {
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const stepSurface = useModelStore((s) => s.stepSurface);
+  const midSurfaceLinks = useModelStore((s) => s.midSurfaceLinks);
 
   const nodeMap = useMemo(
     () => new Map(nodes.map((n, i) => [n.id, { n, i }])),
@@ -213,10 +214,17 @@ export function useMeshTopology(): MeshTopology {
   const shellRim = useMemo(
     () =>
       modelShellRim(
-        { nodes, elements, surfaceTriangles, surfaceFaceIds },
+        { nodes, elements, surfaceTriangles, surfaceFaceIds, midSurfaceLinks },
         stepSurface,
       ),
-    [nodes, elements, surfaceTriangles, surfaceFaceIds, stepSurface],
+    [
+      nodes,
+      elements,
+      surfaceTriangles,
+      surfaceFaceIds,
+      midSurfaceLinks,
+      stepSurface,
+    ],
   );
 
   return useMemo(

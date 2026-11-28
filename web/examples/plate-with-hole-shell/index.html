@@ -46,7 +46,7 @@
               "https://kofem.org/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png",
               "https://kofem.org/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-26",
+            "dateModified": "2026-11-28",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -906,7 +906,7 @@
           <img src="/examples/plate-with-hole-shell.png" width="1200" height="720" alt="Plate with a hole (shells): von mises stress on the undeformed shape" />
           <p class="viewer-hint" hidden></p>
         </div>
-        <div class="colorbar"><span data-legend="min">26.3&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">311&nbsp;MPa</span></div>
+        <div class="colorbar"><span data-legend="min">3.80&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span data-legend="max">311&nbsp;MPa</span></div>
         <figcaption><span data-legend="name">Von Mises stress</span>, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -923,8 +923,8 @@
           <tbody>
             <tr>
               <td class="num">3.1400</td>
-              <td class="num"><strong data-testid="fe-value">3.1089</strong></td>
-              <td class="num">−0.99&nbsp;%<br /><span class="band pass">within ±8&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">3.1142</strong></td>
+              <td class="num">−0.82&nbsp;%<br /><span class="band pass">within ±8&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -934,7 +934,7 @@
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         <picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png" width="330" height="200" alt="Quarter of a long strip with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png" width="330" height="200" alt="Quarter of a long strip with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress" loading="lazy" decoding="async" /></picture>
-        <figcaption>Quarter of a long strip with a central hole, x, y ≥ 0, full thickness, meshed as a shell. Sketch, not to scale.</figcaption>
+        <figcaption>Quarter of a long strip with a central hole, x, y ≥ 0, full thickness, meshed as a shell with the hole edge refined to 0.125 mm. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -970,10 +970,10 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 1 mm maximum element size: 17,283 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>8,843 nodes, 53,058 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 1 mm maximum element size: 18,261 3-node shell triangles (OPT drilling membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>9,387 nodes, 56,322 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-724e4e1365f1); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-32198cb04210</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-7c33c9ef288e); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-e23d3437403a</td></tr>
         </table>
       </div>
         <p>The strip is symmetric about <math><mi>x</mi><mo>=</mo><mn>0</mn></math> and <math><mi>y</mi><mo>=</mo><mn>0</mn></math>,
@@ -982,15 +982,15 @@
         its mid-surface, so there is no mid-plane to cut at. The edge
         <math><mi>x</mi><mo>=</mo><mi>L</mi></math> is pulled with <math><mi>σ</mi><mi>b</mi><mi>t</mi></math>, spread as a uniform
         line load <math><mi>q</mi><mo>=</mo><mi>σ</mi><mi>t</mi></math>.</p>
-        <p>The app builds the shell from a solid mesh: Netgen fills the
-        1&nbsp;mm wall with tetrahedra, and the app replaces the
-        wall by its mid-surface. The faces through the wall, the cut edges and
+        <p>The app builds the shell from the CAD geometry: it pairs the
+        plate's two faces, 1&nbsp;mm apart, and meshes the surface
+        halfway between them. The faces through the wall, the cut edges and
         the hole, become the edges of the shell, so each support and the load
-        is picked as an Edge. Netgen puts at least two elements along every
-        edge, so next to the 1&nbsp;mm cut edge the triangle at A
-        stays about 0.6&nbsp;mm on every mesh: a smaller maximum element size
-        refines the rest of the hole but not the peak.</p>
-        <p>Each of the 17,283 triangles
+        is picked as an Edge. The peak sits on the hole, so the hole face gets
+        its own element size, an eighth of the plate's: the hole edge is
+        meshed at 0.125&nbsp;mm and the rest of the plate grades out to
+        1&nbsp;mm.</p>
+        <p>Each of the 18,261 triangles
         combines Felippa's OPT membrane, whose corner rotations are the
         in-plane rotations of the field, and a DKT plate-bending element; in
         this load case only the membrane part works. Shell nodes carry six degrees of freedom. The
@@ -1003,8 +1003,8 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>stress-concentration factor Kt</td></tr>
           <tr><th scope="row">Reference</th><td>Howland's Kt for 2a/W = 0.2 = 3.1400 <span class="meta">(Kirsch (1898); Howland (1930); Peterson's)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>3.1089</td></tr>
-          <tr><th scope="row">Difference</th><td>−0.99&nbsp;% <span class="band pass">within ±8&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>3.1142</td></tr>
+          <tr><th scope="row">Difference</th><td>−0.82&nbsp;% <span class="band pass">within ±8&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="plate-with-hole-shell">
@@ -1014,8 +1014,8 @@
           <picture class="figure-image theme-light conv"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the one stress each of the one or two triangles that meet there reports. On the finest meshes the peak node is shared by more triangles and reads low.</p>
-        <p>The peak stress is read from the one or two triangles at the cut edge, whose size does not shrink with the maximum element size, so it has no rate to observe.</p>
+        <p>Kt rises steadily towards Howland's 3.14 from below as the plate and its hole edge are refined together, the hole edge at h/8: −2.2 % at 4 mm, −0.8 % at 1 mm, within a few hundredths of a percent at 0.5 mm.</p>
+        <p>The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">
@@ -1033,51 +1033,30 @@
                 <tr>
                   <td>Shell (linear)</td>
                   <td>4 mm</td>
-                  <td class="num">3,960</td>
-                  <td class="num">3.1230</td>
-                  <td class="num">−0.54&nbsp;%</td>
-                </tr>
-                <tr>
-                  <td>Shell (linear)</td>
-                  <td>2.5 mm</td>
-                  <td class="num">8,958</td>
-                  <td class="num">3.2271</td>
-                  <td class="num">+2.77&nbsp;%</td>
+                  <td class="num">4,308</td>
+                  <td class="num">3.0724</td>
+                  <td class="num">−2.15&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>2 mm</td>
-                  <td class="num">13,614</td>
-                  <td class="num">3.2244</td>
-                  <td class="num">+2.69&nbsp;%</td>
-                </tr>
-                <tr>
-                  <td>Shell (linear)</td>
-                  <td>1.5 mm</td>
-                  <td class="num">23,766</td>
-                  <td class="num">3.1286</td>
-                  <td class="num">−0.36&nbsp;%</td>
+                  <td class="num">15,072</td>
+                  <td class="num">3.0745</td>
+                  <td class="num">−2.08&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>1 mm (this example)</td>
-                  <td class="num">53,058</td>
-                  <td class="num">3.1089</td>
-                  <td class="num">−0.99&nbsp;%</td>
-                </tr>
-                <tr>
-                  <td>Shell (linear)</td>
-                  <td>0.75 mm</td>
-                  <td class="num">92,664</td>
-                  <td class="num">2.9538</td>
-                  <td class="num">−5.93&nbsp;%</td>
+                  <td class="num">56,322</td>
+                  <td class="num">3.1142</td>
+                  <td class="num">−0.82&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>0.5 mm</td>
-                  <td class="num">206,406</td>
-                  <td class="num">3.0065</td>
-                  <td class="num">−4.25&nbsp;%</td>
+                  <td class="num">214,962</td>
+                  <td class="num">3.1391</td>
+                  <td class="num">−0.03&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1086,27 +1065,26 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> is −0.99&nbsp;% from
+        <p>KoFEM's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> is −0.82&nbsp;% from
         3.14, read as the Results panel reads it: the largest nodal von Mises
         stress. The <a href="/examples/plate-with-hole/">solid page</a>, with
         quadratic tetrahedra, comes out
         −0.42&nbsp;%.</p>
-        <p>The difference is in the elements. A quadratic tetrahedron's stress
-        varies inside it, so it follows the steep drop away from the hole, and
-        the solid model reads the peak slightly low on every mesh. A shell
-        triangle reports one stress, at its centroid. At A only one or two
-        triangles meet, so the
-        nodal value is their stress, and it lands above or below 3.14
-        depending on how the mesher cuts that corner; on the finest meshes the
-        peak moves to the next node along the hole. Over the mesh study above
-        it ranges from 5.9&nbsp;% below to 2.8&nbsp;% above,
-        without settling, which is why the band is
-        ±8&nbsp;%.</p>
-        <p>For a peak stress in a flat part loaded in its plane, use solid
-        quadratic elements, or check that the shell peak stops changing on
-        finer meshes. Shells pay off when a thin wall bends: one layer of
-        shell elements bends by construction, while solid elements need
-        several layers or quadratic elements to do the same (see the
+        <p>A shell triangle reports one stress, at its centroid, and the
+        nodal value at A averages the one or two triangles that meet there:
+        a stress a fraction of an element inside the plate, where it has
+        started to fall. So the read-out is low, by an amount set by the
+        triangles at the hole. In the mesh study above the plate and its hole
+        edge are refined together, the hole edge always at an eighth of the
+        plate's size, and <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> rises towards 3.14 on
+        every finer mesh, from 2.2&nbsp;% below to
+        0.03&nbsp;% below. Without the face size on the hole the
+        1&nbsp;mm mesh reads about 9&nbsp;% low.</p>
+        <p>For a peak stress, refine where the stress peaks: an element size
+        on the face that carries the peak moves the reading far more than a
+        finer mesh everywhere. Shells pay off when a thin wall bends: one
+        layer of shell elements bends by construction, while solid elements
+        need several layers or quadratic elements to do the same (see the
         <a href="/examples/cantilever-beam/">cantilever</a>).</p>
 
       <h2 id="reproduce">Reproduce</h2>
@@ -1115,6 +1093,7 @@
       <ol class="steps">
         <li>Import <a href="/examples/plate-with-hole-shell.step" download>plate-with-hole-shell.step</a>.</li>
         <li>Set the body to Shell. Meshing measures the 1 mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.</li>
+        <li>Under Face sizes in the mesh settings, give the edge through (7.07107, 7.07107, 0.5) a 0.125 mm element size.</li>
         <li>Mesh with a 1 mm maximum element size, linear elements.</li>
         <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
         <li>Support “Symmetry x = 0”: Ux, Uz, Ry, Rz = 0 on the edge through (0, 30, 0.5).</li>

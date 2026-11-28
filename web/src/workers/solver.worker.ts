@@ -30,8 +30,6 @@ import type {
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import type { ContactResult } from "../lib/contact.js";
 import type {
-  Node,
-  Element,
   ParseStepPayload,
   SplitGeometryPayload,
   BooleanGeometryPayload,
@@ -47,7 +45,8 @@ import {
   thinWallFindings,
   type ThinWallCheckInput,
 } from "../lib/solve/thinWall.js";
-import { dropSuppressedBodies } from "../lib/suppressBodies.js";
+import { describeShellRoute } from "../lib/cadShell.js";
+import { shellMeshOptions, storedMesh } from "../lib/storedMesh.js";
 import {
   inStage,
   inStageAsync,
@@ -56,10 +55,7 @@ import {
   type FailureStage,
 } from "../lib/workerError.js";
 import { explainRustFailure } from "../lib/solve/rustFailure.js";
-import {
-  buildMeshTimeShellModel,
-  prepareAutoShellSolve,
-} from "../lib/solve/autoShell.js";
+import { prepareAutoShellSolve } from "../lib/solve/autoShell.js";
 import {
   buildCoupledEngineInputs,
   coupledSupportOwners,
@@ -480,9 +476,14 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     geometryLoaded = true;
   }
 
+  // Bodies marked Shell: the engine builds each one's mid-surface from its CAD
+  // faces where they pair (KOF-498) and meshes the rest as volumes.
+  const shellBodyIds = new Set(payload.shellBodyIds ?? []);
+  const shellOptions = shellMeshOptions(shellBodyIds);
   const opts = JSON.stringify({
     max_element_size: maxElementSize,
     min_element_size: minSize,
+    ...shellOptions,
     ...(payload.solidMaxSizes
       ? { solid_max_sizes: payload.solidMaxSizes }
       : {}),
@@ -517,10 +518,15 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   }
   const nNodes = dto.vertices.length / 3;
   const nTets = dto.tetrahedra.length / 4;
+  const shellRoutes = dto.shellRoutes ?? [];
+  for (const route of shellRoutes)
+    self.postMessage({ id, log: describeShellRoute(route) });
 
   self.postMessage({
     id,
-    log: `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
+    log: dto.midSurface
+      ? `Mesh complete: ${nTets} tetrahedra, ${dto.midSurface.midFace.length} mid-surface triangles`
+      : `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
   });
 
   // Release OCCT shape + STEP bytes from the engine's WASM heap — they are no
@@ -528,93 +534,11 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   m().free_geometry_cache();
   geometryLoaded = false;
 
-  // The store models nodes/elements as object lists; build them here from
-  // the flat arrays (plain JS, no parsing — cheap relative to meshing).
-  const meshNodes: Node[] = new Array<Node>(nNodes);
-  for (let i = 0; i < nNodes; i++) {
-    meshNodes[i] = {
-      id: i,
-      x: dto.vertices[3 * i],
-      y: dto.vertices[3 * i + 1],
-      z: dto.vertices[3 * i + 2],
-    };
-  }
-  const meshElements: Element[] = new Array<Element>(nTets);
-  for (let i = 0; i < nTets; i++) {
-    meshElements[i] = {
-      id: i,
-      type: "CTETRA",
-      nodeIds: [
-        dto.tetrahedra[4 * i],
-        dto.tetrahedra[4 * i + 1],
-        dto.tetrahedra[4 * i + 2],
-        dto.tetrahedra[4 * i + 3],
-      ],
-      // The tet's body (1-based CAD solid index) — resolved to a material via
-      // the store's properties at solve time (#353).
-      propertyId: dto.bodyIds[i],
-    };
-  }
-
-  const suppressed = new Set(payload.suppressedBodyIds ?? []);
-  const { nodes, elements, surfaceTriangles, surfaceFaceIds } =
-    dropSuppressedBodies(
-      {
-        nodes: meshNodes,
-        elements: meshElements,
-        surfaceTriangles: chunk3(dto.surfaceTriangles) as [
-          number,
-          number,
-          number,
-        ][],
-        surfaceFaceIds: Array.from(dto.surfaceFaceIds),
-      },
-      suppressed,
-    );
-  if (suppressed.size > 0)
-    self.postMessage({
-      id,
-      log: `Suppressed bodies ${[...suppressed].join(", ")} left out: ${nodes.length} nodes, ${elements.length} elements remain`,
-    });
-
-  // Auto-shell at MESH time (#397): a body marked Shell has its thin walls
-  // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
-  // CTRIA3 + CTETRA model the user sees and solves — not an all-solid mesh whose
-  // shells only ever existed transiently inside the solve.
-  const mixed = inStage("shell_idealisation", () =>
-    buildMeshTimeShellModel(
-      nodes,
-      elements,
-      surfaceTriangles,
-      surfaceFaceIds,
-      new Set(payload.shellBodyIds ?? []),
-      payload.properties ?? [],
-      (line: string) => self.postMessage({ id, log: line }),
-    ),
+  const stored = storedMesh(dto, { ...payload, shellBodyIds }, (line) =>
+    self.postMessage({ id, log: line }),
   );
-  if (mixed) {
-    flushCoverage();
-    self.postMessage({
-      id,
-      ok: true,
-      nodes: mixed.nodes,
-      elements: mixed.elements,
-      properties: mixed.properties,
-      surfaceTriangles: mixed.surfaceTriangles,
-      surfaceFaceIds: mixed.surfaceFaceIds,
-    });
-    return;
-  }
-
   flushCoverage();
-  self.postMessage({
-    id,
-    ok: true,
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-  });
+  self.postMessage({ id, ok: true, ...stored });
 }
 
 // ── solve ─────────────────────────────────────────────────────────────────────

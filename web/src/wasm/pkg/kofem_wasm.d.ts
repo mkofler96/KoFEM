@@ -91,6 +91,70 @@ export interface FemMesh {
   bodyIds: Int32Array
   surfaceTriangles: Int32Array
   surfaceFaceIds: Int32Array
+  /** One route per body in `shell_bodies`; absent when none were given. */
+  shellRoutes?: ShellRoute[]
+  /** The surface mesh of the Shell bodies on the CAD path (KOF-498), with its
+   *  own vertex numbering. The arrays above then hold only the bodies meshed
+   *  as volumes, and are empty when there are none. */
+  midSurface?: MidSurfaceMesh
+}
+
+/** The thickest wall that counts as thin: max(max_wall, body_share × the
+ *  body's bounding-box diagonal) × (1 + slack), mm. */
+export interface ThinWallRule {
+  max_wall: number
+  body_share: number
+  slack: number
+}
+
+/** How a body marked Shell is meshed (KOF-498). On the CAD path its
+ *  mid-surface comes from the paired CAD faces; a body this cannot pair keeps
+ *  the mesh-based path, and `face` is the first face that does not fit. */
+export type ShellRoute =
+  | {
+      body: number
+      path: "cad"
+      walls: {
+        kind: "planar" | "cylindrical"
+        thickness: number
+        /** 1-based face ids; `top` is the wall's top side. */
+        top: number[]
+        bottom: number[]
+        sides: number[]
+      }[]
+    }
+  | {
+      body: number
+      path: "mesh"
+      face: number
+      reason: ShellRouteReason
+    }
+
+export type ShellRouteReason =
+  | "no_thin_wall"
+  | "no_opposite_face"
+  | "varying_thickness"
+  | "unsupported_surface"
+  | "partial_overlap"
+
+/** `triangles` are wound so each normal points to its wall's top side;
+ *  `midFace` indexes `faces` per triangle; `rimEdges` holds
+ *  [a, b, sideFace] per rim edge, vertex indices and the CAD side face. */
+export interface MidSurfaceMesh {
+  vertices: Float64Array
+  triangles: Int32Array
+  midFace: Int32Array
+  /** `topAreaRatio` / `bottomAreaRatio`: the area of each source face per
+   *  unit mid-surface area (1 when flat, r_face / r_mid when cylindrical). */
+  faces: {
+    body: number
+    top: number
+    bottom: number
+    thickness: number
+    topAreaRatio: number
+    bottomAreaRatio: number
+  }[]
+  rimEdges: Int32Array
 }
 
 /** Properties of every CAD face of the cached shape, one entry per face in
@@ -119,9 +183,13 @@ export interface KofemModule {
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
    *  Returns `{ overlaps }` instead of a mesh when the surface mesh overlaps itself
    *  or Netgen could not mesh some faces (kind "unmeshed").
-   *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
+   *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d, solid_max_sizes?, face_max_sizes?, shell_bodies?, thin_wall? }`;
+   *                   `thin_wall` ({@link ThinWallRule}) is required with `shell_bodies`.
    */
   generate_fem_mesh(opts_json: string): FemMesh | { overlaps: MeshOverlap[] }
+  /** The {@link ShellRoute} of each body in `shell_bodies`, without meshing.
+   *  @param opts_json JSON `{ shell_bodies: number[], thin_wall: ThinWallRule }`. */
+  plan_shell_bodies(opts_json: string): ShellRoute[]
   /** Split faces or bodies of the loaded shape with a plane (see
    *  {@link SplitGeometryOptions}) and return the edited geometry as STEP
    *  AP214 bytes. Throws, naming the face or body, when the plane leaves any

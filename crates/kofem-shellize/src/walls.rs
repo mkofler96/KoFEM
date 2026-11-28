@@ -153,7 +153,7 @@ pub(crate) fn face_adjacency(mesh: &ShellizeMesh) -> HashMap<i32, HashSet<i32>> 
 
 /// Relative slack on the thickest wall: a wall exactly `max_wall` thick is a
 /// wall, even when its measured gap rounds a few ulps above it.
-const MAX_WALL_SLACK: f64 = 1e-6;
+pub const MAX_WALL_SLACK: f64 = 1e-6;
 
 /// Pair up opposite planar faces of the same body into thin walls, keeping the
 /// OUTER face of each pair (its normal points away from the other face):

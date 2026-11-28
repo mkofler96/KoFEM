@@ -199,6 +199,10 @@ export function buildAnalysisSetup(build, title) {
     volMesh: null,
     surfaceTriangles: build.surfaceTriangles,
     surfaceFaceIds: build.surfaceFaceIds,
+    ...(build.midSurfaceLinks
+      ? { midSurfaceLinks: build.midSurfaceLinks }
+      : {}),
+    ...(build.shellRoutes.length > 0 ? { shellRoutes: build.shellRoutes } : {}),
     elementOrder: build.meshSettings.order,
     // The Mesh step's face sizes (KOF-394), as the store holds them, so a
     // re-mesh of the opened example keeps them. Only written when there are

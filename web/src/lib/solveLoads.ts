@@ -22,6 +22,18 @@ type ShellNodalLoad = {
 //   force on edges  — uniform line load q = F/ΣL along the loaded edge
 //   pressure        — -p·n̂·A/3 per facet node, n̂ the facet winding normal
 //                     (a shell has no outward side; + pushes against n̂)
+// The area each face of a surface load stands for, per unit of its own
+// (SurfaceLoad.areaScales), one entry per face. Without scales every face
+// stands for its own area; only a curved CAD shell face's load has them.
+export function faceAreaScales(sl: SurfaceLoad): number[] {
+  if (!sl.areaScales) return sl.faces.map(() => 1);
+  if (sl.areaScales.length !== sl.faces.length)
+    throw new Error(
+      `surface load: ${sl.areaScales.length} area scales for ${sl.faces.length} faces`,
+    );
+  return sl.areaScales;
+}
+
 export function distributeSurfaceLoad(
   sl: SurfaceLoad,
   posOf: (nodeId: number) => [number, number, number],
@@ -29,6 +41,8 @@ export function distributeSurfaceLoad(
 ): void {
   if (sl.faces.length === 0)
     throw new Error("surface load: selection contains no faces or edges");
+  const scales = faceAreaScales(sl);
+  const scaleOf = new Map(sl.faces.map((f, i) => [f, scales[i]]));
   const facets = sl.faces.filter((f) => f.length === 3);
   const edges = sl.faces.filter((f) => f.length === 2);
   if (facets.length + edges.length !== sl.faces.length)
@@ -41,10 +55,11 @@ export function distributeSurfaceLoad(
     const [a, b, c] = [posOf(f[0]), posOf(f[1]), posOf(f[2])];
     const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const scale = (scaleOf.get(f) as number) / 2;
     return [
-      (ab[1] * ac[2] - ab[2] * ac[1]) / 2,
-      (ab[2] * ac[0] - ab[0] * ac[2]) / 2,
-      (ab[0] * ac[1] - ab[1] * ac[0]) / 2,
+      (ab[1] * ac[2] - ab[2] * ac[1]) * scale,
+      (ab[2] * ac[0] - ab[0] * ac[2]) * scale,
+      (ab[0] * ac[1] - ab[1] * ac[0]) * scale,
     ];
   };
 

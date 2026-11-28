@@ -186,6 +186,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         a.loadGroups,
         a.elements,
         a.couplingGroups,
+        a.midSurfaceLinks,
       );
       s.nextBcGroupId = a.nextBcGroupId;
       s.nextLoadGroupId = a.nextLoadGroupId;
@@ -222,6 +223,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.volMesh = a.volMesh;
       s.surfaceTriangles = a.surfaceTriangles;
       s.surfaceFaceIds = a.surfaceFaceIds;
+      s.midSurfaceLinks = a.midSurfaceLinks;
+      s.shellRoutes = a.shellRoutes;
       s.modelName = a.modelName;
       s.result = a.result;
       s.resultType = a.resultType;
@@ -341,6 +344,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.volMesh = null;
       s.surfaceTriangles = null;
       s.surfaceFaceIds = null;
+      s.midSurfaceLinks = null;
+      s.shellRoutes = [];
       s.viewRepr = "surface";
       s.deformScale = AUTO_DEFORM_SCALE;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;

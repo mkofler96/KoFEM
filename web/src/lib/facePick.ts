@@ -73,7 +73,8 @@ export function sameFaceNodes(a: number[], b: number[]): boolean {
  *
  * Re-selecting an item that is already in the selection removes it instead of
  * adding a duplicate (#264); otherwise it is appended. Items are identified by
- * their node-id set (see `sameFaceNodes`). The result is relabeled
+ * their CAD face when they have one, else by their node-id set (see
+ * `sameFaceNodes`). The result is relabeled
  * "<noun> 1..N" by position so labels stay contiguous after a toggle. `noun`
  * is "Face" for region picks and "Edge" for polyline picks.
  *
@@ -92,8 +93,12 @@ export function toggleFaceSelection(
   noun: SelectionNoun,
   floodFillTri?: Tri,
 ): PickedFace[] {
+  // A whole CAD face is that face: a shell's upper and lower faces resolve
+  // to the same facets, so the same nodes (KOF-498).
   let existingIdx = current.findIndex((f) =>
-    sameFaceNodes(f.nodeIds, picked.nodeIds),
+    picked.cadFaceId !== undefined
+      ? f.cadFaceId === picked.cadFaceId
+      : sameFaceNodes(f.nodeIds, picked.nodeIds),
   );
   if (existingIdx < 0 && floodFillTri !== undefined) {
     existingIdx = current.findIndex(
@@ -110,6 +115,20 @@ export function toggleFaceSelection(
     ...f,
     label: selectionLabel(noun, i + 1, f.nodeIds.length),
   }));
+}
+
+// The axis a picked face is snapped to, and whether it faces that axis's
+// positive end: the largest component of the clicked surface's normal.
+export function snapToAxis(normal: { x: number; y: number; z: number }): {
+  axis: "X" | "Y" | "Z";
+  isMax: boolean;
+} {
+  const ax = Math.abs(normal.x),
+    ay = Math.abs(normal.y),
+    az = Math.abs(normal.z);
+  if (ax >= ay && ax >= az) return { axis: "X", isMax: normal.x > 0 };
+  if (ay >= ax && ay >= az) return { axis: "Y", isMax: normal.y > 0 };
+  return { axis: "Z", isMax: normal.z > 0 };
 }
 
 // What a click selects. "face" is a surface region, "edge" the boundary

@@ -12,13 +12,13 @@
 //   describes, so the two pages compare one plate, solid against shell.
 //
 // Built as a user builds it in the GUI (lib/recipe.mjs): import the quarter
-// x, y ≥ 0 of the strip as a STEP file, mark the body Shell, mesh it (the app
-// measures the 1 mm wall, well inside its 15 mm thin-wall limit, and collapses
-// it to a mid-surface of linear triangles), put symmetry supports on the edges
-// x = 0 and y = 0, pull the edge x = L, solve, and read the largest nodal von
-// Mises stress ÷ σ in the Results panel's hand check. The side faces of the
-// plate collapse to the shell's edges, so each support and the load is an
-// Edge pick of one whole CAD face.
+// x, y ≥ 0 of the strip as a STEP file, mark the body Shell, give the hole
+// face an element size, mesh it (the app pairs the plate's two faces, 1 mm
+// apart, and meshes their mid-surface with linear triangles, KOF-498), put
+// symmetry supports on the edges x = 0 and y = 0, pull the edge x = L, solve,
+// and read the largest nodal von Mises stress ÷ σ in the Results panel's hand
+// check. The side faces of the plate collapse to the shell's edges, so each
+// support and the load is an Edge pick of one whole CAD face.
 //
 // Why this model:
 //   - The full thickness: a shell is its mid-surface, so the solid case's
@@ -28,23 +28,17 @@
 //     on y = 0) and the rotations a mirror plane forbids (Ry, Rz on x = 0;
 //     Rx, Rz on y = 0). Uz is held on both cut edges too: the in-plane load
 //     never moves the plate out of its plane, so this only stops it floating.
+//   - The hole edge at h/8 = 0.125 mm (mesh.localSizes on the hole face,
+//     KOF-394). The peak is a stress at a point, read as the average of the
+//     one stress each triangle there reports at its centroid, so it is only
+//     as good as the triangles at the hole. Refining the hole edge alone
+//     takes the read-out from −8.9 % to −0.8 % for 7 % more elements;
+//     refining the whole plate to 0.25 mm reaches only −1.7 % with 15 times
+//     the elements (convergence.mjs).
 //
-// Tolerance: 8 %. The read-out is the largest NODAL von Mises stress: each
-// triangle reports one stress, at its centroid, and the app averages them to
-// the nodes.
-// At A, where the peak is, only one or two triangles meet, so the read-out is
-// their stress, and it lands a few percent above or below 3.14 depending on
-// how the mesher cuts that corner — not on the element size. Netgen puts at
-// least two elements along every edge, so next to the 1 mm cut edge the
-// triangle at A stays about 0.6 mm on every mesh from 6 mm down, while the
-// rest of the hole follows the maximum size: refining does not refine the
-// peak, and the value does not settle (convergence.mjs; the study from 4 to
-// 0.5 mm reads −5.9 % to +2.8 %; on the finest meshes the peak moves to the
-// next node along the hole and reads low). The CI mesh, 1 mm, reads −1.0 %;
-// 8 % covers every level swept, so a user who
-// re-meshes at another size still sees the hand check agree. It is a band for
-// the scatter of one-stress-per-triangle read-outs at a peak, not a mesh
-// picked for luck. The solid case's quadratic tetrahedra keep 3 %.
+// Tolerance: 8 %, as before the CAD mid-surface. Kt now converges from below
+// as the mesh is refined with the hole edge at h/8: −2.2 % at 4 mm, −2.1 % at
+// 2 mm, −0.8 % at 1 mm (the CI mesh), −0.03 % at 0.5 mm.
 //
 // References: Kirsch (1898); Howland, Phil. Trans. R. Soc. A 229 (1930) 49–86;
 // Pilkey & Pilkey, Peterson's Stress Concentration Factors, chart 4.1.
@@ -69,6 +63,7 @@ const KT_HOWLAND = 3.14;
 const symmetryX = { at: [0, (a + b) / 2, t / 2] }; // face x = 0, y ∈ [a, b]
 const symmetryY = { at: [(a + L) / 2, 0, t / 2] }; // face y = 0, x ∈ [a, L]
 const pulledEdge = { at: [L, b / 2, t / 2] }; // face x = L
+const holeFace = { at: [a * Math.SQRT1_2, a * Math.SQRT1_2, t / 2] }; // r = a
 
 export default {
   id: "plate-with-hole-shell",
@@ -91,7 +86,7 @@ export default {
     summary:
       "The solid page's strip with a hole, as a shell mid-surface: Howland's Kt = 3.14 from linear shell triangles.",
     model:
-      "Quarter of a long strip with a central hole, x, y ≥ 0, full thickness, meshed as a shell.",
+      "Quarter of a long strip with a central hole, x, y ≥ 0, full thickness, meshed as a shell with the hole edge refined to 0.125 mm.",
     inputs: [
       ["a", a, "mm"],
       ["b", b, "mm"],
@@ -112,7 +107,11 @@ export default {
       quarterStripWithHoleStep(a, b, L, t, "Plate with a hole (quarter)"),
     splits: [],
     discretization: { kind: "shell", thickness: t },
-    mesh: { maxElementSize: h, order: 1 },
+    mesh: {
+      maxElementSize: h,
+      order: 1,
+      localSizes: [{ faces: [holeFace], size: h / 8 }],
+    },
     material: APP_STEEL,
     supports: [
       {

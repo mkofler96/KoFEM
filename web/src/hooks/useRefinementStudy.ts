@@ -38,6 +38,7 @@ import {
 import { solvePayload } from "../lib/solve/payload";
 import { carryGroupsToMesh } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
+import { shellFaceNodes } from "../lib/cadShell";
 import { computeResultRange } from "../lib/resultField";
 import { sendToWorker } from "../workers/sharedWorker";
 import { intlTag, tr, useLocale } from "../i18n/useLocale";
@@ -51,6 +52,7 @@ type StudySource = Pick<
   | "elements"
   | "surfaceTriangles"
   | "surfaceFaceIds"
+  | "midSurfaceLinks"
   | "bcGroups"
   | "loadGroups"
   | "tieGroups"
@@ -104,9 +106,13 @@ export function refinementRefusal(s: StudySource): string | null {
         elements: s.elements,
         surfaceTriangles: s.surfaceTriangles,
         surfaceFaceIds: s.surfaceFaceIds,
+        midSurfaceLinks: s.midSurfaceLinks,
       },
       s.stepSurface,
     ).nodesByFace,
+    s.midSurfaceLinks
+      ? shellFaceNodes(s.midSurfaceLinks, s.elements)
+      : new Map(),
   );
   if (carried.dropped.length > 0)
     return tr(studiesMessages).notFaces(carried.dropped.join("; "));
@@ -155,6 +161,8 @@ function levelSnapshot(s: ModelState): RefinementLevelSnapshot {
     properties: s.properties,
     surfaceTriangles: s.surfaceTriangles,
     surfaceFaceIds: s.surfaceFaceIds,
+    midSurfaceLinks: s.midSurfaceLinks,
+    shellRoutes: s.shellRoutes,
     meshSizes: s.meshSizes,
     meshSuppressedIds: s.meshSuppressedIds,
     bcGroups: s.bcGroups,
@@ -205,6 +213,7 @@ export function useRefinementStudy() {
   const elements = useModelStore((s) => s.elements);
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
+  const midSurfaceLinks = useModelStore((s) => s.midSurfaceLinks);
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
@@ -225,6 +234,7 @@ export function useRefinementStudy() {
       elements,
       surfaceTriangles,
       surfaceFaceIds,
+      midSurfaceLinks,
       bcGroups,
       loadGroups,
       tieGroups,
@@ -243,6 +253,7 @@ export function useRefinementStudy() {
       elements,
       surfaceTriangles,
       surfaceFaceIds,
+      midSurfaceLinks,
       bcGroups,
       loadGroups,
       tieGroups,

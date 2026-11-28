@@ -12,6 +12,8 @@ use std::collections::BTreeSet;
 use kofem_fem::count_as_f64;
 use kofem_shellize::coupled_model::{CoupledModel, ExplicitCoupledModel};
 use kofem_shellize::geometry::Vec3;
+use kofem_shellize::mid_surface::SHELL_BODY_WALL_SHARE;
+use kofem_shellize::walls::MAX_WALL_SLACK;
 use kofem_shellize::{
     build_coupled_model, build_explicit_coupled_model, build_shell_transition_model,
     detect_curved_walls, detect_wall_pairs, extract_thin_wall_shells, face_props, shell_body_tets,
@@ -281,6 +283,34 @@ impl ShellSet {
     #[must_use]
     pub fn triangle_source(&self) -> Vec<i32> {
         self.shells.triangle_source.clone()
+    }
+}
+
+/// The thickest wall that counts as thin for a body marked Shell:
+/// `max(maxWall, bodyShare × the body's bounding-box diagonal) × (1 + slack)`. The engine's
+/// CAD mid-surface (KOF-498) takes the same rule, so the app passes it these
+/// numbers rather than keeping its own.
+#[wasm_bindgen]
+pub struct ThinWallRule {
+    max_wall: f64,
+    body_share: f64,
+    slack: f64,
+}
+
+getters!(ThinWallRule {
+    "maxWall" => max_wall: f64,
+    "bodyShare" => body_share: f64,
+    "slack" => slack: f64,
+});
+
+/// The thin-wall rule of [`extract_thin_wall_shells`] for bodies marked Shell.
+#[wasm_bindgen(js_name = shellThinWallRule)]
+#[must_use]
+pub fn shell_thin_wall_rule() -> ThinWallRule {
+    ThinWallRule {
+        max_wall: ExtractOptions::default().max_wall,
+        body_share: SHELL_BODY_WALL_SHARE,
+        slack: MAX_WALL_SLACK,
     }
 }
 

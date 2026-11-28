@@ -37,6 +37,14 @@ interface GeometryLayerProps {
   // Body-to-body interface to show: its shared faces are drawn on top (they lie
   // inside the assembly) and every body outside the pair is dimmed.
   highlightInterface: BodyInterface | null;
+  // Over the mesh: only these bodies, drawn transparent, their CAD faces
+  // picked through onFacePick and the picked ones highlighted (the Shell
+  // bodies on the CAD mid-surface path, KOF-498).
+  ghost?: {
+    bodies: readonly number[];
+    onFacePick?: (cadFaceId: number, e: ThreeEvent<MouseEvent>) => void;
+    pickedFaceIds: number[];
+  };
 }
 
 // Fallback body colour when a body has no material assignment yet (or an
@@ -44,6 +52,8 @@ interface GeometryLayerProps {
 const DEFAULT_BODY_COLOR = "#7a9bbf";
 // Opacity applied to the bodies that are NOT the one currently being assigned.
 const DIMMED_OPACITY = 0.15;
+// A Shell body's CAD geometry over its mid-surface: there to be seen through.
+const GHOST_OPACITY = 0.22;
 // Face outlines contrast with the body they are drawn on: dark lines on a light
 // material, light lines on a dark one (the default steel blue shades dark).
 const OUTLINE_ON_LIGHT = "#1f2937";
@@ -79,6 +89,7 @@ export function GeometryLayer({
   wireframe,
   highlightBodyId,
   highlightInterface,
+  ghost,
 }: GeometryLayerProps) {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const properties = useModelStore((s) => s.properties);
@@ -174,7 +185,11 @@ export function GeometryLayer({
         : null,
     [stepSurface],
   );
-  const pickedIds = faceSizePicking ? faceSizePickIds : splitFaceIds;
+  const pickedIds = ghost
+    ? ghost.pickedFaceIds
+    : faceSizePicking
+      ? faceSizePickIds
+      : splitFaceIds;
   const pickedFaces = useMemo(
     () =>
       faced && pickedIds.length > 0 ? cadFaceTriangles(faced, pickedIds) : null,
@@ -206,14 +221,20 @@ export function GeometryLayer({
 
   // Picking: the clicked triangle's CAD face joins (or leaves) the faces the
   // next split cuts, or the faces the next face size applies to.
-  const picking = faceSizePicking || splitPicking;
+  const picking = ghost
+    ? ghost.onFacePick !== undefined
+    : faceSizePicking || splitPicking;
   const pickFace = (triIndices: number[]) => (e: ThreeEvent<MouseEvent>) => {
     if (e.faceIndex == null || !faced) return;
-    e.stopPropagation();
     const tri = triIndices[e.faceIndex];
     if (tri === undefined) return;
-    if (faceSizePicking) toggleFaceSizePick(faced.faceIds[tri]);
-    else toggleSplitFace(faced.faceIds[tri]);
+    const face = faced.faceIds[tri];
+    // The ghost's handler decides whether the click is its own, so one it
+    // leaves alone reaches the mesh behind.
+    if (ghost?.onFacePick) return ghost.onFacePick(face, e);
+    e.stopPropagation();
+    if (faceSizePicking) toggleFaceSizePick(face);
+    else toggleSplitFace(face);
   };
 
   // body id → its assigned material's colour (via the body's property).
@@ -236,7 +257,8 @@ export function GeometryLayer({
           // Hidden (the eye) or suppressed (as good as deleted): not drawn.
           if (
             hiddenBodyIds.includes(bodyId) ||
-            properties.some((p) => p.id === bodyId && p.suppressed)
+            properties.some((p) => p.id === bodyId && p.suppressed) ||
+            (ghost && !ghost.bodies.includes(bodyId))
           )
             return null;
           // When a body is being assigned (highlightBodyId set), every other body
@@ -246,9 +268,11 @@ export function GeometryLayer({
             (highlightInterface !== null &&
               bodyId !== highlightInterface.bodyA &&
               bodyId !== highlightInterface.bodyB);
+          const see = ghost ? GHOST_OPACITY : dimmed ? DIMMED_OPACITY : 1;
           return (
             <group key={bodyId}>
               <mesh
+                name={ghost ? "cad-shell-ghost" : undefined}
                 onClick={picking && faced ? pickFace(triIndices) : undefined}
               >
                 <bufferGeometry>
@@ -265,9 +289,9 @@ export function GeometryLayer({
                   color={bodyColor(bodyId)}
                   side={THREE.DoubleSide}
                   wireframe={wireframe}
-                  transparent={dimmed}
-                  opacity={dimmed ? DIMMED_OPACITY : 1}
-                  depthWrite={!dimmed}
+                  transparent={see < 1}
+                  opacity={see}
+                  depthWrite={see === 1}
                   // Push the faces back a little so the outlines drawn on them
                   // win the depth test instead of flickering in and out.
                   polygonOffset
