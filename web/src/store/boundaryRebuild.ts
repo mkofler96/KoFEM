@@ -241,9 +241,10 @@ function loadedFaces(
 //   a point pick               — a single mesh node, which spans no face
 //
 // The single definition rebuildLoads and rebuildSurfaceLoads both consult to
-// decide which of them owns a face. Written once on purpose: a load that both
+// decide which of them owns a face, and the load card to count how often a
+// moment is applied (lib/groupSummary). Written once on purpose: a load that both
 // claim is applied twice, and a load neither claims disappears without a word.
-function isNodalFace(
+export function isNodalFace(
   face: { nodeIds: number[]; geometry?: PickGeometry },
   refPoints: Set<number>,
 ): boolean {

@@ -107,7 +107,7 @@ fn a_negative_pressure_pulls_with_a_negative_total() {
 #[test]
 fn a_moment_has_a_total_but_no_traction() {
     let summary =
-        load_summary(LoadValue::Moment([0.0, 0.0, -1000.0]), Some(1.0e4)).expect("summary");
+        load_summary(LoadValue::Moment([0.0, 0.0, -1000.0], 1), Some(1.0e4)).expect("summary");
     assert!(close(summary.total.expect("total"), 1000.0));
     assert_eq!(summary.mean_traction, None);
 }
@@ -116,7 +116,7 @@ fn a_moment_has_a_total_but_no_traction() {
 fn a_load_without_a_value_is_refused_rather_than_zero() {
     for value in [
         LoadValue::Force([0.0; 3]),
-        LoadValue::Moment([0.0; 3]),
+        LoadValue::Moment([0.0; 3], 1),
         LoadValue::Pressure(0.0),
         LoadValue::Force([f64::NAN, 0.0, 1.0]),
     ] {
@@ -149,4 +149,21 @@ fn a_pressure_on_an_area_not_known_has_no_total() {
     let summary = load_summary(LoadValue::Pressure(3.0), None).expect("summary");
     assert_eq!(summary.total, None);
     assert_eq!(summary.mean_traction, Some(3.0));
+}
+
+#[test]
+fn a_moment_on_several_faces_totals_once_per_face() {
+    // The solve applies a moment group's full vector to each of its face
+    // selections (momentToNodalForces), so two faces carry it twice.
+    let summary =
+        load_summary(LoadValue::Moment([0.0, 0.0, 1000.0], 2), Some(2.0e4)).expect("summary");
+    assert_eq!(summary.total, Some(2000.0));
+}
+
+#[test]
+fn a_moment_applied_nowhere_is_refused() {
+    assert!(matches!(
+        load_summary(LoadValue::Moment([0.0, 0.0, 1000.0], 0), Some(1.0)),
+        Err(FemError::BoundarySummary { .. })
+    ));
 }

@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::FemError;
+use crate::{count_as_f64, FemError};
 
 fn refuse(reason: impl Into<String>) -> FemError {
     FemError::BoundarySummary {
@@ -77,8 +77,10 @@ pub fn selected_area(face_areas: &[f64], selected: &[u32]) -> Result<SelectedAre
 pub enum LoadValue {
     /// The total force vector (N), spread over the faces as a uniform traction.
     Force([f64; 3]),
-    /// The total moment vector (N·mm).
-    Moment([f64; 3]),
+    /// A moment vector (N·mm) and how many times the solve applies it: once
+    /// on each face selection (`momentToNodalForces` in the app), and once
+    /// shared by the group's point selections.
+    Moment([f64; 3], usize),
     /// The pressure (N/mm²) on every face, positive pushing in.
     Pressure(f64),
 }
@@ -86,9 +88,10 @@ pub enum LoadValue {
 /// What a load applies over its area.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LoadSummary {
-    /// A force's or moment's magnitude, or a pressure times the area: the
-    /// total force it pushes with, signed like the pressure. A pressure on an
-    /// area that is not known has none.
+    /// A force's magnitude, a moment's magnitude times the times it is
+    /// applied, or a pressure times the area: the total force it pushes with,
+    /// signed like the pressure. A pressure on an area that is not known has
+    /// none.
     pub total: Option<f64>,
     /// The force per unit area (N/mm²): a force's magnitude over the area, or
     /// the pressure. A moment has none, nor a force on an area not known.
@@ -108,7 +111,8 @@ fn magnitude(vector: [f64; 3]) -> f64 {
 ///
 /// # Errors
 /// [`FemError::BoundarySummary`] for an area that is not positive and finite,
-/// or a value that is zero or not finite: such a load has nothing to show.
+/// a value that is zero or not finite, or a moment applied to no selection:
+/// such a load has nothing to show.
 pub fn load_summary(value: LoadValue, area: Option<f64>) -> Result<LoadSummary, FemError> {
     if let Some(area) = area {
         if !(area.is_finite() && area > 0.0) {
@@ -116,9 +120,12 @@ pub fn load_summary(value: LoadValue, area: Option<f64>) -> Result<LoadSummary, 
         }
     }
     let size = match value {
-        LoadValue::Force(vector) | LoadValue::Moment(vector) => magnitude(vector),
+        LoadValue::Force(vector) | LoadValue::Moment(vector, _) => magnitude(vector),
         LoadValue::Pressure(pressure) => pressure.abs(),
     };
+    if matches!(value, LoadValue::Moment(_, 0)) {
+        return Err(refuse("the moment is applied to no selection"));
+    }
     if !size.is_finite() || size == 0.0 {
         return Err(refuse(format!("the load's value {value:?} has no size")));
     }
@@ -127,8 +134,8 @@ pub fn load_summary(value: LoadValue, area: Option<f64>) -> Result<LoadSummary, 
             total: Some(size),
             mean_traction: area.map(|area| size / area),
         },
-        LoadValue::Moment(_) => LoadSummary {
-            total: Some(size),
+        LoadValue::Moment(_, applied) => LoadSummary {
+            total: Some(size * count_as_f64(applied)),
             mean_traction: None,
         },
         LoadValue::Pressure(pressure) => LoadSummary {

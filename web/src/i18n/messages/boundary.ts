@@ -302,6 +302,34 @@ export const boundaryMessages = defineMessages({
     es: (labels: string) => `${labels} son la misma cara, contada una vez`,
     pt: (labels: string) => `${labels} são a mesma face, contada uma vez`,
   },
+  summaryEachOf: {
+    en: (each: string, count: number) =>
+      `${each} on each of ${count} selections`,
+    de: (each: string, count: number) =>
+      `${each} auf jede von ${count} Auswahlen`,
+    fr: (each: string, count: number) =>
+      `${each} sur chacune des ${count} sélections`,
+    it: (each: string, count: number) =>
+      `${each} su ciascuna di ${count} selezioni`,
+    es: (each: string, count: number) =>
+      `${each} en cada una de ${count} selecciones`,
+    pt: (each: string, count: number) =>
+      `${each} em cada uma de ${count} seleções`,
+  },
+  summarySameFaceMoment: {
+    en: (labels: string) =>
+      `${labels} are the same face: its area counts once, but the moment is applied to each`,
+    de: (labels: string) =>
+      `${labels} sind dieselbe Fläche: ihre Fläche zählt einmal, das Moment wirkt aber auf jede`,
+    fr: (labels: string) =>
+      `${labels} sont la même face : son aire compte une fois, mais le moment s'applique à chacune`,
+    it: (labels: string) =>
+      `${labels} sono la stessa faccia: la sua area conta una volta, ma il momento si applica a ciascuna`,
+    es: (labels: string) =>
+      `${labels} son la misma cara: su área cuenta una vez, pero el momento se aplica a cada una`,
+    pt: (labels: string) =>
+      `${labels} são a mesma face: a área conta uma vez, mas o momento é aplicado a cada uma`,
+  },
   addFaceTo: {
     en: (name: string) => `Add face to ${name}`,
     de: (name: string) => `Fläche zu ${name} hinzufügen`,

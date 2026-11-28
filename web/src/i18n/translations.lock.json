@@ -895,6 +895,14 @@
     "es": "cc6eb0e407c6",
     "pt": "f537beeee626"
   },
+  "boundary.ts:boundaryMessages.summaryEachOf": {
+    "en": "62fa011055b7",
+    "de": "49e46beab2e5",
+    "fr": "cfb4f8227dbd",
+    "it": "4b89db327364",
+    "es": "6afe4e7085e2",
+    "pt": "ab59e47024d1"
+  },
   "boundary.ts:boundaryMessages.summaryHolds": {
     "en": "7e12a70d41fa",
     "de": "2f99dac7f72b",
@@ -942,6 +950,14 @@
     "it": "21b58287788f",
     "es": "086a981d600a",
     "pt": "528d767ccbc0"
+  },
+  "boundary.ts:boundaryMessages.summarySameFaceMoment": {
+    "en": "b08c3ab0ddff",
+    "de": "33282e202664",
+    "fr": "0ac53435b632",
+    "it": "0ee2b9cbea78",
+    "es": "94e08dc1f1a2",
+    "pt": "93be35bcffce"
   },
   "boundary.ts:boundaryMessages.summarySets": {
     "en": "1038a8f85daf",

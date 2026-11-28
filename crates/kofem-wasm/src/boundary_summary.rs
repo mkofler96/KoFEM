@@ -94,14 +94,21 @@ pub fn force_summary(components: &[f64], area: Option<f64>) -> Result<LoadSummar
     summary(LoadValue::Force(vector(components)?), area)
 }
 
-/// A total moment [Mx, My, Mz] (N·mm) over `area` (mm²), undefined when the
-/// selection's area is not known.
+/// A moment [Mx, My, Mz] (N·mm) the solve applies `applied` times, over
+/// `area` (mm²), undefined when the selection's area is not known.
 ///
 /// # Errors
 /// Not three components, or the checks of [`kofem_fem::load_summary`].
 #[wasm_bindgen(js_name = momentSummary)]
-pub fn moment_summary(components: &[f64], area: Option<f64>) -> Result<LoadSummary, JsError> {
-    summary(LoadValue::Moment(vector(components)?), area)
+pub fn moment_summary(
+    components: &[f64],
+    applied: u32,
+    area: Option<f64>,
+) -> Result<LoadSummary, JsError> {
+    summary(
+        LoadValue::Moment(vector(components)?, applied as usize),
+        area,
+    )
 }
 
 /// A pressure (N/mm²) over `area` (mm²), undefined when the

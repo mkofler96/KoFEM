@@ -112,7 +112,7 @@ describe("loadSummaryText", () => {
         {
           kind: "moment",
           area: { state: "measured", area: 5027, repeated: [] },
-          value: { total: 1000 },
+          value: { total: 1000, applied: 1 },
         },
         [],
         en,
@@ -190,6 +190,43 @@ describe("loadSummaryText", () => {
         "en-US",
       ).warning,
     ).toBe("Face 1 and Face 3 are the same face, counted once");
+  });
+});
+
+describe("a moment on several selections", () => {
+  // The solve applies a moment group's full vector to each face selection
+  // (momentToNodalForces), unlike a force, which is one total for the group.
+  test("says it is applied to each, and the total the solve gets", () => {
+    expect(
+      loadSummaryText(
+        {
+          kind: "moment",
+          area: { state: "measured", area: 20_000, repeated: [] },
+          value: { total: 2000, applied: 2 },
+        },
+        [],
+        en,
+        "en-US",
+      ).summary,
+    ).toBe("1,000 N·mm on each of 2 selections → 2,000 N·mm over 20,000 mm²");
+  });
+
+  test("a face picked twice takes the moment twice, and says so", () => {
+    const faces = [face(1, 2), face(2, 2)];
+    expect(
+      loadSummaryText(
+        {
+          kind: "moment",
+          area: { state: "measured", area: 10_000, repeated: [2] },
+          value: { total: 2000, applied: 2 },
+        },
+        faces,
+        en,
+        "en-US",
+      ).warning,
+    ).toBe(
+      "Face 1 and Face 2 are the same face: its area counts once, but the moment is applied to each",
+    );
   });
 });
 

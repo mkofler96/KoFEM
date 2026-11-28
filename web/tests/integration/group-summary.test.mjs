@@ -90,6 +90,7 @@ describe("loadFigures", () => {
     const figures = loadFigures(
       group({ kind: "force", components: [0, 0, -100] }),
       cadFaces,
+      [],
     );
     expect(figures.kind).toBe("force");
     expectClose(figures.value.total, 100);
@@ -104,20 +105,63 @@ describe("loadFigures", () => {
         faces: [entry(1, 6), entry(2, 7)],
       }),
       cadFaces,
+      [],
     );
     expectClose(figures.value.total, 2 * 2 * plateArea);
     expect(figures.value.pressure).toBe(2);
   });
 
   test("a legacy single-axis force reads its dof and total", () => {
-    const figures = loadFigures(group({ dof: 1, totalForce: -50 }), cadFaces);
+    const figures = loadFigures(
+      group({ dof: 1, totalForce: -50 }),
+      cadFaces,
+      [],
+    );
     expectClose(figures.value.total, 50);
+  });
+
+  test("a moment is applied once per face selection, as the solve applies it", () => {
+    const figures = loadFigures(
+      group({
+        kind: "moment",
+        components: [0, 0, 1000],
+        faces: [entry(1, 6), entry(2, 7)],
+      }),
+      cadFaces,
+      [],
+    );
+    expect(figures.value).toEqual({ total: 2000, applied: 2 });
+  });
+
+  test("a moment's point selections share it once, like the solve's", () => {
+    const figures = loadFigures(
+      group({
+        kind: "moment",
+        components: [0, 0, 1000],
+        faces: [entry(1, undefined, "point"), entry(2, undefined, "point")],
+      }),
+      cadFaces,
+      [],
+    );
+    expect(figures.value).toEqual({ total: 1000, applied: 1 });
+  });
+
+  test("a coupling's reference point is a point selection", () => {
+    const refPoint = { ...entry(1, undefined), nodeIds: [99] };
+    delete refPoint.geometry;
+    const figures = loadFigures(
+      group({ kind: "moment", components: [500, 0, 0], faces: [refPoint] }),
+      cadFaces,
+      [{ refNodeId: 99 }],
+    );
+    expect(figures.value).toEqual({ total: 500, applied: 1 });
   });
 
   test("a zero force has no value, not 0 N", () => {
     const figures = loadFigures(
       group({ kind: "force", components: [0, 0, 0] }),
       cadFaces,
+      [],
     );
     expect(figures.value).toBeNull();
   });

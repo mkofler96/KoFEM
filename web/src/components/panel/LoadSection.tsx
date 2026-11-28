@@ -278,7 +278,7 @@ export function LoadSection({
             summary={
               femReady
                 ? loadSummaryText(
-                    loadFigures(group, cadFaces),
+                    loadFigures(group, cadFaces, couplingGroups),
                     group.faces,
                     text,
                     intl,

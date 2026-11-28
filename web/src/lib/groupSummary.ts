@@ -22,6 +22,9 @@ import {
   type LoadKind,
   type NamedLoadGroup,
 } from "../store/boundaryGroups";
+import { isNodalFace } from "../store/boundaryRebuild";
+import type { CouplingGroup } from "../store/couplingSlice";
+import { referencePointIds } from "./coupling";
 import { formatMeasure, type CadFaceProperties } from "./cadFaceProperties";
 import { MODEL_UNITS } from "./modelUnits";
 import type { boundaryMessages } from "../i18n/messages/boundary";
@@ -79,13 +82,15 @@ export function groupArea(
 }
 
 /** A load's figures: a force's magnitude and mean traction |F| / A (null on
- *  an area not measured), a moment's magnitude, or a pressure and the total
+ *  an area not measured), a moment's magnitude times the `applied` times the
+ *  solve applies it (once per face selection, once shared by the point
+ *  selections: rebuildLoads), or a pressure and the total
  *  force p · A it pushes with (null on an area not measured). `value` is null
  *  for a load of zero size, which has nothing to show. */
 export type LoadFigures = { area: GroupArea } & (
   | { kind: LoadKind; value: null }
   | { kind: "force"; value: { total: number; meanTraction: number | null } }
-  | { kind: "moment"; value: { total: number } }
+  | { kind: "moment"; value: { total: number; applied: number } }
   | { kind: "pressure"; value: { pressure: number; total: number | null } }
 );
 
@@ -95,9 +100,22 @@ function required(value: number | undefined, what: string): number {
   return value;
 }
 
+// How many times the solve applies a moment group's vector: in full on each
+// face selection (momentToNodalForces), and shared by its nodal selections
+// (rebuildLoads), told apart by the solve's own test.
+function momentApplications(
+  group: NamedLoadGroup,
+  couplingGroups: readonly CouplingGroup[],
+): number {
+  const refPoints = referencePointIds([...couplingGroups]);
+  const nodal = group.faces.filter((face) => isNodalFace(face, refPoints));
+  return group.faces.length - nodal.length + (nodal.length > 0 ? 1 : 0);
+}
+
 export function loadFigures(
   group: NamedLoadGroup,
   cadFaces: readonly CadFaceProperties[] | null,
+  couplingGroups: readonly CouplingGroup[],
 ): LoadFigures {
   const kind = loadKind(group);
   const area = groupArea(group.faces, cadFaces);
@@ -118,14 +136,15 @@ export function loadFigures(
   }
   if (vector.every((component) => component === 0))
     return { kind, area, value: null };
+  const applied = momentApplications(group, couplingGroups);
   const summary =
     kind === "moment"
-      ? momentSummary(vector, known)
+      ? momentSummary(vector, applied, known)
       : forceSummary(vector, known);
   try {
     const total = required(summary.total, "total");
     return kind === "moment"
-      ? { kind, area, value: { total } }
+      ? { kind, area, value: { total, applied } }
       : {
           kind,
           area,
@@ -157,13 +176,13 @@ function quantity(value: number, unit: string, intl: string): string {
 function repeatedWarning(
   area: GroupArea,
   faces: readonly BcFaceEntry[],
-  text: Text,
   intl: string,
+  sameFace: (labels: string) => string,
 ): string | null {
   if (area.state !== "measured" || area.repeated.length === 0) return null;
   return area.repeated
     .map((id) =>
-      text.summarySameFace(
+      sameFace(
         new Intl.ListFormat(intl, { type: "conjunction" }).format(
           faces
             .filter((face) => face.cadFaceId === id)
@@ -189,7 +208,15 @@ export function loadSummaryText(
   const { area } = figures;
   if (area.state === "empty")
     return { summary: text.summaryNoFaces, warning: null };
-  const warning = repeatedWarning(area, faces, text, intl);
+  // A moment is applied in full to each selection, a repeated face included.
+  const warning = repeatedWarning(
+    area,
+    faces,
+    intl,
+    figures.kind === "moment"
+      ? text.summarySameFaceMoment
+      : text.summarySameFace,
+  );
   const areaPart = areaText(area, text, intl);
   if (figures.value === null)
     return { summary: `${text.summaryNoValue} · ${areaPart}`, warning };
@@ -205,9 +232,18 @@ export function loadSummaryText(
     };
   }
   const total =
-    figures.kind === "moment"
-      ? quantity(figures.value.total, UNIT.moment, intl)
-      : quantity(figures.value.total, UNIT.force, intl);
+    figures.kind !== "moment"
+      ? quantity(figures.value.total, UNIT.force, intl)
+      : figures.value.applied === 1
+        ? quantity(figures.value.total, UNIT.moment, intl)
+        : `${text.summaryEachOf(
+            quantity(
+              figures.value.total / figures.value.applied,
+              UNIT.moment,
+              intl,
+            ),
+            figures.value.applied,
+          )} → ${quantity(figures.value.total, UNIT.moment, intl)}`;
   if (area.state === "unmeasured")
     return { summary: `${total} · ${areaPart}`, warning };
   const over = text.summaryOver(total, areaPart);
@@ -238,6 +274,6 @@ export function supportSummaryText(
       : text.summarySets(names, formatMeasure(value, intl));
   return {
     summary: `${areaText(area, text, intl)} · ${held}`,
-    warning: repeatedWarning(area, faces, text, intl),
+    warning: repeatedWarning(area, faces, intl, text.summarySameFace),
   };
 }
