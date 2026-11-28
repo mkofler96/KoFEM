@@ -216,7 +216,7 @@ test("bodies keep their settings when a separate splits one of them", async ({
 
   // A line across the first box (x 0–20, y 0–10, z 0–10) at x = 10: the 12 mm
   // repair width spans y, so the cut goes all the way through.
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.evaluate(() => {
     (
       window as unknown as {

@@ -21,7 +21,7 @@ test("the mesh summary opens a body's own size; Apply to all clears them (KOF-34
   await importStep(page, TWO_BOXES);
 
   // Coarse sizes keep the mesh quick; each body sets a finer size of its own.
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByTestId("max-element-size").fill("5");
   await page.getByTestId("min-element-size").fill("0.5");
   await expect(page.getByTestId("mesh-size-apply-all")).toHaveCount(0);
@@ -31,7 +31,7 @@ test("the mesh summary opens a body's own size; Apply to all clears them (KOF-34
   await page.getByTestId("region-max-size-2").fill("4");
 
   // The Mesh settings say which bodies the global size does not reach.
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await expect(page.getByTestId("mesh-size-apply-all-note")).toHaveText(
     "⚠ Changes 2 bodies: Body 1, Body 2.",
   );
@@ -60,13 +60,13 @@ test("a single body with its own size gets no edit link or Apply to all (KOF-342
   page,
 }) => {
   await importStep(page, TUBE);
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByTestId("max-element-size").fill("10");
   await page.getByTestId("min-element-size").fill("1");
   await openBody(page, 1);
   await page.getByTestId("region-max-size-1").fill("8");
 
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await expect(page.getByTestId("mesh-size-apply-all")).toHaveCount(0);
   await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect(page.getByTestId("mesh-region-size-1")).toHaveText("max 8 mm");

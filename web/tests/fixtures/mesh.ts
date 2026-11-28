@@ -53,5 +53,5 @@ export async function fakeImport(page: Page) {
     store.setStepBytes(new Uint8Array([1, 2, 3]));
   });
   // A real import lands on the mesh entry; the injected one has to go there.
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
 }
