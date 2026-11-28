@@ -4,7 +4,8 @@
 // KOF-250: forces and pressures on faces (and shell edges) reach the solver as
 // `surfaceLoads`, not nodal `loads`. The status bar counted only nodal load
 // DOFs, so a model loaded entirely through faces showed no load count at all.
-// These examples ship exactly one force group each and no nodal loads.
+// These examples ship exactly one force group each and no nodal loads. The
+// counts belong to the Boundary conditions step, so the test opens the load.
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
@@ -49,6 +50,7 @@ for (const [example, body] of [
     const counts = await openExample(page, example);
     expect(counts).toEqual({ nodalLoadDofs: 0, surfaceLoads: 1 });
 
+    await page.locator('[data-testid^="tree-load-"]').click();
     await expect(page.getByText("1 face load", { exact: true })).toBeVisible();
     await expect(page.getByText(/load DOFs?$/)).toHaveCount(0);
   });

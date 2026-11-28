@@ -275,4 +275,14 @@ pub enum FemError {
         node: usize,
         motion: crate::contact::UnheldMotion,
     },
+    #[error(
+        "hexahedron {hex} meets tetrahedra on {triangles} of the four triangles its face {face} \
+         splits into along either diagonal: a hex face must meet tetrahedra on both halves of \
+         one diagonal, or not at all"
+    )]
+    PartialHexTetInterface {
+        hex: usize,
+        face: usize,
+        triangles: usize,
+    },
 }

@@ -18,7 +18,13 @@ import type { ShellSurface, StressField } from "../../src/lib/stressFields";
 import { expect, type Page } from "@playwright/test";
 import { geometryCounts, importStepText } from "./split";
 import { clickViewportAt, lookFrom } from "./viewport";
-import { addBoundary, addMaterial, openBody, openTree } from "./tree";
+import {
+  addBoundary,
+  addMaterial,
+  openBody,
+  openTree,
+  type MeshEntry,
+} from "./tree";
 import {
   DEFLECTION_RELATIVE,
   validateRecipe,
@@ -747,8 +753,12 @@ async function chooseElementType(
 const minElementSizeOf = (mesh: MeshStep): number =>
   mesh.minElementSize ?? mesh.maxElementSize / 10;
 
-async function meshIt(page: Page, mesh: MeshStep): Promise<void> {
-  await openTree(page, "mesh");
+async function meshIt(
+  page: Page,
+  entry: MeshEntry,
+  mesh: MeshStep,
+): Promise<void> {
+  await openTree(page, entry);
   // Face sizes (KOF-394): pick the faces, type the size, Set size.
   for (const local of mesh.localSizes ?? []) {
     await page.getByTestId("face-size-pick").click();
@@ -1142,7 +1152,7 @@ export async function buildByHand(
   }
   lap("splits");
   await chooseElementType(page, recipe.discretization);
-  await meshIt(page, recipe.mesh);
+  await meshIt(page, "add-mesh", recipe.mesh);
   await checkShellThickness(page, recipe.discretization);
   lap("mesh");
   await setMaterial(page, recipe.material);
@@ -1168,7 +1178,7 @@ export async function remeshAndSolve(
   page: Page,
   mesh: MeshStep,
 ): Promise<void> {
-  await meshIt(page, mesh);
+  await meshIt(page, "mesh", mesh);
   await expect
     .poll(async () => (await snapshot(page)).elementOrder)
     .toBe(mesh.order);

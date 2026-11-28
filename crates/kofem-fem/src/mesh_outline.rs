@@ -14,6 +14,8 @@
 //! face.
 
 use crate::error::FemError;
+use crate::mesh::FACES_OF_HEX;
+use crate::transition::find_interface_faces;
 
 /// A tetrahedron's faces, as the viewport has always drawn them.
 const TET_FACES: [[usize; 3]; 4] = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
@@ -105,16 +107,44 @@ fn singles<const N: usize, const K: usize, const F: usize>(
 }
 
 /// The outer faces of a mesh of tetrahedra (`tets`, 4 corners each) and
-/// hexahedra (`hexes`, 8 each).
+/// hexahedra (`hexes`, 8 each). A hex face against two tet triangles, and
+/// the two triangles, are inside the body ([`crate::transition`]).
 ///
 /// # Errors
-/// [`FemError::ConnectivityLength`] when an array is not whole elements.
+/// [`FemError::ConnectivityLength`] when an array is not whole elements,
+/// [`FemError::PartialHexTetInterface`] for a hex face tets meet on part of
+/// it only.
 pub fn outer_faces(tets: &[u32], hexes: &[u32]) -> Result<OuterFaces, FemError> {
     check("tetrahedron", tets, 4)?;
     check("hexahedron", hexes, 8)?;
+    let hex_corners = hexes.as_chunks::<8>().0;
+    let interfaces = find_interface_faces(tets.as_chunks::<4>().0, hex_corners)?;
+    let sorted = |mut corners: Vec<u32>| {
+        corners.sort_unstable();
+        corners
+    };
+    let mut inside: Vec<Vec<u32>> = interfaces
+        .iter()
+        .flat_map(|interface| {
+            let hex = &hex_corners[interface.hex];
+            let quad = FACES_OF_HEX[interface.face].map(|corner| hex[corner]);
+            std::iter::once(quad.to_vec())
+                .chain(interface.triangles(hex).map(|triangle| triangle.to_vec()))
+        })
+        .map(sorted)
+        .collect();
+    inside.sort_unstable();
+    let outside = |faces: Vec<u32>, per: usize| -> Vec<u32> {
+        faces
+            .chunks_exact(per)
+            .filter(|face| inside.binary_search(&sorted(face.to_vec())).is_err())
+            .flatten()
+            .copied()
+            .collect()
+    };
     Ok(OuterFaces {
-        triangles: singles::<4, 3, 4>(tets, &TET_FACES),
-        quadrilaterals: singles::<8, 4, 6>(hexes, &HEX_FACES),
+        triangles: outside(singles::<4, 3, 4>(tets, &TET_FACES), 3),
+        quadrilaterals: outside(singles::<8, 4, 6>(hexes, &HEX_FACES), 4),
     })
 }
 

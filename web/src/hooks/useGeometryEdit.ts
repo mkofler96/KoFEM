@@ -8,6 +8,7 @@ import { resetWorker, sendToWorker } from "../workers/sharedWorker";
 import { isCadBody } from "../store/geometrySlice";
 import { booleanBodySources } from "../lib/booleanBodies";
 import type { RepairHingesOptions } from "../wasm/pkg/kofem_wasm";
+import type { CadFaceProperties } from "../lib/cadFaceProperties";
 import { tr } from "../i18n/useLocale";
 import { geometryMessages } from "../i18n/messages/geometry";
 
@@ -18,6 +19,7 @@ export type BooleanOp = "union" | "subtract" | "intersect";
 type EditReply = Required<StepTessellation> & {
   bytes: Uint8Array;
   bodyCount: number;
+  cadFaces: CadFaceProperties[];
 };
 
 const AXIS_NORMAL: Record<SplitAxis, [number, number, number]> = {
@@ -198,6 +200,7 @@ export function useGeometryEdit() {
       });
       applyGeometryEdit(
         reply.bytes,
+        reply.cadFaces,
         {
           points: reply.points,
           triangles: reply.triangles,

@@ -196,7 +196,7 @@ test("a coupled shell and solid model's report lists both families @pipeline", a
   await expect(page.getByTestId("tree-body-2")).toBeVisible();
   // Body 2 is the 2 mm fin under the 50 × 100 × 30 mm base block.
   await setElementType(page, 2, "shell");
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByRole("button", { name: /Generate mesh/i }).click();
   await expect
     .poll(() =>

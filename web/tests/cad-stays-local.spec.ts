@@ -76,7 +76,7 @@ test("importing, meshing and solving send nothing off the device @pipeline", asy
     .locator('input[type="file"][accept=".stp,.step"]')
     .setInputFiles(STEP_FILE);
   await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
-  await expect(page.getByText("Mesh OK")).toBeVisible();
+  await expect(page.getByTestId("mesh-summary")).toBeVisible();
 
   const model = buildCantilever();
   const displacements = await page.evaluate(async (m) => {

@@ -40,7 +40,7 @@ test("a crane holder marked Shell whole is refused: its thick block is not a wal
     .toBe(3);
 
   await setElementType(page, 1, "shell");
-  await openTree(page, "mesh");
+  await openTree(page, "add-mesh");
   await page.getByRole("button", { name: /Generate mesh/i }).click();
 
   const error = page.getByTestId("meshing-error");

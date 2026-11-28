@@ -11,8 +11,8 @@
 // point load, a pressure and a total-force surface load — with linear and
 // with quadratic elements. Node ids are offset
 // from vertex indices, as in saved analyses, so the id → vertex mapping is
-// exercised too. A hand-built CHEXA beam, alone and with CTETRA at its root,
-// then checks hexahedra and loads on quadrilateral faces the same way.
+// exercised too. A hand-built CHEXA beam then checks hexahedra and loads on
+// quadrilateral faces the same way.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -205,18 +205,8 @@ const beamNodes = beam.vertices.map((vertex, index) => ({
   y: vertex[1],
   z: vertex[2],
 }));
-const KUHN = [
-  [0, 1, 3, 7],
-  [0, 3, 2, 7],
-  [0, 2, 6, 7],
-  [0, 6, 4, 7],
-  [0, 4, 5, 7],
-  [0, 5, 1, 7],
-];
-const HEX_OF_CUBE_CORNER = [0, 1, 3, 2, 4, 5, 7, 6];
-function beamModel(tetRoot) {
+function beamModel() {
   const hexElements = [];
-  const tetElements = [];
   const top = [];
   const tip = [];
   const onPlane = (axis, value) => (vertex) =>
@@ -225,28 +215,15 @@ function beamModel(tetRoot) {
     const propertyId = beam.vertices[hex[0]][0] < 50 ? 1 : 2;
     const tipFace = [1, 2, 6, 5].map((corner) => hex[corner]);
     if (tipFace.every(onPlane(0, 100))) tip.push(tipFace);
-    if (tetRoot && propertyId === 1) {
-      for (const tet of KUHN) {
-        const corners = tet.map((corner) => hex[HEX_OF_CUBE_CORNER[corner]]);
-        tetElements.push({ type: "CTETRA", nodeIds: corners, propertyId });
-        for (let skip = 0; skip < 4; skip++) {
-          const face = corners.filter((_, corner) => corner !== skip);
-          if (face.every(onPlane(2, 10))) top.push(face);
-        }
-      }
-    } else {
-      hexElements.push({ type: "CHEXA", nodeIds: hex, propertyId });
-      const topFace = [4, 5, 6, 7].map((corner) => hex[corner]);
-      if (topFace.every(onPlane(2, 10))) top.push(topFace);
-    }
+    hexElements.push({ type: "CHEXA", nodeIds: hex, propertyId });
+    const topFace = [4, 5, 6, 7].map((corner) => hex[corner]);
+    if (topFace.every(onPlane(2, 10))) top.push(topFace);
   });
-  const beamElements = [...hexElements, ...tetElements].map(
-    (element, index) => ({
-      ...element,
-      id: index + 1,
-      nodeIds: element.nodeIds.map((vertex) => vertex + ID),
-    }),
-  );
+  const beamElements = hexElements.map((element, index) => ({
+    ...element,
+    id: index + 1,
+    nodeIds: element.nodeIds.map((vertex) => vertex + ID),
+  }));
   const beamConstraints = [];
   for (const node of beamNodes) {
     if (Math.abs(node.x) < 1e-9)
@@ -682,19 +659,16 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     });
   });
 
-  // ── Hexahedra (CHEXA), alone and mixed with tetrahedra ──────────────────────
+  // ── Hexahedra (CHEXA) ────────────────────────────────────────────────────────
   // A hand-built store model as the app holds it: a 100 × 10 × 10 mm beam of
-  // CHEXA elements, and the same beam with its root half split into CTETRA
-  // (listed after the hexes, so element order ≠ solve order). Two bodies,
-  // node ids offset from vertex indices, a clamp, a roller, a prescribed
-  // displacement, a point load, a pressure on quadrilateral (and triangular)
-  // faces and a total force on the tip quadrilaterals. Both solvers number the
-  // elements tets first, then hexes; their results must agree at orders 1 and 2.
-  describe.each([
-    ["CHEXA beam", false],
-    ["CHEXA + CTETRA beam", true],
-  ])("%s", (_name, tetRoot) => {
-    const store = beamModel(tetRoot);
+  // CHEXA elements. Two bodies, node ids offset from vertex indices, a clamp,
+  // a roller, a prescribed displacement, a point load, a pressure on
+  // quadrilateral faces and a total force on the tip quadrilaterals; the two
+  // solvers' results must agree at orders 1 and 2. Mixed tet/hex models are
+  // not compared: MFEM's hex/tet interface did not conform (KOF-433);
+  // hex-tet-interface.test.mjs checks them against exact fields.
+  describe("CHEXA beam", () => {
+    const store = beamModel();
     // Whether each element, in solve order (tets first, then hexes), has a
     // node on the clamp x = 0.
     const xOf = new Map(store.nodes.map((node) => [node.id, node.x]));

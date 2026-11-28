@@ -25,22 +25,12 @@ pub fn count_as_f64(count: usize) -> f64 {
 }
 
 /// A node, DOF, row or aggregate number as the `u32` that sparse matrix
-/// columns and the JS interface index with.
-///
-/// It fits: [`MAX_NODES`](crate::mesh::MAX_NODES) and
-/// [`MAX_SHELL_VERTICES`](crate::shell::MAX_SHELL_VERTICES) cap every mesh
-/// so that its DOF numbers fit in `u32`, and every such number is below the
-/// DOF count.
+/// columns and the JS interface index with. Exact for every such number of
+/// a mesh: [`MAX_NODES`](crate::mesh::MAX_NODES) and
+/// [`MAX_SHELL_VERTICES`](crate::shell::MAX_SHELL_VERTICES) cap the nodes so
+/// that their DOF numbers fit in `u32`.
 #[must_use]
 pub fn index_as_u32(index: usize) -> u32 {
-    debug_assert!(
-        u32::try_from(index).is_ok(),
-        "index {index} does not fit in u32"
-    );
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "mesh caps keep every node and DOF number within u32"
-    )]
-    let narrow = index as u32;
-    narrow
+    u32::try_from(index)
+        .unwrap_or_else(|_| unreachable!("index {index} is past the mesh caps, which fit in u32"))
 }

@@ -321,6 +321,8 @@ export async function solveSolidInRust(
           `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
       );
     }
+    const transitions = transitionNote(elastic);
+    if (transitions !== null) log(transitions);
     const { fixedDofs, fixedValues, forces } = rustSolidBoundaryConditions(
       elastic,
       model,
@@ -651,6 +653,15 @@ export function createRustSolidModel(
     tetCount: tetElements.length,
     hexCount: hexElements.length,
   };
+}
+
+export function transitionNote(
+  elastic: Pick<ElasticModel, "transitionElements">,
+): string | null {
+  const count = elastic.transitionElements;
+  return count === 0
+    ? null
+    : `${count} hexahedra joined to tetrahedra by transition elements`;
 }
 
 // The element kinds a model has, e.g. "24 tetrahedra and 4 hexahedra".

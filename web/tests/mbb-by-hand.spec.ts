@@ -19,7 +19,7 @@ import type { Page } from "@playwright/test";
 import { geometryCounts, importStepText, splitFaceAt } from "./fixtures/split";
 import { clickModelAt, lookFrom } from "./fixtures/viewport";
 import mbbRecipe from "../../examples/gallery/recipes/mbb-beam-topopt.mjs";
-import { openTree, addBoundary } from "./fixtures/tree";
+import { openTree, addBoundary, type MeshEntry } from "./fixtures/tree";
 
 // The plain 300 × 50 × 10 mm block the example's page links.
 const BLOCK = mbbRecipe.step();
@@ -93,9 +93,13 @@ function readModel(page: Page) {
   });
 }
 
-async function mesh(page: Page, maxSize: string): Promise<void> {
+async function mesh(
+  page: Page,
+  entry: MeshEntry,
+  maxSize: string,
+): Promise<void> {
   const before = (await readModel(page)).nodes;
-  await openTree(page, "mesh");
+  await openTree(page, entry);
   await page.getByTestId("max-element-size").fill(maxSize);
   await page.getByTestId("min-element-size").fill(String(Number(maxSize) / 10));
   await page.getByRole("button", { name: /generate mesh/i }).click();
@@ -139,7 +143,7 @@ test("the MBB beam example can be built by hand, and survives a finer re-mesh @p
   await page.getByRole("button", { name: "Close" }).click();
 
   // ── Mesh, supports, load ────────────────────────────────────────────────────
-  await mesh(page, "5");
+  await mesh(page, "add-mesh", "5");
   await pickSupport(page, [2.5, 0, 5], ["Ux", "Uy", "Uz"]); // pin
   await pickSupport(page, [297.5, 0, 5], ["Uy"]); // roller
 
@@ -167,7 +171,7 @@ test("the MBB beam example can be built by hand, and survives a finer re-mesh @p
   expect(new Set(picked.map((f) => f.cadFaceId)).size).toBe(3);
 
   // ── A finer mesh keeps them ─────────────────────────────────────────────────
-  await mesh(page, "4");
+  await mesh(page, "mesh", "4");
   const finer = await readModel(page);
   expect(finer.nodes).toBeGreaterThan(built.nodes);
   expect(finer.bc.map((g) => g.dofs)).toEqual([[0, 1, 2], [1]]);

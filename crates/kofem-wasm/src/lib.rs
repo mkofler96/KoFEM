@@ -691,6 +691,21 @@ impl ElasticModel {
             tie_report: Some(report),
         })
     }
+
+    /// Hexes solved as transition elements (`kofem_fem::transition`): each
+    /// has a face that meets two tet triangles.
+    #[wasm_bindgen(getter, js_name = transitionElements)]
+    #[must_use]
+    pub fn transition_elements(&self) -> usize {
+        let mut hexes: Vec<usize> = self
+            .mesh
+            .interface_faces()
+            .iter()
+            .map(|face| face.hex)
+            .collect();
+        hexes.dedup();
+        hexes.len()
+    }
 }
 
 #[wasm_bindgen]

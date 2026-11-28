@@ -8,17 +8,17 @@
 //! and both are sampled at the centre as well. The stress tensor is also
 //! recovered at each element's corners, where a quadratic element's own field
 //! reaches a surface: the centre lies inside, away from a peak on the surface.
+//! A transition element ([`crate::transition`]) gives the volume mean of its
+//! pieces' centre values, and at a corner the mean of the pieces meeting there.
 
-use crate::element::{
-    hex27_reference_gradients, hex8_reference_gradients, hex_gradients, tet10_gradients,
-    tet4_gradients, CENTROID, HEX_CENTRE, HEX_CORNERS,
-};
 use crate::error::FemError;
-use crate::mesh::{ElementOrder, ElementShape, TetMesh};
+use crate::mesh::{ElementShape, TetMesh};
+use crate::piece::{centre_samples, corner_samples};
 
-/// Where in an element its shape-function gradients are taken.
+/// Where in an element its displacement gradient is read.
 #[derive(Clone, Copy)]
 pub(crate) enum Location {
+    /// The centre; for a transition element, the mean over its pieces.
     Centre,
     /// One of the element's corner vertices, in its node order.
     Corner(usize),
@@ -32,59 +32,6 @@ pub(crate) fn corner_count(mesh: &TetMesh, element: usize) -> usize {
     }
 }
 
-/// Physical shape-function gradients of `element` at `location`, in its node
-/// order, written to the front of `gradients`; returns how many there are.
-fn gradients_at(
-    mesh: &TetMesh,
-    element: usize,
-    location: Location,
-    gradients: &mut [[f64; 3]; 27],
-) -> usize {
-    match mesh.shape(element) {
-        ElementShape::Tetrahedron => {
-            let tet_point = match location {
-                Location::Centre => CENTROID,
-                Location::Corner(corner) => {
-                    let mut point = [0.0; 4];
-                    point[corner] = 1.0;
-                    point
-                }
-            };
-            let (corner_gradients, _) = tet4_gradients(&mesh.corners(element));
-            match mesh.order() {
-                ElementOrder::Linear => {
-                    gradients[..4].copy_from_slice(&corner_gradients);
-                    4
-                }
-                ElementOrder::Quadratic => {
-                    gradients[..10].copy_from_slice(&tet10_gradients(&corner_gradients, tet_point));
-                    10
-                }
-            }
-        }
-        ElementShape::Hexahedron => {
-            let hex_point = match location {
-                Location::Centre => HEX_CENTRE,
-                Location::Corner(corner) => HEX_CORNERS[corner].map(f64::from),
-            };
-            let corners = mesh.hex_corners(element - mesh.tets().len());
-            match mesh.order() {
-                ElementOrder::Linear => {
-                    let reference = hex8_reference_gradients(hex_point);
-                    gradients[..8]
-                        .copy_from_slice(&hex_gradients(&corners, &reference, hex_point).0);
-                    8
-                }
-                ElementOrder::Quadratic => {
-                    let reference = hex27_reference_gradients(hex_point);
-                    *gradients = hex_gradients(&corners, &reference, hex_point).0;
-                    27
-                }
-            }
-        }
-    }
-}
-
 /// The displacement gradient `∇u[i][j] = ∂u_i/∂x_j` of `element` at `location`.
 pub(crate) fn displacement_gradient(
     mesh: &TetMesh,
@@ -92,15 +39,16 @@ pub(crate) fn displacement_gradient(
     location: Location,
     displacements: &[f64],
 ) -> [[f64; 3]; 3] {
-    let mut gradients = [[0.0; 3]; 27];
-    let used = gradients_at(mesh, element, location, &mut gradients);
-    // ∇u[i][j] = Σ_a u_a[i]·g_a[j].
+    let samples = match location {
+        Location::Centre => centre_samples(mesh, element),
+        Location::Corner(corner) => corner_samples(mesh, element, corner),
+    };
     let mut gradient = [[0.0; 3]; 3];
-    for (node, shape_gradient) in mesh.element_nodes(element).iter().zip(&gradients[..used]) {
-        let base = 3 * *node as usize;
+    for (piece, point, weight) in samples {
+        let at_point = piece.displacement_gradient(point, displacements);
         for (row, entries) in gradient.iter_mut().enumerate() {
             for (col, entry) in entries.iter_mut().enumerate() {
-                *entry += displacements[base + row] * shape_gradient[col];
+                *entry += weight * at_point[row][col];
             }
         }
     }
