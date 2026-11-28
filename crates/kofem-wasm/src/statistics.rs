@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Browser binding for the volume-weighted percentiles of a nodal field
-//! (`kofem_fem::field_statistics`): the Results panel lists them next to the
-//! field's min and max.
+//! Browser bindings for the statistics of a result field
+//! (`kofem_fem::field_statistics`): the volume-weighted percentiles the
+//! Results panel lists next to the field's min and max, and the per-body max
+//! and percentile its safety factors are taken against.
 
-use kofem_fem::StatisticsMesh;
+use kofem_fem::{ElementMesh, StatisticsMesh};
 use wasm_bindgen::prelude::*;
 
 use crate::to_js;
@@ -45,4 +46,50 @@ pub fn nodal_percentiles(
         quantiles,
     )
     .map_err(|error| to_js(&error))
+}
+
+/// Per group, the max and the volume-weighted `quantile` of an element field
+/// averaged to the nodes over that group's elements, as `[max, quantile]`
+/// pairs in group order. `values` and `groups` hold one entry per element:
+/// tetrahedra, then hexahedra, then shell facets. The mesh arrays are those
+/// of [`nodal_percentiles`].
+///
+/// # Errors
+/// The checks of [`kofem_fem::grouped_element_statistics`].
+#[wasm_bindgen(js_name = groupedElementStatistics)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "a flat wasm-bindgen signature: typed arrays in, one call per result"
+)]
+pub fn grouped_element_statistics(
+    points: &[f64],
+    tets: &[u32],
+    tet_nodes: u32,
+    hexes: &[u32],
+    shell_triangles: &[u32],
+    shell_thicknesses: &[f64],
+    values: &[f64],
+    groups: &[u32],
+    group_count: u32,
+    quantile: f64,
+) -> Result<Vec<f64>, JsError> {
+    let statistics = kofem_fem::grouped_element_statistics(
+        &ElementMesh {
+            points,
+            tets,
+            tet_nodes: tet_nodes as usize,
+            hexes,
+            shell_triangles,
+            shell_thicknesses,
+        },
+        values,
+        groups,
+        group_count as usize,
+        quantile,
+    )
+    .map_err(|error| to_js(&error))?;
+    Ok(statistics
+        .iter()
+        .flat_map(|group| [group.max, group.quantile])
+        .collect())
 }

@@ -66,7 +66,9 @@ pub use coupled_static::{
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;
 pub use field_expression::{FieldExpression, FieldExpressionError};
-pub use field_statistics::{nodal_percentiles, StatisticsMesh};
+pub use field_statistics::{
+    grouped_element_statistics, nodal_percentiles, ElementMesh, GroupStatistics, StatisticsMesh,
+};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};

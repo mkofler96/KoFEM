@@ -26,7 +26,7 @@ import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { useFieldPercentiles } from "../../hooks/useFieldPercentiles";
 import { useSafetyFactors } from "../../hooks/useSafetyFactors";
-import { SAFETY_PERCENTILE, safetyRowLabel } from "../../lib/safetyFactor";
+import { SAFETY_PERCENTILE } from "../../lib/safetyFactor";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
@@ -391,8 +391,6 @@ const formatFactor = (factor: number): string =>
 // per body for a model of several. Nothing without a yield strength.
 function SafetyFactorSection() {
   const readings = useSafetyFactors();
-  const properties = useModelStore((s) => s.properties);
-  const materials = useModelStore((s) => s.materials);
   const text = useT(resultsMessages);
   if (readings === null) return null;
   if (readings.kind === "unreadable")
@@ -405,9 +403,8 @@ function SafetyFactorSection() {
   return (
     <div data-testid="safety-factors">
       <div className={styles.sectionLabel}>{text.safetyFactor}</div>
-      {readings.rows.map((row) => {
+      {readings.rows.map(({ row, label }) => {
         const key = row.propertyId === null ? "model" : String(row.propertyId);
-        const title = safetyRowLabel(row, properties, materials);
         const entries = [
           {
             id: "max",
@@ -425,7 +422,7 @@ function SafetyFactorSection() {
         return (
           <div key={key} data-testid={`safety-factor-${key}`}>
             <div className={`${styles.formNote} ${styles.formNoteFull}`}>
-              {title}
+              {label}
             </div>
             {entries.map(({ id, label, factor, stress }) => (
               <div

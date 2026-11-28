@@ -3,18 +3,30 @@
 
 import { useMemo } from "react";
 import { useModelStore } from "../store/modelStore";
-import { safetyFactors, type SafetyFactorRow } from "../lib/safetyFactor";
+import {
+  safetyFactors,
+  safetyRowLabel,
+  safetyModel,
+  type SafetyFactorRow,
+} from "../lib/safetyFactor";
 import { useFemModule } from "./useFemModule";
 import { useLocale } from "../i18n/useLocale";
 
+export interface LabelledSafetyRow {
+  row: SafetyFactorRow;
+  label: string;
+}
+
 export type SafetyReadings =
-  | { kind: "value"; rows: SafetyFactorRow[] }
+  | { kind: "value"; rows: LabelledSafetyRow[] }
   | { kind: "unreadable"; reason: string };
 
 // The safety factors against yield of the current result (KOF-496): null
 // while there is no result with stresses, or while the Rust module loads. The
-// yield strength is read from the materials as they are now, so setting one
-// after the solve shows the factor without solving again.
+// bodies and their materials are the solve's, so a material reassigned since
+// does not pair its yield strength with stresses it did not produce; only the
+// yield strength is read as it is now, so setting one after the solve shows
+// the factor without solving again.
 export function useSafetyFactors(): SafetyReadings | null {
   const { ready, error } = useFemModule();
   const nodes = useModelStore((s) => s.nodes);
@@ -22,15 +34,27 @@ export function useSafetyFactors(): SafetyReadings | null {
   const properties = useModelStore((s) => s.properties);
   const materials = useModelStore((s) => s.materials);
   const vonMises = useModelStore((s) => s.result?.vonMises);
+  const run = useModelStore((s) => s.result?.run);
   const locale = useLocale();
   return useMemo((): SafetyReadings | null => {
     if (vonMises === undefined) return null;
     if (error !== null) return { kind: "unreadable", reason: error };
     if (!ready) return null;
     try {
+      const solved = safetyModel(run, properties, materials);
+      const rows = safetyFactors(
+        vonMises,
+        nodes,
+        elements,
+        solved.properties,
+        solved.materials,
+      );
       return {
         kind: "value",
-        rows: safetyFactors(vonMises, nodes, elements, properties, materials),
+        rows: rows.map((row) => ({
+          row,
+          label: safetyRowLabel(row, solved.properties, solved.materials),
+        })),
       };
     } catch (err) {
       return {
@@ -38,5 +62,15 @@ export function useSafetyFactors(): SafetyReadings | null {
         reason: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [ready, error, nodes, elements, properties, materials, vonMises, locale]);
+  }, [
+    ready,
+    error,
+    nodes,
+    elements,
+    properties,
+    materials,
+    vonMises,
+    run,
+    locale,
+  ]);
 }

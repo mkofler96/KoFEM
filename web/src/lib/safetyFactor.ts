@@ -3,16 +3,21 @@
 
 // The safety factor against yield (KOF-496): a material's yield strength over
 // the von Mises stress, against both the max and the 99th percentile by
-// volume. A model of one material gets one factor over the whole model, read
-// from the field Results plots. A model of several gets one per body whose
-// material has a yield strength, each from its own elements averaged to the
-// nodes, so a stiff body's stress does not leak into a soft neighbour at the
-// nodes they share. Without a yield strength there is no factor. The
-// percentile comes from the Rust module, which must be loaded first.
+// volume. A model of one material gets one factor over the whole model. A
+// model of several gets one per body whose material has a yield strength,
+// each from its own elements averaged to the nodes, so a stiff body's stress
+// does not leak into a soft neighbour at the nodes they share. Without a
+// yield strength there is no factor. The statistics come from the Rust
+// module, which must be loaded first.
 
-import type { Element, Material, Node, Property } from "../store/modelStore";
-import { nodeAveraged } from "./resultField";
-import { fieldPercentiles } from "./resultStatistics";
+import type {
+  Element,
+  Material,
+  Node,
+  Property,
+  SolveRun,
+} from "../store/modelStore";
+import { groupStatistics } from "./resultStatistics";
 import { elementBodyName } from "./regions";
 import { tr } from "../i18n/useLocale";
 import { reportMessages } from "../i18n/messages/report";
@@ -124,7 +129,8 @@ export interface SafetyFactorRow {
 
 /**
  * The safety factors of a result, from its von Mises stress per element (in
- * element order); empty when no material in use has a yield strength.
+ * element order); empty when no material in use has a yield strength. Each
+ * group's max and percentile come from the Rust module.
  */
 export function safetyFactors(
   vonMises: Float64Array,
@@ -137,35 +143,71 @@ export function safetyFactors(
     throw new Error(
       `The von Mises result carries ${vonMises.length} values for ${elements.length} elements: it belongs to a different mesh`,
     );
-  const nodeIndex = new Map<number, number>();
-  nodes.forEach((node, i) => nodeIndex.set(node.id, i));
-  return safetyGroups(elements, properties, materials).map((group) => {
-    const own = group.elements.map((i) => elements[i]);
-    const values = nodeAveraged((k) => vonMises[group.elements[k]], nodes, own);
-    let maxVonMises = 0;
-    for (const element of own)
-      for (const id of element.nodeIds) {
-        const i = nodeIndex.get(id);
-        if (i === undefined)
-          throw new Error(
-            `Element ${element.id} uses node ${id}, which the mesh does not have`,
-          );
-        maxVonMises = Math.max(maxVonMises, values[i]);
-      }
-    const [p99VonMises] = fieldPercentiles(values, nodes, own, properties, [
-      SAFETY_PERCENTILE,
-    ]);
-    const { yieldStrength } = group;
+  const safety = safetyGroups(elements, properties, materials);
+  if (safety.length === 0) return [];
+  // Only the grouped elements: a body without a yield strength takes no part.
+  const members = safety.flatMap((group) => group.elements);
+  const groups = Uint32Array.from(
+    safety.flatMap((group, g) => group.elements.map(() => g)),
+  );
+  const statistics = groupStatistics(
+    Float64Array.from(members, (e) => vonMises[e]),
+    groups,
+    safety.length,
+    SAFETY_PERCENTILE,
+    nodes,
+    members.map((e) => elements[e]),
+    properties,
+  );
+  return safety.map((group, g) => {
+    const { max, quantile } = statistics[g];
     return {
       propertyId: group.propertyId,
       materialId: group.materialId,
-      yieldStrength,
-      maxVonMises,
-      p99VonMises,
-      maxFactor: safetyFactor(yieldStrength, maxVonMises),
-      p99Factor: safetyFactor(yieldStrength, p99VonMises),
+      yieldStrength: group.yieldStrength,
+      maxVonMises: max,
+      p99VonMises: quantile,
+      maxFactor: safetyFactor(group.yieldStrength, max),
+      p99Factor: safetyFactor(group.yieldStrength, quantile),
     };
   });
+}
+
+/**
+ * The materials a result was solved with, each with its yield strength as it
+ * is now: the stresses belong to the solve's material assignment, while a
+ * yield strength set after the solve changes no stress and needs no new one.
+ */
+export function withCurrentYield(
+  solved: Material[],
+  current: Material[],
+): Material[] {
+  return solved.map((material) => {
+    const now = current.find((m) => m.id === material.id);
+    if (!now)
+      throw new Error(
+        `The result was solved with material ${material.id}, which the model no longer has: solve again`,
+      );
+    return { ...material, yieldStrength: now.yieldStrength };
+  });
+}
+
+/**
+ * The bodies and materials a result's safety factors are taken with: the
+ * solve's, with each yield strength as it is now. A result loaded from a file
+ * has no run; the file's own bodies and materials are the ones it was solved
+ * with.
+ */
+export function safetyModel(
+  run: SolveRun | undefined,
+  properties: Property[],
+  materials: Material[],
+): { properties: Property[]; materials: Material[] } {
+  if (run === undefined) return { properties, materials };
+  return {
+    properties: run.properties,
+    materials: withCurrentYield(run.materials, materials),
+  };
 }
 
 /**

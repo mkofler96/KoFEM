@@ -294,7 +294,11 @@ export function buildReport(input: ReportInput): ReportDocument {
     stats: input.stats,
     safety: input.safety.map((row) => ({
       key: row.propertyId === null ? "model" : String(row.propertyId),
-      body: safetyRowLabel(row, input.properties, input.materials),
+      body: safetyRowLabel(
+        row,
+        (run ?? input).properties,
+        (run ?? input).materials,
+      ),
       maxFactor: row.maxFactor,
       p99Factor: row.p99Factor,
     })),

@@ -8,7 +8,11 @@
 // there is no factor, never one against a default.
 
 import { describe, expect, test } from "bun:test";
-import { safetyFactor, safetyGroups } from "../../src/lib/safetyFactor";
+import {
+  safetyFactor,
+  safetyGroups,
+  withCurrentYield,
+} from "../../src/lib/safetyFactor";
 import type { Element, Material, Property } from "../../src/store/modelStore";
 
 const material = (id: number, yieldStrength?: number): Material => ({
@@ -91,5 +95,22 @@ describe("safetyGroups", () => {
     expect(() =>
       safetyGroups([tet(1, 1)], [{ id: 1, materialId: 7 }], [material(1)]),
     ).toThrow(/material 7/);
+  });
+});
+
+describe("withCurrentYield", () => {
+  test("keeps the solved materials, with the yield strength as it is now", () => {
+    const solved = [material(1), { ...material(2, 100), name: "Old" }];
+    const current = [material(1, 250), { ...material(2), name: "New" }];
+    expect(withCurrentYield(solved, current)).toEqual([
+      material(1, 250),
+      { ...material(2), name: "Old" },
+    ]);
+  });
+
+  test("refuses a solved material the model no longer has", () => {
+    expect(() => withCurrentYield([material(3)], [material(1)])).toThrow(
+      /material 3/,
+    );
   });
 });

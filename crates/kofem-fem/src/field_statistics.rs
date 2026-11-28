@@ -34,6 +34,67 @@ pub struct StatisticsMesh<'a> {
     pub shell_thicknesses: &'a [f64],
 }
 
+/// The elements of a model without a field: node coordinates (x, y, z per
+/// node) and the element connectivities by node index, as in
+/// [`StatisticsMesh`].
+#[derive(Debug, Clone, Copy)]
+pub struct ElementMesh<'a> {
+    pub points: &'a [f64],
+    pub tets: &'a [u32],
+    pub tet_nodes: usize,
+    pub hexes: &'a [u32],
+    pub shell_triangles: &'a [u32],
+    pub shell_thicknesses: &'a [f64],
+}
+
+impl<'a> StatisticsMesh<'a> {
+    fn elements(&self) -> ElementMesh<'a> {
+        ElementMesh {
+            points: self.points,
+            tets: self.tets,
+            tet_nodes: self.tet_nodes,
+            hexes: self.hexes,
+            shell_triangles: self.shell_triangles,
+            shell_thicknesses: self.shell_thicknesses,
+        }
+    }
+}
+
+impl ElementMesh<'_> {
+    fn element_count(&self) -> usize {
+        self.tets.len() / self.tet_nodes + self.hexes.len() / 8 + self.shell_triangles.len() / 3
+    }
+
+    /// Each element's nodes, its node count and its volume, tetrahedra
+    /// first, then hexahedra, then shell facets (area times thickness).
+    fn measured(&self) -> impl Iterator<Item = (&[u32], f64, f64)> + '_ {
+        let points = self.points;
+        let tet_nodes = if self.tet_nodes == 4 { 4.0 } else { 10.0 };
+        let tets = self.tets.chunks_exact(self.tet_nodes).map(move |tet| {
+            let corners = [0, 1, 2, 3].map(|k| point(points, tet[k]));
+            (tet, tet_nodes, tet_volume(corners))
+        });
+        let hexes = self.hexes.as_chunks::<8>().0.iter().map(move |hex| {
+            let volume = HEX_TETS
+                .iter()
+                .map(|tet| tet_volume(tet.map(|k| point(points, hex[k]))))
+                .sum();
+            (hex.as_slice(), 8.0, volume)
+        });
+        let facets = self
+            .shell_triangles
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .zip(self.shell_thicknesses)
+            .map(move |(facet, &thickness)| {
+                let corners = [0, 1, 2].map(|k| point(points, facet[k]));
+                (facet.as_slice(), 3.0, triangle_area(corners) * thickness)
+            });
+        tets.chain(hexes).chain(facets)
+    }
+}
+
 /// A hexahedron (CHEXA corner order) as six tetrahedra about its 0–6 diagonal.
 const HEX_TETS: [[usize; 4]; 6] = [
     [0, 1, 2, 6],
@@ -93,38 +154,64 @@ fn check_connectivity(
     Ok(())
 }
 
-/// Each node's share of the model's volume.
-fn nodal_volumes(mesh: &StatisticsMesh<'_>, node_count: usize) -> Vec<f64> {
-    let points = mesh.points;
+/// Each node's share of the model's volume: an element's volume is shared
+/// equally among its nodes.
+fn nodal_volumes(mesh: &ElementMesh<'_>, node_count: usize) -> Vec<f64> {
     let mut weights = vec![0.0; node_count];
-    let mut share = |nodes: &[u32], per_element: f64, volume: f64| {
+    for (nodes, node_count, volume) in mesh.measured() {
+        let share = volume / node_count;
         for &node in nodes {
-            weights[node as usize] += volume / per_element;
+            weights[node as usize] += share;
         }
-    };
-    let tet_nodes = if mesh.tet_nodes == 4 { 4.0 } else { 10.0 };
-    for tet in mesh.tets.chunks_exact(mesh.tet_nodes) {
-        let corners = [0, 1, 2, 3].map(|k| point(points, tet[k]));
-        share(tet, tet_nodes, tet_volume(corners));
-    }
-    for hex in mesh.hexes.as_chunks::<8>().0 {
-        let volume = HEX_TETS
-            .iter()
-            .map(|tet| tet_volume(tet.map(|k| point(points, hex[k]))))
-            .sum();
-        share(hex, 8.0, volume);
-    }
-    for (facet, &thickness) in mesh
-        .shell_triangles
-        .as_chunks::<3>()
-        .0
-        .iter()
-        .zip(mesh.shell_thicknesses)
-    {
-        let corners = [0, 1, 2].map(|k| point(points, facet[k]));
-        share(facet, 3.0, triangle_area(corners) * thickness);
     }
     weights
+}
+
+/// The checks every statistic makes of the elements; the node count.
+fn check_elements(elements: &ElementMesh<'_>) -> Result<usize, FemError> {
+    if !elements.points.len().is_multiple_of(3) {
+        return Err(invalid(format!(
+            "{} coordinates, which is not a multiple of 3",
+            elements.points.len()
+        )));
+    }
+    if let Some(at) = elements
+        .points
+        .iter()
+        .position(|coordinate| !coordinate.is_finite())
+    {
+        return Err(invalid(format!(
+            "node {} has a non-finite coordinate",
+            at / 3
+        )));
+    }
+    let node_count = elements.points.len() / 3;
+    if elements.tet_nodes != 4 && elements.tet_nodes != 10 {
+        return Err(invalid(format!(
+            "a tetrahedron has 4 or 10 nodes, got {}",
+            elements.tet_nodes
+        )));
+    }
+    check_connectivity("tetrahedron", elements.tets, elements.tet_nodes, node_count)?;
+    check_connectivity("hexahedron", elements.hexes, 8, node_count)?;
+    check_connectivity("shell facet", elements.shell_triangles, 3, node_count)?;
+    let facets = elements.shell_triangles.len() / 3;
+    if elements.shell_thicknesses.len() != facets {
+        return Err(invalid(format!(
+            "{} shell thicknesses for {facets} shell facets",
+            elements.shell_thicknesses.len()
+        )));
+    }
+    if let Some(thickness) = elements
+        .shell_thicknesses
+        .iter()
+        .find(|thickness| thickness.is_nan() || **thickness <= 0.0)
+    {
+        return Err(invalid(format!(
+            "a shell thickness must be positive, got {thickness}"
+        )));
+    }
+    Ok(node_count)
 }
 
 /// The volume-weighted `quantiles` (each in [0, 1]) of the nodal field, in
@@ -149,23 +236,7 @@ pub fn nodal_percentiles(
             "a quantile must lie in [0, 1], got {quantile}"
         )));
     }
-    if !mesh.points.len().is_multiple_of(3) {
-        return Err(invalid(format!(
-            "{} coordinates, which is not a multiple of 3",
-            mesh.points.len()
-        )));
-    }
-    if let Some(at) = mesh
-        .points
-        .iter()
-        .position(|coordinate| !coordinate.is_finite())
-    {
-        return Err(invalid(format!(
-            "node {} has a non-finite coordinate",
-            at / 3
-        )));
-    }
-    let node_count = mesh.points.len() / 3;
+    let node_count = check_elements(&mesh.elements())?;
     if mesh.values.len() != node_count {
         return Err(invalid(format!(
             "{} values for {node_count} nodes",
@@ -178,33 +249,7 @@ pub fn nodal_percentiles(
             mesh.values[node]
         )));
     }
-    if mesh.tet_nodes != 4 && mesh.tet_nodes != 10 {
-        return Err(invalid(format!(
-            "a tetrahedron has 4 or 10 nodes, got {}",
-            mesh.tet_nodes
-        )));
-    }
-    check_connectivity("tetrahedron", mesh.tets, mesh.tet_nodes, node_count)?;
-    check_connectivity("hexahedron", mesh.hexes, 8, node_count)?;
-    check_connectivity("shell facet", mesh.shell_triangles, 3, node_count)?;
-    let facets = mesh.shell_triangles.len() / 3;
-    if mesh.shell_thicknesses.len() != facets {
-        return Err(invalid(format!(
-            "{} shell thicknesses for {facets} shell facets",
-            mesh.shell_thicknesses.len()
-        )));
-    }
-    if let Some(thickness) = mesh
-        .shell_thicknesses
-        .iter()
-        .find(|thickness| thickness.is_nan() || **thickness <= 0.0)
-    {
-        return Err(invalid(format!(
-            "a shell thickness must be positive, got {thickness}"
-        )));
-    }
-
-    let weights = nodal_volumes(mesh, node_count);
+    let weights = nodal_volumes(&mesh.elements(), node_count);
     let mut order: Vec<usize> = (0..node_count).filter(|&n| weights[n] > 0.0).collect();
     order.sort_by(|&lhs, &rhs| mesh.values[lhs].total_cmp(&mesh.values[rhs]));
     let total: f64 = order.iter().map(|&n| weights[n]).sum();
@@ -225,4 +270,122 @@ pub fn nodal_percentiles(
             mesh.values[order[at.min(order.len() - 1)]]
         })
         .collect())
+}
+
+/// The statistics of one group of elements: the max and the asked percentile
+/// of the group's field averaged to its nodes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroupStatistics {
+    pub max: f64,
+    pub quantile: f64,
+}
+
+/// Per group, the max and the volume-weighted `quantile` (in [0, 1]) of an
+/// element field averaged to the nodes over that group's elements only, each
+/// element weighted by its volume. `values` and `groups` hold one entry per
+/// element, tetrahedra first, then hexahedra, then shell facets; groups are
+/// numbered from 0 to `group_count` − 1. A stiff group's stress so does not
+/// leak into a soft neighbour at the nodes they share.
+///
+/// # Errors
+/// [`FemError::StatisticsInput`] for the element checks of
+/// [`nodal_percentiles`], a value or group count that differs from the
+/// element count, a non-finite value, a group outside `group_count`, or a
+/// group without elements.
+pub fn grouped_element_statistics(
+    elements: &ElementMesh<'_>,
+    values: &[f64],
+    groups: &[u32],
+    group_count: usize,
+    quantile: f64,
+) -> Result<Vec<GroupStatistics>, FemError> {
+    let node_count = check_elements(elements)?;
+    let element_count = elements.element_count();
+    if values.len() != element_count || groups.len() != element_count {
+        return Err(invalid(format!(
+            "{} values and {} groups for {element_count} elements",
+            values.len(),
+            groups.len()
+        )));
+    }
+    if let Some(element) = values.iter().position(|value| !value.is_finite()) {
+        return Err(invalid(format!(
+            "element {element} has the non-finite value {}",
+            values[element]
+        )));
+    }
+    if let Some(group) = groups.iter().find(|&&group| group as usize >= group_count) {
+        return Err(invalid(format!(
+            "an element is in group {group}, but there are {group_count} groups"
+        )));
+    }
+    let measured: Vec<(&[u32], f64)> = elements
+        .measured()
+        .map(|(nodes, _, volume)| (nodes, volume))
+        .collect();
+    (0..group_count)
+        .map(|group| {
+            let members: Vec<usize> = (0..element_count)
+                .filter(|&element| groups[element] as usize == group)
+                .collect();
+            if members.is_empty() {
+                return Err(invalid(format!("group {group} has no elements")));
+            }
+            let mut sums = vec![0.0; node_count];
+            let mut weights = vec![0.0; node_count];
+            for &element in &members {
+                let (nodes, volume) = measured[element];
+                for &node in nodes {
+                    sums[node as usize] += volume * values[element];
+                    weights[node as usize] += volume;
+                }
+            }
+            let averaged: Vec<f64> = sums
+                .iter()
+                .zip(&weights)
+                .map(|(&sum, &weight)| if weight > 0.0 { sum / weight } else { 0.0 })
+                .collect();
+            let max = averaged
+                .iter()
+                .zip(&weights)
+                .filter(|(_, &weight)| weight > 0.0)
+                .map(|(&value, _)| value)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let own = |family: &[u32], per: usize, offset: usize| -> Vec<u32> {
+                family
+                    .chunks_exact(per)
+                    .enumerate()
+                    .filter(|(index, _)| groups[offset + index] as usize == group)
+                    .flat_map(|(_, nodes)| nodes.iter().copied())
+                    .collect()
+            };
+            let tet_count = elements.tets.len() / elements.tet_nodes;
+            let hex_count = elements.hexes.len() / 8;
+            let tets = own(elements.tets, elements.tet_nodes, 0);
+            let hexes = own(elements.hexes, 8, tet_count);
+            let shell_triangles = own(elements.shell_triangles, 3, tet_count + hex_count);
+            let shell_thicknesses: Vec<f64> = elements
+                .shell_thicknesses
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| groups[tet_count + hex_count + index] as usize == group)
+                .map(|(_, &thickness)| thickness)
+                .collect();
+            let [quantile] = nodal_percentiles(
+                &StatisticsMesh {
+                    points: elements.points,
+                    values: &averaged,
+                    tets: &tets,
+                    tet_nodes: elements.tet_nodes,
+                    hexes: &hexes,
+                    shell_triangles: &shell_triangles,
+                    shell_thicknesses: &shell_thicknesses,
+                },
+                &[quantile],
+            )?[..] else {
+                unreachable!("one quantile asked, one returned")
+            };
+            Ok(GroupStatistics { max, quantile })
+        })
+        .collect()
 }
