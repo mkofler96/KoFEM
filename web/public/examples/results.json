@@ -1,7 +1,7 @@
 {
   "generated": "2026-11-28",
-  "engine": "engine-e23d3437403a",
-  "fem": "fem-7c33c9ef288e",
+  "engine": "engine-f6443e1cd400",
+  "fem": "fem-a9c0a9a37571",
   "cases": [
     {
       "id": "axial-bar",
@@ -1367,8 +1367,8 @@
       "reference": -105,
       "referenceLabel": "NAFEMS LE11 target",
       "tolPct": 3,
-      "fe": -103.76694856106808,
-      "errPct": -1.174334703744689,
+      "fe": -103.76694856106333,
+      "errPct": -1.1743347037492093,
       "pass": true,
       "mesh": {
         "order": 2,
@@ -1400,9 +1400,140 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 30.40168826121691,
-        "max": 146.19822151436802,
+        "min": 30.401688261217082,
+        "max": 146.19822151436728,
         "deform": 200,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "scordelis-lo-roof",
+      "name": "Scordelis–Lo roof",
+      "quantity": "vertical displacement at the middle of the free edge",
+      "unit": "mm",
+      "reference": -302.4,
+      "referenceLabel": "MacNeal and Harder (1985)",
+      "tolPct": 2,
+      "fe": -299.2464667051138,
+      "errPct": -1.0428350842877605,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 1016,
+        "vertices": 551,
+        "nodes": 551,
+        "dofs": 3306,
+        "maxElementSize": 1000,
+        "minElementSize": 100
+      },
+      "inputs": [
+        {
+          "symbol": "R",
+          "value": 25000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "L",
+          "value": 50000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 250,
+          "unit": "mm"
+        },
+        {
+          "symbol": "φ",
+          "value": 40,
+          "unit": "°"
+        },
+        {
+          "symbol": "E",
+          "value": 432,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0,
+          "unit": ""
+        },
+        {
+          "symbol": "q",
+          "value": 0.00009,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0.08740247199718194,
+        "max": 338.27013074809906,
+        "deform": 5,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "pinched-cylinder",
+      "name": "Pinched cylinder with end diaphragms",
+      "quantity": "displacement under the load",
+      "unit": "mm",
+      "reference": -0.000018248,
+      "referenceLabel": "Belytschko et al. (1985)",
+      "tolPct": 2,
+      "fe": -0.000018309290626507855,
+      "errPct": 0.335875857671288,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 3249,
+        "vertices": 1707,
+        "nodes": 1707,
+        "dofs": 10242,
+        "maxElementSize": 10,
+        "minElementSize": 1
+      },
+      "inputs": [
+        {
+          "symbol": "R",
+          "value": 300,
+          "unit": "mm"
+        },
+        {
+          "symbol": "L",
+          "value": 600,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 3,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 3000000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 1,
+          "unit": "N"
+        }
+      ],
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 4.654960832013703e-9,
+        "max": 0.000018309290626507855,
+        "deform": 1000000,
         "width": 1200,
         "height": 900
       }
@@ -3060,8 +3191,8 @@
               "dofs": 21846,
               "maxElementSize": 100,
               "minElementSize": 10,
-              "fe": -101.81399725532589,
-              "errPct": -3.0342883282610598,
+              "fe": -101.81399725532424,
+              "errPct": -3.0342883282626296,
               "ci": false
             },
             {
@@ -3074,8 +3205,8 @@
               "dofs": 180945,
               "maxElementSize": 50,
               "minElementSize": 5,
-              "fe": -103.76694856106808,
-              "errPct": -1.174334703744689,
+              "fe": -103.76694856106333,
+              "errPct": -1.1743347037492093,
               "ci": true
             },
             {
@@ -3088,8 +3219,8 @@
               "dofs": 379089,
               "maxElementSize": 35,
               "minElementSize": 3.5,
-              "fe": -104.41578317161908,
-              "errPct": -0.5563969794103973,
+              "fe": -104.41578317161824,
+              "errPct": -0.5563969794111958,
               "ci": false
             }
           ]
@@ -3385,6 +3516,184 @@
         "reference": null,
         "series": [],
         "noRate": "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only."
+      }
+    },
+    {
+      "id": "scordelis-lo-roof",
+      "caseId": "scordelis-lo-roof",
+      "title": "Scordelis–Lo roof, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "scordelis-lo-roof",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "4000 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 58,
+              "vertices": 40,
+              "nodes": 40,
+              "dofs": 240,
+              "maxElementSize": 4000,
+              "minElementSize": 400,
+              "fe": -251.4801896241197,
+              "errPct": -16.838561632235542,
+              "ci": false
+            },
+            {
+              "mesh": "2000 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 248,
+              "vertices": 146,
+              "nodes": 146,
+              "dofs": 876,
+              "maxElementSize": 2000,
+              "minElementSize": 200,
+              "fe": -292.1304194050124,
+              "errPct": -3.3960253290302873,
+              "ci": false
+            },
+            {
+              "mesh": "1000 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 1016,
+              "vertices": 551,
+              "nodes": 551,
+              "dofs": 3306,
+              "maxElementSize": 1000,
+              "minElementSize": 100,
+              "fe": -299.2464667051138,
+              "errPct": -1.0428350842877605,
+              "ci": true
+            },
+            {
+              "mesh": "500 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 4040,
+              "vertices": 2106,
+              "nodes": 2106,
+              "dofs": 12636,
+              "maxElementSize": 500,
+              "minElementSize": 50,
+              "fe": -300.2713533592099,
+              "errPct": -0.703917539943805,
+              "ci": false
+            },
+            {
+              "mesh": "250 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 16082,
+              "vertices": 8212,
+              "nodes": 8212,
+              "dofs": 49272,
+              "maxElementSize": 250,
+              "minElementSize": 25,
+              "fe": -300.47807362861954,
+              "errPct": -0.6355576624935306,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only."
+      }
+    },
+    {
+      "id": "pinched-cylinder",
+      "caseId": "pinched-cylinder",
+      "title": "Pinched cylinder, curved shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "pinched-cylinder",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "40 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 229,
+              "vertices": 139,
+              "nodes": 139,
+              "dofs": 834,
+              "maxElementSize": 40,
+              "minElementSize": 4,
+              "fe": -0.000018050128415374253,
+              "errPct": -1.084346693477346,
+              "ci": false
+            },
+            {
+              "mesh": "20 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 857,
+              "vertices": 473,
+              "nodes": 473,
+              "dofs": 2838,
+              "maxElementSize": 20,
+              "minElementSize": 2,
+              "fe": -0.000018262324673536878,
+              "errPct": 0.07849996458175787,
+              "ci": false
+            },
+            {
+              "mesh": "10 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 3249,
+              "vertices": 1707,
+              "nodes": 1707,
+              "dofs": 10242,
+              "maxElementSize": 10,
+              "minElementSize": 1,
+              "fe": -0.000018309290626507855,
+              "errPct": 0.335875857671288,
+              "ci": true
+            },
+            {
+              "mesh": "5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 13173,
+              "vertices": 6747,
+              "nodes": 6747,
+              "dofs": 40482,
+              "maxElementSize": 5,
+              "minElementSize": 0.5,
+              "fe": -0.00001828694586506281,
+              "errPct": 0.21342538942793515,
+              "ci": false
+            },
+            {
+              "mesh": "2.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 51397,
+              "vertices": 26012,
+              "nodes": 26012,
+              "dofs": 156072,
+              "maxElementSize": 2.5,
+              "minElementSize": 0.25,
+              "fe": -0.00001827733552449126,
+              "errPct": 0.16076021751019312,
+              "ci": false
+            }
+          ]
+        }
+      ],
+      "rates": {
+        "reference": null,
+        "series": [],
+        "noRate": "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only."
       }
     }
   ]

@@ -44,7 +44,7 @@
 // off (Abaqus S3: −13 % on its fine mesh). The example meshes at 250 mm.
 
 import { sphericalShellStep } from "../../gallery/step-revolve.mjs";
-import { APP_STEEL } from "../lib/recipe.mjs";
+import { benchmarkMaterial } from "../lib/recipe.mjs";
 
 const E = 68250; // MPa
 const nu = 0.3;
@@ -116,14 +116,7 @@ export default {
     ],
     discretization: { kind: "shell", thickness: t },
     mesh: { maxElementSize: h, order: 1 },
-    // E and ν as the benchmark sets them; the density is the material form's
-    // default (it does not enter a static solve).
-    material: {
-      name: "NAFEMS LE3",
-      young: E,
-      poisson: nu,
-      density: APP_STEEL.density,
-    },
+    material: benchmarkMaterial("NAFEMS LE3", E, nu),
     supports: [
       {
         name: "Symmetry y = 0",

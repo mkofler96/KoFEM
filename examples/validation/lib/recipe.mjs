@@ -170,6 +170,15 @@ export const APP_STEEL = Object.freeze({
   density: 7.85e-9,
 });
 
+/**
+ * A benchmark's material: E and ν as the benchmark sets them, typed into the
+ * material form, which keeps its default density. The density does not enter
+ * a static solve, and a weight a benchmark prescribes is entered as a load.
+ */
+export function benchmarkMaterial(name, young, poisson) {
+  return { name, young, poisson, density: APP_STEEL.density };
+}
+
 // ── Resolving a face from a point ─────────────────────────────────────────────
 
 /** The worker's tessellation chord tolerance, relative to the model size. */

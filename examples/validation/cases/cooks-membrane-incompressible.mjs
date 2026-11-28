@@ -26,7 +26,7 @@
 // a node of every mesh.
 
 import { prismStep } from "../../gallery/step-prism.mjs";
-import { APP_STEEL } from "../lib/recipe.mjs";
+import { benchmarkMaterial } from "../lib/recipe.mjs";
 
 const E = 240.565; // MPa
 const nu = 0.4999;
@@ -82,14 +82,7 @@ export default {
     splits: [],
     discretization: { kind: "solid" },
     mesh: { maxElementSize: 2, order: 2 },
-    // E and ν as the benchmark sets them; the density is the material form's
-    // default (it does not enter a static solve).
-    material: {
-      name: "Nearly incompressible",
-      young: E,
-      poisson: nu,
-      density: APP_STEEL.density,
-    },
+    material: benchmarkMaterial("Nearly incompressible", E, nu),
     supports: [
       { name: "Clamp", faces: [clamped], dofs: [0, 1, 2], value: 0 },
       { name: "Plane strain", faces: [front, back], dofs: [2], value: 0 },

@@ -932,6 +932,89 @@ export function cylindricalPanelFigure() {
 }
 
 /**
+ * The Scordelis–Lo roof seen along its axis: the 80° arc of radius R, free
+ * at both straight edges, its weight q pointing down, the angle φ = 40° on
+ * each side of the crown and A, the read-out point, at the middle of a free
+ * edge. The diaphragms close the two ends, in the plane of the drawing.
+ */
+export function scordelisRoofFigure() {
+  const R = 150,
+    ox = 165,
+    oy = 196;
+  const P = (deg, r = R) => [
+    ox + r * Math.cos((deg * Math.PI) / 180),
+    oy - r * Math.sin((deg * Math.PI) / 180),
+  ];
+  const [x0, y0] = P(130),
+    [x1, y1] = P(50);
+  const parts = [
+    `<path class="curve" d="M${f(x0)} ${f(y0)}A${R} ${R} 0 0 1 ${f(x1)} ${f(y1)}"/>`,
+    line(ox, oy, x0, y0, "ext"),
+    line(ox, oy, x1, y1, "ext"),
+    line(ox, oy, ox, oy - R - 14, "axis"),
+    `<path class="dim" d="M${f(P(90, 46)[0])} ${f(P(90, 46)[1])}A46 46 0 0 1 ${f(P(50, 46)[0])} ${f(P(50, 46)[1])}" fill="none"/>`,
+    sym(P(70, 58)[0], P(70, 58)[1] + 4, "φ"),
+    sym((ox + x1) / 2 + 10, (oy + y1) / 2 + 12, "R", "start"),
+  ];
+  for (const deg of [62, 76, 90, 104, 118]) {
+    const [x, y] = P(deg);
+    parts.push(arrow(x, y - 30, x, y - 4));
+  }
+  parts.push(
+    sym(P(90)[0] + 6, P(90)[1] - 34, "q", "start"),
+    `<circle class="pt" cx="${f(x1)}" cy="${f(y1)}" r="3.5"/>`,
+    label(x1 + 8, y1 + 4, "A (free edge)", { anchor: "start" }),
+    label(x0 - 8, y0 + 4, "free edge", { anchor: "end" }),
+    label(ox, oy + 18, "rigid diaphragms at both ends, L apart"),
+  );
+  return svg(
+    330,
+    220,
+    "The Scordelis–Lo roof seen along its axis: an arc of radius R spanning φ = 40° each side of the crown, free along both straight edges, loaded by its weight q; A is the middle of a free edge",
+    parts.join("\n    "),
+    { cls: "fig half", name: "roof-diagram" },
+  );
+}
+
+/**
+ * The pinched cylinder: its section at mid-length with the two opposite
+ * point loads P, and beside it the side view between the two rigid
+ * diaphragms, L apart, the loads at mid-length.
+ */
+export function pinchedCylinderFigure() {
+  const r = 62,
+    cx = 80,
+    cy = 100;
+  const sx0 = 200,
+    sx1 = 360;
+  const parts = [
+    `<circle class="curve" cx="${cx}" cy="${cy}" r="${r}" fill="none"/>`,
+    arrow(cx, cy - r - 34, cx, cy - r - 3),
+    arrow(cx, cy + r + 34, cx, cy + r + 3),
+    sym(cx + 8, cy - r - 18, "P", "start"),
+    sym(cx + 8, cy + r + 26, "P", "start"),
+    line(cx, cy, cx + r * Math.cos(-0.6), cy + r * Math.sin(-0.6), "ext"),
+    sym(cx + 26, cy - 22, "R", "start"),
+    `<rect class="body" x="${sx0}" y="${cy - r}" width="${sx1 - sx0}" height="${2 * r}"/>`,
+    line(sx0, cy - r - 8, sx0, cy + r + 8, "wall"),
+    line(sx1, cy - r - 8, sx1, cy + r + 8, "wall"),
+    arrow((sx0 + sx1) / 2, cy - r - 34, (sx0 + sx1) / 2, cy - r - 3),
+    arrow((sx0 + sx1) / 2, cy + r + 34, (sx0 + sx1) / 2, cy + r + 3),
+    dim(sx0, cy + r + 44, sx1, cy + r + 44),
+    sym((sx0 + sx1) / 2 + 30, cy + r + 38, "L"),
+    label(sx0, cy - r - 14, "diaphragm"),
+    label(sx1, cy - r - 14, "diaphragm"),
+  ];
+  return svg(
+    400,
+    224,
+    "The pinched cylinder: its section of radius R with two opposite point loads P, and its side view between two rigid diaphragms L apart, the loads at mid-length",
+    parts.join("\n    "),
+    { name: "pinched-cylinder-diagram" },
+  );
+}
+
+/**
  * A meridian section (r, z) of a body of revolution, to scale: the closed
  * profile of a solid or the mid-surface of a shell (`closed` false), its
  * points labelled, the axis dashed. Segments as in examples/gallery/

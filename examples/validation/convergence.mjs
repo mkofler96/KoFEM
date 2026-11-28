@@ -56,6 +56,10 @@ const NAFEMS_STRESS_SOLID =
   "The read-out is a stress at a point, recovered at element corners; the rate check covers energy-type results and point displacements only.";
 const NAFEMS_STRESS_SHELL =
   "The read-out is a stress at a point on a shell of flat facets; the rate check covers energy-type results and point displacements on solid meshes only.";
+// A displacement read on a shell of flat facets, which stand in for the
+// curved surface: the rate check has theory for solid meshes only.
+const SHELL_DISPLACEMENT =
+  "The read-out is a displacement on a shell of flat facets, which approximate the curved surface; the rate check covers solid meshes only.";
 
 /** A convergence study: levels are max element sizes (mm). */
 export function recipeStudy(study) {
@@ -427,6 +431,38 @@ export default [
         caseId: "nafems-le8",
         order: 1,
         levels: [10, 7.5, 6, 5],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "scordelis-lo-roof",
+    caseId: "scordelis-lo-roof",
+    title: "Scordelis–Lo roof, curved shell triangles",
+    note: "The free-edge deflection rises to the reference from below and settles about 0.6 % short of it.",
+    expect: null,
+    noRate: SHELL_DISPLACEMENT,
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "scordelis-lo-roof",
+        order: 1,
+        levels: [4000, 2000, 1000, 500, 250],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "pinched-cylinder",
+    caseId: "pinched-cylinder",
+    title: "Pinched cylinder, curved shell triangles",
+    note: "The displacement under the load settles within 0.2 % of the reference.",
+    expect: null,
+    noRate: SHELL_DISPLACEMENT,
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "pinched-cylinder",
+        order: 1,
+        levels: [40, 20, 10, 5, 2.5],
       },
     ],
   }),

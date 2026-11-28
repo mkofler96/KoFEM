@@ -49,6 +49,8 @@ export const ORDER = [
   "nafems-le8",
   "nafems-le10",
   "nafems-le11",
+  "scordelis-lo-roof",
+  "pinched-cylinder",
   "mbb-beam-topopt",
 ];
 

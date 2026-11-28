@@ -37,6 +37,8 @@ import nafemsLe7 from "./nafems-le7.mjs";
 import nafemsLe8 from "./nafems-le8.mjs";
 import nafemsLe10 from "./nafems-le10.mjs";
 import nafemsLe11 from "./nafems-le11.mjs";
+import scordelisLoRoof from "./scordelis-lo-roof.mjs";
+import pinchedCylinder from "./pinched-cylinder.mjs";
 
 export default new Map([
   ["axial-bar", axialBar],
@@ -62,4 +64,6 @@ export default new Map([
   ["nafems-le8", nafemsLe8],
   ["nafems-le10", nafemsLe10],
   ["nafems-le11", nafemsLe11],
+  ["scordelis-lo-roof", scordelisLoRoof],
+  ["pinched-cylinder", pinchedCylinder],
 ]);

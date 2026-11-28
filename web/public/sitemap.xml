@@ -120,6 +120,16 @@
     <image:image><image:loc>https://kofem.org/examples/nafems-le11.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le11/nafems-le11-solid-of-revolution-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/nafems-le11/nafems-le11-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
+    <loc>https://kofem.org/examples/scordelis-lo-roof/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/scordelis-lo-roof.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/scordelis-lo-roof/scordelis-lo-roof-roof-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/scordelis-lo-roof/scordelis-lo-roof-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/pinched-cylinder/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/pinched-cylinder.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/pinched-cylinder/pinched-cylinder-pinched-cylinder-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/pinched-cylinder/pinched-cylinder-mesh-convergence.png</image:loc></image:image>
+  </url>
+  <url>
     <loc>https://kofem.org/examples/mbb-beam-topopt/</loc>
     <priority>0.6</priority>
     <image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-compliance-history.png</image:loc></image:image>
