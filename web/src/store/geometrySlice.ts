@@ -26,6 +26,7 @@ import {
 } from "../lib/meshSizing";
 import type { MeshOverlap, ShellRoute } from "../wasm/pkg/kofem_wasm";
 import { shellFaceNodes, type MidSurfaceLinks } from "../lib/cadShell";
+import type { CadFaceProperties } from "../lib/cadFaceProperties";
 import {
   detectInterfaces,
   INTERFACE_TYPES,
@@ -286,6 +287,7 @@ export interface GeometryVersion {
   stepBytes: Uint8Array;
   geometryFormat: GeometryFormat;
   stepSurface: StepTessellation;
+  cadFaces: CadFaceProperties[];
   properties: Property[];
   interfaces: BodyInterface[] | null;
   faceSizes: FaceSize[];
@@ -313,6 +315,8 @@ export interface GeometrySlice {
   stepBytes: Uint8Array | null;
   // Format of the retained stepBytes — selects the OCCT reader on re-mesh.
   geometryFormat: GeometryFormat;
+  // What each CAD face of stepBytes is (lib/cadFaceProperties), by face id − 1.
+  cadFaces: CadFaceProperties[] | null;
   isMeshing: boolean;
   volMesh: VolMesh | null;
   // Netgen surface element vertex indices (0-based, same node IDs as the volume
@@ -401,7 +405,7 @@ export interface GeometrySlice {
   promoteRegion(propertyId: number): void;
   setInterfaceType(interfaceId: number, type: InterfaceType): void;
   setStepSurface(tessellation: StepTessellation | null): void;
-  setStepBytes(bytes: Uint8Array | null): void;
+  setStepBytes(bytes: Uint8Array, cadFaces: CadFaceProperties[]): void;
   setGeometryFormat(format: GeometryFormat): void;
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
@@ -422,6 +426,7 @@ export interface GeometrySlice {
   // rebuilds it as an import would.
   applyGeometryEdit(
     bytes: Uint8Array,
+    cadFaces: CadFaceProperties[],
     tessellation: StepTessellation,
     bodyCount: number,
     // For an edit that knows where each new body came from (a split, a
@@ -565,6 +570,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   stepSurface: null,
   stepBytes: null,
   geometryFormat: "step",
+  cadFaces: null,
   isMeshing: false,
   volMesh: null,
   surfaceTriangles: null,
@@ -698,9 +704,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         );
       delete prop.materialUnconfirmed;
     }),
-  setStepBytes: (bytes) =>
+  setStepBytes: (bytes, cadFaces) =>
     set((s) => {
       s.stepBytes = bytes;
+      s.cadFaces = cadFaces;
     }),
   setGeometryFormat: (format) =>
     set((s) => {
@@ -715,6 +722,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       if (!tessellation) {
         s.stepBytes = null;
         s.geometryFormat = "step";
+        s.cadFaces = null;
       }
       // New (or cleared) geometry: body ids, the mesh and everything on it no
       // longer apply (issue #353), and the edits of the previous geometry are
@@ -781,14 +789,21 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources, piecesAs) =>
+  applyGeometryEdit: (
+    bytes,
+    cadFaces,
+    tessellation,
+    bodyCount,
+    bodySources,
+    piecesAs,
+  ) =>
     set((s) => {
       // Where the pieces of one solid go is the edit's to say (KOF-432).
       if (bodySources && piecesAs === undefined)
         throw new Error(
           "Geometry edit: body sources given without saying whether the pieces of a solid become regions or bodies",
         );
-      if (!s.stepBytes || !s.stepSurface)
+      if (!s.stepBytes || !s.cadFaces || !s.stepSurface)
         throw new Error(
           "Cannot apply a geometry edit: no geometry is loaded to edit",
         );
@@ -797,11 +812,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         stepBytes: s.stepBytes,
         geometryFormat: s.geometryFormat,
         stepSurface: s.stepSurface,
+        cadFaces: s.cadFaces,
         properties: cadBodies,
         interfaces: s.interfaces,
         faceSizes: s.faceSizes,
       });
       s.stepBytes = bytes;
+      s.cadFaces = cadFaces;
       // The engine writes every edit as STEP, whatever the source format was.
       s.geometryFormat = "step";
       s.stepSurface = tessellation;
@@ -860,6 +877,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.stepBytes = previous.stepBytes;
       s.geometryFormat = previous.geometryFormat;
       s.stepSurface = previous.stepSurface;
+      s.cadFaces = previous.cadFaces;
       s.properties = previous.properties;
       s.interfaces = previous.interfaces;
       dropAnalysis(s);

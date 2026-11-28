@@ -39,6 +39,7 @@ pub mod mesh;
 pub mod mesh_outline;
 pub mod mortar;
 pub mod nonlinear;
+pub mod piece;
 pub mod reactions;
 pub mod report;
 pub mod rigid_body;
@@ -51,6 +52,7 @@ pub mod surface;
 pub mod thermal;
 pub mod tie;
 pub mod topology;
+pub mod transition;
 
 pub use amg::{
     AmgSettings, LevelInfo, NodeBlock, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel,
@@ -76,7 +78,7 @@ pub use field_peak::{
 pub use field_statistics::{nodal_percentiles, StatisticsMesh};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
-pub use mesh::{ElementOrder, ElementShape, TetMesh};
+pub use mesh::{ElementOrder, ElementShape, Pieces, TetMesh};
 pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
 pub use mortar::{mortar_integrals, mortar_weights, MortarFace, MortarRow, SlaveIntegrals};
 pub use reactions::{
@@ -106,3 +108,4 @@ pub use tie::{
     node_ties, prepare_tied_static, solve_tied_static, tie_couplings, NodeTie, PreparedTied,
     TieReport, TiedSolution, VertexTies,
 };
+pub use transition::{find_interface_faces, Diagonal, InterfaceFace};

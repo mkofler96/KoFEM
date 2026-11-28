@@ -156,6 +156,20 @@ export interface MidSurfaceMesh {
   rimEdges: Int32Array
 }
 
+/** Properties of every CAD face of the cached shape, one entry per face in
+ *  face id order (index = id − 1), measured on the exact CAD surface.
+ *  `surfaceTypes`: 0 plane, 1 cylinder, 2 cone, 3 any other surface.
+ *  `areas`: face area (mm²). `directions`: three per face — a plane's outward
+ *  unit normal, a cylinder's or cone's unit axis direction (either sign), zero
+ *  for any other surface. `radii`: a cylinder's radius (mm), zero for any other
+ *  surface. */
+export interface CadFacePropertyArrays {
+  surfaceTypes: Uint8Array
+  areas: Float64Array
+  directions: Float64Array
+  radii: Float64Array
+}
+
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
   /** Load a STEP or IGES file and tessellate it for display.
@@ -209,6 +223,9 @@ export interface KofemModule {
    *  can't be closed. Releases the cached shape, like split_geometry.
    *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
   remove_faces(opts_json: string): { bytes: Uint8Array }
+  /** Type, area and normal or axis of every CAD face of the shape
+   *  tessellate_step cached. Throws when no shape is cached. */
+  cad_face_properties(): CadFacePropertyArrays
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete to free ~10–30 MB of WASM memory
    *  that is no longer needed.

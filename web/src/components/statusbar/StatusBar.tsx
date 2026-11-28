@@ -3,46 +3,48 @@
 
 import { Fragment } from "react";
 import { useModelStore, loadKind } from "../../store/modelStore";
-import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import { consentBanner } from "../../lib/analytics";
 import type { ViewRepr } from "../../store/viewSlice";
 import type { Projection } from "../../lib/projection";
 import { EngineStatus } from "./EngineStatus";
-import { useT } from "../../i18n/useLocale";
+import { useIntlTag, useT } from "../../i18n/useLocale";
 import { statusMessages } from "../../i18n/messages/shell";
-import type { PickGeometry } from "../../lib/facePick";
+import {
+  isPicking,
+  pickedCadFaceId,
+  stepCounts,
+} from "../../lib/statusContext";
+import type { CountKind } from "../../lib/statusContext";
+import { cadFaceLabel } from "../../lib/cadFaceProperties";
+import type { CadFaceProperties } from "../../lib/cadFaceProperties";
+import { MODEL_UNITS } from "../../lib/modelUnits";
 import styles from "./StatusBar.module.css";
 
 type StatusText = (typeof statusMessages)["en"];
 
-// What the face being picked is for, shown next to the pick indicator.
-function pickPurpose(text: StatusText, mode: PickMode): string {
+function countLabel(text: StatusText, kind: CountKind, value: number): string {
   return {
-    bc: text.purposeBc,
-    load: text.purposeLoad,
-    tie: text.purposeTie,
-    contact: text.purposeContact,
-    coupling: text.purposeCoupling,
-  }[mode];
+    nodes: () => text.nodes(value),
+    hexes: () => `${value} CHEXA`,
+    tets: () => `${value} CTETRA`,
+    fixedNodes: () => text.nodesFixed(value),
+    faceLoads: () => text.faceLoads(value),
+    nodalLoadDofs: () => text.nodalLoadDofs(value),
+  }[kind]();
 }
 
-function pickTarget(text: StatusText, geometry: PickGeometry): string {
-  return { face: text.pickFace, edge: text.pickEdge, point: text.pickPoint }[
-    geometry
-  ];
-}
-
-// The face and nodal-DOF load counts, faces first.
-function loadCountLabels(
-  text: StatusText,
-  nodalLoadDofs: number,
-  faceLoads: number,
-): string[] {
-  const parts: string[] = [];
-  if (faceLoads > 0) parts.push(text.faceLoads(faceLoads));
-  if (nodalLoadDofs > 0) parts.push(text.nodalLoadDofs(nodalLoadDofs));
-  return parts;
+function pickedCadFace(
+  faces: CadFaceProperties[] | null,
+  cadFaceId: number | undefined,
+): { id: number; face: CadFaceProperties } | null {
+  if (faces === null || cadFaceId === undefined) return null;
+  const face = faces[cadFaceId - 1];
+  if (face === undefined)
+    throw new Error(
+      `Picked CAD face ${cadFaceId}, but the geometry has ${faces.length} faces`,
+    );
+  return { id: cadFaceId, face };
 }
 
 function reprLabels(
@@ -174,9 +176,9 @@ export function StatusBar() {
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const result = useModelStore((s) => s.result);
   const mode = useModelStore((s) => s.mode);
-  const selectedFace = useModelStore((s) => s.selectedFace);
-  const pickMode = useModelStore((s) => s.pickMode);
-  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const picking = useModelStore(isPicking);
+  const treeGroup = useModelStore((s) => s.treeSelection.group);
+  const pickedFaceId = useModelStore(pickedCadFaceId);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
   const projection = useModelStore((s) => s.projection);
@@ -189,7 +191,13 @@ export function StatusBar() {
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const setLoadDisplay = useModelStore((s) => s.setLoadDisplay);
   const stepSurface = useModelStore((s) => s.stepSurface);
+  const cadFaces = useModelStore((s) => s.cadFaces);
   const text = useT(statusMessages);
+  const intl = useIntlTag();
+  const picked = pickedCadFace(cadFaces, pickedFaceId);
+  const pickedLabel =
+    picked &&
+    cadFaceLabel(picked.id, picked.face, text, intl, MODEL_UNITS.length);
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
   const hasSurface = nodes.length > 0;
@@ -201,7 +209,14 @@ export function StatusBar() {
 
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
-  const meshOk = nodes.length > 0;
+  const counts = stepCounts(treeGroup, {
+    nodes: nodes.length,
+    hexes: hexCount,
+    tets: tetCount,
+    fixedNodes: new Set(constraints.map((c) => c.nodeId)).size,
+    faceLoads: surfaceLoads.length,
+    nodalLoadDofs: loads.length,
+  }).map(({ kind, value }) => countLabel(text, kind, value));
 
   // Load glyphs are only drawn outside the deformed-result view. Moment arrows
   // look identical in both display modes (they have no per-node form), so the
@@ -212,67 +227,25 @@ export function StatusBar() {
     !showingResult && loadGroups.some((g) => loadKind(g) !== "moment");
 
   return (
-    <div className={styles.bar}>
-      {/* Left */}
+    <div className={styles.bar} data-testid="status-bar">
+      {/* Left: the face being picked while a tool picks, else the step's counts */}
       <div className={styles.left}>
-        {/* <span className={styles.stepChip}>
-          Step {MODE_NUMS[mode]} / 05 · {MODE_LABELS[mode]}
-        </span> */}
-
-        {pickMode && (
-          <span className={styles.pickChip}>
-            <span className={styles.pickDot} />
-            {text.pick(
-              pickTarget(text, pickGeometry),
-              pickPurpose(text, pickMode),
-            )}
-          </span>
-        )}
-
-        {selectedFace && !pickMode && (
-          <span className={styles.selChip}>
-            {text.selected(selectedFace.label)}
-          </span>
-        )}
-
-        {nodes.length > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{text.nodes(nodes.length)}</span>
-          </>
-        )}
-
-        {hexCount > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{hexCount} CHEXA</span>
-          </>
-        )}
-
-        {tetCount > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{tetCount} CTETRA</span>
-          </>
-        )}
-
-        {constraints.length > 0 && (
-          <>
-            <span className={styles.sep}>·</span>
-            <span className={styles.stat}>
-              {text.nodesFixed(new Set(constraints.map((c) => c.nodeId)).size)}
-            </span>
-          </>
-        )}
-
-        {loadCountLabels(text, loads.length, surfaceLoads.length).map(
-          (count) => (
-            <Fragment key={count}>
-              <span className={styles.sep}>·</span>
-              <span className={styles.stat}>{count}</span>
-            </Fragment>
-          ),
-        )}
+        {picking
+          ? pickedLabel && (
+              <span
+                className={styles.faceInfo}
+                title={pickedLabel}
+                data-testid="picked-face"
+              >
+                {pickedLabel}
+              </span>
+            )
+          : counts.map((count, i) => (
+              <Fragment key={count}>
+                {i > 0 && <span className={styles.sep}>·</span>}
+                <span className={styles.stat}>{count}</span>
+              </Fragment>
+            ))}
       </div>
 
       {/* Center — repr toolbar + undeformed overlay toggle */}
@@ -379,19 +352,11 @@ export function StatusBar() {
 
       {/* Right */}
       <div className={styles.right}>
-        {result ? (
-          <span className={styles.resultChip}>
-            <span className={styles.okDot} />
-            {text.solved}
-          </span>
-        ) : meshOk ? (
-          <span className={styles.meshChip}>
-            <span className={styles.okDot} />
-            {text.meshOk}
-          </span>
-        ) : null}
         <EngineStatus />
-        <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
+        <span className={styles.muted}>
+          {MODEL_UNITS.length} · {MODEL_UNITS.force} · {MODEL_UNITS.stress} ·{" "}
+          {APP_VERSION}
+        </span>
         <a
           className={styles.discLink}
           href="https://github.com/mkofler96/KoFEM/blob/main/DISCLAIMER.md"

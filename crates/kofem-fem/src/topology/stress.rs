@@ -19,9 +19,9 @@
 //! The stress is sampled once per element at its centre, as the static
 //! result's von Mises is.
 
-use crate::element::{hex8_reference_gradients, hex_gradients, tet4_gradients, HEX_CENTRE};
 use crate::error::FemError;
-use crate::mesh::{ElementShape, TetMesh};
+use crate::mesh::TetMesh;
+use crate::piece::centre_gradients;
 
 use super::simp::{simp_scale_deriv, SimpModel};
 use super::topology_error;
@@ -79,17 +79,9 @@ impl StressOperators {
     pub(super) fn new(mesh: &TetMesh) -> Self {
         let mut operators = Vec::new();
         let mut offsets = Vec::with_capacity(mesh.element_count() + 1);
-        let tet_count = mesh.tets().len();
         for element in 0..mesh.element_count() {
             offsets.push(operators.len());
-            let gradients: Vec<[f64; 3]> = match mesh.shape(element) {
-                ElementShape::Tetrahedron => tet4_gradients(&mesh.corners(element)).0.to_vec(),
-                ElementShape::Hexahedron => {
-                    let corners = mesh.hex_corners(element - tet_count);
-                    let reference = hex8_reference_gradients(HEX_CENTRE);
-                    hex_gradients(&corners, &reference, HEX_CENTRE).0.to_vec()
-                }
-            };
+            let gradients = centre_gradients(mesh, element);
             let (lambda, mu) = mesh.material(element).lame();
             let width = 3 * gradients.len();
             let mut strain = vec![0.0; VOIGT * width];

@@ -20,6 +20,7 @@
 //   mesh_netgen.cpp   — Netgen OCC surface + tetrahedral volume meshing
 //   mesh_sizes.cpp    — element sizes per solid, face and edge
 //   mid_surface.cpp   — CAD mid-surfaces of Shell bodies (face pairing)
+//   face_properties.cpp — per-face CAD properties: type, area, normal or axis
 //   json_util.cpp     — manual JSON in/out helpers
 //   wasm_util.cpp     — WASM memory diagnostics + typed-array returns
 //
@@ -28,6 +29,7 @@
 
 #include <emscripten/bind.h>
 
+#include "face_properties.h"
 #include "geometry_cache.h"
 #include "geometry_edit.h"
 #include "mesh_netgen.h"
@@ -46,4 +48,5 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("repair_hinges",          &repair_hinges);
     emscripten::function("split_cone_tips",        &split_cone_tips);
     emscripten::function("remove_faces",           &remove_faces);
+    emscripten::function("cad_face_properties",    &cad_face_properties);
 }

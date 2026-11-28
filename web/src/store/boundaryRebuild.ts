@@ -119,21 +119,22 @@ const loadableCache = new WeakMap<FaceElements, ReadonlySet<string>>();
 export function loadableFaceKeys(elements: FaceElements): ReadonlySet<string> {
   const cached = loadableCache.get(elements);
   if (cached !== undefined) return cached;
-  const loadable = computeLoadableFaceKeys(elements);
+  const loadable = new Set(solidSurfaceFaceKeys(elements));
+  for (const el of elements) {
+    if (el.type !== "CTRIA3") continue;
+    loadable.add(faceKey(el.nodeIds));
+    for (const edge of TRIA_EDGE_INDICES)
+      loadable.add(faceKey(edge.map((i) => el.nodeIds[i])));
+  }
   loadableCache.set(elements, loadable);
   return loadable;
 }
 
-function computeLoadableFaceKeys(elements: FaceElements): Set<string> {
-  const solidOwners = new Map<string, number>();
-  const loadable = new Set<string>();
+// TypeScript because the store builds loads without the Rust module.
+export function solidSurfaceFaceKeys(elements: FaceElements): Set<string> {
+  const owners = new Map<string, number>();
+  const hexFaces: number[][] = [];
   for (const el of elements) {
-    if (el.type === "CTRIA3") {
-      loadable.add(faceKey(el.nodeIds));
-      for (const edge of TRIA_EDGE_INDICES)
-        loadable.add(faceKey(edge.map((i) => el.nodeIds[i])));
-      continue;
-    }
     const local =
       el.type === "CTETRA"
         ? TET_FACE_INDICES
@@ -142,12 +143,34 @@ function computeLoadableFaceKeys(elements: FaceElements): Set<string> {
           : null;
     if (!local) continue;
     for (const lf of local) {
-      const key = faceKey(lf.map((i) => el.nodeIds[i]));
-      solidOwners.set(key, (solidOwners.get(key) ?? 0) + 1);
+      const corners = lf.map((i) => el.nodeIds[i]);
+      const key = faceKey(corners);
+      owners.set(key, (owners.get(key) ?? 0) + 1);
+      if (el.type === "CHEXA") hexFaces.push(corners);
     }
   }
-  for (const [key, owners] of solidOwners) if (owners === 1) loadable.add(key);
-  return loadable;
+  const surface = new Set<string>();
+  for (const [key, count] of owners) if (count === 1) surface.add(key);
+  for (const [first, second, third, fourth] of hexFaces) {
+    const quad = faceKey([first, second, third, fourth]);
+    if (!surface.has(quad)) continue;
+    for (const halves of [
+      [
+        [first, second, third],
+        [first, third, fourth],
+      ],
+      [
+        [second, third, fourth],
+        [second, fourth, first],
+      ],
+    ]) {
+      const keys = halves.map(faceKey);
+      if (!keys.every((key) => surface.has(key))) continue;
+      surface.delete(quad);
+      for (const key of keys) surface.delete(key);
+    }
+  }
+  return surface;
 }
 
 // The element boundary faces lying on one loaded face: every loadable element

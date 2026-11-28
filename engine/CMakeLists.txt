@@ -34,6 +34,7 @@ add_executable(kofem_wasm_emcc
     cpp/tessellate.cpp
     cpp/geometry_cache.cpp
     cpp/geometry_edit.cpp
+    cpp/face_properties.cpp
     cpp/mesh_netgen.cpp
     cpp/mesh_sizes.cpp
     cpp/mid_surface.cpp
