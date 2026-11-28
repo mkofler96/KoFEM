@@ -58,7 +58,7 @@ pub use amg::{
 pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
-pub use count::count_as_f64;
+pub use count::{count_as_f64, index_as_u32};
 pub use coupled_static::{
     constrained_reduction, prepare_constrained_static, prepare_coupled_static,
     prepare_mixed_static, solve_coupled_static, solve_mixed_static, AppliedPreconditioner,

@@ -18,7 +18,7 @@
 //! Gauss–Seidel sweep before and a backward sweep after the coarse correction
 //! is a symmetric positive-definite preconditioner, as CG requires.
 
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, index_as_u32};
 use crate::error::FemError;
 use crate::extremum::largest;
 use crate::sparse::CsrMatrix;
@@ -172,7 +172,7 @@ impl Csr {
             let (cols, vals) = self.row(row);
             for (&column, &value) in cols.iter().zip(vals) {
                 let slot = &mut next[column as usize];
-                columns[*slot] = to_u32(row);
+                columns[*slot] = index_as_u32(row);
                 values[*slot] = value;
                 *slot += 1;
             }
@@ -304,7 +304,7 @@ fn diagonal_of(matrix: &(impl Rows + ?Sized)) -> Vec<f64> {
     (0..matrix.row_count())
         .map(|row| {
             let (cols, vals) = matrix.row(row);
-            cols.binary_search(&to_u32(row))
+            cols.binary_search(&index_as_u32(row))
                 .map_or(0.0, |offset| vals[offset])
         })
         .collect()
@@ -316,15 +316,6 @@ fn inverse_diagonal_of(matrix: &(impl Rows + ?Sized)) -> Vec<f64> {
         .into_iter()
         .map(|value| if value == 0.0 { 1.0 } else { 1.0 / value })
         .collect()
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "every index here is a DOF or aggregate number, bounded by the fine DOF count, \
-              which TetMesh::new caps to fit u32"
-)]
-fn to_u32(index: usize) -> u32 {
-    index as u32
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -349,7 +340,7 @@ fn strong_couplings(
                 let other = column as usize / block;
                 if !seen[other] {
                     seen[other] = true;
-                    touched.push(to_u32(other));
+                    touched.push(index_as_u32(other));
                 }
                 norm[other] += value * value;
             }
@@ -399,7 +390,7 @@ fn aggregate(couplings: &[Vec<(u32, f64)>], excluded: &[bool]) -> (Vec<Option<u3
         {
             continue;
         }
-        let id = Some(to_u32(count));
+        let id = Some(index_as_u32(count));
         owner[node] = id;
         for &(other, _) in list {
             owner[other as usize] = id;
@@ -428,7 +419,7 @@ fn aggregate(couplings: &[Vec<(u32, f64)>], excluded: &[bool]) -> (Vec<Option<u3
         if excluded[node] || owner[node].is_some() || couplings[node].is_empty() {
             continue;
         }
-        let id = Some(to_u32(count));
+        let id = Some(index_as_u32(count));
         owner[node] = id;
         for &(other, _) in &couplings[node] {
             let index = other as usize;
@@ -519,7 +510,9 @@ fn tentative_prolongator(
         if let Some(id) = owner[row / block] {
             for (mode, &value) in values.iter().enumerate() {
                 if value != 0.0 {
-                    prolongator.columns.push(to_u32(id as usize * MODES + mode));
+                    prolongator
+                        .columns
+                        .push(index_as_u32(id as usize * MODES + mode));
                     prolongator.values.push(value);
                 }
             }
@@ -626,7 +619,7 @@ fn galerkin(matrix: &(impl Rows + ?Sized), prolongator: &Csr, dead: &[bool]) -> 
         prolongator.column_count,
         |coarse, coarse_row| {
             if dead[coarse] {
-                coarse_row.add(to_u32(coarse), 1.0);
+                coarse_row.add(index_as_u32(coarse), 1.0);
                 return;
             }
             let (fine_rows, weights) = transpose.row(coarse);

@@ -23,7 +23,7 @@
 //! arm the fold moves them by ([`fold_onto_vertices_at`]), as a curved edge's
 //! node no longer lies midway between its ends.
 
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, index_as_u32};
 use crate::coupling::DOFS_PER_NODE;
 use crate::error::FemError;
 use crate::mesh::{cross, sub, ElementOrder, TetMesh};
@@ -250,12 +250,8 @@ pub fn load_on_held_nodes(
             }
         }
     };
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "TetMesh caps the node count at MAX_NODES, so every vertex fits in u32"
-    )]
     for vertex in 0..mesh.vertex_count() {
-        add(vertex, &[vertex as u32]);
+        add(vertex, &[index_as_u32(vertex)]);
     }
     let mut node = mesh.vertex_count();
     for edge in mesh.edges() {

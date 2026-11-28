@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::count::index_as_u32;
 use crate::element::{hex27_stiffness, hex8_stiffness, tet10_stiffness, tet4_stiffness};
 use crate::mesh::{ElementOrder, ElementShape, TetMesh};
 use crate::sparse::CsrMatrix;
@@ -22,11 +23,7 @@ pub fn node_neighbours(mesh: &TetMesh) -> Vec<Vec<u32>> {
     }
     for (node, list) in neighbours.iter_mut().enumerate() {
         if list.is_empty() {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "TetMesh caps the node count at MAX_NODES"
-            )]
-            list.push(node as u32);
+            list.push(index_as_u32(node));
         }
         list.sort_unstable();
         list.dedup();

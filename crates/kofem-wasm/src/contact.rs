@@ -6,11 +6,12 @@
 //! in steps, one active-set iteration at a time.
 
 use kofem_fem::contact::{ContactCg, ContactState, UnheldMotion};
+use kofem_fem::index_as_u32;
 use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonStatus};
 use kofem_fem::FemError;
 use wasm_bindgen::prelude::*;
 
-use crate::{to_js, to_u32, ElasticSolution};
+use crate::{to_js, ElasticSolution};
 
 /// Contact pairs for `ElasticModel.startContactSolve`: each pair is two
 /// picked surfaces, given by their vertices. The solve finds the boundary
@@ -80,7 +81,7 @@ impl ContactRun {
     #[wasm_bindgen(getter, js_name = unheldNode)]
     #[must_use]
     pub fn unheld_node(&self) -> Option<u32> {
-        self.unheld.map(|(node, _)| to_u32(node))
+        self.unheld.map(|(node, _)| index_as_u32(node))
     }
 
     /// The motion its load drives it in: a line, or with `unheldTurns` an
@@ -234,7 +235,11 @@ impl ContactSolution {
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn nodes(&self) -> Vec<u32> {
-        self.state.nodes.iter().map(|&node| to_u32(node)).collect()
+        self.state
+            .nodes
+            .iter()
+            .map(|&node| index_as_u32(node))
+            .collect()
     }
 
     /// Contact pressure per slave vertex (force per area, ≥ 0 pressing).

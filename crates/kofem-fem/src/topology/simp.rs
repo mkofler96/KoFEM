@@ -19,7 +19,7 @@ use crate::amg::{AmgSettings, Preconditioner, SmoothedAggregation, SymmetricGaus
 use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
 use crate::constraints::{apply_dirichlet, Dirichlet};
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, index_as_u32};
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex8_stiffness, hex_gradients, tet4_stiffness,
 };
@@ -203,11 +203,7 @@ impl SimpModel {
             {
                 return Err(FemError::LoadOnUnusedVertex { vertex });
             }
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "TetMesh caps the node count, so every DOF fits in u32"
-            )]
-            dofs.extend((0..3).map(|component| (3 * vertex + component) as u32));
+            dofs.extend((0..3).map(|component| index_as_u32(3 * vertex + component)));
         }
         let values = vec![0.0; dofs.len()];
         let supports = Dirichlet::new(dof_count, &dofs, &values)?;

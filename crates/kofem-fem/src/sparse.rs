@@ -12,6 +12,8 @@
 //! MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
 //! All rights reserved. See `../NOTICE.md` and `../LICENSE-MFEM` (BSD-3-Clause).
 
+use crate::count::index_as_u32;
+
 /// Square CSR matrix. Column indices are sorted within each row, and every row
 /// stores its diagonal.
 #[derive(Debug, Clone)]
@@ -56,11 +58,7 @@ impl CsrMatrix {
                         if column == row {
                             diagonal_at.push(columns.len());
                         }
-                        #[allow(
-                            clippy::cast_possible_truncation,
-                            reason = "the mesh constructors cap the vertex count so every DOF fits in u32"
-                        )]
-                        columns.push(column as u32);
+                        columns.push(index_as_u32(column));
                     }
                 }
             }

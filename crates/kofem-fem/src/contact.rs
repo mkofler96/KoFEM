@@ -115,7 +115,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::amg::Preconditioner;
 use crate::cg::{CgSettings, PcgRun, PcgStatus};
 use crate::constraints::Dirichlet;
-use crate::count::count_as_f64;
+use crate::count::{count_as_f64, index_as_u32};
 use crate::coupled_static::{
     constrained_reduction, prepare_constrained_static, CoupledReduction, NormalConstraint,
     PreparedMixed,
@@ -706,7 +706,7 @@ impl ContactCg {
                                 .face
                                 .nodes
                                 .iter()
-                                .all(|&node| members.contains(&to_u32(node)))
+                                .all(|&node| members.contains(&index_as_u32(node)))
                         })
                         .map(|(index, _)| index)
                         .collect()
@@ -806,7 +806,7 @@ impl ContactCg {
     fn set_up(&self, supports: &Dirichlet) -> Result<Setup, FemError> {
         let (fixed_dofs, fixed_values): (Vec<u32>, Vec<f64>) = supports
             .prescribed()
-            .map(|(dof, value)| (to_u32(dof), value))
+            .map(|(dof, value)| (index_as_u32(dof), value))
             .unzip();
         let (couplings, ties) = match &self.ties {
             Some(ties) => tie_couplings(&self.mesh, ties, &fixed_dofs, &fixed_values)?,
@@ -885,18 +885,22 @@ impl ContactCg {
         let mut element_nodes = Vec::new();
         for element in 0..self.mesh.element_count() {
             element_nodes.extend_from_slice(self.mesh.element_nodes(element));
-            element_offsets.push(to_u32(element_nodes.len()));
+            element_offsets.push(index_as_u32(element_nodes.len()));
         }
         // Each element labelled by its index, so a loose piece reports its
         // elements.
-        let element_labels: Vec<u32> = (0..self.mesh.element_count()).map(to_u32).collect();
+        let element_labels: Vec<u32> = (0..self.mesh.element_count()).map(index_as_u32).collect();
         let links: Vec<RigidLink> = self
             .ties
             .iter()
             .flat_map(VertexTies::ties)
             .map(|tie| RigidLink {
-                primary: tie.masters.iter().map(|&master| to_u32(master)).collect(),
-                secondary: vec![to_u32(tie.node)],
+                primary: tie
+                    .masters
+                    .iter()
+                    .map(|&master| index_as_u32(master))
+                    .collect(),
+                secondary: vec![index_as_u32(tie.node)],
                 dof_mask: 0b111,
             })
             .collect();
@@ -1414,7 +1418,7 @@ impl TangentSolver for ContactCg {
             .collect();
         let (dofs, values): (Vec<u32>, Vec<f64>) = prescribed
             .prescribed()
-            .map(|(dof, value)| (widen_dof(to_u32(dof)), value))
+            .map(|(dof, value)| (widen_dof(index_as_u32(dof)), value))
             .unzip();
         let stabilised = setup.stabilised(&tangent);
         let PreparedMixed {
@@ -2004,7 +2008,7 @@ fn widen(values: &[f64]) -> Vec<f64> {
 /// A 3-per-node DOF in the 6-per-node numbering.
 fn widen_dof(dof: u32) -> u32 {
     let node = dof / 3;
-    to_u32(DOFS_PER_NODE) * node + dof % 3
+    index_as_u32(DOFS_PER_NODE) * node + dof % 3
 }
 
 fn norm(values: &[f64]) -> f64 {
@@ -2013,13 +2017,4 @@ fn norm(values: &[f64]) -> f64 {
 
 fn dot(lhs: [f64; 3], rhs: [f64; 3]) -> f64 {
     lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2]
-}
-
-fn to_u32(index: usize) -> u32 {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "DOF indices of a TetMesh fit in u32 (MAX_NODES)"
-    )]
-    let narrow = index as u32;
-    narrow
 }

@@ -4,10 +4,11 @@
 //! Browser bindings for constraint ties (`kofem_fem::tie`) and their dual
 //! mortar weights (`kofem_fem::mortar`).
 
+use kofem_fem::index_as_u32;
 use kofem_fem::{mortar_weights, MortarFace, MortarRow};
 use wasm_bindgen::prelude::*;
 
-use crate::{to_js, to_u32};
+use crate::to_js;
 
 /// Constraint ties for `ElasticModel.startTiedSolve`, in CSR form: vertex
 /// `slaves[k]` follows Σ `weights[i]` · u(`masters[i]`) over
@@ -142,7 +143,10 @@ impl MortarTies {
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn slaves(&self) -> Vec<u32> {
-        self.rows.iter().map(|row| to_u32(row.slave)).collect()
+        self.rows
+            .iter()
+            .map(|row| index_as_u32(row.slave))
+            .collect()
     }
 
     #[wasm_bindgen(getter)]
@@ -153,7 +157,7 @@ impl MortarTies {
         offsets.push(0);
         for row in &self.rows {
             end += row.masters.len();
-            offsets.push(to_u32(end));
+            offsets.push(index_as_u32(end));
         }
         offsets
     }
@@ -163,7 +167,7 @@ impl MortarTies {
     pub fn masters(&self) -> Vec<u32> {
         self.rows
             .iter()
-            .flat_map(|row| row.masters.iter().map(|&master| to_u32(master)))
+            .flat_map(|row| row.masters.iter().map(|&master| index_as_u32(master)))
             .collect()
     }
 
