@@ -30,6 +30,8 @@ import {
   type PercentileReadings,
 } from "../../hooks/useFieldPercentiles";
 import { usePeakLocation } from "../../hooks/usePeakLocation";
+import { useSafetyFactors } from "../../hooks/useSafetyFactors";
+import { formatSafetyFactor, SAFETY_PERCENTILE } from "../../lib/safetyFactor";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
@@ -393,6 +395,59 @@ function PercentileRows({
   ));
 }
 
+// The safety factor against yield (KOF-496).
+function SafetyFactorSection() {
+  const readings = useSafetyFactors();
+  const text = useT(resultsMessages);
+  if (readings === null) return null;
+  if (readings.kind === "unreadable")
+    return (
+      <div className={styles.formNote}>
+        {text.safetyUnreadable(readings.reason)}
+      </div>
+    );
+  if (readings.rows.length === 0) return null;
+  return (
+    <div data-testid="safety-factors">
+      <div className={styles.sectionLabel}>{text.safetyFactor}</div>
+      {readings.rows.map(({ row, label }) => {
+        const key = row.propertyId === null ? "model" : String(row.propertyId);
+        const entries = [
+          {
+            id: "max",
+            label: text.safetyOnMax,
+            factor: row.maxFactor,
+          },
+          {
+            id: "p99",
+            label: text.safetyOnPercentile(Math.round(SAFETY_PERCENTILE * 100)),
+            factor: row.p99Factor,
+          },
+        ];
+        return (
+          <div key={key} data-testid={`safety-factor-${key}`}>
+            <div className={`${styles.formNote} ${styles.formNoteFull}`}>
+              {label}
+            </div>
+            {entries.map(({ id, label, factor }) => (
+              <div key={id} className={styles.statRow}>
+                <span className={styles.statKey}>{label}</span>
+                <span
+                  className={styles.statVal}
+                  data-testid={`safety-factor-${id}-${key}`}
+                  data-value={String(factor)}
+                >
+                  {formatSafetyFactor(factor)}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PeakLocationRow({
   percentiles,
   unit,
@@ -738,6 +793,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         <DeformScaleControl />
 
         {stats && <MinMaxSection field={resultType} />}
+
+        <SafetyFactorSection />
 
         <ProbeSection field={resultType} />
 

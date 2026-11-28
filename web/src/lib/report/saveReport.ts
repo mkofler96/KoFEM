@@ -17,6 +17,7 @@ import { track, workflowParams } from "../analytics";
 import { captureViews, type FigureImage, type ReportFigures } from "./figures";
 import { loadReportAssets } from "./assets";
 import { buildReport, type ReportStats } from "./buildReport";
+import { safetyFactors, safetyModel } from "../safetyFactor";
 import { renderReport } from "./renderReport";
 import { intlTag, tr } from "../../i18n/useLocale";
 import { reportMessages } from "../../i18n/messages/report";
@@ -73,7 +74,8 @@ export async function saveReport(): Promise<void> {
     elements,
     state.shellSurface,
   );
-  if (vonMises === null) throw new Error(text.noStress);
+  if (vonMises === null || result.vonMises === undefined)
+    throw new Error(text.noStress);
   const legend = state.reactionsShown
     ? reactionLegend(result, state.reactionsDisplay)
     : (fieldLegend(
@@ -85,6 +87,7 @@ export async function saveReport(): Promise<void> {
         state.legendRange,
       )?.legend ?? null);
   if (legend === null) throw new Error(text.noStress);
+  const solved = safetyModel(result.run, state.properties, state.materials);
   const [assets] = await Promise.all([loadReportAssets(), loadFemModule()]);
   const { densityResult } = state;
   const { figures, density } = await captureFigures(densityResult !== null);
@@ -105,6 +108,13 @@ export async function saveReport(): Promise<void> {
     meshSizes: state.meshSizes,
     result,
     stats: stats(result.displacements, vonMises),
+    safety: safetyFactors(
+      result.vonMises,
+      nodes,
+      elements,
+      solved.properties,
+      solved.materials,
+    ),
     figures,
     assets,
     refinement: state.refinementStudy,

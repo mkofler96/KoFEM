@@ -649,6 +649,19 @@ function checkLargeDeformation(value: unknown): void {
     );
 }
 
+// A material's yield strength (KOF-496) is optional, but one given is a
+// positive number of MPa.
+function checkYieldStrengths(materials: Record<string, unknown>[]): void {
+  for (const material of materials)
+    if (
+      material.yieldStrength !== undefined &&
+      !isPositive(material.yieldStrength)
+    )
+      throw new Error(
+        `Invalid analysis file: material ${String(material.id)} has the yield strength ${JSON.stringify(material.yieldStrength)}, which is not a positive number`,
+      );
+}
+
 function checkMeshSizes(value: unknown): void {
   const sizes = value as Partial<MeshSizes> | null;
   const valid =
@@ -725,6 +738,7 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
         );
     }
 
+  checkYieldStrengths(meta.materials as Record<string, unknown>[]);
   if (meta.faceSizes !== undefined) checkFaceSizes(meta.faceSizes);
   if (meta.meshSizes !== undefined) checkMeshSizes(meta.meshSizes);
   if (meta.largeDeformation !== undefined)

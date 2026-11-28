@@ -43,6 +43,7 @@ pub mod piece;
 pub mod reactions;
 pub mod report;
 pub mod rigid_body;
+pub mod safety_factor;
 pub mod section;
 pub mod shell;
 pub mod sparse;
@@ -75,7 +76,9 @@ pub use field_peak::{
     field_peak, BoundaryGroup, Condition, CouplingSurface, FieldPeak, PeakInput, PickGeometry,
     Selection,
 };
-pub use field_statistics::{nodal_percentiles, StatisticsMesh};
+pub use field_statistics::{
+    grouped_element_statistics, nodal_percentiles, ElementMesh, GroupStatistics, StatisticsMesh,
+};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, Pieces, TetMesh};
@@ -88,6 +91,7 @@ pub use reactions::{
 };
 pub use report::{percentile, report_stats, ReportStats};
 pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};
+pub use safety_factor::{safety_factors, SafetyFactor, SafetyInput, SafetyScope};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
     assemble_shell_stiffness, prepare_shell_static, shell_corner_stress_tensors,

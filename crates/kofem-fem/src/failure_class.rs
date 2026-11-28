@@ -128,6 +128,7 @@ impl FemError {
             | Self::AmgInput { .. }
             | Self::SectionInput { .. }
             | Self::StatisticsInput { .. }
+            | Self::SafetyFactorInput { .. }
             | Self::RigidBodyInput { .. }
             | Self::TriangleArrayLength { .. }
             | Self::TriangleVertexOutOfRange { .. }

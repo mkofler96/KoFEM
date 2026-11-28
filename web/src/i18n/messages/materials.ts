@@ -37,6 +37,22 @@ export const materialsMessages = defineMessages({
     es: "El coeficiente de dilatación debe ser un número, o quedar vacío si no hay",
     pt: "O coeficiente de dilatação deve ser um número, ou ficar vazio se não houver",
   },
+  yieldInvalid: {
+    en: "The yield strength must be a positive number, or blank for none",
+    de: "Die Streckgrenze muss eine positive Zahl sein oder leer bleiben",
+    fr: "La limite d'élasticité doit être un nombre positif, ou vide s'il n'y en a pas",
+    it: "Il carico di snervamento deve essere un numero positivo, oppure vuoto se assente",
+    es: "El límite elástico debe ser un número positivo, o quedar vacío si no hay",
+    pt: "A tensão de escoamento deve ser um número positivo, ou ficar vazia se não houver",
+  },
+  yieldLabel: {
+    en: "Yield strength (MPa)",
+    de: "Streckgrenze (MPa)",
+    fr: "Limite d'élasticité (MPa)",
+    it: "Carico di snervamento (MPa)",
+    es: "Límite elástico (MPa)",
+    pt: "Tensão de escoamento (MPa)",
+  },
   name: {
     en: "Name",
     de: "Name",
@@ -77,7 +93,7 @@ export const materialsMessages = defineMessages({
     es: "No la usa el solucionador estático actual: reservada para futuras cargas de gravedad / inercia.",
     pt: "Não usada pelo solucionador estático atual — reservada para futuras cargas de gravidade / inércia.",
   },
-  expansionPlaceholder: {
+  nonePlaceholder: {
     en: "none",
     de: "keiner",
     fr: "aucun",

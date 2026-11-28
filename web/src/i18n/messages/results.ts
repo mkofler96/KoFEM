@@ -1047,6 +1047,43 @@ export const resultsMessages = defineMessages({
     pt: (percent: number) =>
       `Percentil ${percent} por volume: ${100 - percent} % do modelo está mais solicitado. Ao contrário do máx., não cresce numa singularidade quando a malha é refinada.`,
   },
+  safetyFactor: {
+    en: "Safety factor against yield",
+    de: "Sicherheitsfaktor gegen Fließen",
+    fr: "Coefficient de sécurité à la plastification",
+    it: "Coefficiente di sicurezza allo snervamento",
+    es: "Factor de seguridad frente a la fluencia",
+    pt: "Fator de segurança ao escoamento",
+  },
+  safetyOnMax: {
+    en: "On max σ_vm",
+    de: "Auf max. σ_vm",
+    fr: "Sur σ_vm max.",
+    it: "Su σ_vm max",
+    es: "Sobre σ_vm máx.",
+    pt: "Sobre σ_vm máx.",
+  },
+  safetyOnPercentile: {
+    en: (percent: number) => `On P${percent} σ_vm`,
+    de: (percent: number) => `Auf P${percent} σ_vm`,
+    fr: (percent: number) => `Sur P${percent} σ_vm`,
+    it: (percent: number) => `Su P${percent} σ_vm`,
+    es: (percent: number) => `Sobre P${percent} σ_vm`,
+    pt: (percent: number) => `Sobre P${percent} σ_vm`,
+  },
+  safetyUnreadable: {
+    en: (reason: string) => `The safety factor cannot be read. ${reason}`,
+    de: (reason: string) =>
+      `Der Sicherheitsfaktor lässt sich nicht ablesen. ${reason}`,
+    fr: (reason: string) =>
+      `Impossible de lire le coefficient de sécurité. ${reason}`,
+    it: (reason: string) =>
+      `Impossibile leggere il coefficiente di sicurezza. ${reason}`,
+    es: (reason: string) =>
+      `No se puede leer el factor de seguridad. ${reason}`,
+    pt: (reason: string) =>
+      `Não é possível ler o fator de segurança. ${reason}`,
+  },
   percentileUnreadable: {
     en: (reason: string) => `The percentiles cannot be read. ${reason}`,
     de: (reason: string) =>

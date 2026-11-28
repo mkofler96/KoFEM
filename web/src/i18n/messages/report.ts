@@ -167,14 +167,6 @@ export const reportMessages = defineMessages({
     es: "Lámina, idealizada al resolver; su espesor se mide al resolver y no se registra aquí",
     pt: "Casca, idealizada ao resolver; sua espessura é medida ao resolver e não é registrada aqui",
   },
-  shellOf: {
-    en: (body: string) => `${body}, shell`,
-    de: (body: string) => `${body}, Schale`,
-    fr: (body: string) => `${body}, coque`,
-    it: (body: string) => `${body}, guscio`,
-    es: (body: string) => `${body}, lámina`,
-    pt: (body: string) => `${body}, casca`,
-  },
   supports: {
     en: "Supports",
     de: "Lagerungen",
@@ -436,6 +428,22 @@ export const reportMessages = defineMessages({
     it: "Tensione di von Mises max. $σ_{\\u{vm}}$",
     es: "Tensión de von Mises máx. $σ_{\\u{vm}}$",
     pt: "Tensão de von Mises máx. $σ_{\\u{vm}}$",
+  },
+  safetyOnMax: {
+    en: "Safety factor against yield on the max $σ_{\\u{vm}}$",
+    de: "Sicherheitsfaktor gegen Fließen auf die max. $σ_{\\u{vm}}$",
+    fr: "Coefficient de sécurité à la plastification sur $σ_{\\u{vm}}$ max.",
+    it: "Coefficiente di sicurezza allo snervamento su $σ_{\\u{vm}}$ max.",
+    es: "Factor de seguridad frente a la fluencia sobre $σ_{\\u{vm}}$ máx.",
+    pt: "Fator de segurança ao escoamento sobre $σ_{\\u{vm}}$ máx.",
+  },
+  safetyOnP99: {
+    en: "Safety factor against yield on the 99th percentile $σ_{\\u{vm}}$ by volume",
+    de: "Sicherheitsfaktor gegen Fließen auf das 99. Perzentil der $σ_{\\u{vm}}$ nach Volumen",
+    fr: "Coefficient de sécurité à la plastification sur le 99e centile de $σ_{\\u{vm}}$ en volume",
+    it: "Coefficiente di sicurezza allo snervamento sul 99° percentile di $σ_{\\u{vm}}$ per volume",
+    es: "Factor de seguridad frente a la fluencia sobre el percentil 99 de $σ_{\\u{vm}}$ por volumen",
+    pt: "Fator de segurança ao escoamento sobre o percentil 99 de $σ_{\\u{vm}}$ por volume",
   },
   p99VonMises: {
     en: "Von Mises stress, 99th percentile of the nodes",

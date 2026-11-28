@@ -2095,6 +2095,14 @@
     "es": "544cadeffddc",
     "pt": "da5b4a3c07f7"
   },
+  "geometry.ts:geometryMessages.shellOf": {
+    "en": "db96d4e1ce27",
+    "de": "ea97b735e961",
+    "fr": "5e954546f7fc",
+    "it": "41033b39c687",
+    "es": "d7278f223871",
+    "pt": "659cf9eaacd0"
+  },
   "geometry.ts:geometryMessages.shellRouteMesh": {
     "en": "035f07651819",
     "de": "58c5ffbb785d",
@@ -2423,14 +2431,6 @@
     "es": "dc10a7a21a34",
     "pt": "e097e824d277"
   },
-  "materials.ts:materialsMessages.expansionPlaceholder": {
-    "en": "b7f4588fabf6",
-    "de": "6ac8fc9b6739",
-    "fr": "365a1f19eace",
-    "it": "706a381bc98d",
-    "es": "0f4a363aeae1",
-    "pt": "c222bf0aacc0"
-  },
   "materials.ts:materialsMessages.expansionTitle": {
     "en": "bb8b4854e09f",
     "de": "7c61ac1243fa",
@@ -2454,6 +2454,14 @@
     "it": "2ed3bf30f813",
     "es": "a70d6ac627e4",
     "pt": "8933e4c5c4cf"
+  },
+  "materials.ts:materialsMessages.nonePlaceholder": {
+    "en": "b7f4588fabf6",
+    "de": "6ac8fc9b6739",
+    "fr": "365a1f19eace",
+    "it": "706a381bc98d",
+    "es": "0f4a363aeae1",
+    "pt": "c222bf0aacc0"
   },
   "materials.ts:materialsMessages.poissonInvalid": {
     "en": "2ed6f3922ef0",
@@ -2486,6 +2494,22 @@
     "it": "017cb19dfdf4",
     "es": "603158a7e698",
     "pt": "603158a7e698"
+  },
+  "materials.ts:materialsMessages.yieldInvalid": {
+    "en": "8b74ebe31f21",
+    "de": "aa79dc124625",
+    "fr": "5802ecccfa16",
+    "it": "89da61458068",
+    "es": "fdb89129396e",
+    "pt": "09e6c2e2c262"
+  },
+  "materials.ts:materialsMessages.yieldLabel": {
+    "en": "6ebabaac5d62",
+    "de": "c3f130cbe15f",
+    "fr": "415cdbbc2aec",
+    "it": "7237d6e4c040",
+    "es": "82d25760344f",
+    "pt": "f77f9dd0cf9b"
   },
   "materials.ts:materialsMessages.youngInvalid": {
     "en": "d555c9778007",
@@ -5255,6 +5279,22 @@
     "es": "ba2bb8a78b71",
     "pt": "36d97a44cf01"
   },
+  "report.ts:reportMessages.safetyOnMax": {
+    "en": "34b1c98d8c67",
+    "de": "db77ff4c80d0",
+    "fr": "9f1d0ff24069",
+    "it": "1240d76df019",
+    "es": "71b75ddee786",
+    "pt": "49011d85727c"
+  },
+  "report.ts:reportMessages.safetyOnP99": {
+    "en": "b9d10d7d6624",
+    "de": "034d5f540394",
+    "fr": "28e0bb78cb8d",
+    "it": "7266687cc679",
+    "es": "aea0682adaa2",
+    "pt": "ef1ae4d6affb"
+  },
   "report.ts:reportMessages.saveReport": {
     "en": "c4ae08be078e",
     "de": "1d7cb403b712",
@@ -5302,14 +5342,6 @@
     "it": "55eebf0dca14",
     "es": "d262c80deab2",
     "pt": "f3f63d84a673"
-  },
-  "report.ts:reportMessages.shellOf": {
-    "en": "db96d4e1ce27",
-    "de": "ea97b735e961",
-    "fr": "5e954546f7fc",
-    "it": "41033b39c687",
-    "es": "d7278f223871",
-    "pt": "659cf9eaacd0"
   },
   "report.ts:reportMessages.sizesNotRecorded": {
     "en": "c0d1885a235a",
@@ -6366,6 +6398,38 @@
     "it": "83fa27f517d7",
     "es": "f18b5f2213bf",
     "pt": "fd452e90ed1b"
+  },
+  "results.ts:resultsMessages.safetyFactor": {
+    "en": "95ed0babd7ad",
+    "de": "268211ee16e7",
+    "fr": "e62d320dece1",
+    "it": "32a9bf4f3c9c",
+    "es": "eeab5d7556bc",
+    "pt": "eeaf6243e81a"
+  },
+  "results.ts:resultsMessages.safetyOnMax": {
+    "en": "a006091c7d44",
+    "de": "32a346ceb4e6",
+    "fr": "e22654999cd1",
+    "it": "54d3451a9ec9",
+    "es": "bd10942fe25a",
+    "pt": "bd10942fe25a"
+  },
+  "results.ts:resultsMessages.safetyOnPercentile": {
+    "en": "96be85c43797",
+    "de": "73ec3c0c491a",
+    "fr": "0990e24fa31b",
+    "it": "53ef936c066b",
+    "es": "24b6d1a277b5",
+    "pt": "24b6d1a277b5"
+  },
+  "results.ts:resultsMessages.safetyUnreadable": {
+    "en": "0b6710d1c43a",
+    "de": "2a24cf77e2dd",
+    "fr": "d73a5ee2a0ca",
+    "it": "d4aa9ee3faa0",
+    "es": "6612f5a9e5c9",
+    "pt": "12a183e90946"
   },
   "results.ts:resultsMessages.sectionAxis": {
     "en": "f96cbac2f213",

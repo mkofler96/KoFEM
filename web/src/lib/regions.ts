@@ -89,6 +89,19 @@ export function solidName(properties: Property[], solidId: number): string {
   return text.bodyRegionName(group.body, k);
 }
 
+// What the user calls the body of an element property: the CAD solid's name,
+// or "Body 2, shell" for the shell sections a mesh derived from Body 2.
+export function elementBodyName(
+  properties: Property[],
+  property: Property,
+): string {
+  if (property.sourceBodyId === undefined)
+    return solidName(properties, property.id);
+  return tr(geometryMessages).shellOf(
+    solidName(properties, property.sourceBodyId),
+  );
+}
+
 // The label of a region under its body in the model tree.
 export function regionLabel(properties: Property[], solidId: number): string {
   const group = groupOf(properties, solidId);

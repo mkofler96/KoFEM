@@ -18,18 +18,25 @@ import { resultsMessages } from "../i18n/messages/results";
 /** The share of the model's volume each percentile row in Results stands for. */
 export const RESULT_PERCENTILES = [0.95, 0.99] as const;
 
-/**
- * The volume-weighted `quantiles` of `values` (one per node, in node order):
- * for each, the lowest value with that share of the volume at or below it.
- * A shell facet's volume is its area times its property's thickness.
- */
-export function fieldPercentiles(
-  values: Float64Array,
+// The app's nodes and elements as the Rust module's statistics take them:
+// coordinates in node order, connectivities by node index per element family,
+// and where each element lands in the family order (tetrahedra, hexahedra,
+// shell facets), which per-element inputs follow.
+export interface PackedElements {
+  points: Float64Array;
+  tets: Uint32Array;
+  tetNodes: number;
+  hexes: Uint32Array;
+  shells: Uint32Array;
+  thicknesses: Float64Array;
+  familyOrder: number[];
+}
+
+export function packElements(
   nodes: Node[],
   elements: Element[],
   properties: Property[],
-  quantiles: readonly number[],
-): number[] {
+): PackedElements {
   const text = tr(resultsMessages);
   const index = new Map<number, number>();
   const points = new Float64Array(nodes.length * 3);
@@ -43,8 +50,11 @@ export function fieldPercentiles(
   const hexes: number[] = [];
   const shells: number[] = [];
   const thicknesses: number[] = [];
+  const tetOrder: number[] = [];
+  const hexOrder: number[] = [];
+  const shellOrder: number[] = [];
   let tetNodes = 4;
-  for (const element of elements) {
+  elements.forEach((element, e) => {
     const at = element.nodeIds.map((id) => {
       const i = index.get(id);
       if (i === undefined)
@@ -54,8 +64,10 @@ export function fieldPercentiles(
     if (element.type === "CTETRA") {
       tetNodes = at.length;
       tets.push(...at);
+      tetOrder.push(e);
     } else if (element.type === "CHEXA") {
       hexes.push(...at);
+      hexOrder.push(e);
     } else {
       const thickness = properties.find(
         (p) => p.id === element.propertyId,
@@ -64,17 +76,42 @@ export function fieldPercentiles(
         throw new Error(text.percentileNoThickness(element.id));
       shells.push(...at);
       thicknesses.push(thickness);
+      shellOrder.push(e);
     }
-  }
+  });
+  return {
+    points,
+    tets: Uint32Array.from(tets),
+    tetNodes,
+    hexes: Uint32Array.from(hexes),
+    shells: Uint32Array.from(shells),
+    thicknesses: Float64Array.from(thicknesses),
+    familyOrder: [...tetOrder, ...hexOrder, ...shellOrder],
+  };
+}
+
+/**
+ * The volume-weighted `quantiles` of `values` (one per node, in node order):
+ * for each, the lowest value with that share of the volume at or below it.
+ * A shell facet's volume is its area times its property's thickness.
+ */
+export function fieldPercentiles(
+  values: Float64Array,
+  nodes: Node[],
+  elements: Element[],
+  properties: Property[],
+  quantiles: readonly number[],
+): number[] {
+  const packed = packElements(nodes, elements, properties);
   return Array.from(
     nodalPercentiles(
-      points,
+      packed.points,
       values,
-      Uint32Array.from(tets),
-      tetNodes,
-      Uint32Array.from(hexes),
-      Uint32Array.from(shells),
-      Float64Array.from(thicknesses),
+      packed.tets,
+      packed.tetNodes,
+      packed.hexes,
+      packed.shells,
+      packed.thicknesses,
       Float64Array.from(quantiles),
     ),
   );
