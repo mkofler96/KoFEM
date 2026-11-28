@@ -273,6 +273,38 @@ test.describe("workflow events", () => {
     expect(after.map((e) => e.name)).not.toContain("solve_failed");
   });
 
+  test("repeat solves: one first_solve_completed per tab session", async ({
+    page,
+  }) => {
+    await withAnalytics(page);
+    await setConsent(page, "granted");
+    await page.goto("/app/?example=axial-bar");
+    const count = async (name: string) =>
+      (await eventNames(page)).filter((n) => n === name).length;
+    const ready = () =>
+      expect
+        .poll(() => eventNames(page))
+        .toEqual(expect.arrayContaining(["engine_ready", "example_loaded"]));
+
+    await ready();
+    for (let solves = 1; solves <= 3; solves++) {
+      await triggerSolve(page);
+      await expect.poll(() => count("solve_completed")).toBe(solves);
+    }
+    const events = await gaEvents(page);
+    const first = events.filter((e) => e.name === "first_solve_completed");
+    expect(first).toHaveLength(1);
+    expect(first[0].params).toEqual(
+      events.find((e) => e.name === "solve_completed")?.params,
+    );
+
+    await page.reload();
+    await ready();
+    await triggerSolve(page);
+    await expect.poll(() => count("solve_completed")).toBe(1);
+    expect(await count("first_solve_completed")).toBe(0);
+  });
+
   test("the sample counts as an example, not as the user's CAD", async ({
     page,
   }) => {

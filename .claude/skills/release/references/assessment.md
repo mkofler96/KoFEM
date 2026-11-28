@@ -72,7 +72,8 @@ correctness blocker to finish the checklist.
 
 When analytics changed, verify consent coverage and any required external
 configuration separately from code completion. For GA4 workflow analytics,
-check `solve_completed` as a key event, custom dimensions, and the funnel.
+check `first_solve_completed` as the key event (not `solve_completed`, KOF-491),
+custom dimensions, and the funnel.
 A merged PR alone does not prove GA4 admin setup. Do not send model data or
 manufacture live analytics events while checking readiness.
 

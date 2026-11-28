@@ -127,6 +127,10 @@ export interface AnalyticsEvents {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
   };
+  first_solve_completed: WorkflowParams & {
+    analysis_type: AnalysisType;
+    duration_bucket: DurationBucket;
+  };
   solve_failed: WorkflowParams & {
     analysis_type: AnalysisType;
     duration_bucket: DurationBucket;
@@ -163,6 +167,14 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 // Parameter values must look like an enum or a gallery id. A raw error message
 // or file name fails this and is refused rather than sent.
 const SAFE_VALUE = /^[A-Za-z0-9_-]{1,64}$/;
+// GA4's key event, so sent at most once per browser-tab session, or repeat
+// solves would inflate conversions (KOF-491). The flag in sessionStorage is
+// written only when the event is sent, so never without consent, and is gone
+// with the tab.
+const PER_SESSION: ReadonlySet<string> = new Set<AnalyticsEventName>([
+  "first_solve_completed",
+]);
+const SESSION_MARK_PREFIX = "kofem_analytics_sent:";
 
 let pending: [string, Record<string, string>][] = [];
 let listening = false;
@@ -177,6 +189,21 @@ function consent(): ConsentState | undefined {
     : window.__kofemAnalyticsConsent;
 }
 
+function claimSession(name: string): boolean {
+  const key = SESSION_MARK_PREFIX + name;
+  try {
+    if (window.sessionStorage.getItem(key) !== null) return false;
+    window.sessionStorage.setItem(key, "1");
+    return true;
+  } catch (err) {
+    console.error(
+      `[analytics] sessionStorage is unavailable — "${name}" not sent, since it may be sent only once per session.`,
+      err,
+    );
+    return false;
+  }
+}
+
 function send(name: string, params: Record<string, string>) {
   const gtag = window.gtag;
   if (!gtag) {
@@ -185,6 +212,7 @@ function send(name: string, params: Record<string, string>) {
     );
     return;
   }
+  if (PER_SESSION.has(name) && !claimSession(name)) return;
   const now = Date.now();
   if (lastHitAt !== null && now - lastHitAt > SESSION_TIMEOUT_MS)
     gtag("event", "page_view", {});
@@ -222,6 +250,8 @@ export function track<E extends AnalyticsEventName>(
   const state = consent();
   if (state === "granted") send(name, clean);
   else if (state === undefined) {
+    if (PER_SESSION.has(name) && pending.some(([queued]) => queued === name))
+      return;
     listen();
     pending.push([name, clean]);
     if (pending.length > MAX_PENDING) pending.shift();
@@ -236,6 +266,13 @@ export function trackOnce<E extends AnalyticsEventName>(
   if (sentOnce.has(name)) return;
   sentOnce.add(name);
   track(name, params);
+}
+
+export function trackSolveCompleted(
+  params: AnalyticsEvents["solve_completed"],
+): void {
+  track("solve_completed", params);
+  track("first_solve_completed", params);
 }
 
 /**
