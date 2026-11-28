@@ -18,14 +18,14 @@ use crate::mesh::{ElementOrder, ElementShape, TetMesh};
 
 /// Where in an element its shape-function gradients are taken.
 #[derive(Clone, Copy)]
-enum Location {
+pub(crate) enum Location {
     Centre,
     /// One of the element's corner vertices, in its node order.
     Corner(usize),
 }
 
 /// The number of corner vertices of `element`.
-fn corner_count(mesh: &TetMesh, element: usize) -> usize {
+pub(crate) fn corner_count(mesh: &TetMesh, element: usize) -> usize {
     match mesh.shape(element) {
         ElementShape::Tetrahedron => 4,
         ElementShape::Hexahedron => 8,
@@ -86,7 +86,7 @@ fn gradients_at(
 }
 
 /// The displacement gradient `∇u[i][j] = ∂u_i/∂x_j` of `element` at `location`.
-fn displacement_gradient(
+pub(crate) fn displacement_gradient(
     mesh: &TetMesh,
     element: usize,
     location: Location,
@@ -107,7 +107,7 @@ fn displacement_gradient(
     gradient
 }
 
-fn check_length(mesh: &TetMesh, displacements: &[f64]) -> Result<(), FemError> {
+pub(crate) fn check_length(mesh: &TetMesh, displacements: &[f64]) -> Result<(), FemError> {
     let count = mesh.dof_count();
     if displacements.len() == count {
         Ok(())

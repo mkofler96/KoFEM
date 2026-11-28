@@ -4,7 +4,9 @@
 //! Linear-elastic finite elements for KoFEM: linear and quadratic tetrahedra
 //! and hexahedra, Kirchhoff shell facets, sparse assembly, Dirichlet elimination,
 //! surface-to-point couplings, constraint ties with dual mortar weights, a
-//! preconditioned conjugate-gradient solve and SIMP topology optimization.
+//! preconditioned conjugate-gradient solve, a Newton driver for nonlinear
+//! solves (frictionless contact, and a compressible Neo-Hookean solid for
+//! large deformation) and SIMP topology optimization.
 //! Pure Rust with no I/O or clock, so the same code runs natively under
 //! `cargo test` and in the browser through `kofem-wasm`.
 //!
@@ -18,18 +20,27 @@ pub mod amg;
 pub mod assembly;
 pub mod cg;
 pub mod constraints;
+pub mod contact;
 pub mod convergence;
+pub mod count;
 pub mod coupled_static;
 pub mod coupling;
 pub mod element;
 pub mod error;
+pub mod extremum;
+pub mod failure_class;
 pub mod field_expression;
+pub mod field_peak;
+pub mod field_statistics;
+pub mod hyperelastic;
 pub mod incomplete_cholesky;
 pub mod material;
 pub mod mesh;
 pub mod mesh_outline;
 pub mod mortar;
+pub mod nonlinear;
 pub mod reactions;
+pub mod report;
 pub mod rigid_body;
 pub mod section;
 pub mod shell;
@@ -41,28 +52,40 @@ pub mod thermal;
 pub mod tie;
 pub mod topology;
 
-pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
+pub use amg::{
+    AmgSettings, LevelInfo, NodeBlock, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel,
+};
 pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, eliminate_dirichlet, Dirichlet, EliminatedEntries};
+pub use count::count_as_f64;
 pub use coupled_static::{
-    prepare_coupled_static, prepare_mixed_static, solve_coupled_static, solve_mixed_static,
-    AppliedPreconditioner, CoupledReduction, CoupledSolution, MixedPreconditioner, PreparedCoupled,
+    constrained_reduction, prepare_constrained_static, prepare_coupled_static,
+    prepare_mixed_static, solve_coupled_static, solve_mixed_static, AppliedPreconditioner,
+    CoupledReduction, CoupledSolution, MixedPreconditioner, NormalConstraint, PreparedCoupled,
     PreparedMixed, ShellPart,
 };
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;
+pub use failure_class::{FailureClass, NumericalReason, INTERNAL_FORCE};
 pub use field_expression::{FieldExpression, FieldExpressionError};
+pub use field_peak::{
+    field_peak, BoundaryGroup, Condition, CouplingSurface, FieldPeak, PeakInput, PickGeometry,
+    Selection,
+};
+pub use field_statistics::{nodal_percentiles, StatisticsMesh};
 pub use incomplete_cholesky::IncompleteCholesky;
 pub use material::Isotropic;
 pub use mesh::{ElementOrder, ElementShape, TetMesh};
 pub use mesh_outline::{outer_faces, unique_edges, OuterFaces};
-pub use mortar::{mortar_weights, MortarFace, MortarRow};
+pub use mortar::{mortar_integrals, mortar_weights, MortarFace, MortarRow, SlaveIntegrals};
 pub use reactions::{
-    fold_onto_vertices, load_on_held_nodes, nodal_residual, summarize_reactions,
-    widen_translations, NodalReaction, ReactionSummary, SupportReaction,
+    fold_onto_vertices, fold_onto_vertices_at, load_on_held_nodes, nodal_residual,
+    summarize_reactions, summarize_reactions_at, widen_translations, NodalReaction,
+    ReactionSummary, SupportReaction,
 };
-pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
+pub use report::{percentile, report_stats, ReportStats};
+pub use rigid_body::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};
 pub use section::{section_cut, SectionCut, SectionMesh, SectionPlane};
 pub use shell::{
     assemble_shell_stiffness, prepare_shell_static, shell_corner_stress_tensors,
@@ -80,6 +103,6 @@ pub use thermal::{
     thermal_strains_at_centres,
 };
 pub use tie::{
-    node_ties, prepare_tied_static, solve_tied_static, NodeTie, PreparedTied, TieReport,
-    TiedSolution, VertexTies,
+    node_ties, prepare_tied_static, solve_tied_static, tie_couplings, NodeTie, PreparedTied,
+    TieReport, TiedSolution, VertexTies,
 };

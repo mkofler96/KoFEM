@@ -49,8 +49,11 @@ Take an issue only if all of these hold:
   solve plumbing or cross-cutting cleanups conflict with everything. Name
   them in the report as candidates to run alone.
 
-Prefer `agent:ready` issues, bugs with a repro, tests-only work and isolated
-subsystems.
+Rank by Linear priority, which is the order of work (ADR-0004): fill the
+batch from Urgent down through High, Medium, Low and no priority. Within one
+priority, prefer `agent:ready` issues, bugs with a repro, tests-only work and
+isolated subsystems. Never pass over an eligible higher-priority issue for a
+lower one unless their areas overlap.
 
 ## 3. Brief
 
@@ -70,7 +73,8 @@ Work on Linear issue KOF-nn: "<title>". Read the full issue in Linear first
 Context: other cloud sessions are working in parallel on KOF-aa (<area>),
 KOF-bb (<area>) ... Stay out of those areas. <Known conflict risk, if any.>
 Branch from develop, target develop, write `Fixes KOF-nn` in the PR
-(`Refs KOF-nn` if the acceptance criteria may not be met).
+(`Refs KOF-nn` if the acceptance criteria may not be met, or if the issue
+has a GitHub issue attached: only the maintainer closes GitHub issues).
 
 Show the proof in this chat too, not only on Linear. When you post or update
 the Linear evidence comment, also send it here: the before/after screenshots
@@ -114,7 +118,10 @@ first, per AGENTS.md.
 
 A table with one row per session: issue, area it touches, why it was picked,
 what done looks like. Then one line per notable issue left out and why
-(overlap, open decision, chain, broad refactor). Name any remaining conflict
+(overlap, open decision, chain, broad refactor). List every Urgent or High
+issue left out for an open decision or missing scope first, with the question
+the maintainer has to answer: those are what holds the release up. Name any
+remaining conflict
 risk between picks. Say the sessions have only just started and give the
 batch tag to find them; never describe their progress without checking with
 `get_session` or `list_events`.

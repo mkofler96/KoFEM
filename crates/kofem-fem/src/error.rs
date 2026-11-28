@@ -62,6 +62,8 @@ pub enum FemError {
     },
     #[error("support reactions: {reason}")]
     ReactionInput { reason: String },
+    #[error("report: {reason}")]
+    ReportField { reason: String },
     #[error(
         "a coupled, tied or mixed solve works on a reduction of the stiffness matrix, \
          so it has no assembled matrix to give back"
@@ -112,6 +114,11 @@ pub enum FemError {
          force cannot be spread over them"
     )]
     SurfaceLoadArea { load: usize, area: f64 },
+    #[error(
+        "triangle {triangle}: the recovered stress is {value}, not a finite number — the \
+         displacements it was recovered from are not finite or overflow"
+    )]
+    NonFiniteStress { triangle: usize, value: f64 },
     #[error("displacement vector has {len} entries, but the model has {count} degrees of freedom")]
     DisplacementLength { len: usize, count: usize },
     #[error("multigrid setup input is invalid: {reason}")]
@@ -123,6 +130,8 @@ pub enum FemError {
     CoarseNotPositiveDefinite { unknowns: usize },
     #[error("section cut: {reason}")]
     SectionInput { reason: String },
+    #[error("field statistics: {reason}")]
+    StatisticsInput { reason: String },
     #[error("coupling {coupling}: {reason}")]
     Coupling { coupling: usize, reason: String },
     #[error("coupling input is invalid: {reason}")]
@@ -214,4 +223,48 @@ pub enum FemError {
     TopologyInput { reason: String },
     #[error("mesh convergence: {reason}")]
     Convergence { reason: String },
+    #[error(
+        "Newton increment {increment} of {increments} did not converge: relative residual \
+         {relative_residual:e} after {iterations} iterations (target {target:e})"
+    )]
+    NewtonNotConverged {
+        increment: u32,
+        increments: u32,
+        iterations: usize,
+        relative_residual: f64,
+        target: f64,
+    },
+    #[error(
+        "Newton increment {increment}, iteration {iteration}: the tangent solve failed: {reason}"
+    )]
+    TangentSolve {
+        increment: u32,
+        iteration: usize,
+        reason: String,
+    },
+    #[error(
+        "Newton increment {increment} of {increments} (load factor {load_factor}): the tangent \
+         stiffness is not positive definite — the model loses stability (it buckles or snaps \
+         through) at or below this load, so a static solve cannot follow it further"
+    )]
+    TangentNotPositiveDefinite {
+        increment: u32,
+        increments: u32,
+        load_factor: f64,
+    },
+    #[error(
+        "element {element} is turned inside out (volume ratio J = {jacobian:e}): the \
+         deformation is too large for one load increment, or for the element — try more load \
+         increments"
+    )]
+    InvertedElement { element: usize, jacobian: f64 },
+    #[error(
+        "the Newton solve has not finished: it stands at increment {increment}, iteration \
+         {iteration}"
+    )]
+    NewtonUnfinished { increment: u32, iteration: usize },
+    #[error("nonlinear solve: {reason}")]
+    NonlinearInput { reason: String },
+    #[error("contact: {reason}")]
+    Contact { reason: String },
 }

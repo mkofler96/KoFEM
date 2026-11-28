@@ -7,6 +7,7 @@
 import { SHELL_SURFACES, type ElementStress } from "../lib/stressFields";
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
 import {
+  ContactPairs,
   Couplings,
   ElasticModel,
   freeRigidMotions,
@@ -27,6 +28,7 @@ import type {
   KofemModule,
 } from "../wasm/pkg/kofem_wasm.js";
 import type { CgLimitProgress } from "../lib/solve/contracts.js";
+import type { ContactResult } from "../lib/contact.js";
 import type {
   Node,
   Element,
@@ -49,6 +51,7 @@ import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 import {
   inStage,
   inStageAsync,
+  rustFailureClass,
   splitStage,
   type FailureStage,
 } from "../lib/workerError.js";
@@ -626,11 +629,13 @@ type SolveResultFields = {
 };
 
 // Each path's reactions are summed in the solve's own numbering, before its
-// result is mapped back to the store mesh (KOF-387).
+// result is mapped back to the store mesh (KOF-387). Only the solid path
+// solves contact; the other paths have no contact result.
 function postSolveResult(
   id: number,
   result: SolveResultFields,
   reactions: ReactionSummary | null,
+  contact: ContactResult | null = null,
 ) {
   self.postMessage(
     {
@@ -640,6 +645,7 @@ function postSolveResult(
       vonMises: result.vonMises,
       stress: result.stress,
       reactions,
+      contact,
     },
     // A model without shells holds one stress array on every surface: each
     // buffer is transferred once.
@@ -648,6 +654,14 @@ function postSolveResult(
         result.displacements.buffer,
         result.vonMises.buffer,
         ...SHELL_SURFACES.map((s) => result.stress[s].buffer),
+        ...(contact
+          ? [
+              contact.pressure.buffer,
+              contact.gap.buffer,
+              contact.closed.buffer,
+              contact.area.buffer,
+            ]
+          : []),
       ]),
     ],
   );
@@ -872,7 +886,13 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
       : null,
   );
   const result = await solveSolidInRust(
-    { ElasticModel, SolveOptions, Ties, evaluateFieldExpression },
+    {
+      ElasticModel,
+      SolveOptions,
+      Ties,
+      ContactPairs,
+      evaluateFieldExpression,
+    },
     {
       ...payload,
       nodes: tied.solveNodes,
@@ -900,6 +920,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     id,
     { displacements, vonMises: result.vonMises, stress: result.stress },
     result.reactions,
+    result.contact,
   );
 }
 
@@ -1196,6 +1217,14 @@ function isWasmTrap(err: unknown): boolean {
 // WebAssembly trap in them is the Rust module's (KOF-454).
 const RUST_STAGES: readonly FailureStage[] = ["shell_idealisation", "solving"];
 
+// The user's text of an error: its name and message. Its stack is for the
+// console only (KOF-490).
+function errorSummary(err: unknown): string {
+  return err instanceof Error
+    ? `${err.name}: ${err.message}`
+    : describeError(err);
+}
+
 function reportTaskError(id: number, type: string, failure: unknown): void {
   const { stage, error: raw } = splitStage(failure);
   const err =
@@ -1211,7 +1240,7 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
       ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
       : explained
         ? err.message
-        : describeError(err);
+        : errorSummary(err);
   const errorMessage = trap
     ? `WASM trap (code bug, not OOM): ${detail}`
     : detail;
@@ -1219,14 +1248,21 @@ function reportTaskError(id: number, type: string, failure: unknown): void {
     trap
       ? `[solver.worker] WASM trap in ${type}:`
       : `[solver.worker] ${type} failed:`,
-    explained ? `${detail}\n${describeError(raw)}` : detail,
+    explained ? `${detail}\n${describeError(raw)}` : describeError(err),
   );
+  const rustClass = rustFailureClass(err);
   self.postMessage({
     id,
     ok: false,
     error: errorMessage,
     english: inEnglish(errorMessage),
     ...(stage === null ? {} : { stage }),
+    ...(rustClass === null
+      ? {}
+      : {
+          failureClass: rustClass.category,
+          numericalReason: rustClass.reason,
+        }),
   });
 }
 

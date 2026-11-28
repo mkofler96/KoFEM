@@ -55,6 +55,7 @@ export type TreeItemKind =
   | "bc"
   | "load"
   | "tie"
+  | "contact"
   | "coupling"
   | "temperature"
   | "study"
@@ -74,7 +75,8 @@ export const MESH_ITEM_ID = 1;
 export const TEMPERATURE_ITEM_ID = 1;
 
 // The object kinds "+ Add" under Boundary conditions can create.
-export type BoundaryKind = "bc" | "load" | "tie" | "coupling" | "temperature";
+export type BoundaryKind =
+  "bc" | "load" | "tie" | "contact" | "coupling" | "temperature";
 
 export type TreeTarget =
   // created: the object was just made by its "+ Add" form, so its view opens
@@ -220,6 +222,11 @@ export interface ViewSlice {
   // factor drawn is appliedDeformFactor (lib/deformScale, useDeformFactor).
   deformScale: DeformScale;
   fitViewTrigger: number;
+  // Results → Show (KOF-495): the node to frame, by id, and a trigger like
+  // fitViewTrigger, so a repeat click on the same node frames it again after
+  // the user moved away. Transient.
+  frameNodeId: number | null;
+  frameNodeTrigger: number;
   // Perspective or orthographic projection of the viewport camera.
   projection: Projection;
   // Sidebar layout (issue #339): collapsed on small screens so the viewport
@@ -255,6 +262,7 @@ export interface ViewSlice {
   setLoadDisplay(v: LoadDisplay): void;
   setDeformScale(v: DeformScale): void;
   triggerFitView(): void;
+  frameNode(nodeId: number): void;
   setProjection(v: Projection): void;
   setSidebarOpen(v: boolean): void;
   setSidebarWidth(v: number): void;
@@ -276,6 +284,8 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   loadDisplay: "resultant",
   deformScale: AUTO_DEFORM_SCALE,
   fitViewTrigger: 0,
+  frameNodeId: null,
+  frameNodeTrigger: 0,
   projection: initialProjection(),
   sidebarOpen: !window.matchMedia(SMALL_SCREEN_QUERY).matches,
   sidebarWidth: initialSidebarWidth(),
@@ -307,6 +317,11 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   triggerFitView: () =>
     set((s) => {
       s.fitViewTrigger++;
+    }),
+  frameNode: (nodeId) =>
+    set((s) => {
+      s.frameNodeId = nodeId;
+      s.frameNodeTrigger++;
     }),
   setProjection: (v) =>
     set((s) => {

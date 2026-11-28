@@ -10,27 +10,34 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod contact;
 mod convergence;
 mod failure;
 mod field;
+mod large_deformation;
 mod mixed;
 mod outline;
+mod report;
 mod rigid_body;
 mod section;
 mod shell;
 mod shellize;
+mod statistics;
 mod stiffness;
 mod tie;
 mod topology;
 
+pub use contact::{ContactPairs, ContactRun, ContactSolution};
 pub use convergence::{
     clamped_free_wedge_exponent, extrapolate_to_zero_size, fit_convergence_rate,
     relative_element_sizes, ConvergenceRate, ZeroSizeExtrapolation,
 };
 pub use failure::{record_panics, take_panic_message};
 pub use field::{check_field_expression, evaluate_field_expression};
+pub use large_deformation::{LargeDeformationRun, LargeDeformationSolution};
 pub use mixed::MixedModel;
 pub use outline::{outer_faces, unique_edges, MeshOuterFaces};
+pub use report::report_stats;
 pub use rigid_body::{free_rigid_motions_js, FreeMotions};
 pub use shell::ShellModel;
 pub use shellize::{
@@ -40,21 +47,45 @@ pub use shellize::{
 pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
+use kofem_fem::contact::{ContactCg, ContactInterface, ContactPair};
+use kofem_fem::nonlinear::{LinearElastic, NewtonRun, NewtonSettings, NewtonStatus};
 use kofem_fem::{
-    assemble_stiffness, corner_stress_tensors, fold_onto_vertices, load_on_held_nodes,
-    nodal_residual, prepare_coupled_static, prepare_static, prepare_tied_static, solve_pcg_with,
-    summarize_reactions, von_mises, widen_translations, AmgSettings, BoundaryFaces, CgSettings,
-    CoupledReduction, Coupling, CouplingKind, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
-    PreconditionerChoice, PreparedCoupled, PreparedTied, ReactionSummary, ShellSurface,
-    StoppingRule, SurfaceLoadKind, TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
+    assemble_stiffness, corner_stress_tensors, fold_onto_vertices, fold_onto_vertices_at,
+    load_on_held_nodes, nodal_residual, prepare_coupled_static, prepare_static,
+    prepare_tied_static, solve_pcg_with, summarize_reactions, summarize_reactions_at, von_mises,
+    widen_translations, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling,
+    CouplingKind, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice,
+    PreparedCoupled, PreparedTied, ReactionSummary, ShellSurface, StoppingRule, SurfaceLoadKind,
+    TetMesh, TieReport, VertexTies, DOFS_PER_NODE,
 };
-use kofem_fem::{corner_stress_tensors_thermal, thermal_load, thermal_strains_at_centres};
+use kofem_fem::{
+    corner_stress_tensors_thermal, count_as_f64, thermal_load, thermal_strains_at_centres,
+};
 use wasm_bindgen::prelude::*;
 
 use stiffness::{Loan, Stiffness};
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = Reflect, js_name = set)]
+    fn reflect_set(target: &JsValue, key: &str, value: &str) -> bool;
+}
+
 fn to_js(error: &FemError) -> JsError {
-    JsError::new(&error.to_string())
+    with_class(JsError::new(&error.to_string()), error)
+}
+
+/// `js_error` with `error`'s class set on it as `failureClass` and, for a
+/// numerical failure, `numericalReason` (KOF-490): the app reads these, never
+/// the message.
+fn with_class(js_error: JsError, error: &FemError) -> JsError {
+    let class = error.class();
+    let target = JsValue::from(js_error.clone());
+    reflect_set(&target, "failureClass", class.category());
+    if let Some(reason) = class.reason() {
+        reflect_set(&target, "numericalReason", reason);
+    }
+    js_error
 }
 
 /// Values per support in a `supportReactions` result: force, moment about the
@@ -75,26 +106,16 @@ fn flatten_reactions(summary: &ReactionSummary) -> Vec<f64> {
         out.extend_from_slice(&support.force);
         out.extend_from_slice(&support.moment);
         out.extend_from_slice(&support.centroid);
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "a vertex count is far below 2^52"
-        )]
-        out.push(support.vertices as f64);
+        out.push(count_as_f64(support.vertices));
     }
     out.extend_from_slice(&summary.applied);
     out.extend_from_slice(&summary.applied_on_supports);
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "vertex counts and support indices are far below 2^52"
-    )]
-    {
-        out.push(summary.nodal.len() as f64);
-        out.reserve(NODAL_STRIDE * summary.nodal.len());
-        for node in &summary.nodal {
-            out.push(node.support as f64);
-            out.extend_from_slice(&node.position);
-            out.extend_from_slice(&node.force);
-        }
+    out.push(count_as_f64(summary.nodal.len()));
+    out.reserve(NODAL_STRIDE * summary.nodal.len());
+    for node in &summary.nodal {
+        out.push(count_as_f64(node.support));
+        out.extend_from_slice(&node.position);
+        out.extend_from_slice(&node.force);
     }
     out
 }
@@ -379,7 +400,10 @@ impl ElasticModel {
     /// or −1. The layout of the result is `REACTION_STRIDE` values per
     /// support, then the applied force and the applied force on supported
     /// DOFs (`kofem_fem::reactions`). A coupled or tied solve's reactions go
-    /// through its reduction; a quadratic model's edge, face and centre nodes
+    /// through its reduction, a large-deformation solve's from its internal
+    /// force, with its moments taken where the forces act, in the deformed
+    /// configuration (the centroids and nodal positions stay undeformed, for
+    /// drawing); a quadratic model's edge, face and centre nodes
     /// fold onto the vertices.
     ///
     /// # Errors
@@ -397,27 +421,79 @@ impl ElasticModel {
         } else {
             forces.to_vec()
         };
-        let residual =
-            self.stiffness
-                .with("supportReactions", |stiffness| match &solution.reduction {
-                    Some(reduction) => reduction
-                        .reactions(stiffness, &solution.full_dofs, &wide_forces)
-                        .map_err(|error| to_js(&error)),
-                    None => Ok(widen_translations(
-                        &nodal_residual(stiffness, &solution.full_dofs, forces)
-                            .map_err(|error| to_js(&error))?,
-                    )),
-                })?;
-        let reactions = fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
+        let residual = match &solution.internal_force {
+            Some(internal_force) => {
+                if internal_force.len() != forces.len() {
+                    return Err(JsError::new(&format!(
+                        "support reactions: {} forces for a large-deformation solve of {} DOFs",
+                        forces.len(),
+                        internal_force.len()
+                    )));
+                }
+                widen_translations(
+                    &internal_force
+                        .iter()
+                        .zip(forces)
+                        .map(|(internal, force)| internal - force)
+                        .collect::<Vec<_>>(),
+                )
+            }
+            None => {
+                self.stiffness
+                    .with("supportReactions", |stiffness| match &solution.reduction {
+                        Some(reduction) => reduction
+                            .reactions(stiffness, &solution.full_dofs, &wide_forces)
+                            .map_err(|error| to_js(&error)),
+                        None => Ok(widen_translations(
+                            &nodal_residual(stiffness, &solution.full_dofs, forces)
+                                .map_err(|error| to_js(&error))?,
+                        )),
+                    })?
+            }
+        };
         let loads = fold_onto_vertices(&self.mesh, &wide_forces).map_err(|error| to_js(&error))?;
-        let mut summary =
-            summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
+        let mut summary = if solution.internal_force.is_some() {
+            // A large deformation balances its forces where they act.
+            let deformed = self.deformed_nodes(&solution.full_dofs)?;
+            let reactions = fold_onto_vertices_at(&self.mesh, &residual, &deformed)
                 .map_err(|error| to_js(&error))?;
+            summarize_reactions_at(
+                self.mesh.vertices(),
+                &deformed[..self.mesh.vertex_count()],
+                &reactions,
+                &loads,
+                owners,
+                supports,
+            )
+        } else {
+            let reactions =
+                fold_onto_vertices(&self.mesh, &residual).map_err(|error| to_js(&error))?;
+            summarize_reactions(self.mesh.vertices(), &reactions, &loads, owners, supports)
+        }
+        .map_err(|error| to_js(&error))?;
         // Counted before folding: a free edge node's load is not on a support
         // because one of its ends is.
         summary.applied_on_supports =
             load_on_held_nodes(&self.mesh, &wide_forces, owners).map_err(|error| to_js(&error))?;
         Ok(flatten_reactions(&summary))
+    }
+
+    /// Where every node is once moved by `displacements` (3 per node).
+    fn deformed_nodes(&self, displacements: &[f64]) -> Result<Vec<[f64; 3]>, JsError> {
+        if displacements.len() != self.mesh.dof_count() {
+            return Err(JsError::new(&format!(
+                "support reactions: {} displacements for {} DOFs",
+                displacements.len(),
+                self.mesh.dof_count()
+            )));
+        }
+        Ok(self
+            .mesh
+            .node_coordinates()
+            .iter()
+            .zip(displacements.as_chunks::<3>().0)
+            .map(|(point, motion)| std::array::from_fn(|axis| point[axis] + motion[axis]))
+            .collect())
     }
 
     /// Assemble the global stiffness matrix; returns its non-zero count.
@@ -455,6 +531,7 @@ impl ElasticModel {
             unused_vertices: prepared.unused_vertices,
             level_sizes: prepared.levels.iter().map(|level| level.unknowns).collect(),
             reduction: None,
+            internal_force: None,
         })
     }
 
@@ -612,6 +689,104 @@ impl ElasticModel {
             reduction: Some(reduction),
             output: RunOutput::Translations,
             tie_report: Some(report),
+        })
+    }
+}
+
+#[wasm_bindgen]
+impl ElasticModel {
+    /// Solve with frictionless contact between the surface pairs `contacts`
+    /// (`kofem_fem::contact`), on linear elements, with the constraint ties
+    /// `ties` (an empty table for none) and constraints and forces as for
+    /// `startSolve`, 3 per node. Returns a run the caller advances in
+    /// steps; each correction solve stops at the options' tolerance and fails
+    /// after their iteration budget, and the active set must settle within
+    /// `max_iterations` iterations. The out-of-balance force is held to the
+    /// same tolerance as each correction.
+    ///
+    /// # Errors
+    /// Missing assembly, a contact pair whose sides name no boundary face or
+    /// do not face each other, a quadratic model, malformed ties,
+    /// constraints or forces, or a zero iteration limit.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the tied solve's inputs plus the contact pairs and their iteration limit"
+    )]
+    #[wasm_bindgen(js_name = startContactSolve)]
+    pub fn start_contact_solve(
+        &mut self,
+        contacts: &ContactPairs,
+        ties: &Ties,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: &[f64],
+        options: &SolveOptions,
+        max_iterations: usize,
+    ) -> Result<ContactRun, JsError> {
+        let stiffness = self
+            .stiffness
+            .with("startContactSolve", |assembled| Ok(assembled.clone()))?;
+        let boundary = self
+            .boundary
+            .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
+        let pairs = contacts
+            .sides
+            .iter()
+            .enumerate()
+            .map(|(index, (side_a, side_b))| {
+                ContactPair::between(&self.mesh, boundary, side_a, side_b).map_err(|error| {
+                    with_class(
+                        JsError::new(&format!("contact pair {index}: {error}")),
+                        &error,
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let interface = ContactInterface::new(&self.mesh, &pairs).map_err(|error| to_js(&error))?;
+        let vertex_ties = if ties.slaves.is_empty() {
+            None
+        } else {
+            Some(
+                VertexTies::new(
+                    self.mesh.vertex_count(),
+                    &ties.slaves,
+                    &ties.offsets,
+                    &ties.masters,
+                    &ties.weights,
+                )
+                .and_then(|vertex_ties| vertex_ties.with_interfaces(&ties.interfaces))
+                .map_err(|error| to_js(&error))?,
+            )
+        };
+        let solver = ContactCg::new(
+            &self.mesh,
+            interface,
+            vertex_ties,
+            options.settings,
+            options.preconditioner,
+        );
+        let run = NewtonRun::start(
+            LinearElastic::new(stiffness),
+            solver,
+            &self.mesh,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            NewtonSettings {
+                increments: 1,
+                max_iterations,
+                tolerance: options.settings.relative_tolerance,
+            },
+        )
+        .map_err(|error| to_js(&error))?;
+        Ok(ContactRun {
+            run,
+            status: NewtonStatus::Solving {
+                increment: 1,
+                iteration: 1,
+                cg_iterations: 0,
+            },
+            preconditioner: preconditioner_name(options.preconditioner).to_owned(),
         })
     }
 }
@@ -893,6 +1068,7 @@ impl SolveRun {
             level_sizes,
             full_dofs,
             reduction: self.reduction,
+            internal_force: None,
         })
     }
 }
@@ -951,6 +1127,7 @@ impl SolveOptions {
 }
 
 #[wasm_bindgen]
+#[derive(Clone)]
 pub struct ElasticSolution {
     displacements: Vec<f64>,
     iterations: usize,
@@ -962,6 +1139,9 @@ pub struct ElasticSolution {
     pub(crate) full_dofs: Vec<f64>,
     /// A coupled, tied or mixed solve's reduction, for its reactions.
     pub(crate) reduction: Option<CoupledReduction>,
+    /// A large-deformation solve's internal force at the solution, for its
+    /// reactions: the stiffness times the displacements is not that force.
+    pub(crate) internal_force: Option<Vec<f64>>,
 }
 
 #[wasm_bindgen]

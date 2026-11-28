@@ -4,6 +4,7 @@
 // Results slice: solver output, solve settings, and the app's stage
 // transitions (mode navigation).
 
+import { CONTACT_FIELDS, type ContactResult } from "../lib/contact";
 import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
 import { anchorAtPoint, type ResultProbe } from "../lib/resultProbe";
@@ -11,7 +12,20 @@ import type { ReactionSummary } from "../lib/solve/reactions";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
-import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
+import {
+  DEFAULT_SOLVER_METHOD,
+  type Preconditioner,
+  type SolverMethod,
+} from "../lib/solve/amg";
+import type { SolveRoute } from "../lib/solve/route";
+import type { LargeDeformation } from "../workers/solverTypes";
+import {
+  DEFAULT_LOAD_INCREMENTS,
+  isLoadIncrementCount,
+  MAX_LOAD_INCREMENTS,
+} from "../lib/solve/largeDeformation";
+import type { Material } from "./materialSlice";
+import type { Property } from "./geometrySlice";
 import {
   SHELL_SURFACES,
   STRESS_FIELDS,
@@ -35,6 +49,27 @@ export interface SolverResult {
   // Each support's reaction and the applied load (KOF-387); absent on a
   // result that did not come from a static solve here (a saved file).
   reactions?: ReactionSummary | null;
+  // The contact pressure and status of every contact's slave nodes, in store
+  // node ids (KOF-485); absent without contact.
+  contact?: ContactResult | null;
+  // How the solve ran, for the analysis report (KOF-391); absent on a result
+  // that did not come from a static solve here (a saved file).
+  run?: SolveRun;
+}
+
+// What a static solve was run with: its path, its preconditioner, the element
+// order, the warnings the Solve panel showed when it started, and the
+// materials and body properties it solved. A material can be edited after the
+// solve without clearing the result, so the report reads them from here.
+export interface SolveRun {
+  path: SolveRoute["path"];
+  preconditioner: Preconditioner;
+  elementOrder: number;
+  // The large deformation solved, or null for the linear solve.
+  largeDeformation: LargeDeformation | null;
+  warnings: string[];
+  materials: Material[];
+  properties: Property[];
 }
 
 export const RESULT_TYPES = [
@@ -44,6 +79,7 @@ export const RESULT_TYPES = [
   "Uz",
   "Von Mises stress",
   ...STRESS_FIELDS,
+  ...CONTACT_FIELDS,
 ] as const;
 export type ResultType = (typeof RESULT_TYPES)[number];
 
@@ -85,6 +121,11 @@ export interface ResultsSlice {
   // covers all-solid tet and hex models of order 1 or 2, as Gauss–Seidel in
   // Rust does. A model with shells may solve with another (solvePreconditioner).
   solverMethod: SolverMethod;
+  // Large deformation (KOF-486): solve the solids as Neo-Hookean over
+  // `loadIncrements` load increments instead of the linear solve. The count is
+  // kept while the option is off.
+  largeDeformation: boolean;
+  loadIncrements: number;
   // Colorbar limits for the displayed field, or null for the field's own
   // min/max. A single stress concentration otherwise takes the whole colour
   // map and flattens everything else to blue, hiding the second-highest
@@ -124,6 +165,9 @@ export interface ResultsSlice {
   setRunning(v: boolean): void;
   setElementOrder(order: number): void;
   setSolverMethod(method: SolverMethod): void;
+  setLargeDeformation(on: boolean): void;
+  // Throws unless `count` is a whole number from 1 to MAX_LOAD_INCREMENTS.
+  setLoadIncrements(count: number): void;
   setLegendRange(range: LegendRange | null): void;
   setShellSurface(surface: ShellSurface): void;
   setProbing(on: boolean): void;
@@ -153,6 +197,8 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   // an opt-in upgrade (Solver settings) — far more accurate but ~8× the DOFs.
   elementOrder: 1,
   solverMethod: DEFAULT_SOLVER_METHOD,
+  largeDeformation: false,
+  loadIncrements: DEFAULT_LOAD_INCREMENTS,
   legendRange: null,
   shellSurface: "top",
   mode: "geometry",
@@ -195,6 +241,18 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setSolverMethod: (method) =>
     set((s) => {
       s.solverMethod = method;
+    }),
+  setLargeDeformation: (on) =>
+    set((s) => {
+      s.largeDeformation = on;
+    }),
+  setLoadIncrements: (count) =>
+    set((s) => {
+      if (!isLoadIncrementCount(count))
+        throw new Error(
+          `load increments must be a whole number from 1 to ${MAX_LOAD_INCREMENTS}, got ${count}`,
+        );
+      s.loadIncrements = count;
     }),
   setShellSurface: (surface) =>
     set((s) => {

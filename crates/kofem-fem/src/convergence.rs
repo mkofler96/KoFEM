@@ -14,6 +14,8 @@
 //! J. Fluids Eng. 130 (2008) 078001. [`fit_rate`] fits the order of an error
 //! measured against a known reference: the slope of ln|e| against ln h.
 
+use crate::count::count_as_f64;
+use crate::extremum::{largest, smallest};
 use crate::FemError;
 
 /// A power law |e| = C·hᵖ fitted to errors by least squares in log–log.
@@ -106,11 +108,13 @@ pub fn fit_rate(sizes: &[f64], errors: &[f64]) -> Result<RateFit, FemError> {
         .sum();
     let rate = covariance / spread;
     let log_coefficient = mean_error - rate * mean_size;
-    let max_log_residual = log_sizes
-        .iter()
-        .zip(&log_errors)
-        .map(|(ls, le)| (le - log_coefficient - rate * ls).abs())
-        .fold(0.0, f64::max);
+    let max_log_residual = largest(
+        0.0,
+        log_sizes
+            .iter()
+            .zip(&log_errors)
+            .map(|(ls, le)| (le - log_coefficient - rate * ls).abs()),
+    );
     Ok(RateFit {
         rate,
         log_coefficient,
@@ -119,15 +123,14 @@ pub fn fit_rate(sizes: &[f64], errors: &[f64]) -> Result<RateFit, FemError> {
 }
 
 fn mean(values: &[f64]) -> f64 {
-    #[allow(clippy::cast_precision_loss, reason = "a handful of mesh levels")]
-    let count = values.len() as f64;
+    let count = count_as_f64(values.len());
     values.iter().sum::<f64>() / count
 }
 
 /// The orders [`extrapolate`] searches. Below 0.05 the levels barely differ
 /// from a constant; above 10 no finite element converges.
 const ORDER_RANGE: (f64, f64) = (0.05, 10.0);
-const SCAN_POINTS: usize = 400;
+const SCAN_POINTS: u32 = 400;
 
 /// The linear least-squares fit of φ = φ∞ + C·sᵖ for one order p, on sizes
 /// scaled to at most 1 (s = h / `h_max`): (φ∞, C for the scaled sizes, the
@@ -167,17 +170,17 @@ fn fit_at_order(scaled: &[f64], values: &[f64], order: f64) -> (f64, f64, f64) {
 /// anything.
 pub fn extrapolate(sizes: &[f64], values: &[f64]) -> Result<Extrapolation, FemError> {
     check_levels(sizes, values, "results", 3)?;
-    let h_max = sizes.iter().copied().fold(0.0, f64::max);
+    let h_max = largest(0.0, sizes.iter().copied());
     let scaled: Vec<f64> = sizes.iter().map(|size| size / h_max).collect();
-    let spread = values.iter().copied().fold(f64::NEG_INFINITY, f64::max)
-        - values.iter().copied().fold(f64::INFINITY, f64::min);
-    let magnitude = values.iter().map(|value| value.abs()).fold(0.0, f64::max);
+    let spread = largest(f64::NEG_INFINITY, values.iter().copied())
+        - smallest(f64::INFINITY, values.iter().copied());
+    let magnitude = largest(0.0, values.iter().map(|value| value.abs()));
     if spread <= 1e-14 * magnitude.max(f64::MIN_POSITIVE) {
         return Err(refuse(
             "the results do not change with the mesh, so they give no order of convergence",
         ));
     }
-    if scaled.iter().copied().fold(f64::INFINITY, f64::min) >= 1.0 - 1e-12 {
+    if smallest(f64::INFINITY, scaled.iter().copied()) >= 1.0 - 1e-12 {
         return Err(refuse(
             "the element sizes are all equal, so they give no order",
         ));
@@ -201,9 +204,8 @@ pub fn extrapolate(sizes: &[f64], values: &[f64]) -> Result<Extrapolation, FemEr
     // Scan log-spaced orders for the smallest residual, then refine it by
     // golden-section search inside the bracketing scan cells.
     let (low, high) = (ORDER_RANGE.0.ln(), ORDER_RANGE.1.ln());
-    let order_at = |k: usize| {
-        #[allow(clippy::cast_precision_loss, reason = "a few hundred scan points")]
-        let fraction = k as f64 / (SCAN_POINTS - 1) as f64;
+    let order_at = |k: u32| {
+        let fraction = f64::from(k) / f64::from(SCAN_POINTS - 1);
         (low + (high - low) * fraction).exp()
     };
     let residual_at = |order: f64| fit_at_order(&scaled, values, order).2;
@@ -239,8 +241,7 @@ pub fn extrapolate(sizes: &[f64], values: &[f64]) -> Result<Extrapolation, FemEr
     }
     let order = f64::midpoint(lower, upper);
     let (limit, scaled_coefficient, residual) = fit_at_order(&scaled, values, order);
-    #[allow(clippy::cast_precision_loss, reason = "a handful of mesh levels")]
-    let levels = scaled.len() as f64;
+    let levels = count_as_f64(scaled.len());
     Ok(Extrapolation {
         limit,
         order,
@@ -256,7 +257,7 @@ pub fn extrapolate(sizes: &[f64], values: &[f64]) -> Result<Extrapolation, FemEr
 ///
 /// # Errors
 /// A dimension other than 1, 2 or 3, no levels, or a level without elements.
-pub fn relative_sizes(element_counts: &[u64], dimension: u32) -> Result<Vec<f64>, FemError> {
+pub fn relative_sizes(element_counts: &[u32], dimension: u32) -> Result<Vec<f64>, FemError> {
     if !(1..=3).contains(&dimension) {
         return Err(refuse(format!(
             "a mesh refines in 1, 2 or 3 dimensions, got {dimension}"
@@ -268,13 +269,9 @@ pub fn relative_sizes(element_counts: &[u64], dimension: u32) -> Result<Vec<f64>
     if let Some(i) = element_counts.iter().position(|count| *count == 0) {
         return Err(refuse(format!("mesh level {i} has no elements")));
     }
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "element counts are far below 2^52"
-    )]
     Ok(element_counts
         .iter()
-        .map(|count| (first as f64 / *count as f64).powf(1.0 / f64::from(dimension)))
+        .map(|count| (f64::from(first) / f64::from(*count)).powf(1.0 / f64::from(dimension)))
         .collect())
 }
 

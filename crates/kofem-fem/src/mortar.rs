@@ -1,8 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Dual mortar weights for a constraint tie between linear element faces,
-//! ported from the app's `tieMortar.ts` (PR #547).
+//! Dual mortar integrals between linear element faces, shared by constraint
+//! ties and contact ([`mortar_integrals`]): the diagonal slave matrix D, the
+//! coupling matrix M, nodal normals and weighted gaps. A tie's weights are
+//! D⁻¹M ([`mortar_weights`], ported from the app's `tieMortar.ts`, PR #547);
+//! contact ([`crate::contact`]) constrains the weighted gap.
 //!
 //! A node-to-surface tie makes each slave node follow the point of the
 //! master surface it projects onto. That is exact at the slave nodes, but
@@ -49,8 +52,10 @@
 //! mortar contact formulation using a primal–dual active set strategy",
 //! IJNME 79 (2009).
 
+use crate::extremum::largest;
 use std::collections::{BTreeMap, HashMap};
 
+use crate::count::count_as_f64;
 use crate::error::FemError;
 
 /// One element face on a tied surface: its nodes in cyclic order (3 or 4),
@@ -72,6 +77,37 @@ pub struct MortarRow {
     pub masters: Vec<usize>,
     pub weights: Vec<f64>,
     pub coverage: f64,
+}
+
+/// The mortar integrals of one slave node j over the master surface, with
+/// ψⱼ its dual basis function and Nₖ the master shape functions:
+///
+/// ```text
+/// Mⱼₖ = ∫ ψⱼ Nₖ dΓ,   Dⱼⱼ = Σₖ Mⱼₖ = ∫ ψⱼ dΓ,   g̃ⱼ = nⱼ · (Σₖ Mⱼₖ xₖ − Dⱼⱼ xⱼ),
+/// ```
+///
+/// integrated over the part of the slave surface the master covers. D is
+/// lumped to the diagonal as the dual basis makes it over a fully covered
+/// node; taking it as the row sum of M keeps a rigid motion of both sides
+/// from opening a gap. The weighted gap g̃ⱼ measures the master surface
+/// from xⱼ along nⱼ, the average of the normals of the slave faces around
+/// the node weighted by its share of each (Popp et al. 2009); it is positive
+/// where the surfaces are apart.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlaveIntegrals {
+    pub slave: usize,
+    /// Dⱼⱼ.
+    pub diagonal: f64,
+    pub masters: Vec<usize>,
+    /// Mⱼₖ for each of `masters`.
+    pub coupling: Vec<f64>,
+    /// How much of the node's multiplier support the master covers (1 = all
+    /// of it).
+    pub coverage: f64,
+    /// Unit outward normal of the slave surface at the node.
+    pub normal: [f64; 3],
+    /// g̃ⱼ.
+    pub weighted_gap: f64,
 }
 
 /// Faces whose normals are less opposed than this are not treated as facing
@@ -132,11 +168,10 @@ fn frame_of(face: &MortarFace) -> Result<FaceFrame<'_>, FemError> {
     let edge = sub(face.points[1], face.points[0]);
     let axis_u = unit(sub(edge, scale(normal, dot(edge, normal))));
     let axis_v = cross(normal, axis_u);
-    let radius = face
-        .points
-        .iter()
-        .map(|&point| norm(sub(point, centroid)))
-        .fold(0.0, f64::max);
+    let radius = largest(
+        0.0,
+        face.points.iter().map(|&point| norm(sub(point, centroid))),
+    );
     Ok(FaceFrame {
         face,
         centroid,
@@ -426,10 +461,7 @@ impl<'a> MasterSurface<'a> {
             .iter()
             .map(frame_of)
             .collect::<Result<Vec<_>, _>>()?;
-        let max_radius = frames
-            .iter()
-            .map(|master| master.radius)
-            .fold(0.0, f64::max);
+        let max_radius = largest(0.0, frames.iter().map(|master| master.radius));
         let mut grid = FaceGrid {
             cell: (2.0 * max_radius).max(1e-9),
             buckets: HashMap::new(),
@@ -491,7 +523,10 @@ impl<'a> MasterSurface<'a> {
                 nearest = nearest.min(gap);
             });
             // Every master not yet scanned is at least this far away.
-            #[allow(clippy::cast_precision_loss, reason = "a ring count is far below 2^52")]
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "rings follow the surfaces' extent, not the mesh size; a search that ends scans far fewer than 2^53"
+            )]
             let scanned = ring as f64 * self.grid.cell - self.max_radius;
             if scanned > reach || scanned > nearest + 2.0 * (slave.radius + self.max_radius) {
                 break;
@@ -516,11 +551,14 @@ struct SlaveFace {
 }
 
 /// Running sums of the mortar integrals: ∫ ψⱼ Nₖ per slave node j and master
-/// node k, and ∫ Nⱼ over the slave faces.
+/// node k, ∫ Nⱼ over the slave faces, the slave face normals weighted by ∫ Nⱼ,
+/// and every node's position.
 #[derive(Default)]
 struct MortarSums {
     coupling: BTreeMap<usize, BTreeMap<usize, f64>>,
     integral_of: BTreeMap<usize, f64>,
+    normal_of: BTreeMap<usize, [f64; 3]>,
+    position_of: HashMap<usize, [f64; 3]>,
 }
 
 impl MortarSums {
@@ -573,14 +611,14 @@ impl MortarSums {
         }
     }
 
-    /// The normalised weights of every slave node the master surface covers
-    /// enough of.
-    fn into_rows(self) -> Result<Vec<MortarRow>, FemError> {
-        let mut rows = Vec::with_capacity(self.coupling.len());
+    /// The integrals of every slave node the master surface covers enough
+    /// of.
+    fn into_integrals(self) -> Result<Vec<SlaveIntegrals>, FemError> {
+        let mut nodes = Vec::with_capacity(self.coupling.len());
         for (slave, row) in self.coupling {
-            let total: f64 = row.values().sum();
+            let diagonal: f64 = row.values().sum();
             let full = self.integral_of.get(&slave).copied().unwrap_or(0.0);
-            if !(full > 0.0 && total.is_finite()) {
+            if !(full > 0.0 && diagonal.is_finite()) {
                 return Err(FemError::Tie {
                     reason: format!(
                         "the mortar integrals of node {slave} are not finite — a degenerate face \
@@ -588,44 +626,89 @@ impl MortarSums {
                     ),
                 });
             }
-            let coverage = total / full;
+            let coverage = diagonal / full;
             if coverage < MIN_COVERAGE {
                 continue;
             }
-            let (masters, mut weights): (Vec<usize>, Vec<f64>) = row
-                .into_iter()
-                .map(|(master, value)| (master, value / total))
-                .filter(|&(_, weight)| weight.abs() >= 1e-12)
-                .unzip();
-            let sum: f64 = weights.iter().sum();
-            for weight in &mut weights {
-                *weight /= sum;
+            let normal = unit(self.normal_of.get(&slave).copied().unwrap_or_default());
+            let own = self.position_of.get(&slave).copied().unwrap_or_default();
+            let mut followed = scale(own, -diagonal);
+            for (master, &value) in &row {
+                let point = self.position_of.get(master).copied().unwrap_or_default();
+                followed = add(followed, scale(point, value));
             }
-            rows.push(MortarRow {
+            let (masters, coupling) = row.into_iter().unzip();
+            nodes.push(SlaveIntegrals {
                 slave,
+                diagonal,
                 masters,
-                weights,
+                coupling,
                 coverage,
+                normal,
+                weighted_gap: dot(normal, followed),
             });
         }
-        Ok(rows)
+        Ok(nodes)
+    }
+}
+
+impl SlaveIntegrals {
+    /// The tie weights D⁻¹M, without the round-off terms of a master the
+    /// node barely reaches, summing to one.
+    fn into_row(self) -> MortarRow {
+        let total = self.diagonal;
+        let (masters, mut weights): (Vec<usize>, Vec<f64>) = self
+            .masters
+            .into_iter()
+            .zip(self.coupling)
+            .map(|(master, value)| (master, value / total))
+            .filter(|&(_, weight)| weight.abs() >= 1e-12)
+            .unzip();
+        let sum: f64 = weights.iter().sum();
+        for weight in &mut weights {
+            *weight /= sum;
+        }
+        MortarRow {
+            slave: self.slave,
+            masters,
+            weights,
+            coverage: self.coverage,
+        }
     }
 }
 
 /// Mortar weights of every slave node on the slave faces, over the master
 /// faces within `limit` of them (infinity for the whole surface), sorted by
-/// slave node. A node whose multiplier support the master surface covers
-/// less than half of gets no row.
+/// slave node: D⁻¹M of [`mortar_integrals`]. A node whose multiplier support
+/// the master surface covers less than half of gets no row.
 ///
 /// # Errors
-/// [`FemError::Tie`] for a negative search distance, or a face that is not a
-/// triangle or quadrilateral, has zero area, or whose integrals are not
-/// finite.
+/// As [`mortar_integrals`].
 pub fn mortar_weights(
     slave_faces: &[MortarFace],
     master_faces: &[MortarFace],
     limit: f64,
 ) -> Result<Vec<MortarRow>, FemError> {
+    Ok(mortar_integrals(slave_faces, master_faces, limit)?
+        .into_iter()
+        .map(SlaveIntegrals::into_row)
+        .collect())
+}
+
+/// The mortar integrals ([`SlaveIntegrals`]) of every slave node on the
+/// slave faces, over the master faces within `limit` of them (infinity for
+/// the whole surface), sorted by slave node. A node whose multiplier support
+/// the master surface covers less than half of gets none.
+///
+/// # Errors
+/// [`FemError::Tie`] for a negative search distance, or a face that is not a
+/// triangle or quadrilateral, has zero area, or whose integrals are not
+/// finite.
+pub fn mortar_integrals(
+    slave_faces: &[MortarFace],
+    master_faces: &[MortarFace],
+    limit: f64,
+) -> Result<Vec<SlaveIntegrals>, FemError> {
     if limit.is_nan() || limit < 0.0 {
         return Err(FemError::Tie {
             reason: format!("the tie search distance must be non-negative, got {limit}"),
@@ -633,6 +716,11 @@ pub fn mortar_weights(
     }
     let surface = MasterSurface::new(master_faces, slave_faces)?;
     let mut sums = MortarSums::default();
+    for face in master_faces {
+        for (&node, &point) in face.nodes.iter().zip(&face.points) {
+            sums.position_of.insert(node, point);
+        }
+    }
     for original in slave_faces {
         let frame = frame_of(original)?;
         let mut corners: Vec<Point2> = original
@@ -648,8 +736,11 @@ pub fn mortar_weights(
             points.reverse();
         }
         let (coefficients, integrals) = dual_basis(&corners)?;
-        for (&node, &integral) in nodes.iter().zip(&integrals) {
+        for ((&node, &integral), &point) in nodes.iter().zip(&integrals).zip(&points) {
             *sums.integral_of.entry(node).or_default() += integral;
+            let normal = sums.normal_of.entry(node).or_default();
+            *normal = add(*normal, scale(frame.normal, integral));
+            sums.position_of.insert(node, point);
         }
         let slave = SlaveFace {
             corners,
@@ -669,7 +760,7 @@ pub fn mortar_weights(
             sums.add_overlap(&slave, frame.radius, master, &master_corners, gap_limit);
         }
     }
-    sums.into_rows()
+    sums.into_integrals()
 }
 
 fn combine(points: &[[f64; 3]], weights: &[f64]) -> [f64; 3] {
@@ -683,9 +774,12 @@ fn combine(points: &[[f64; 3]], weights: &[f64]) -> [f64; 3] {
 }
 
 fn average(points: &[[f64; 3]]) -> [f64; 3] {
-    #[allow(clippy::cast_precision_loss, reason = "a face has 3 or 4 points")]
-    let share = 1.0 / points.len() as f64;
+    let share = 1.0 / count_as_f64(points.len());
     combine(points, &vec![share; points.len()])
+}
+
+fn add(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
+    [lhs[0] + rhs[0], lhs[1] + rhs[1], lhs[2] + rhs[2]]
 }
 
 fn sub(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {

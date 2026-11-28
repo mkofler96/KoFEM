@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useMemo, useState, type ReactNode } from "react";
-import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
+import { useModelStore } from "../../store/modelStore";
 import type {
   ResultPlot,
   ResultType,
   SolverResult,
 } from "../../store/modelStore";
-import type { TreeTarget } from "../../store/viewSlice";
+import { SMALL_SCREEN_QUERY, type TreeTarget } from "../../store/viewSlice";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { plotLabel } from "../../store/studySlice";
 import {
   computeResultRange,
   resultFieldSymbol,
+  resultTypesOf,
   resultUnit,
 } from "../../lib/resultField";
 import {
@@ -23,16 +25,23 @@ import {
 import { isStressField, type ShellSurface } from "../../lib/stressFields";
 import { probeLabel } from "../../lib/resultProbe";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
+import {
+  useFieldPercentiles,
+  type PercentileReadings,
+} from "../../hooks/useFieldPercentiles";
+import { usePeakLocation } from "../../hooks/usePeakLocation";
 import { DeformScaleControl } from "./DeformScaleControl";
 import { SectionControls } from "./SectionControls";
 import { RefinementResult } from "./RefinementStudy";
 import { TopOptResult } from "./TopOptResult";
 import { SupportReactions } from "./SupportReactions";
-import { useT } from "../../i18n/useLocale";
+import { useLocale, useT } from "../../i18n/useLocale";
 import {
   resultFieldMessages,
   resultsMessages,
 } from "../../i18n/messages/results";
+import { reportMessages } from "../../i18n/messages/report";
+import { saveReport } from "../../lib/report/saveReport";
 import styles from "./Panel.module.css";
 
 // "Von Mises stress" → "von-mises-stress", "Normal stress σxx" →
@@ -50,7 +59,10 @@ function fieldSlug(field: ResultType): string {
 // the optimization's density. A result its study has not produced yet cannot
 // be picked.
 function AddResultPlot() {
-  const hasStatic = useModelStore((s) => s.result !== null);
+  const result = useModelStore((s) => s.result);
+  const hasStatic = result !== null;
+  // The contact fields only once a solve found a contact.
+  const staticFields = resultTypesOf(result);
   const hasDensity = useModelStore((s) => s.densityResult !== null);
   const hasRefinement = useModelStore(
     (s) => s.refinementStudy?.status === "done",
@@ -67,7 +79,7 @@ function AddResultPlot() {
   const fields = useT(resultFieldMessages);
   return (
     <div className={styles.addChooser}>
-      {RESULT_TYPES.map((field) => (
+      {staticFields.map((field) => (
         <button
           key={field}
           className={styles.addChoice}
@@ -301,6 +313,7 @@ function MinMaxSection({ field }: { field: ResultType }) {
   const showExtremes = useModelStore((s) => s.showExtremeProbes);
   const setShowExtremes = useModelStore((s) => s.setShowExtremeProbes);
   const { extremes } = useProbeReadings();
+  const percentiles = useFieldPercentiles();
   const unit = resultUnit(field);
   const symbol = resultFieldSymbol(field);
   const text = useT(resultsMessages);
@@ -334,6 +347,120 @@ function MinMaxSection({ field }: { field: ResultType }) {
             reading={{ kind: "value", ...extremes[end] }}
           />
         ))}
+      <PercentileRows percentiles={percentiles} symbol={symbol} unit={unit} />
+      <PeakLocationRow percentiles={percentiles} unit={unit} />
+    </>
+  );
+}
+
+// The von Mises percentiles by volume (KOF-477), under the max: the number a
+// part is judged on when the max sits at a singularity.
+function PercentileRows({
+  percentiles,
+  symbol,
+  unit,
+}: {
+  percentiles: PercentileReadings | null;
+  symbol: string;
+  unit: string;
+}) {
+  const text = useT(resultsMessages);
+  if (percentiles === null) return null;
+  if (percentiles.kind === "unreadable")
+    return (
+      <div className={styles.formNote}>
+        {text.percentileUnreadable(percentiles.reason)}
+      </div>
+    );
+  return percentiles.values.map(({ percent, value }) => (
+    <div
+      key={percent}
+      className={styles.statRow}
+      data-testid={`percentile-row-${percent}`}
+      title={text.percentileHint(percent)}
+    >
+      <span className={styles.statKey}>
+        {text.percentile(percent)} {symbol}
+      </span>
+      <span
+        className={styles.statVal}
+        data-testid={`percentile-value-${percent}`}
+        data-value={String(value)}
+      >
+        {value.toExponential(3)} {unit}
+      </span>
+    </div>
+  ));
+}
+
+function PeakLocationRow({
+  percentiles,
+  unit,
+}: {
+  percentiles: PercentileReadings | null;
+  unit: string;
+}) {
+  const peak = usePeakLocation();
+  const frameNode = useModelStore((s) => s.frameNode);
+  const setShowExtremes = useModelStore((s) => s.setShowExtremeProbes);
+  const setSidebarOpen = useModelStore((s) => s.setSidebarOpen);
+  const small = useMediaQuery(SMALL_SCREEN_QUERY);
+  const text = useT(resultsMessages);
+  const locale = useLocale();
+  if (peak === null) return null;
+  if (peak.kind === "unreadable")
+    return (
+      <div className={`${styles.formNote} ${styles.formNoteFull}`}>
+        {text.peakUnreadable(peak.reason)}
+      </div>
+    );
+  const p99 =
+    percentiles?.kind === "value"
+      ? percentiles.values.find(({ percent }) => percent === 99)
+      : undefined;
+  // On a phone the panel covers the view, so Show closes it.
+  const show = () => {
+    setShowExtremes(true);
+    frameNode(peak.nodeId);
+    if (small) setSidebarOpen(false);
+  };
+  return (
+    <>
+      <div
+        className={styles.peakRow}
+        data-testid="peak-location"
+        data-node-id={peak.nodeId}
+      >
+        <span className={styles.statKey}>{text.peakAt}</span>
+        <span
+          className={styles.statVal}
+          data-testid="peak-location-at"
+          data-at={peak.at.join(",")}
+        >
+          {formatVector(peak.at)}
+        </span>
+        <button
+          className={styles.peakShow}
+          data-testid="peak-show"
+          onClick={show}
+        >
+          {text.show}
+        </button>
+      </div>
+      {peak.on.length > 0 && (
+        <p className={styles.peakNote} data-testid="peak-note" role="note">
+          {text.peakOnBoundary(
+            new Intl.ListFormat(locale).format(
+              peak.on.map(({ kind, name }) =>
+                kind === "support"
+                  ? text.peakSupport(name)
+                  : text.peakLoad(name),
+              ),
+            ),
+            p99 && `${p99.value.toExponential(3)} ${unit}`,
+          )}
+        </p>
+      )}
     </>
   );
 }
@@ -441,6 +568,48 @@ function ProbeAtPoint({ symbol }: { symbol: string }) {
   );
 }
 
+// Results → Save report (KOF-391): one HTML file of the analysis, with the
+// figures of the view as it is now.
+function ReportButton() {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const text = useT(reportMessages);
+  const save = () => {
+    setSaving(true);
+    setError(null);
+    saveReport()
+      .catch((err: unknown) =>
+        setError(
+          text.reportFailed(err instanceof Error ? err.message : String(err)),
+        ),
+      )
+      .finally(() => setSaving(false));
+  };
+  return (
+    <>
+      <div className={styles.sectionLabel}>{text.title}</div>
+      <button
+        className={styles.outlineBtn}
+        data-testid="report-save"
+        disabled={saving}
+        title={text.saveReportHint}
+        onClick={save}
+      >
+        {saving ? text.savingReport : text.saveReport}
+      </button>
+      {error && (
+        <div
+          className={`${styles.formNote} ${styles.formNoteFull}`}
+          data-testid="report-error"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
+    </>
+  );
+}
+
 function Empty({ message, footer }: { message: string; footer: ReactNode }) {
   return (
     <div className={styles.panel}>
@@ -534,7 +703,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           value={resultType}
           onChange={(e) => setPlotField(plot.id, e.target.value as ResultType)}
         >
-          {RESULT_TYPES.map((type) => (
+          {resultTypesOf(result).map((type) => (
             <option key={type} value={type}>
               {fields[type]}
             </option>
@@ -571,6 +740,8 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
         {stats && <MinMaxSection field={resultType} />}
 
         <ProbeSection field={resultType} />
+
+        <ReportButton />
 
         {footer}
       </div>

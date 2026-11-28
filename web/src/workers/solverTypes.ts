@@ -8,6 +8,7 @@ import type {
 } from "../wasm/pkg/kofem_wasm.js";
 import type { TopOptSettings } from "../lib/solve/contracts.js";
 import type { TieDefinition } from "../lib/tie.js";
+import type { ContactDefinition } from "../lib/contact.js";
 import type { CouplingDefinition } from "../lib/coupling.js";
 import type { SolverMethod } from "../lib/solve/amg.js";
 
@@ -145,6 +146,12 @@ export interface VolumeMeshPayload {
   suppressedBodyIds?: number[];
   properties?: Property[];
 }
+// Large deformation (KOF-486): the solids as Neo-Hookean, the loads applied
+// over `increments` equal load increments.
+export interface LargeDeformation {
+  increments: number;
+}
+
 // The model a solve (or a topology optimization) works on — everything in the
 // solve request except the choice of solver.
 export interface SolveModel {
@@ -169,6 +176,13 @@ export interface SolveModel {
   // carrying any of these solves through the COUPLED assembler, whether or not
   // it has shells. Absent/empty = no couplings, and the routing is unchanged.
   couplings?: CouplingDefinition[];
+  // Frictionless contacts between picked surfaces (KOF-485): solved on the
+  // all-solid path with linear elements only (routeSolve refuses the rest).
+  // Absent/empty = no contact.
+  contacts?: ContactDefinition[];
+  // Large deformation; absent or null: the linear solve. Only the solid path
+  // solves it (routeSolve refuses the rest).
+  largeDeformation?: LargeDeformation | null;
   // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
@@ -200,7 +214,11 @@ export interface TopOptPayload {
   surfaceLoads?: SurfaceLoad[];
   tieGroups?: TieDefinition[];
   couplings?: CouplingDefinition[];
+  // Contacts; the optimizer refuses them.
+  contacts?: ContactDefinition[];
   // A temperature change; the optimizer refuses one.
   temperature?: TemperatureLoad | null;
+  // Large deformation; the optimizer, which is linear, refuses it.
+  largeDeformation?: LargeDeformation | null;
   settings: TopOptSettings;
 }

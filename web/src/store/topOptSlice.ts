@@ -8,7 +8,10 @@
 // The density field the run produces is a transient result and is NOT
 // serialized; loading an analysis restores the settings but not a stale run.
 
-import type { TopOptHistoryEntry } from "../lib/solve/contracts.js";
+import type {
+  TopOptHistoryEntry,
+  TopOptSettings,
+} from "../lib/solve/contracts.js";
 import type { ModelState, SliceCreator } from "./modelStore";
 import {
   raisedIterationLimit,
@@ -16,6 +19,7 @@ import {
 } from "../lib/topOptConvergence";
 import { ensurePlot, showPlot } from "./studySlice";
 import { endPickSessionOutside } from "./pickSlice";
+import type { FailureNotice } from "../lib/solve/failureAdvice";
 
 // The two objectives the panel offers: minimize compliance under a volume
 // fraction (KOF-230) or minimize volume under a compliance limit (KOF-235).
@@ -70,6 +74,9 @@ export interface DensityResult extends TopOptConvergence {
   // Level-set runs only: φ per node, aligned with the store's `nodes` array.
   levelSet?: Float64Array;
   history: TopOptHistoryEntry[];
+  // The settings the run was made with, for the analysis report (KOF-391);
+  // the panel's fields can change after the run.
+  run?: TopOptSettings;
 }
 
 // Sensible starting point. complianceLimit has no universal default — it is in
@@ -144,7 +151,7 @@ export interface TopOptSlice {
   topOptView: TopOptView;
   // Why the last run failed, for whichever panel is open: the run hands off to
   // Results as it starts, so the Optimize panel is gone by the time it fails.
-  topOptError: string | null;
+  topOptError: FailureNotice | null;
 
   setTopOptMethod(method: TopOptMethod): void;
   setTopOptObjective(objective: TopOptObjective): void;
@@ -155,7 +162,7 @@ export interface TopOptSlice {
   setDensityResult(result: DensityResult | null): void;
   setLiveDensity(live: LiveDensity | null): void;
   setTopOptView(view: TopOptView): void;
-  setTopOptError(error: string | null): void;
+  setTopOptError(error: FailureNotice | null): void;
   // Open Results → Density, adding its plot when there is none yet: where a
   // run goes as it starts.
   showTopOptResult(): void;

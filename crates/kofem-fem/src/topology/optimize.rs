@@ -23,6 +23,7 @@
 //! caller can report progress and show the design between iterations.
 
 use crate::error::FemError;
+use crate::extremum::largest;
 
 use super::filter::{default_filter_radius, DensityFilter};
 use super::formulation::{
@@ -682,11 +683,12 @@ impl<M: DesignModel> SimpOptimizer<M> {
         let next = self
             .mma
             .update(&self.design, step.f0, &step.df0, &step.fval, &step.dfdx)?;
-        let max_change = next
-            .iter()
-            .zip(&self.design)
-            .map(|(new, old)| (new - old).abs())
-            .fold(0.0, f64::max);
+        let max_change = largest(
+            0.0,
+            next.iter()
+                .zip(&self.design)
+                .map(|(new, old)| (new - old).abs()),
+        );
 
         // (4) Record the analysed design.
         let max_stress = stress_state

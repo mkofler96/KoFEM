@@ -9,12 +9,16 @@ import type { SolveModel, TopOptPayload } from "../../workers/solverTypes.js";
 import { shellMarkedBodies, requireOneShellBody } from "./autoShell.js";
 import { amgUnavailableReason } from "./amg.js";
 import {
+  contactRefusal,
+  largeDeformationRefusal,
   shellCouplingRefusal,
   solidModelRefusal,
   shellOrderRefusal,
   shellTieRefusal,
   surfaceLoadRefusal,
   temperatureRefusal,
+  topOptContactRefusal,
+  topOptLargeDeformationRefusal,
   topOptTieRefusal,
 } from "./refusals.js";
 import { elementOrderOf } from "./messageDefaults.js";
@@ -36,9 +40,20 @@ export type SolveRoute =
 
 export function routeSolve(payload: SolveModel): SolveRoute {
   const route = routeModel(payload);
+  // Large deformation is solved on the solid path alone (KOF-486); checked
+  // first, as its refusal names the setting to turn off.
+  const largeDeformation = largeDeformationRefusal(payload, route.path);
+  if (largeDeformation !== null) throw new Error(largeDeformation);
   // Only the solid solve applies a temperature change (KOF-449).
   if (payload.temperature && route.path !== "solid")
     throw new Error(temperatureRefusal(route.path));
+  // And only the solid solve, on linear elements, solves contact (KOF-485).
+  const refusal = contactRefusal(
+    payload.contacts,
+    route.path,
+    elementOrderOf(payload),
+  );
+  if (refusal !== null) throw new Error(refusal);
   return route;
 }
 
@@ -152,6 +167,16 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   // assembly would be optimized as separate parts.
   const tieRefusal = topOptTieRefusal(payload.tieGroups);
   if (tieRefusal !== null) throw new Error(tieRefusal);
+
+  // Nor a contact (KOF-485).
+  const contactsRefusal = topOptContactRefusal(payload.contacts);
+  if (contactsRefusal !== null) throw new Error(contactsRefusal);
+
+  // Nor large deformation: the optimizer is linear (KOF-486).
+  const largeDeformation = topOptLargeDeformationRefusal(
+    payload.largeDeformation,
+  );
+  if (largeDeformation !== null) throw new Error(largeDeformation);
 
   // A body marked "Shell" that has NOT been idealised into shell (CTRIA3)
   // elements would be turned into a mid-surface mesh only at solve time — the

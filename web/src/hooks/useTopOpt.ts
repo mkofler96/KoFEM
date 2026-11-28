@@ -24,7 +24,7 @@ import {
 } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
-  categorizeError,
+  classifyFailure,
   startTimer,
   track,
   workflowParams,
@@ -37,8 +37,14 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { passiveElements, roleOf } from "../lib/regions";
-import { topOptTieRefusal } from "../lib/solve/refusals";
+import {
+  topOptContactRefusal,
+  topOptLargeDeformationRefusal,
+  topOptTieRefusal,
+} from "../lib/solve/refusals";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { failureNotice, plainNotice } from "../lib/solve/failureAdvice";
+import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import { tr, useT } from "../i18n/useLocale";
 import { optimizeMessages } from "../i18n/messages/optimize";
 import { solveMessages } from "../i18n/messages/solve";
@@ -203,6 +209,14 @@ export function useTopOpt() {
   // a tie yet, so a tied model is refused (KOF-353).
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  // No optimizer solves contact either (KOF-485).
+  const contactGroups = useModelStore((s) => s.contactGroups);
+  const largeDeformation = useModelStore((s) => s.largeDeformation);
+  const loadIncrements = useModelStore((s) => s.loadIncrements);
+  const largeDeformationRun = largeDeformationSetting(
+    largeDeformation,
+    loadIncrements,
+  );
   const isOptimizing = useModelStore((s) => s.isOptimizing);
   const setOptimizing = useModelStore((s) => s.setOptimizing);
   const setDensityResult = useModelStore((s) => s.setDensityResult);
@@ -274,8 +288,13 @@ export function useTopOpt() {
   // No optimizer applies a tie: the worker refuses a tied model (routeTopOpt)
   // with the same words, so say so before the run.
   const tieRefusal = topOptTieRefusal(tieGroups);
+  const contactRefusal = topOptContactRefusal(contactGroups);
+  const largeDeformationRefusal =
+    topOptLargeDeformationRefusal(largeDeformationRun);
   const allOk =
     tieRefusal === null &&
+    contactRefusal === null &&
+    largeDeformationRefusal === null &&
     !noDesignRegion &&
     !levelSetShellBlock &&
     !levelSetCouplingBlock &&
@@ -293,7 +312,11 @@ export function useTopOpt() {
     // re-check the settings here rather than trust the caller.
     if (!settings) {
       setError(
-        tr(optimizeMessages).settingsInvalid(Object.values(errors).join("; ")),
+        plainNotice(
+          tr(optimizeMessages).settingsInvalid(
+            Object.values(errors).join("; "),
+          ),
+        ),
       );
       return;
     }
@@ -327,10 +350,19 @@ export function useTopOpt() {
       temperature,
       tieGroups,
       couplings: couplingGroups,
+      contacts: contactGroups,
+      largeDeformation: largeDeformationRun,
       settings: { ...settings, passive: passiveElements(elements, properties) },
     })
       .then(({ density, levelSet, history, converged, iterations }) => {
-        setDensityResult({ density, levelSet, history, converged, iterations });
+        setDensityResult({
+          density,
+          levelSet,
+          history,
+          converged,
+          iterations,
+          run: settings,
+        });
         track("solve_completed", {
           ...workflow,
           analysis_type: "topology",
@@ -341,12 +373,18 @@ export function useTopOpt() {
         // A cancel terminated the worker; the resulting rejection is expected.
         if (cancelled) return;
         console.error("[topopt] optimization failed:", err.message);
-        setError(tr(optimizeMessages).optimizationError(err.message));
+        const failure = classifyFailure(err);
+        setError(
+          failureNotice(
+            failure,
+            tr(optimizeMessages).optimizationError(err.message),
+          ),
+        );
         track("solve_failed", {
           ...workflow,
           analysis_type: "topology",
           duration_bucket: elapsed(),
-          error_category: categorizeError(err),
+          ...failure,
         });
       })
       .finally(() => {
@@ -386,7 +424,7 @@ export function useTopOpt() {
     state.clearTopOptRunRequest();
     if (state.isOptimizing) return;
     if (allOk) optimize();
-    else setError(tr(optimizeMessages).rerunBlocked);
+    else setError(plainNotice(tr(optimizeMessages).rerunBlocked));
   });
 
   const stressSummary = topOpt.stressConstraint
@@ -460,6 +498,9 @@ export function useTopOpt() {
   // the familiar five-row checklist rather than always carrying two green rows
   // for constraints most models never hit.
   if (tieRefusal !== null) checks.push([false, tieRefusal]);
+  if (contactRefusal !== null) checks.push([false, contactRefusal]);
+  if (largeDeformationRefusal !== null)
+    checks.push([false, largeDeformationRefusal]);
   if (noDesignRegion) checks.push([false, text.noDesignRegion]);
   if (levelSetShellBlock) checks.push([false, text.levelSetShells]);
   if (levelSetCouplingBlock) checks.push([false, text.levelSetCouplings]);

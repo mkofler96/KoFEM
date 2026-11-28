@@ -24,6 +24,7 @@
 import type {
   Constraint,
   Element,
+  LargeDeformation,
   Load,
   Material,
   Node,
@@ -40,6 +41,7 @@ import type {
   Ties,
 } from "../../wasm/fem/kofem_wasm.js";
 import type { TieConstraint } from "../tieConstraints.js";
+import type { ContactDefinition, ContactResult } from "../contact.js";
 import type { SolveRoute } from "./route.js";
 import {
   groupDirichlet,
@@ -62,6 +64,13 @@ import {
   type SupportOwners,
 } from "./reactions.js";
 import { release } from "./rustFailure.js";
+import {
+  contactPairs,
+  readContact,
+  runContactSolve,
+  type ContactFemModule,
+} from "./contactRun.js";
+import { runLargeDeformationSolve } from "./largeDeformation.js";
 import { tr } from "../../i18n/useLocale.js";
 import { solveMessages } from "../../i18n/messages/solve.js";
 
@@ -149,7 +158,7 @@ export function solvePreconditioner(
   return hasShells ? "incomplete-cholesky" : requested;
 }
 
-function preconditionerLabel(preconditioner: Preconditioner): string {
+export function preconditionerLabel(preconditioner: Preconditioner): string {
   return preconditioner === "incomplete-cholesky"
     ? tr(solveMessages).incompleteCholesky
     : METHOD_LABEL[preconditioner];
@@ -185,9 +194,9 @@ export interface FemModule {
   SolveOptions: typeof SolveOptions;
 }
 
-// The solid solve needs the tie tables too, for constraint ties, and the
-// formula evaluator for a temperature change.
-export interface SolidFemModule extends FemModule {
+// The solid solve needs the tie tables too, for constraint ties, the
+// formula evaluator for a temperature change, and the contact pairs.
+export interface SolidFemModule extends FemModule, ContactFemModule {
   Ties: typeof Ties;
   evaluateFieldExpression: EvaluateField;
 }
@@ -210,12 +219,23 @@ export interface AmgSolidModel {
   // The constraint-tie equations of the model's "mpc" connections
   // (weldTies), in original node ids; absent or empty when it has none.
   constraintTies?: TieConstraint[];
+  // Frictionless contacts; absent or empty when it has none.
+  contacts?: ContactDefinition[];
+  // Large deformation; absent or null: the linear solve.
+  largeDeformation?: LargeDeformation | null;
 }
 
 // The CG budget when the solve request names none (the former MFEM path's
 // cap). AMG converges in tens to a few hundred iterations, so reaching it is
 // rare; when it happens the user is asked whether to go on.
 const DEFAULT_ITERATION_LIMIT = 5000;
+
+// The CG budget of a solve whose request names `iterationLimit` or none. The
+// solve entries call this once and hand the number down.
+function cgBudget(iterationLimit: number | undefined): number {
+  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
+  return iterationLimit ?? DEFAULT_ITERATION_LIMIT;
+}
 // Progress is logged every this many iterations.
 const LOG_EVERY = 10;
 // Stop on the force residual ‖f − K·u‖ / ‖f‖, which means the same accuracy
@@ -233,6 +253,11 @@ const RELATIVE_TOLERANCE = 1e-6;
 // their displacements stay there.
 // Constraint ties (`model.constraintTies`) are eliminated in the same solve;
 // on quadratic elements their tied surface's edge and face nodes come along.
+// Contacts (`model.contacts`, linear elements) make it a contact solve, which
+// also returns the contact pressure and status of every slave node.
+// `model.largeDeformation` makes it a Neo-Hookean solve over load increments,
+// whose stresses are Cauchy stresses; routeSolve has refused it with a
+// contact, a constraint tie or a temperature change.
 export async function solveSolidInRust(
   fem: SolidFemModule,
   model: AmgSolidModel,
@@ -248,6 +273,7 @@ export async function solveSolidInRust(
   vonMises: Float64Array;
   stress: ElementStress;
   reactions: ReactionSummary | null;
+  contact: ContactResult | null;
 }> {
   const reason = amgUnavailableReason({
     elements: model.elements,
@@ -270,11 +296,29 @@ export async function solveSolidInRust(
         `The AMG solver received ${elastic.vertexCount} vertices for ${model.nodes.length} nodes`,
       );
     const started = performance.now();
-    const nonzeros = elastic.assemble();
-    log(
-      `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
-        `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
-    );
+    const largeDeformation = model.largeDeformation ?? null;
+    if (largeDeformation !== null) {
+      const unsupported = [
+        ...((model.contacts ?? []).length > 0 ? ["contact"] : []),
+        ...((model.constraintTies ?? []).length > 0 ? ["constraint ties"] : []),
+        ...(model.temperature ? ["a temperature change"] : []),
+      ];
+      if (unsupported.length > 0)
+        throw new Error(
+          `The large-deformation solve does not take ${unsupported.join(", ")}.`,
+        );
+      // The Newton solve assembles its own tangent each iteration.
+      log(
+        `${METHOD_LABEL[method]} large-deformation solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
+          `${elastic.dofCount} unknowns, Neo-Hookean solids over ${largeDeformation.increments} load increments`,
+      );
+    } else {
+      const nonzeros = elastic.assemble();
+      log(
+        `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
+          `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
+      );
+    }
     const { fixedDofs, fixedValues, forces } = rustSolidBoundaryConditions(
       elastic,
       model,
@@ -308,6 +352,57 @@ export async function solveSolidInRust(
     );
 
     const constraintTies = model.constraintTies ?? [];
+    // One triple per node: the vertices first, then any edge nodes.
+    const readSolution = (solution: ElasticSolution) => {
+      const nodal = solution.displacements;
+      return {
+        displacements: nodal.slice(0, 3 * elastic.vertexCount),
+        vonMises: elastic.vonMises(nodal),
+        stress: uniformStress(
+          thermal
+            ? elastic.stressTensorsThermal(nodal, thermal.alpha, thermal.deltaT)
+            : elastic.stressTensors(nodal),
+        ),
+        reactions: readReactions(elastic, solution, forces, supports),
+      };
+    };
+    if (largeDeformation !== null)
+      return await solveLargeDeformation(
+        fem,
+        elastic,
+        { fixedDofs, fixedValues, forces },
+        largeDeformation.increments,
+        method,
+        cgBudget(iterationLimit),
+        started,
+        log,
+        (solution) => {
+          const nodal = solution.displacements;
+          return {
+            displacements: nodal.slice(0, 3 * elastic.vertexCount),
+            vonMises: elastic.cauchyVonMises(nodal),
+            stress: uniformStress(elastic.cauchyStressTensors(nodal)),
+            reactions: readReactions(elastic, solution, forces, supports),
+            contact: null,
+          };
+        },
+      );
+    const contacts = model.contacts ?? [];
+    if (contacts.length > 0)
+      return await solveWithContact(
+        fem,
+        elastic,
+        model,
+        contacts,
+        constraintTies,
+        refVid,
+        { fixedDofs, fixedValues, forces },
+        method,
+        cgBudget(iterationLimit),
+        started,
+        log,
+        readSolution,
+      );
     const start =
       constraintTies.length === 0
         ? (options: SolveOptions) =>
@@ -344,32 +439,152 @@ export async function solveSolidInRust(
     return await runRustSolve(
       fem,
       method,
-      iterationLimit,
+      cgBudget(iterationLimit),
       start,
       started,
       askToContinue,
       log,
-      (solution) => {
-        // One triple per node: the vertices first, then any edge nodes.
-        const nodal = solution.displacements;
-        return {
-          displacements: nodal.slice(0, 3 * elastic.vertexCount),
-          vonMises: elastic.vonMises(nodal),
-          stress: uniformStress(
-            thermal
-              ? elastic.stressTensorsThermal(
-                  nodal,
-                  thermal.alpha,
-                  thermal.deltaT,
-                )
-              : elastic.stressTensors(nodal),
-          ),
-          reactions: readReactions(elastic, solution, forces, supports),
-        };
-      },
+      (solution) => ({ ...readSolution(solution), contact: null }),
     );
   } finally {
     release(elastic);
+  }
+}
+
+// The contact solve of an assembled solid model (see solveSolidInRust): the
+// constraint ties, if any, eliminated with it; each correction solved by CG
+// with `method` to the solid solve's tolerance.
+async function solveWithContact<T>(
+  fem: SolidFemModule,
+  elastic: ElasticModel,
+  model: AmgSolidModel,
+  contacts: ContactDefinition[],
+  constraintTies: TieConstraint[],
+  refVid: VertexIndexer,
+  conditions: {
+    fixedDofs: Uint32Array;
+    fixedValues: Float64Array;
+    forces: Float64Array;
+  },
+  method: SolverMethod,
+  budget: number,
+  started: number,
+  log: (line: string) => void,
+  read: (solution: ElasticSolution) => T,
+): Promise<T & { contact: ContactResult }> {
+  const tables = rustTieTables(constraintTies, refVid);
+  const ties = new fem.Ties(
+    tables.slaves,
+    tables.offsets,
+    tables.masters,
+    tables.weights,
+    tables.interfaces,
+  );
+  const pairs = contactPairs(fem, contacts, refVid);
+  const options = new fem.SolveOptions(
+    RELATIVE_TOLERANCE,
+    budget,
+    method,
+    "residual",
+  );
+  log(
+    `${METHOD_LABEL[method]} contact solve: ${contacts.length} contact pair(s), each touching node found by the active set`,
+  );
+  try {
+    const solution = await runContactSolve(
+      elastic,
+      pairs,
+      ties,
+      conditions.fixedDofs,
+      conditions.fixedValues,
+      conditions.forces,
+      options,
+      log,
+    );
+    try {
+      const contact = readContact(solution, model.nodes);
+      const elasticSolution = solution.elastic;
+      try {
+        const result = read(elasticSolution);
+        const touching = contact.closed.reduce(
+          (sum, closed) => sum + closed,
+          0,
+        );
+        const seconds = (performance.now() - started) / 1000;
+        log(
+          `Contact converged: ${contact.iterations} active-set iterations, ${elasticSolution.iterations} CG iterations, ` +
+            `${touching} of ${contact.nodeIds.length} slave nodes touching, contact force ${contact.force.toExponential(3)}, ${seconds.toFixed(2)} s`,
+        );
+        if (solution.heldNodes > 0)
+          log(
+            `${solution.heldNodes} slave node(s) held by a support along their normal — the support applies there`,
+          );
+        return { ...result, contact };
+      } finally {
+        release(elasticSolution);
+      }
+    } finally {
+      release(solution);
+    }
+  } finally {
+    release(options);
+    release(pairs);
+    release(ties);
+  }
+}
+
+// The large-deformation solve of a solid model (see solveSolidInRust): each
+// Newton correction solved by CG with `method` to the solid solve's
+// tolerance, which also bounds the out-of-balance force.
+async function solveLargeDeformation<T>(
+  fem: FemModule,
+  elastic: ElasticModel,
+  conditions: {
+    fixedDofs: Uint32Array;
+    fixedValues: Float64Array;
+    forces: Float64Array;
+  },
+  increments: number,
+  method: SolverMethod,
+  budget: number,
+  started: number,
+  log: (line: string) => void,
+  read: (solution: ElasticSolution) => T,
+): Promise<T> {
+  const options = new fem.SolveOptions(
+    RELATIVE_TOLERANCE,
+    budget,
+    method,
+    "residual",
+  );
+  try {
+    const solution = await runLargeDeformationSolve(
+      elastic,
+      conditions.fixedDofs,
+      conditions.fixedValues,
+      conditions.forces,
+      options,
+      increments,
+      log,
+    );
+    try {
+      const elasticSolution = solution.elastic;
+      try {
+        const result = read(elasticSolution);
+        const seconds = (performance.now() - started) / 1000;
+        log(
+          `Large deformation converged: ${increments} load increments, ${solution.iterations} Newton iterations, ` +
+            `${elasticSolution.iterations} CG iterations, each increment checked stable, ${seconds.toFixed(2)} s`,
+        );
+        return result;
+      } finally {
+        release(elasticSolution);
+      }
+    } finally {
+      release(solution);
+    }
+  } finally {
+    release(options);
   }
 }
 
@@ -601,7 +816,7 @@ export async function solveCoupledSolidInRust(
       return await runRustSolve(
         fem,
         method,
-        iterationLimit,
+        cgBudget(iterationLimit),
         (options) =>
           elastic.startCoupledSolve(
             couplings,
@@ -643,15 +858,13 @@ export async function solveCoupledSolidInRust(
 async function runRustSolve<T>(
   fem: FemModule,
   method: SolverMethod,
-  iterationLimit: number | undefined,
+  budget: number,
   start: (options: SolveOptions) => SolveRun,
   started: number,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
   read: (solution: ElasticSolution) => T,
 ): Promise<T> {
-  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
-  const budget = iterationLimit ?? DEFAULT_ITERATION_LIMIT;
   const options = new fem.SolveOptions(
     RELATIVE_TOLERANCE,
     budget,

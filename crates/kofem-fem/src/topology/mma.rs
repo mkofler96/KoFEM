@@ -30,7 +30,7 @@
 
 use crate::error::FemError;
 
-use super::topology_error;
+use super::{check_sensitivity, topology_error};
 
 /// Initial asymptote half-span, × the bound gap.
 const ASY_INIT: f64 = 0.5;
@@ -433,22 +433,15 @@ impl Mma {
         })
     }
 
-    /// One MMA step from `x` with the objective gradient `df0`, the `m`
-    /// constraint values `fval` and their Jacobian `dfdx` (m×n, row-major).
-    /// The objective value `_f0` is an additive constant of the
-    /// approximation, so it does not move the step. Returns the next iterate,
-    /// within the bounds and the move limit.
-    ///
-    /// # Errors
-    /// Arrays of the wrong length, or a singular subproblem.
-    pub fn update(
-        &mut self,
+    /// The number of the step these inputs are for, once their lengths fit
+    /// and every value is finite.
+    fn check_step(
+        &self,
         x: &[f64],
-        _f0: f64,
         df0: &[f64],
         fval: &[f64],
         dfdx: &[f64],
-    ) -> Result<Vec<f64>, FemError> {
+    ) -> Result<usize, FemError> {
         let (n, m) = (self.n, self.m);
         if x.len() != n || df0.len() != n {
             return Err(topology_error(
@@ -463,7 +456,45 @@ impl Mma {
         if dfdx.len() != m * n {
             return Err(topology_error("MMA: dfdx must be constraints × variables"));
         }
-        self.iteration += 1;
+        let iteration = self.iteration + 1;
+        check_sensitivity(iteration, "objective gradient", "design variable", df0)?;
+        if let Some(constraint) = fval.iter().position(|value| !value.is_finite()) {
+            return Err(topology_error(format!(
+                "iteration {iteration}: constraint {constraint} has the value {}, not a finite \
+                 number",
+                fval[constraint]
+            )));
+        }
+        for (constraint, row) in dfdx.chunks_exact(n).enumerate() {
+            check_sensitivity(
+                iteration,
+                &format!("gradient of constraint {constraint}"),
+                "design variable",
+                row,
+            )?;
+        }
+        Ok(iteration)
+    }
+
+    /// One MMA step from `x` with the objective gradient `df0`, the `m`
+    /// constraint values `fval` and their Jacobian `dfdx` (m×n, row-major).
+    /// The objective value `_f0` is an additive constant of the
+    /// approximation, so it does not move the step. Returns the next iterate,
+    /// within the bounds and the move limit.
+    ///
+    /// # Errors
+    /// Arrays of the wrong length, values or gradients that are not finite,
+    /// or a singular subproblem.
+    pub fn update(
+        &mut self,
+        x: &[f64],
+        _f0: f64,
+        df0: &[f64],
+        fval: &[f64],
+        dfdx: &[f64],
+    ) -> Result<Vec<f64>, FemError> {
+        self.iteration = self.check_step(x, df0, fval, dfdx)?;
+        let (n, m) = (self.n, self.m);
 
         for j in 0..n {
             let gap = self.xmax[j] - self.xmin[j];

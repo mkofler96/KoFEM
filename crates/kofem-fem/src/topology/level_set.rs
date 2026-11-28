@@ -35,17 +35,19 @@
 use crate::amg::SymmetricGaussSeidel;
 use crate::assembly::node_neighbours;
 use crate::cg::{solve_pcg_with, CgSettings, StoppingRule};
+use crate::count::count_as_f64;
 use crate::element::{
     cube_rule, hex8_reference_gradients, hex_gradients, tet4_gradients, HEX_CORNERS,
 };
 use crate::error::FemError;
+use crate::extremum::{largest, smallest};
 use crate::mesh::{ElementShape, TetMesh};
 use crate::sparse::CsrMatrix;
 
 use super::filter::mean_element_size;
 use super::optimize::{HistoryEntry, StepReport};
 use super::simp::{simp_scale, SimpModel};
-use super::topology_error;
+use super::{check_sensitivity, topology_error};
 
 /// The settings of one run; [`LevelSetSettings::default`] holds the engine's
 /// defaults.
@@ -410,6 +412,7 @@ impl LevelSetOptimizer {
             .zip(&evaluation.strain_energy)
             .map(|(&density, &strain)| simp_scale(density, 1.0, settings.emin_rel) * strain)
             .collect();
+        check_sensitivity(iteration, "strain energy", "element", &energy)?;
         let mean_density = energy.iter().sum::<f64>() / self.total_volume;
         if mean_density.is_nan() || mean_density <= 0.0 {
             return Err(topology_error(
@@ -420,11 +423,7 @@ impl LevelSetOptimizer {
         let mut forcing = vec![0.0; self.phi.len()];
         for (element, &element_energy) in energy.iter().enumerate() {
             let nodes = mesh.element_nodes(element);
-            #[allow(
-                clippy::cast_precision_loss,
-                reason = "4 or 8 nodes, exactly representable"
-            )]
-            let share = element_energy / mean_density / nodes.len() as f64;
+            let share = element_energy / mean_density / count_as_f64(nodes.len());
             for &node in nodes {
                 forcing[node as usize] += share;
             }
@@ -460,11 +459,8 @@ impl LevelSetOptimizer {
             let fraction = self.fraction_of(&rho);
             (phi, rho, fraction)
         };
-        let (low_psi, high_psi) = psi
-            .iter()
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), &value| {
-                (low.min(value), high.max(value))
-            });
+        let low_psi = smallest(f64::INFINITY, psi.iter().copied());
+        let high_psi = largest(f64::NEG_INFINITY, psi.iter().copied());
         let mut low = low_psi - 1.0; // every vertex clamps to +1: full material
         let mut high = high_psi + 1.0; // every vertex clamps to −1: empty
         for _ in 0..60 {
@@ -486,11 +482,13 @@ impl LevelSetOptimizer {
         }
         let (phi_next, rho_next, _) = trial(f64::midpoint(low, high));
 
-        let max_change = rho_next
-            .iter()
-            .zip(&self.rho)
-            .map(|(next, current)| (next - current).abs())
-            .fold(0.0, f64::max);
+        let max_change = largest(
+            0.0,
+            rho_next
+                .iter()
+                .zip(&self.rho)
+                .map(|(next, current)| (next - current).abs()),
+        );
         let compliance = evaluation.compliance;
         let entry = HistoryEntry {
             iteration,
@@ -509,11 +507,8 @@ impl LevelSetOptimizer {
         let volume_met = (volume - settings.volume_fraction).abs() < 5e-3;
         let flat = self.history.len() >= 6 && {
             let recent = &self.history[self.history.len() - 6..];
-            let (low, high) = recent
-                .iter()
-                .fold((compliance, compliance), |(low, high), entry| {
-                    (low.min(entry.compliance), high.max(entry.compliance))
-                });
+            let low = smallest(compliance, recent.iter().map(|entry| entry.compliance));
+            let high = largest(compliance, recent.iter().map(|entry| entry.compliance));
             high - low < 0.1 * settings.tolerance * compliance
         };
         let converged = volume_met && (max_change < settings.tolerance || flat);

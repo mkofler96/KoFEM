@@ -68,7 +68,7 @@ pub fn assemble_stiffness(mesh: &TetMesh) -> CsrMatrix {
 
 /// Add one element stiffness (row-major, 3 DOFs per node of `nodes`) into the
 /// global matrix.
-fn scatter(
+pub(crate) fn scatter(
     matrix: &mut CsrMatrix,
     neighbours: &[Vec<u32>],
     element: usize,

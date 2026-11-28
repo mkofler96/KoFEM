@@ -4,7 +4,7 @@
 //! Browser binding for the rigid-body check that runs before a solve
 //! (`kofem_fem::rigid_body`, KOF-388).
 
-use kofem_fem::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidLink};
+use kofem_fem::{free_rigid_motions, FreeMotion, RigidBodyModel, RigidContact, RigidLink};
 use wasm_bindgen::prelude::*;
 
 use crate::to_js;
@@ -134,11 +134,14 @@ fn split(values: &[u32], offsets: &[u32], what: &str) -> Result<Vec<Vec<u32>>, J
 /// nodes, reference points). Link k makes the nodes
 /// `secondaryNodes[secondaryOffsets[k] ..]` move with the components of
 /// `primaryNodes[primaryOffsets[k] ..]` on the DOFs of bit mask `masks[k]`.
+/// Contact k holds the nodes of the outer faces on
+/// `contactSurfaceNodes[contactSurfaceOffsets[k] ..]` to the components of
+/// `contactOtherNodes[contactOtherOffsets[k] ..]` along the surface normal.
 /// `fixedDofs` are the supported DOFs, `6·node + dof`.
 ///
 /// # Errors
 /// Inconsistent arrays: malformed offsets, a mask count that is not the link
-/// count, or what `kofem_fem::free_rigid_motions` refuses.
+/// count, contact surface and other lists of different counts, or what `kofem_fem::free_rigid_motions` refuses.
 #[wasm_bindgen(js_name = freeRigidMotions)]
 #[expect(
     clippy::too_many_arguments,
@@ -155,6 +158,10 @@ pub fn free_rigid_motions_js(
     secondary_offsets: &[u32],
     secondary_nodes: &[u32],
     masks: &[u8],
+    contact_surface_offsets: &[u32],
+    contact_surface_nodes: &[u32],
+    contact_other_offsets: &[u32],
+    contact_other_nodes: &[u32],
     fixed_dofs: &[u32],
 ) -> Result<FreeMotions, JsError> {
     let primaries = split(primary_nodes, primary_offsets, "link primaries")?;
@@ -177,6 +184,24 @@ pub fn free_rigid_motions_js(
             dof_mask,
         })
         .collect();
+    let surfaces = split(
+        contact_surface_nodes,
+        contact_surface_offsets,
+        "contact surfaces",
+    )?;
+    let others = split(contact_other_nodes, contact_other_offsets, "contact others")?;
+    if surfaces.len() != others.len() {
+        return Err(JsError::new(&format!(
+            "{} contact surfaces for {} other sides",
+            surfaces.len(),
+            others.len()
+        )));
+    }
+    let contacts: Vec<RigidContact> = surfaces
+        .into_iter()
+        .zip(others)
+        .map(|(surface, other)| RigidContact { surface, other })
+        .collect();
     let motions = free_rigid_motions(&RigidBodyModel {
         positions,
         element_offsets,
@@ -184,6 +209,7 @@ pub fn free_rigid_motions_js(
         element_labels,
         rotational_nodes,
         links: &links,
+        contacts: &contacts,
         fixed_dofs,
     })
     .map_err(|error| to_js(&error))?;

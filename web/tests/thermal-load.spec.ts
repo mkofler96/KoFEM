@@ -4,7 +4,7 @@
 // A temperature change (KOF-449): a material takes an expansion coefficient α,
 // Boundary conditions → + Add → Temperature change takes a formula the Rust
 // parser checks as it is typed, and the solid solve applies it. A shell model
-// refuses it by name.
+// refuses it by name, before the run.
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
@@ -75,8 +75,14 @@ test("a shell model refuses a temperature change @pipeline", async ({
   await openExample(page, "plate-with-hole-shell");
   await setExpansion(page, "1.2e-5");
   await addTemperature(page, "50");
-  await runSolve(page);
+  // The Solve panel refuses it before the run, in the solve's own words.
+  await openTree(page, "static");
   await expect(
-    page.getByText(/cannot take a temperature change/),
+    page
+      .getByTestId("check-fail")
+      .filter({ hasText: /cannot take a temperature change/ }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Run static solve/ }),
+  ).toBeDisabled();
 });

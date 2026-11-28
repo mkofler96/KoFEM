@@ -8,6 +8,7 @@
 //   materialSlice — material definitions + CRUD
 //   boundarySlice — BC / load groups and the solver-facing flat arrays
 //   tieSlice      — bonded tie connections between two surfaces
+//   contactSlice  — frictionless contacts between two surfaces
 //   couplingSlice — surface-to-point couplings and their reference nodes
 //   pickSlice     — viewport face-pick session (selection, tie/coupling drafts)
 //   boundaryGroups / boundaryRebuild — the BC / load group model and the pure
@@ -49,9 +50,11 @@ import {
   rebuildSurfaceLoads,
 } from "./boundaryRebuild";
 import { createTieSlice, type TieSlice } from "./tieSlice";
+import { createContactSlice, type ContactSlice } from "./contactSlice";
 import { createCouplingSlice, type CouplingSlice } from "./couplingSlice";
 import { createPickSlice, type PickSlice } from "./pickSlice";
 import { createResultsSlice, type ResultsSlice } from "./resultsSlice";
+import { DEFAULT_LOAD_INCREMENTS } from "../lib/solve/largeDeformation";
 import {
   createTopOptSlice,
   DEFAULT_TOPOPT_SETTINGS,
@@ -77,6 +80,7 @@ export type {
   VolMesh,
   GeometryVersion,
   SplitMode,
+  MeshSizes,
 } from "./geometrySlice";
 export type { Material } from "./materialSlice";
 export type {
@@ -89,6 +93,8 @@ export { loadKind, loadComponents } from "./boundaryGroups";
 export type { Constraint, Load, SurfaceLoad } from "./boundaryRebuild";
 export type { TieGroup, TieSide } from "./tieSlice";
 export { tieFaces, DEFAULT_TIE_DISTANCE, DEFAULT_TIE_METHOD } from "./tieSlice";
+export type { ContactGroup } from "./contactSlice";
+export { contactFaces } from "./contactSlice";
 export type { CouplingGroup } from "./couplingSlice";
 export type { FaceSelection, PickMode } from "./pickSlice";
 export type { TieExtent, TieMethod } from "../lib/tie";
@@ -97,6 +103,7 @@ export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
 export { ALL_DOFS, referencePointOptions } from "../lib/coupling";
 export type {
   SolverResult,
+  SolveRun,
   ResultType,
   AppMode,
   LegendRange,
@@ -128,6 +135,7 @@ export type ModelState = GeometrySlice &
   MaterialSlice &
   BoundarySlice &
   TieSlice &
+  ContactSlice &
   CouplingSlice &
   PickSlice &
   ResultsSlice &
@@ -169,6 +177,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.bcGroups = a.bcGroups;
       s.loadGroups = a.loadGroups;
       s.tieGroups = a.tieGroups;
+      s.contactGroups = a.contactGroups;
       s.couplingGroups = a.couplingGroups;
       s.temperature = a.temperature;
       s.constraints = rebuildConstraints(a.bcGroups);
@@ -181,6 +190,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextBcGroupId = a.nextBcGroupId;
       s.nextLoadGroupId = a.nextLoadGroupId;
       s.nextTieGroupId = a.nextTieGroupId;
+      s.nextContactGroupId = a.nextContactGroupId;
       s.nextCouplingGroupId = a.nextCouplingGroupId;
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
@@ -216,6 +226,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.result = a.result;
       s.resultType = a.resultType;
       s.elementOrder = a.elementOrder;
+      s.largeDeformation = a.largeDeformation;
+      s.loadIncrements = a.loadIncrements;
       s.handCheck = a.handCheck;
       s.legendRange = null;
       s.probes = [];
@@ -293,6 +305,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];
+      s.contactGroups = [];
       s.couplingGroups = [];
       s.temperature = null;
       s.constraints = [];
@@ -301,6 +314,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
       s.nextTieGroupId = 1;
+      s.nextContactGroupId = 1;
       s.nextCouplingGroupId = 1;
       s.nextFaceEntryId = 1;
       s.modelName = "";
@@ -331,6 +345,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.deformScale = AUTO_DEFORM_SCALE;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
+      s.largeDeformation = false;
+      s.loadIncrements = DEFAULT_LOAD_INCREMENTS;
       s.handCheck = null;
       s.probes = [];
       s.nextProbeId = 1;
@@ -372,6 +388,7 @@ export const useModelStore = create<ModelState>()(
     ...createMaterialSlice(...args),
     ...createBoundarySlice(...args),
     ...createTieSlice(...args),
+    ...createContactSlice(...args),
     ...createCouplingSlice(...args),
     ...createPickSlice(...args),
     ...createResultsSlice(...args),

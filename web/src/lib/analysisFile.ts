@@ -1,15 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { TemperatureLoad } from "../workers/solverTypes";
+import type { LargeDeformation, TemperatureLoad } from "../workers/solverTypes";
+import {
+  DEFAULT_LOAD_INCREMENTS,
+  isLoadIncrementCount,
+  MAX_LOAD_INCREMENTS,
+} from "./solve/largeDeformation";
 import {
   cornerCount,
   SHELL_SURFACES,
   uniformStress,
   type ElementStress,
 } from "./stressFields";
+import type { ContactResult } from "./contact";
 import type {
   AppMode,
+  ContactGroup,
   CouplingGroup,
   Element,
   ElementType,
@@ -91,12 +98,14 @@ export interface AnalysisState {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
+  contactGroups: ContactGroup[];
   couplingGroups: CouplingGroup[];
   // A temperature change over the model (KOF-449), or null for none.
   temperature: TemperatureLoad | null;
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId: number;
+  nextContactGroupId: number;
   nextCouplingGroupId: number;
   nextFaceEntryId: number;
   nextMatId: number;
@@ -111,6 +120,7 @@ export interface AnalysisState {
     displacements: Float64Array;
     vonMises?: Float64Array;
     stress?: ElementStress;
+    contact?: ContactResult | null;
   } | null;
   resultType: ResultType;
   // Topology-optimization setup (KOF-232). Absent in files written before TO
@@ -119,6 +129,9 @@ export interface AnalysisState {
   topOpt?: TopOptSettingsState;
   // FE polynomial order of the solve (1 linear, 2 quadratic).
   elementOrder: number;
+  // The Solve panel's large-deformation option and its load increments.
+  largeDeformation: boolean;
+  loadIncrements: number;
   // The closed-form check a gallery example carries (lib/handCheck), or null.
   handCheck: HandCheck | null;
   // Element sizes on selected CAD faces (KOF-394); empty for none.
@@ -148,6 +161,12 @@ interface KofemFieldDataV1 {
   // became a named model object — such a file simply has no ties. A tie's
   // `method` is absent in files written before the constraint tie existed.
   tieGroups?: (Omit<TieGroup, "method"> & { method?: TieMethod })[];
+  // Contacts (KOF-485). Absent in files written before contact existed —
+  // such a file simply has none.
+  contactGroups?: ContactGroup[];
+  // What the solve found at the contacts (KOF-485), with a result that has
+  // one: per slave node, as in ContactResult.
+  contactResult?: SavedContactResult;
   // Surface-to-point couplings. Absent in files written before couplings
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
@@ -158,6 +177,7 @@ interface KofemFieldDataV1 {
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId?: number;
+  nextContactGroupId?: number;
   nextCouplingGroupId?: number;
   nextFaceEntryId: number;
   nextMatId: number;
@@ -175,6 +195,9 @@ interface KofemFieldDataV1 {
   // Absent in files written before the order was saved; they were solved with
   // whatever order the session had, and reopen linear (the app's default).
   elementOrder?: number;
+  // Written only while on (KOF-486), so files without it are unchanged; such
+  // a file reopens with the option off and the default increments.
+  largeDeformation?: LargeDeformation;
   // Only gallery examples carry one.
   handCheck?: HandCheck;
   // Written only when there are some (KOF-394), so files without face sizes
@@ -267,6 +290,66 @@ function dataArray(
   return `<DataArray type="${type}" Name="${name}"${comp} format="ascii">\n${body}\n</DataArray>`;
 }
 
+// A contact result as the file's JSON holds it: plain arrays.
+interface SavedContactResult {
+  nodeIds: number[];
+  pressure: number[];
+  gap: number[];
+  closed: number[];
+  area: number[];
+  force: number;
+  iterations: number;
+}
+
+function savedContactResult(contact: ContactResult): SavedContactResult {
+  return {
+    nodeIds: contact.nodeIds,
+    pressure: Array.from(contact.pressure),
+    gap: Array.from(contact.gap),
+    closed: Array.from(contact.closed),
+    area: Array.from(contact.area),
+    force: contact.force,
+    iterations: contact.iterations,
+  };
+}
+
+function restoredContactResult(
+  saved: SavedContactResult,
+  nodeIds: Set<number>,
+): ContactResult {
+  const invalid = (why: string) =>
+    new Error(`Invalid analysis file: the contact result ${why}`);
+  if (typeof saved !== "object" || saved === null)
+    throw invalid("is not an object");
+  const lists = ["nodeIds", "pressure", "gap", "closed", "area"] as const;
+  for (const name of lists)
+    if (
+      !Array.isArray(saved[name]) ||
+      !saved[name].every((value) => Number.isFinite(value))
+    )
+      throw invalid(`has no list of numbers "${name}"`);
+  const count = saved.nodeIds.length;
+  for (const name of lists)
+    if (saved[name].length !== count)
+      throw invalid(`has ${saved[name].length} ${name} for ${count} nodes`);
+  const unknown = saved.nodeIds.find((id) => !nodeIds.has(id));
+  if (unknown !== undefined)
+    throw invalid(`names node ${unknown}, which the mesh does not have`);
+  if (saved.closed.some((closed) => closed !== 0 && closed !== 1))
+    throw invalid("marks a node touching with a value other than 0 or 1");
+  if (!Number.isFinite(saved.force) || !Number.isInteger(saved.iterations))
+    throw invalid("has no force or iteration count");
+  return {
+    nodeIds: saved.nodeIds,
+    pressure: Float64Array.from(saved.pressure),
+    gap: Float64Array.from(saved.gap),
+    closed: Uint8Array.from(saved.closed),
+    area: Float64Array.from(saved.area),
+    force: saved.force,
+    iterations: saved.iterations,
+  };
+}
+
 export function serializeAnalysis(state: AnalysisState): string {
   const { nodes, elements, result } = state;
 
@@ -336,7 +419,21 @@ export function serializeAnalysis(state: AnalysisState): string {
     surfaceFaceIds: state.surfaceFaceIds,
     topOpt: state.topOpt,
     elementOrder: state.elementOrder,
+    ...(state.largeDeformation
+      ? { largeDeformation: { increments: state.loadIncrements } }
+      : {}),
     ...(state.handCheck ? { handCheck: state.handCheck } : {}),
+    // A model that never had a contact saves as it did before contact
+    // existed (KOF-485).
+    ...(state.contactGroups.length > 0 || state.nextContactGroupId > 1
+      ? {
+          contactGroups: state.contactGroups,
+          nextContactGroupId: state.nextContactGroupId,
+        }
+      : {}),
+    ...(result?.contact
+      ? { contactResult: savedContactResult(result.contact) }
+      : {}),
     ...(state.faceSizes.length > 0 ? { faceSizes: state.faceSizes } : {}),
     ...(state.meshSizes ? { meshSizes: state.meshSizes } : {}),
   };
@@ -528,6 +625,17 @@ function checkFaceSizes(value: unknown): void {
     );
 }
 
+function checkLargeDeformation(value: unknown): void {
+  const increments =
+    typeof value === "object" && value !== null
+      ? (value as Partial<LargeDeformation>).increments
+      : undefined;
+  if (typeof increments !== "number" || !isLoadIncrementCount(increments))
+    throw new Error(
+      `Invalid analysis file: "largeDeformation" must give its load increments, a whole number from 1 to ${MAX_LOAD_INCREMENTS}`,
+    );
+}
+
 function checkMeshSizes(value: unknown): void {
   const sizes = value as Partial<MeshSizes> | null;
   const valid =
@@ -606,12 +714,18 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
 
   if (meta.faceSizes !== undefined) checkFaceSizes(meta.faceSizes);
   if (meta.meshSizes !== undefined) checkMeshSizes(meta.meshSizes);
+  if (meta.largeDeformation !== undefined)
+    checkLargeDeformation(meta.largeDeformation);
 
   // Ties postdate the first analysis files, so absence is legitimate — but a
   // present entry of the wrong shape is not.
   if (meta.tieGroups !== undefined && !Array.isArray(meta.tieGroups))
     throw new Error(
       `Invalid analysis file: "tieGroups" must be an array, got ${typeof meta.tieGroups}`,
+    );
+  if (meta.contactGroups !== undefined && !Array.isArray(meta.contactGroups))
+    throw new Error(
+      `Invalid analysis file: "contactGroups" must be an array, got ${typeof meta.contactGroups}`,
     );
   if (meta.couplingGroups !== undefined && !Array.isArray(meta.couplingGroups))
     throw new Error(
@@ -821,6 +935,11 @@ export function parseAnalysisFile(text: string): AnalysisState {
         middle: tensors("StressMiddle"),
         bottom: tensors("StressBottom"),
       };
+    if (meta.contactResult !== undefined)
+      result.contact = restoredContactResult(
+        meta.contactResult,
+        new Set(nodes.map((node) => node.id)),
+      );
   }
 
   // A file written before ties existed carries none. The counter is then not
@@ -834,6 +953,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
   const nextTieGroupId =
     meta.nextTieGroupId ??
     tieGroups.reduce((highest, tie) => Math.max(highest, tie.id), 0) + 1;
+  const contactGroups = meta.contactGroups ?? [];
+  const nextContactGroupId =
+    meta.nextContactGroupId ??
+    contactGroups.reduce((highest, c) => Math.max(highest, c.id), 0) + 1;
   const couplingGroups = meta.couplingGroups ?? [];
   const nextCouplingGroupId =
     meta.nextCouplingGroupId ??
@@ -850,12 +973,14 @@ export function parseAnalysisFile(text: string): AnalysisState {
     bcGroups: meta.bcGroups,
     loadGroups: meta.loadGroups,
     tieGroups,
+    contactGroups,
     couplingGroups,
     // A file written before temperature changes existed (KOF-449) has none.
     temperature: meta.temperature ?? null,
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
     nextTieGroupId,
+    nextContactGroupId,
     nextCouplingGroupId,
     nextFaceEntryId: meta.nextFaceEntryId,
     nextMatId: meta.nextMatId,
@@ -869,6 +994,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
     topOpt: meta.topOpt,
     // eslint-disable-next-line kofem/no-silent-fallback -- files written before the order was saved carry none; linear is the app's documented default order
     elementOrder: meta.elementOrder ?? 1,
+    largeDeformation: meta.largeDeformation !== undefined,
+    loadIncrements:
+      // eslint-disable-next-line kofem/no-silent-fallback -- a file without large deformation was solved with it off; the count matters only once the user turns it on, and starts at the app's default as in a new analysis
+      meta.largeDeformation?.increments ?? DEFAULT_LOAD_INCREMENTS,
     // Only gallery examples carry a hand check.
     handCheck: meta.handCheck ?? null,
     faceSizes: meta.faceSizes ?? [],

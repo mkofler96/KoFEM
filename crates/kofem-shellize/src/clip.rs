@@ -4,7 +4,10 @@
 //! Plane clipping of the solid tets, the solid surface and the shell facets at
 //! the shell/solid transition planes.
 
+use kofem_fem::extremum::{largest, smallest};
 use std::collections::{BTreeSet, HashMap, HashSet};
+
+use kofem_fem::count_as_f64;
 
 use crate::error::ShellizeError;
 use crate::geometry::{
@@ -84,13 +87,9 @@ impl<'planes> PlaneClipper<'planes> {
         self.vertices.len() - 1
     }
 
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "a polygon's node count, used as an averaging divisor"
-    )]
     fn center(&self, nodes: &[usize]) -> Vec3 {
         let mut center: Vec3 = [0.0; 3];
-        let count = nodes.len() as f64;
+        let count = count_as_f64(nodes.len());
         for &index in nodes {
             for (axis, value) in center.iter_mut().enumerate() {
                 *value += self.vertices[index][axis] / count;
@@ -112,10 +111,10 @@ impl<'planes> PlaneClipper<'planes> {
             .iter()
             .map(|&index| self.distance(index, plane))
             .collect();
-        if distances.iter().copied().fold(f64::NEG_INFINITY, f64::max) <= self.tolerance {
+        if largest(f64::NEG_INFINITY, distances.iter().copied()) <= self.tolerance {
             return Side::Negative;
         }
-        if distances.iter().copied().fold(f64::INFINITY, f64::min) >= -self.tolerance {
+        if smallest(f64::INFINITY, distances.iter().copied()) >= -self.tolerance {
             return Side::Positive;
         }
         Side::Straddles

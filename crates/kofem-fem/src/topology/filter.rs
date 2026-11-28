@@ -18,6 +18,7 @@
 
 use std::collections::HashMap;
 
+use crate::count::count_as_f64;
 use crate::error::FemError;
 
 use super::topology_error;
@@ -42,11 +43,7 @@ pub fn mean_element_size(volumes: &[f64]) -> Result<f64, FemError> {
     {
         return Err(topology_error("an element volume is not positive"));
     }
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "an element count, far below 2^52"
-    )]
-    let mean = volumes.iter().sum::<f64>() / volumes.len() as f64;
+    let mean = volumes.iter().sum::<f64>() / count_as_f64(volumes.len());
     Ok(mean.cbrt())
 }
 

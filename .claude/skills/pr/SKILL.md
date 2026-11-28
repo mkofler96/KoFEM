@@ -94,8 +94,14 @@ Fixes KOF-nn
 ~~~
 
 Write `Fixes KOF-nn` for every issue whose scope the PR delivers, even when
-follow-ups are split into new issues. Write `Refs KOF-nn` only for an issue
-that stays open because work in its own scope remains; nothing closes it.
+follow-ups are split into new issues. Write `Refs KOF-nn` for an issue that
+stays open because work in its own scope remains; nothing closes it.
+
+Before writing `Fixes`, check the issue's attachments with `get_issue`. If
+one is a GitHub issue (`github.com/mkofler96/KoFEM/issues/…`), write
+`Refs KOF-nn`: Linear would close the GitHub issue on merge, and only the
+maintainer closes GitHub issues. Never write `Fixes #nn` or `Closes #nn`.
+
 Keep the Checklist from `.github/pull_request_template.md` in sync with this
 template if either changes.
 

@@ -16,6 +16,7 @@
 //!   meshed independently. Nodes that nearly coincide are welded; each other
 //!   one splits the facet edge of the other wall it lies on.
 
+use kofem_fem::extremum::{largest, smallest};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::geometry::{cross, dot, norm, scale, sub, OrderedMap, Vec3};
@@ -168,9 +169,10 @@ pub(crate) fn find_corners(
         }
         let direction = scale(direction, 1.0 / length);
         let along = edge.iter().map(|&vertex| dot(vertices[vertex], direction));
-        let span = along.fold([f64::INFINITY, f64::NEG_INFINITY], |span, value| {
-            [span[0].min(value), span[1].max(value)]
-        });
+        let span = [
+            smallest(f64::INFINITY, along.clone()),
+            largest(f64::NEG_INFINITY, along),
+        ];
         // The mid-plane passes t/2 behind the kept face.
         let mid = [(first_wall, first_face), (second_wall, second_face)].map(|(wall, face)| {
             (

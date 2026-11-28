@@ -230,3 +230,78 @@ export async function bootstrapCantilever(page: Page): Promise<void> {
     );
   }, buildCantilever());
 }
+
+// One more hexahedron on the cantilever's free end, above it, sharing only the
+// end face's top edge along Z (KOF-490). It is part of body 1, so the
+// rigid-body check holds it with the beam, but it can still swing about that
+// edge: the stiffness matrix is singular and the solve fails inside the solver.
+export async function hingeBlockOnCantilever(page: Page): Promise<void> {
+  const model = buildCantilever();
+  const at = (x: number, y: number, z: number) => {
+    const node = model.nodes.find(
+      (n) =>
+        Math.abs(n.x - x) < 1e-9 &&
+        Math.abs(n.y - y) < 1e-9 &&
+        Math.abs(n.z - z) < 1e-9,
+    );
+    if (!node) throw new Error(`the cantilever has no node at ${x},${y},${z}`);
+    return node.id;
+  };
+  const hinge = [at(1, 0.1, 0), at(1, 0.1, 0.05)];
+  await page.evaluate(
+    ({ hinge, firstNode, elementId }) => {
+      const store = (
+        window as unknown as {
+          __kofemStore: {
+            setState(s: object): void;
+            getState(): {
+              nodes: { id: number; x: number; y: number; z: number }[];
+              elements: {
+                id: number;
+                type: string;
+                nodeIds: number[];
+                propertyId: number;
+              }[];
+            };
+          };
+        }
+      ).__kofemStore;
+      const { nodes, elements } = store.getState();
+      const added = [
+        [1.1, 0.1, 0],
+        [1.1, 0.2, 0],
+        [1, 0.2, 0],
+        [1.1, 0.1, 0.05],
+        [1.1, 0.2, 0.05],
+        [1, 0.2, 0.05],
+      ].map(([x, y, z], i) => ({ id: firstNode + i, x, y, z }));
+      const id = (i: number) => added[i].id;
+      store.setState({
+        nodes: [...nodes, ...added],
+        elements: [
+          ...elements,
+          {
+            id: elementId,
+            type: "CHEXA",
+            nodeIds: [
+              hinge[0],
+              id(0),
+              id(1),
+              id(2),
+              hinge[1],
+              id(3),
+              id(4),
+              id(5),
+            ],
+            propertyId: 1,
+          },
+        ],
+      });
+    },
+    {
+      hinge,
+      firstNode: Math.max(...model.nodes.map((n) => n.id)) + 1,
+      elementId: Math.max(...model.elements.map((e) => e.id)) + 1,
+    },
+  );
+}

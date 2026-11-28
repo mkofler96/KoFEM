@@ -16,6 +16,8 @@ import {
   type ShellSurface,
   type StressField,
 } from "./stressFields";
+import { isContactField, type ContactField } from "./contact";
+import { RESULT_TYPES } from "../store/resultsSlice";
 
 // Maps a normalized scalar t ∈ [0,1] to the viewport result color: blue (low)
 // → red (high).  Must stay identical to MeshScene's vertex coloring so the
@@ -233,6 +235,8 @@ export function nodalResultValues(
     throw new Error(
       `displacement result carries ${disp.length} values for ${nodes.length} nodes (expected ${nodes.length * 3}) — the result is stale or belongs to a different mesh`,
     );
+  if (isContactField(resultType))
+    return nodeContactField(result, resultType, nodes);
   if (resultType === "Von Mises stress")
     return nodeVonMisesField(result, nodes, elements);
   if (isStressField(resultType))
@@ -252,6 +256,39 @@ export function nodalResultValues(
             : Math.sqrt(ux * ux + uy * uy + uz * uz);
   }
   return values;
+}
+
+// A contact field over the mesh nodes: the slave nodes' pressure or touching
+// status, zero on every other node. Null for a result without contact.
+function nodeContactField(
+  result: SolverResult,
+  field: ContactField,
+  nodes: Node[],
+): Float64Array | null {
+  const contact = result.contact;
+  if (!contact) return null;
+  const indexOf = new Map(nodes.map((node, index) => [node.id, index]));
+  const values = new Float64Array(nodes.length);
+  contact.nodeIds.forEach((id, k) => {
+    const index = indexOf.get(id);
+    if (index === undefined)
+      throw new Error(
+        `contact result names node ${id}, which the mesh does not have — the result belongs to a different mesh`,
+      );
+    values[index] =
+      field === "Contact pressure" ? contact.pressure[k] : contact.closed[k];
+  });
+  return values;
+}
+
+// The fields a result offers: the contact fields only where it solved a
+// contact.
+export function resultTypesOf(
+  result: Pick<SolverResult, "contact"> | null,
+): ResultType[] {
+  return RESULT_TYPES.filter(
+    (type) => !isContactField(type) || !!result?.contact,
+  );
 }
 
 // Min/max of the selected scalar field over all nodes.  Returns null when the
@@ -284,6 +321,8 @@ export function computeResultRange(
 export function resultFieldSymbol(resultType: ResultType): string {
   // "Normal stress σxx" → "σxx", "Max principal stress σ1" → "σ1".
   if (isStressField(resultType)) return resultType.split(" ").at(-1) as string;
+  if (resultType === "Contact pressure") return "p_c";
+  if (resultType === "Contact status") return "touching";
   return resultType === "Von Mises stress"
     ? "σ_vm"
     : resultType === "Displacement (magnitude)"
@@ -292,9 +331,15 @@ export function resultFieldSymbol(resultType: ResultType): string {
 }
 
 // Canonical unit system is N · mm · MPa: displacements come out in mm and
-// stresses in MPa (force/area = N/mm²).
-export function resultUnit(resultType: ResultType): "MPa" | "mm" {
-  return resultType === "Von Mises stress" || isStressField(resultType)
+// stresses and contact pressure in MPa (force/area = N/mm²). The contact
+// status (1 touching, 0 apart) has no unit.
+export type ResultUnit = "MPa" | "mm" | "";
+
+export function resultUnit(resultType: ResultType): ResultUnit {
+  if (resultType === "Contact status") return "";
+  return resultType === "Von Mises stress" ||
+    isStressField(resultType) ||
+    resultType === "Contact pressure"
     ? "MPa"
     : "mm";
 }

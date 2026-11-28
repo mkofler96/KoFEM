@@ -143,9 +143,8 @@ describe("the optimization's result view", () => {
   });
 
   test("a failed run keeps its error for Results to show", () => {
-    useModelStore.getState().setTopOptError("Optimization error: boom");
-    expect(useModelStore.getState().topOptError).toBe(
-      "Optimization error: boom",
-    );
+    const notice = { advice: null, detail: "Optimization error: boom" };
+    useModelStore.getState().setTopOptError(notice);
+    expect(useModelStore.getState().topOptError).toEqual(notice);
   });
 });
