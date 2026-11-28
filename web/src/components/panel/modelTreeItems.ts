@@ -58,6 +58,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
+  const contactGroups = useModelStore((s) => s.contactGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const temperature = useModelStore((s) => s.temperature);
   const nodeCount = useModelStore((s) => s.nodes.length);
@@ -166,6 +167,11 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
           id: g.id,
           label: g.name,
         })),
+        ...contactGroups.map((g) => ({
+          kind: "contact" as const,
+          id: g.id,
+          label: g.name,
+        })),
         ...couplingGroups.map((g) => ({
           kind: "coupling" as const,
           id: g.id,
@@ -239,6 +245,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     bcGroups,
     loadGroups,
     tieGroups,
+    contactGroups,
     couplingGroups,
     temperature,
     nodeCount,

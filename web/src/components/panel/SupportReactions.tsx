@@ -8,20 +8,13 @@
 import { useModelStore } from "../../store/modelStore";
 import {
   reactionBalance,
+  reactionComponent as component,
   type ReactionSummary,
   type Vec3,
 } from "../../lib/solve/reactions";
 import { useT } from "../../i18n/useLocale";
 import { resultsMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
-
-// A component as the panel shows it: four significant digits, and 0 for what
-// four digits of the largest value in the summary would not show (solver
-// noise, typically).
-function component(value: number, scale: number): string {
-  if (Math.abs(value) < 5e-5 * scale) return "0";
-  return String(Number(value.toPrecision(4)));
-}
 
 const magnitude = (v: Vec3) => Math.hypot(v[0], v[1], v[2]);
 

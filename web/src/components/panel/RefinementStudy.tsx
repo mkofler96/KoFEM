@@ -13,7 +13,8 @@ import {
   type RefinementSettingsInput,
 } from "../../lib/refinementStudy";
 import type { RefinementStudyRun, Study } from "../../store/studySlice";
-import { RESULT_TYPES, useModelStore } from "../../store/modelStore";
+import { useModelStore } from "../../store/modelStore";
+import { resultTypesOf } from "../../lib/resultField";
 import type { ResultType } from "../../store/resultsSlice";
 import { useEngineGate } from "../../store/engineStore";
 import { useSolver } from "../../hooks/useSolver";
@@ -24,6 +25,9 @@ import { studiesMessages } from "../../i18n/messages/studies";
 import { resultFieldMessages } from "../../i18n/messages/results";
 import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
+
+// The fields of a level: its solves find no contact.
+const STUDY_FIELDS = resultTypesOf(null);
 
 // Mesh refinement study (KOF-401): the study's panel under Studies, which runs
 // it, and its result under Results — the verdict, the convergence chart (drawn
@@ -348,7 +352,7 @@ export function RefinementResult({ run }: { run: RefinementStudyRun }) {
           value={resultType}
           onChange={(e) => setResultType(e.target.value as ResultType)}
         >
-          {RESULT_TYPES.map((t) => (
+          {STUDY_FIELDS.map((t) => (
             <option key={t} value={t}>
               {fields[t]}
             </option>

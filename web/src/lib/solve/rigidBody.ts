@@ -9,8 +9,8 @@
 // The check itself is Rust (kofem_fem::rigid_body, through `freeRigidMotions`);
 // this module builds its input from a model and words its answer. Two inputs:
 //
-//   modelRigidBodyInput   — the store model: elements, supports, ties and
-//                           couplings as the user defined them. For the solid
+//   modelRigidBodyInput   — the store model: elements, supports, ties,
+//                           couplings and contacts as the user defined them. For the solid
 //                           and shell paths.
 //   coupledRigidBodyInput — the coupled solve's own inputs, where shells and
 //                           solids are separate node sets joined by couplings
@@ -49,6 +49,7 @@ import {
   referencePointIds,
   type CouplingDefinition,
 } from "../coupling.js";
+import type { ContactDefinition } from "../contact.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { release } from "./rustFailure.js";
 import { tr } from "../../i18n/useLocale.js";
@@ -69,6 +70,10 @@ export interface RigidBodyInput {
   secondaryOffsets: Uint32Array;
   secondaryNodes: Uint32Array;
   masks: Uint8Array;
+  contactSurfaceOffsets: Uint32Array;
+  contactSurfaceNodes: Uint32Array;
+  contactOtherOffsets: Uint32Array;
+  contactOtherNodes: Uint32Array;
   fixedDofs: Uint32Array;
 }
 
@@ -98,6 +103,10 @@ export interface RigidBodyModule {
     secondaryOffsets: Uint32Array,
     secondaryNodes: Uint32Array,
     masks: Uint8Array,
+    contactSurfaceOffsets: Uint32Array,
+    contactSurfaceNodes: Uint32Array,
+    contactOtherOffsets: Uint32Array,
+    contactOtherNodes: Uint32Array,
     fixedDofs: Uint32Array,
   ): FreeMotions;
 }
@@ -120,6 +129,10 @@ class InputBuilder {
   private readonly secondaryOffsets = [0];
   private readonly secondaryNodes: number[] = [];
   private readonly masks: number[] = [];
+  private readonly contactSurfaceOffsets = [0];
+  private readonly contactSurfaceNodes: number[] = [];
+  private readonly contactOtherOffsets = [0];
+  private readonly contactOtherNodes: number[] = [];
 
   element(nodes: number[], label: number): void {
     this.elementNodes.push(...nodes);
@@ -135,6 +148,15 @@ class InputBuilder {
     this.secondaryNodes.push(...secondary);
     this.secondaryOffsets.push(this.secondaryNodes.length);
     this.masks.push(mask);
+  }
+
+  // The nodes of the solid faces on `surface` press on the pieces an `other`
+  // node is in: held along the surface normal, free across it.
+  contact(surface: number[], other: number[]): void {
+    this.contactSurfaceNodes.push(...surface);
+    this.contactSurfaceOffsets.push(this.contactSurfaceNodes.length);
+    this.contactOtherNodes.push(...other);
+    this.contactOtherOffsets.push(this.contactOtherNodes.length);
   }
 
   build(
@@ -153,6 +175,10 @@ class InputBuilder {
       secondaryOffsets: Uint32Array.from(this.secondaryOffsets),
       secondaryNodes: Uint32Array.from(this.secondaryNodes),
       masks: Uint8Array.from(this.masks),
+      contactSurfaceOffsets: Uint32Array.from(this.contactSurfaceOffsets),
+      contactSurfaceNodes: Uint32Array.from(this.contactSurfaceNodes),
+      contactOtherOffsets: Uint32Array.from(this.contactOtherOffsets),
+      contactOtherNodes: Uint32Array.from(this.contactOtherNodes),
       fixedDofs: Uint32Array.from(fixedDofs),
     };
   }
@@ -183,13 +209,15 @@ function supportDof(constraint: Constraint, vertex: number): number {
   return 6 * vertex + constraint.dof;
 }
 
-// The rigid-body input of a store model: its elements, the supports, and a
-// link per tie (each node of one side moves with the other side) and per
-// coupling (the coupled nodes move with the reference point on its DOFs).
+// The rigid-body input of a store model: its elements, the supports, a link
+// per tie (each node of one side moves with the other side) and per coupling
+// (the coupled nodes move with the reference point on its DOFs), and per
+// contact the surfaces holding each other along their normal.
 export function modelRigidBodyInput(
   model: Pick<SolveModel, "nodes" | "elements" | "constraints"> & {
     tieGroups?: TieDefinition[];
     couplings?: CouplingDefinition[];
+    contacts?: ContactDefinition[];
   },
 ): RigidBodyInput {
   const { nodes, elements, constraints } = model;
@@ -225,6 +253,16 @@ export function modelRigidBodyInput(
       coupledNodeIds(coupling).map((id) => vid(id, context)),
       couplingDofMask(coupling.kind, coupling.dofs),
     );
+  }
+  for (const contact of model.contacts ?? []) {
+    const side = (faces: ContactDefinition["facesA"]) => [
+      ...new Set(
+        faces.flatMap((face) =>
+          face.nodeIds.map((id) => vid(id, `Contact "${contact.name}"`)),
+        ),
+      ),
+    ];
+    input.contact(side(contact.facesA), side(contact.facesB));
   }
   const fixed = constraints.map((constraint) =>
     supportDof(constraint, vid(constraint.nodeId, "Support")),
@@ -414,6 +452,10 @@ export function looseComponents(
     input.secondaryOffsets,
     input.secondaryNodes,
     input.masks,
+    input.contactSurfaceOffsets,
+    input.contactSurfaceNodes,
+    input.contactOtherOffsets,
+    input.contactOtherNodes,
     input.fixedDofs,
   );
   try {

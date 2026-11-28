@@ -227,6 +227,7 @@ describe("studyFingerprint", () => {
       },
     ],
     tieGroups: [],
+    contactGroups: [],
     couplingGroups: [
       {
         id: 1,

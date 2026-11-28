@@ -62,6 +62,8 @@ pub enum FemError {
     },
     #[error("support reactions: {reason}")]
     ReactionInput { reason: String },
+    #[error("report: {reason}")]
+    ReportField { reason: String },
     #[error(
         "a coupled, tied or mixed solve works on a reduction of the stiffness matrix, \
          so it has no assembled matrix to give back"
@@ -240,6 +242,22 @@ pub enum FemError {
         iteration: usize,
         reason: String,
     },
+    #[error(
+        "Newton increment {increment} of {increments} (load factor {load_factor}): the tangent \
+         stiffness is not positive definite — the model loses stability (it buckles or snaps \
+         through) at or below this load, so a static solve cannot follow it further"
+    )]
+    TangentNotPositiveDefinite {
+        increment: u32,
+        increments: u32,
+        load_factor: f64,
+    },
+    #[error(
+        "element {element} is turned inside out (volume ratio J = {jacobian:e}): the \
+         deformation is too large for one load increment, or for the element — try more load \
+         increments"
+    )]
+    InvertedElement { element: usize, jacobian: f64 },
     #[error(
         "the Newton solve has not finished: it stands at increment {increment}, iteration \
          {iteration}"

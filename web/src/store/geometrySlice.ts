@@ -514,6 +514,7 @@ function dropAnalysis(s: ModelState): void {
   s.bcGroups = [];
   s.loadGroups = [];
   s.tieGroups = [];
+  s.contactGroups = [];
   s.couplingGroups = [];
   s.constraints = [];
   s.loads = [];
@@ -521,6 +522,7 @@ function dropAnalysis(s: ModelState): void {
   s.nextBcGroupId = 1;
   s.nextLoadGroupId = 1;
   s.nextTieGroupId = 1;
+  s.nextContactGroupId = 1;
   s.nextCouplingGroupId = 1;
   s.nextFaceEntryId = 1;
   s.result = null;
@@ -927,6 +929,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           loadGroups: before.loadGroups,
           tieGroups: before.tieGroups,
           couplingGroups: before.couplingGroups,
+          contactGroups: before.contactGroups,
         },
         surfaceTriangles ?? null,
         surfaceFaceIds ?? null,
@@ -951,6 +954,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.bcGroups = carried.bcGroups;
       s.loadGroups = carried.loadGroups;
       s.tieGroups = carried.tieGroups;
+      s.contactGroups = carried.contactGroups;
       s.couplingGroups = carried.couplingGroups;
       s.constraints = rebuildConstraints(carried.bcGroups);
       s.loads = rebuildLoads(

@@ -153,6 +153,7 @@ export type RefinementLevelSnapshot = Pick<
   | "bcGroups"
   | "loadGroups"
   | "tieGroups"
+  | "contactGroups"
   | "couplingGroups"
   | "constraints"
   | "loads"

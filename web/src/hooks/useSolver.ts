@@ -11,12 +11,14 @@ import {
 } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { solvePayload } from "../lib/solve/payload";
+import { largeDeformationSetting } from "../lib/solve/largeDeformation";
 import {
   amgUnavailableReason,
   preconditionerNotice,
   solvePreconditioner,
 } from "../lib/solve/amg";
 import type { ReactionSummary } from "../lib/solve/reactions";
+import type { ContactResult } from "../lib/contact";
 import { routeOrRefusal } from "../lib/solve/route";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import {
@@ -25,7 +27,7 @@ import {
 } from "../lib/solve/incompressible";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
-  categorizeError,
+  classifyFailure,
   startTimer,
   track,
   workflowParams,
@@ -37,7 +39,9 @@ import {
   unconfirmedMaterialMessage,
 } from "../store/geometrySlice";
 import { prescribedValueOf } from "../lib/solve/messageDefaults";
+import { failureNotice, type FailureNotice } from "../lib/solve/failureAdvice";
 import { tr, useT } from "../i18n/useLocale";
+import type { SolveRun } from "../store/resultsSlice";
 import { solveMessages } from "../i18n/messages/solve";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
@@ -62,11 +66,20 @@ export function useSolver() {
   const setSolverMethod = useModelStore((s) => s.setSolverMethod);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const contactGroups = useModelStore((s) => s.contactGroups);
+  const largeDeformation = useModelStore((s) => s.largeDeformation);
+  const setLargeDeformation = useModelStore((s) => s.setLargeDeformation);
+  const loadIncrements = useModelStore((s) => s.loadIncrements);
+  const setLoadIncrements = useModelStore((s) => s.setLoadIncrements);
+  const largeDeformationRun = largeDeformationSetting(
+    largeDeformation,
+    loadIncrements,
+  );
   // Surface mesh + CAD face ids drive auto-shell idealisation of thin bodies
   // in the worker's coupled solve.
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FailureNotice | null>(null);
   const text = useT(solveMessages);
   const { logs, clearLogs } = useWorkerLogs("solve");
   const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
@@ -117,9 +130,12 @@ export function useSolver() {
           constraints,
           loads,
           surfaceLoads,
+          temperature,
           elementOrder,
           tieGroups,
           couplings: couplingGroups,
+          contacts: contactGroups,
+          largeDeformation: largeDeformationRun,
         }
       : null,
   );
@@ -149,6 +165,7 @@ export function useSolver() {
       elementOrder,
       tieGroups,
       couplings: couplingGroups,
+      contacts: contactGroups,
       // A body marked Shell is checked on its idealisation, found from these.
       surfaceTriangles,
       surfaceFaceIds,
@@ -173,6 +190,7 @@ export function useSolver() {
     elementOrder,
     tieGroups,
     couplingGroups,
+    contactGroups,
     surfaceTriangles,
     surfaceFaceIds,
     routeRefusal,
@@ -213,7 +231,56 @@ export function useSolver() {
     elementOrder,
   ]);
 
+  // Linear elements lock on a nearly incompressible material (KOF-400).
+  const incompressible = useMemo(
+    () =>
+      incompressibleFindings({ elements, properties, materials, elementOrder }),
+    [elements, properties, materials, elementOrder],
+  );
+
+  // Why the chosen solver will not take this model and what the solve uses
+  // instead (shown under the solver choice), or null. Only computed with a
+  // mesh: before one there is no model.
+  const amgModel = {
+    elements,
+    properties,
+    elementOrder,
+    couplingCount: couplingGroups.length,
+  };
+  const amgReason = route !== null ? amgUnavailableReason(amgModel) : null;
+  const solverNote =
+    route === null
+      ? null
+      : preconditionerNotice(
+          solverMethod,
+          solvePreconditioner(solverMethod, route, amgReason, elements),
+          amgReason,
+        );
+
   function solve() {
+    // What the Solve panel shows now goes with the result into the report. A
+    // model no route takes is refused by the worker, so it has no run to keep.
+    const run: SolveRun | undefined =
+      route === null
+        ? undefined
+        : {
+            path: route.path,
+            preconditioner: solvePreconditioner(
+              solverMethod,
+              route,
+              amgReason,
+              elements,
+            ),
+            elementOrder,
+            largeDeformation: largeDeformationRun,
+            warnings: [
+              ...(solverNote === null ? [] : [solverNote]),
+              ...thinWalls.map(thinWallMessage),
+              ...incompressible.map(incompressibleMessage),
+            ],
+            materials,
+            properties,
+          };
     setRunning(true);
     clearLogs();
     const workflow = workflowParams();
@@ -232,8 +299,11 @@ export function useSolver() {
       solverMethod,
       tieGroups,
       couplingGroups,
+      contactGroups,
       surfaceTriangles,
       surfaceFaceIds,
+      largeDeformation,
+      loadIncrements,
     });
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
@@ -242,9 +312,10 @@ export function useSolver() {
       vonMises: Float64Array;
       stress: ElementStress;
       reactions: ReactionSummary | null;
+      contact: ContactResult | null;
     }>("solve", payload)
-      .then(({ displacements, vonMises, stress, reactions }) => {
-        setResult({ displacements, vonMises, stress, reactions });
+      .then(({ displacements, vonMises, stress, reactions, contact }) => {
+        setResult({ displacements, vonMises, stress, reactions, contact, run });
         track("solve_completed", {
           ...workflow,
           analysis_type: "static",
@@ -254,12 +325,15 @@ export function useSolver() {
       })
       .catch((err) => {
         console.error("[solve] solver failed:", err.message);
-        setError(tr(solveMessages).solverError(err.message));
+        const failure = classifyFailure(err);
+        setError(
+          failureNotice(failure, tr(solveMessages).solverError(err.message)),
+        );
         track("solve_failed", {
           ...workflow,
           analysis_type: "static",
           duration_bucket: elapsed(),
-          error_category: categorizeError(err),
+          ...failure,
         });
       })
       .finally(() => setRunning(false));
@@ -272,13 +346,6 @@ export function useSolver() {
       window as Window & { __kofemTriggerSolve?: () => void }
     ).__kofemTriggerSolve = solve;
   });
-
-  // Linear elements lock on a nearly incompressible material (KOF-400).
-  const incompressible = useMemo(
-    () =>
-      incompressibleFindings({ elements, properties, materials, elementOrder }),
-    [elements, properties, materials, elementOrder],
-  );
 
   const checks: [boolean, string][] = [
     [meshOk, meshCheckLabel(nodes.length, elements.length, suppressionStale)],
@@ -320,25 +387,6 @@ export function useSolver() {
       : [[false, routeRefusal] satisfies [boolean, string]]),
   ];
 
-  // Why the chosen solver will not take this model and what the solve uses
-  // instead (shown under the solver choice), or null. Only computed with a
-  // mesh: before one there is no model.
-  const amgModel = {
-    elements,
-    properties,
-    elementOrder,
-    couplingCount: couplingGroups.length,
-  };
-  const amgReason = route !== null ? amgUnavailableReason(amgModel) : null;
-  const solverNote =
-    route === null
-      ? null
-      : preconditionerNotice(
-          solverMethod,
-          solvePreconditioner(solverMethod, route, amgReason, elements),
-          amgReason,
-        );
-
   return {
     solve,
     error,
@@ -349,6 +397,10 @@ export function useSolver() {
     elementOrder,
     solverMethod,
     setSolverMethod,
+    largeDeformation,
+    setLargeDeformation,
+    loadIncrements,
+    setLoadIncrements,
     solverNote,
     logs,
   };

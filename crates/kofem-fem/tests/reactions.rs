@@ -17,13 +17,15 @@
 
 mod support;
 
+use kofem_fem::hyperelastic::NeoHookean;
+use kofem_fem::nonlinear::NonlinearProblem;
 use kofem_fem::{
-    assemble_shell_stiffness, assemble_stiffness, fold_onto_vertices, load_on_held_nodes,
-    nodal_residual, prepare_coupled_static, prepare_mixed_static, solve_coupled_static,
-    solve_mixed_static, solve_shell_static, solve_static, summarize_reactions, widen_translations,
-    CgSettings, Coupling, CouplingKind, ElementOrder, FemError, Isotropic, MixedPreconditioner,
-    PreconditionerChoice, ReactionSummary, ShellMesh, ShellPart, StoppingRule, TetMesh,
-    DOFS_PER_NODE,
+    assemble_shell_stiffness, assemble_stiffness, fold_onto_vertices, fold_onto_vertices_at,
+    load_on_held_nodes, nodal_residual, prepare_coupled_static, prepare_mixed_static,
+    solve_coupled_static, solve_mixed_static, solve_shell_static, solve_static,
+    summarize_reactions, summarize_reactions_at, widen_translations, CgSettings, Coupling,
+    CouplingKind, ElementOrder, FemError, Isotropic, MixedPreconditioner, PreconditionerChoice,
+    ReactionSummary, ShellMesh, ShellPart, StoppingRule, TetMesh, DOFS_PER_NODE,
 };
 use support::box_mesh;
 
@@ -541,4 +543,153 @@ fn each_held_vertex_reports_its_own_reaction_for_drawing() {
     assert_eq!(summary.nodal[1].support, 1);
     assert_eq!(summary.nodal[1].position, [1.0, 0.0, 0.0]);
     assert_eq!(summary.nodal[1].force, [4.0, 0.0, 0.0]);
+}
+
+/// The forces a large deformation leaves at the vertices, and where they
+/// act: a single element with every node held, displaced by `field`, so its
+/// reactions are its Neo-Hookean internal forces. Those balance in moment
+/// about any point in the deformed configuration (the energy is unchanged by
+/// a rigid rotation), not in the undeformed one.
+struct Deformed {
+    mesh: TetMesh,
+    reactions: Vec<f64>,
+    /// Where each node is after the deformation.
+    positions: Vec<[f64; 3]>,
+    owners: Vec<i32>,
+}
+
+fn deformed(order: ElementOrder, field: impl Fn([f64; 3]) -> [f64; 3]) -> Deformed {
+    let mesh = TetMesh::new(
+        &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        &[0, 1, 2, 3],
+        &[0],
+        vec![Isotropic::new(0, 1000.0, 0.3).expect("valid material")],
+    )
+    .expect("valid tet")
+    .with_order(order)
+    .expect("fits");
+    let mut displacements = vec![0.0; mesh.dof_count()];
+    let mut positions: Vec<[f64; 3]> = Vec::new();
+    for (node, point) in mesh.node_coordinates().iter().enumerate() {
+        let motion = field(*point);
+        displacements[3 * node..3 * node + 3].copy_from_slice(&motion);
+        positions.push(std::array::from_fn(|axis| point[axis] + motion[axis]));
+    }
+    let mut problem = NeoHookean::new(&mesh);
+    let mut tangent = problem.tangent_pattern();
+    let reactions = problem
+        .internal_force_and_tangent(&displacements, &mut tangent)
+        .expect("not inverted");
+    // Every vertex held in translation by support 0.
+    let owners = (0..mesh.vertex_count())
+        .flat_map(|_| [0, 0, 0, -1, -1, -1])
+        .collect();
+    Deformed {
+        mesh,
+        reactions,
+        positions,
+        owners,
+    }
+}
+
+fn largest(values: &[f64]) -> f64 {
+    values
+        .iter()
+        .fold(0.0_f64, |max, value| max.max(value.abs()))
+}
+
+#[test]
+fn a_large_deformation_balances_its_moment_where_the_forces_act() {
+    // Shear and stretch: u_x = 0.5·X + 0.4·Y.
+    let model = deformed(ElementOrder::Linear, |point| {
+        [0.5 * point[0] + 0.4 * point[1], 0.0, 0.0]
+    });
+    let reactions = widen_translations(&model.reactions);
+    let loads = vec![0.0; reactions.len()];
+    let vertices = model.mesh.vertices();
+    let scale = largest(&model.reactions);
+    let undeformed =
+        summarize_reactions(vertices, &reactions, &loads, &model.owners, 1).expect("valid owners");
+    assert!(
+        largest(&undeformed.supports[0].moment) > 0.1 * scale,
+        "taken about the undeformed vertices the moment does not balance"
+    );
+    let summary = summarize_reactions_at(
+        vertices,
+        &model.positions,
+        &reactions,
+        &loads,
+        &model.owners,
+        1,
+    )
+    .expect("valid owners");
+    let support = &summary.supports[0];
+    assert!(
+        largest(&support.force) <= 1e-10 * scale,
+        "{:?}",
+        support.force
+    );
+    assert!(
+        largest(&support.moment) <= 1e-10 * scale,
+        "moment {:?} in the deformed configuration",
+        support.moment
+    );
+    // Drawn where the support's nodes are in the model, undeformed.
+    assert_eq!(summary.nodal[1].position, vertices[1]);
+    assert_eq!(support.centroid, [0.25; 3]);
+}
+
+#[test]
+fn folding_curved_edge_nodes_keeps_the_moment_in_the_deformed_configuration() {
+    // A quadratic field bends the edges, so a deformed edge node no longer
+    // lies midway between its deformed ends.
+    let model = deformed(ElementOrder::Quadratic, |point| {
+        [
+            0.2 * point[1] * point[1],
+            0.3 * point[0] * point[2],
+            0.1 * point[0] * point[0],
+        ]
+    });
+    let reactions = widen_translations(&model.reactions);
+    let loads = vec![0.0; reactions.len()];
+    let vertices = model.mesh.vertices();
+    let corners = &model.positions[..vertices.len()];
+    let scale = largest(&model.reactions);
+    let moment_after = |folded: &[f64]| {
+        let summary = summarize_reactions_at(
+            vertices,
+            corners,
+            folded,
+            &loads[..folded.len()],
+            &model.owners,
+            1,
+        )
+        .expect("valid owners");
+        summary.supports[0].moment
+    };
+    let plain = fold_onto_vertices(&model.mesh, &reactions).expect("fits");
+    assert!(
+        largest(&moment_after(&plain)) > 1e-3 * scale,
+        "folding to the corners alone loses the edge nodes' offset"
+    );
+    let folded = fold_onto_vertices_at(&model.mesh, &reactions, &model.positions).expect("fits");
+    let moment = moment_after(&folded);
+    assert!(largest(&moment) <= 1e-10 * scale, "moment {moment:?}");
+    // The fold keeps the forces as the plain one does.
+    for vertex in 0..vertices.len() {
+        for axis in 0..3 {
+            let at = DOFS_PER_NODE * vertex + axis;
+            assert!((folded[at] - plain[at]).abs() <= 1e-12 * scale);
+        }
+    }
+}
+
+#[test]
+fn a_fold_at_positions_of_the_wrong_length_is_refused() {
+    let model = deformed(ElementOrder::Quadratic, |_| [0.0; 3]);
+    let reactions = widen_translations(&model.reactions);
+    assert!(matches!(
+        fold_onto_vertices_at(&model.mesh, &reactions, &model.positions[..4]),
+        Err(FemError::ReactionInput { .. })
+    ));
 }

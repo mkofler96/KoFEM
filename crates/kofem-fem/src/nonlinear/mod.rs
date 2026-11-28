@@ -8,8 +8,9 @@
 //! [`TangentSolver`] seam; [`DirichletCg`] is the solid solve's elimination,
 //! preconditioner and CG.
 //!
-//! Elements and materials contribute their share of force and tangent;
-//! linear elasticity, [`LinearElastic`], is the first. Contact enters as
+//! Elements and materials contribute their share of force and tangent:
+//! linear elasticity, [`LinearElastic`], and the Neo-Hookean solid of large
+//! deformation, [`crate::hyperelastic::NeoHookean`]. Contact enters as
 //! constraints of the correction solve ([`crate::contact::ContactCg`]).
 
 mod newton;
@@ -29,6 +30,13 @@ pub trait NonlinearProblem {
     /// A zero matrix with the tangent's sparsity pattern, which stays fixed
     /// for the whole solve. Its row count is the problem's DOF count.
     fn tangent_pattern(&self) -> CsrMatrix;
+
+    /// Whether the tangent changes with the displacement. Such a problem can
+    /// lose stability: the driver checks its tangent at every converged
+    /// increment and reports a tangent that is not positive definite as the
+    /// stability limit ([`FemError::TangentNotPositiveDefinite`]). A constant
+    /// tangent that is not positive definite means the model is not held.
+    fn tangent_varies(&self) -> bool;
 
     /// The internal force at `displacements`, with the tangent (its
     /// derivative) added into `tangent`, which arrives zeroed and with the
@@ -62,6 +70,10 @@ impl NonlinearProblem for LinearElastic {
         let mut pattern = self.stiffness.clone();
         pattern.values_mut().fill(0.0);
         pattern
+    }
+
+    fn tangent_varies(&self) -> bool {
+        false
     }
 
     fn internal_force_and_tangent(

@@ -31,6 +31,7 @@ import type {
 import type { CouplingGroup } from "../store/couplingSlice";
 import type { Node } from "../store/geometrySlice";
 import type { TieGroup } from "../store/tieSlice";
+import type { ContactGroup } from "../store/contactSlice";
 import { tr } from "../i18n/useLocale";
 import { meshMessages } from "../i18n/messages/mesh";
 
@@ -38,6 +39,7 @@ export interface CarriedGroups {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
+  contactGroups: ContactGroup[];
   couplingGroups: CouplingGroup[];
   // The reference point node of each carried coupling, numbered after the new
   // mesh's nodes: the caller appends them to the mesh.
@@ -91,6 +93,7 @@ export function carryGroupsToMesh(
     loadGroups: NamedLoadGroup[];
     tieGroups: TieGroup[];
     couplingGroups: CouplingGroup[];
+    contactGroups: ContactGroup[];
   },
   surfaceTriangles: [number, number, number][] | null,
   surfaceFaceIds: number[] | null,
@@ -201,11 +204,21 @@ export function carryGroupsToMesh(
       tieGroups.push({ ...tie, facesA, facesB });
     else dropped.push(text.nothingToTie(tie.name));
   }
+  // So does a contact.
+  const contactGroups: ContactGroup[] = [];
+  for (const contact of groups.contactGroups) {
+    const facesA = carry(text.tieSideA(contact.name), contact.facesA);
+    const facesB = carry(text.tieSideB(contact.name), contact.facesB);
+    if (facesA.length > 0 && facesB.length > 0)
+      contactGroups.push({ ...contact, facesA, facesB });
+    else dropped.push(text.nothingToTouch(contact.name));
+  }
 
   return {
     bcGroups,
     loadGroups,
     tieGroups,
+    contactGroups,
     couplingGroups,
     referenceNodes,
     kept,
@@ -220,7 +233,8 @@ export function remeshNotice(carried: CarriedGroups): string | null {
   const groups =
     carried.bcGroups.length +
     carried.loadGroups.length +
-    carried.tieGroups.length;
+    carried.tieGroups.length +
+    carried.contactGroups.length;
   const couplings = carried.couplingGroups.length;
   const text = tr(meshMessages);
   const keptGroups = groups > 0 ? text.keptGroups(groups) : null;

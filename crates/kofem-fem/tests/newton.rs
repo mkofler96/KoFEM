@@ -261,6 +261,10 @@ impl NonlinearProblem for CubicSprings {
         pattern
     }
 
+    fn tangent_varies(&self) -> bool {
+        true
+    }
+
     fn internal_force_and_tangent(
         &mut self,
         displacements: &[f64],
@@ -386,7 +390,9 @@ fn a_nonlinear_problem_with_a_known_solution_converges_quadratically() {
                 }
             }
             NewtonStatus::Converged => break,
-            NewtonStatus::Solving { .. } => panic!("an unlimited budget finishes every solve"),
+            NewtonStatus::Solving { .. } | NewtonStatus::Checking { .. } => {
+                panic!("an unlimited budget finishes every solve")
+            }
         }
     }
     println!(

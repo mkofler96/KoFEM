@@ -68,7 +68,7 @@ export async function openTree(
 // Boundary conditions → + Add → <kind>. The creation pick starts right away.
 export async function addBoundary(
   page: Page,
-  kind: "bc" | "load" | "tie" | "coupling" | "temperature",
+  kind: "bc" | "load" | "tie" | "contact" | "coupling" | "temperature",
 ): Promise<void> {
   await page.getByTestId("tree-add-boundary").click();
   await page.getByTestId(`add-boundary-${kind}`).click();

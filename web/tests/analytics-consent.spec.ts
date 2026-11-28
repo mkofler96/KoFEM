@@ -4,6 +4,10 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
 import { importStep } from "./fixtures/app";
+import {
+  bootstrapCantilever,
+  hingeBlockOnCantilever,
+} from "./fixtures/cantilever";
 import { openTree } from "./fixtures/tree";
 
 // The consent-gated GA4 loader (vite-analytics.ts) and the product events
@@ -397,5 +401,27 @@ test.describe("workflow events", () => {
 
     const everything = JSON.stringify(await gaCalls(page));
     expect(everything).not.toMatch(/secret|bracket|tube|\.stp|\.stl/i);
+  });
+
+  // KOF-490: a numerical failure says how the solver failed, as an enum.
+  test("a singular model's solve_failed carries its numerical reason", async ({
+    page,
+  }) => {
+    await withAnalytics(page);
+    await setConsent(page, "granted");
+    await bootstrapCantilever(page);
+    await hingeBlockOnCantilever(page);
+    await triggerSolve(page);
+    await expect.poll(() => eventNames(page)).toContain("solve_failed");
+    const failed = (await gaEvents(page)).find(
+      (e) => e.name === "solve_failed",
+    );
+    expect(failed?.params).toEqual({
+      workflow: "none",
+      analysis_type: "static",
+      duration_bucket: expect.stringMatching(/^[a-z0-9_]+$/),
+      error_category: "numerical_failure",
+      numerical_reason: "singular_matrix",
+    });
   });
 });

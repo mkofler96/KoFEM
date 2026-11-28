@@ -21,8 +21,9 @@ export interface FaceSelection {
 }
 
 // What a pick session is being used to define. A coupling picks one surface,
-// like a BC or a load; a tie picks two (pickTieSide selects which).
-export type PickMode = "bc" | "load" | "tie" | "coupling";
+// like a BC or a load; a tie and a contact pick two (pickTieSide selects
+// which).
+export type PickMode = "bc" | "load" | "tie" | "contact" | "coupling";
 
 export interface PickSlice {
   pickMode: PickMode | null;

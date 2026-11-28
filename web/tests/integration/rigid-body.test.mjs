@@ -224,6 +224,63 @@ describe("solid models", () => {
   });
 });
 
+// A block resting on a clamped block, meshed apart, with a frictionless
+// contact between the lower block's top and the upper block's bottom.
+const stacked = () => {
+  const model = builder();
+  const lower = model.block([0, 0, 0], [2, 2, 1], 1, "lower");
+  const upper = model.block([0, 0, 1], [2, 2, 1], 2, "upper");
+  const contacts = [
+    {
+      name: "Contact1",
+      facesA: model.faces(model.where(upper, (n) => near(n.z, 1))),
+      facesB: model.faces(model.where(lower, (n) => near(n.z, 1))),
+    },
+  ];
+  const base = model.fix(model.where(lower, (n) => near(n.z, 0)));
+  return { model, upper, contacts, base };
+};
+const TWO_BODIES = [
+  { id: 1, materialId: 1 },
+  { id: 2, materialId: 1 },
+];
+
+describe("contacts", () => {
+  test("a block pressed onto a clamped block, its slide and spin held, is held", () => {
+    const { model, upper, contacts, base } = stacked();
+    const constraints = [
+      ...base,
+      ...model.fix(
+        model.where(upper, (n) => near(n.x, 0)),
+        [0],
+      ),
+      ...model.fix(
+        model.where(upper, (n) => near(n.y, 0)),
+        [1],
+      ),
+    ];
+    const held = { ...model, constraints, properties: TWO_BODIES };
+    expect(solidMessage({ ...held, contacts })).toBeNull();
+    expect(solidMessage(held)).toBe(
+      `Body 2 can still move along Z. ${ONE_BODY_ADVICE}`,
+    );
+  });
+
+  test("a frictionless contact leaves the slide and the spin", () => {
+    const { model, contacts, base } = stacked();
+    expect(
+      solidMessage({
+        ...model,
+        constraints: base,
+        contacts,
+        properties: TWO_BODIES,
+      }),
+    ).toBe(
+      `Body 2 can still move along X and Y, and rotate about Z. ${ONE_BODY_ADVICE}`,
+    );
+  });
+});
+
 describe("couplings", () => {
   // A block gripped at its x = 0 face by a reference point at (−1, 0.5, 0.5).
   const coupledBlock = (referenceDofs) => {

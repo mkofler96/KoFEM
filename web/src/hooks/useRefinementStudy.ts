@@ -56,6 +56,7 @@ type StudySource = Pick<
   | "bcGroups"
   | "loadGroups"
   | "tieGroups"
+  | "contactGroups"
   | "couplingGroups"
   | "meshSizes"
   | "maxElementSize"
@@ -94,6 +95,7 @@ export function refinementRefusal(s: StudySource): string | null {
       loadGroups: s.loadGroups,
       tieGroups: s.tieGroups,
       couplingGroups: s.couplingGroups,
+      contactGroups: s.contactGroups,
     },
     s.surfaceTriangles,
     s.surfaceFaceIds,
@@ -141,6 +143,7 @@ function entryCount(s: StudySource): number {
     s.bcGroups.reduce((n, g) => n + g.faces.length, 0) +
     s.loadGroups.reduce((n, g) => n + g.faces.length, 0) +
     s.tieGroups.reduce((n, t) => n + t.facesA.length + t.facesB.length, 0) +
+    s.contactGroups.reduce((n, c) => n + c.facesA.length + c.facesB.length, 0) +
     s.couplingGroups.reduce((n, c) => n + c.faces.length, 0)
   );
 }
@@ -165,6 +168,7 @@ function levelSnapshot(s: ModelState): RefinementLevelSnapshot {
     bcGroups: s.bcGroups,
     loadGroups: s.loadGroups,
     tieGroups: s.tieGroups,
+    contactGroups: s.contactGroups,
     couplingGroups: s.couplingGroups,
     constraints: s.constraints,
     loads: s.loads,
@@ -213,6 +217,7 @@ export function useRefinementStudy() {
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
+  const contactGroups = useModelStore((s) => s.contactGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const meshSizes = useModelStore((s) => s.meshSizes);
   const maxElementSize = useModelStore((s) => s.maxElementSize);
@@ -233,6 +238,7 @@ export function useRefinementStudy() {
       bcGroups,
       loadGroups,
       tieGroups,
+      contactGroups,
       couplingGroups,
       meshSizes,
       maxElementSize,
@@ -251,6 +257,7 @@ export function useRefinementStudy() {
       bcGroups,
       loadGroups,
       tieGroups,
+      contactGroups,
       couplingGroups,
       meshSizes,
       maxElementSize,

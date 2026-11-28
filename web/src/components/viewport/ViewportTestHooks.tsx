@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect } from "react";
-import { addTail, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import { Mesh, Vector3, type BufferGeometry } from "three";
-import { applyPendingSceneCommits } from "./pickingEvents";
+import { viewSettled } from "./viewSettled";
 
 export interface ViewCamera {
   type: "PerspectiveCamera" | "OrthographicCamera";
@@ -94,21 +94,9 @@ export function ViewportTestHooks() {
         };
       },
       settled() {
-        // The scene's tree applies a store change in a scheduled task (see
-        // pickingEvents); apply it now, effects included.
-        applyPendingSceneCommits();
-        // Whatever needs drawing has asked for a frame by now. With none
-        // asked for, the canvas already shows this state. settled() draws
-        // nothing itself: a test may call it hundreds of times.
-        if (get().internal.frames === 0) return Promise.resolve();
-        // R3F runs its tail callbacks when a frame finds nothing left to
-        // draw and the render loop stops.
-        return new Promise<void>((resolve) => {
-          const unsubscribe = addTail(() => {
-            unsubscribe();
-            resolve();
-          });
-        });
+        // settled() draws nothing itself: a test may call it hundreds of
+        // times.
+        return viewSettled(get);
       },
       drawnSegments(name) {
         let total = 0;

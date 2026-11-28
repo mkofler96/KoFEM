@@ -159,7 +159,10 @@ test("a face picked in the Mesh step meshes at its own size, and keeps it throug
   await page
     .locator('input[type="file"][accept=".vtu,.zip"]')
     .setInputFiles(file);
-  await openTree(page, "mesh");
+  // Wait for the loaded mesh itself: openTree reads the tree once, and while
+  // the file still loads it would pick Mesh → Add, which the loaded mesh then
+  // replaces.
+  await page.getByTestId("tree-mesh-1").click();
   await expect(page.getByTestId(`mesh-face-size-${hole}`)).toHaveText(
     "max 0.5 mm",
   );

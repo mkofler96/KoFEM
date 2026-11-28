@@ -7,6 +7,7 @@
 
 import type { ModelState } from "../../store/modelStore";
 import type { SolvePayload } from "../../workers/solverTypes";
+import { largeDeformationSetting } from "./largeDeformation";
 
 export type SolveSource = Pick<
   ModelState,
@@ -22,8 +23,11 @@ export type SolveSource = Pick<
   | "solverMethod"
   | "tieGroups"
   | "couplingGroups"
+  | "contactGroups"
   | "surfaceTriangles"
   | "surfaceFaceIds"
+  | "largeDeformation"
+  | "loadIncrements"
 >;
 
 export function solvePayload(s: SolveSource): SolvePayload {
@@ -40,9 +44,14 @@ export function solvePayload(s: SolveSource): SolvePayload {
     solverMethod: s.solverMethod,
     tieGroups: s.tieGroups,
     couplings: s.couplingGroups,
+    contacts: s.contactGroups,
     // Surface mesh + CAD face ids drive auto-shell idealisation of thin
     // bodies in the worker's coupled solve.
     surfaceTriangles: s.surfaceTriangles,
     surfaceFaceIds: s.surfaceFaceIds,
+    largeDeformation: largeDeformationSetting(
+      s.largeDeformation,
+      s.loadIncrements,
+    ),
   };
 }

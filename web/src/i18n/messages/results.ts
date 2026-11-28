@@ -111,18 +111,40 @@ export const resultFieldMessages = defineMessages({
     es: "Tensión principal mín. σ3",
     pt: "Tensão principal mín. σ3",
   },
+  "Contact pressure": {
+    en: "Contact pressure",
+    de: "Kontaktdruck",
+    fr: "Pression de contact",
+    it: "Pressione di contatto",
+    es: "Presión de contacto",
+    pt: "Pressão de contato",
+  },
+  "Contact status": {
+    en: "Contact status (1 = touching)",
+    de: "Kontaktstatus (1 = berührt)",
+    fr: "État du contact (1 = en contact)",
+    it: "Stato del contatto (1 = a contatto)",
+    es: "Estado del contacto (1 = en contacto)",
+    pt: "Estado do contato (1 = em contato)",
+  },
 });
 
 // The Results panel: adding plots, a plot's field, scale, probes and section
 // cut, and the support reactions.
 export const resultsMessages = defineMessages({
   staticSolveHint: {
-    en: (unit: string) => `Static solve · ${unit}`,
-    de: (unit: string) => `Statische Berechnung · ${unit}`,
-    fr: (unit: string) => `Calcul statique · ${unit}`,
-    it: (unit: string) => `Calcolo statico · ${unit}`,
-    es: (unit: string) => `Cálculo estático · ${unit}`,
-    pt: (unit: string) => `Cálculo estático · ${unit}`,
+    en: (unit: string) =>
+      unit === "" ? "Static solve" : `Static solve · ${unit}`,
+    de: (unit: string) =>
+      unit === "" ? "Statische Berechnung" : `Statische Berechnung · ${unit}`,
+    fr: (unit: string) =>
+      unit === "" ? "Calcul statique" : `Calcul statique · ${unit}`,
+    it: (unit: string) =>
+      unit === "" ? "Calcolo statico" : `Calcolo statico · ${unit}`,
+    es: (unit: string) =>
+      unit === "" ? "Cálculo estático" : `Cálculo estático · ${unit}`,
+    pt: (unit: string) =>
+      unit === "" ? "Cálculo estático" : `Cálculo estático · ${unit}`,
   },
   runStaticFirst: {
     en: "Run a static study first",
@@ -1061,6 +1083,84 @@ export const resultsMessages = defineMessages({
       `el elemento lámina ${element} no tiene espesor, así que su volumen es desconocido`,
     pt: (element: number) =>
       `o elemento de casca ${element} não tem espessura, logo o seu volume é desconhecido`,
+  },
+  peakAt: {
+    en: "Max at",
+    de: "Max. bei",
+    fr: "Max. en",
+    it: "Max in",
+    es: "Máx. en",
+    pt: "Máx. em",
+  },
+  show: {
+    en: "Show",
+    de: "Zeigen",
+    fr: "Afficher",
+    it: "Mostra",
+    es: "Mostrar",
+    pt: "Mostrar",
+  },
+  peakSupport: {
+    en: (name: string) => `support “${name}”`,
+    de: (name: string) => `der Lagerung „${name}“`,
+    fr: (name: string) => `l'appui « ${name} »`,
+    it: (name: string) => `il vincolo «${name}»`,
+    es: (name: string) => `el apoyo «${name}»`,
+    pt: (name: string) => `o apoio «${name}»`,
+  },
+  peakLoad: {
+    en: (name: string) => `load “${name}”`,
+    de: (name: string) => `der Last „${name}“`,
+    fr: (name: string) => `la charge « ${name} »`,
+    it: (name: string) => `il carico «${name}»`,
+    es: (name: string) => `la carga «${name}»`,
+    pt: (name: string) => `a carga «${name}»`,
+  },
+  peakOnBoundary: {
+    en: (places: string, p99: string | undefined) =>
+      `On ${places}: likely a singularity. Use P99${p99 ? ` = ${p99}` : ""}.`,
+    de: (places: string, p99: string | undefined) =>
+      `An ${places}: wahrscheinlich eine Singularität. P99${p99 ? ` = ${p99}` : ""} verwenden.`,
+    fr: (places: string, p99: string | undefined) =>
+      `Sur ${places} : singularité probable. Utilisez P99${p99 ? ` = ${p99}` : ""}.`,
+    it: (places: string, p99: string | undefined) =>
+      `Presso ${places}: probabile singolarità. Usa P99${p99 ? ` = ${p99}` : ""}.`,
+    es: (places: string, p99: string | undefined) =>
+      `En ${places}: probable singularidad. Use P99${p99 ? ` = ${p99}` : ""}.`,
+    pt: (places: string, p99: string | undefined) =>
+      `Sobre ${places}: provável singularidade. Use P99${p99 ? ` = ${p99}` : ""}.`,
+  },
+  peakUnreadable: {
+    en: (reason: string) => `The location of the max cannot be read. ${reason}`,
+    de: (reason: string) =>
+      `Der Ort des Maximums lässt sich nicht ablesen. ${reason}`,
+    fr: (reason: string) => `Impossible de lire la position du max. ${reason}`,
+    it: (reason: string) =>
+      `Impossibile leggere la posizione del max. ${reason}`,
+    es: (reason: string) => `No se puede leer la posición del máx. ${reason}`,
+    pt: (reason: string) => `Não é possível ler a posição do máx. ${reason}`,
+  },
+  peakUnknownNode: {
+    en: (owner: string, node: number) =>
+      `${owner} refers to node ${node}, which the mesh does not have`,
+    de: (owner: string, node: number) =>
+      `${owner} verweist auf Knoten ${node}, den das Netz nicht hat`,
+    fr: (owner: string, node: number) =>
+      `${owner} référence le nœud ${node}, absent du maillage`,
+    it: (owner: string, node: number) =>
+      `${owner} fa riferimento al nodo ${node}, che la mesh non ha`,
+    es: (owner: string, node: number) =>
+      `${owner} hace referencia al nodo ${node}, que la malla no tiene`,
+    pt: (owner: string, node: number) =>
+      `${owner} referencia o nó ${node}, que a malha não tem`,
+  },
+  peakElement: {
+    en: (element: number) => `Shell element ${element}`,
+    de: (element: number) => `Schalenelement ${element}`,
+    fr: (element: number) => `L'élément coque ${element}`,
+    it: (element: number) => `L'elemento guscio ${element}`,
+    es: (element: number) => `El elemento lámina ${element}`,
+    pt: (element: number) => `O elemento de casca ${element}`,
   },
   sectionNoNodes: {
     en: "the model has no nodes to cut",

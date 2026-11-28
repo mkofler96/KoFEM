@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! The rigid-body check that runs before a solve (KOF-388): which bodies the
-//! supports, ties and couplings leave free to slide or spin, and along which
+//! supports, ties, couplings and contacts leave free to slide or spin, and along which
 //! axes. Each case is a model whose free motions follow from the geometry by
 //! inspection.
 
@@ -14,7 +14,9 @@
               and a fixture that fails to build should abort the test"
 )]
 
-use kofem_fem::{free_rigid_motions, FemError, FreeMotion, RigidBodyModel, RigidLink};
+use kofem_fem::{
+    free_rigid_motions, FemError, FreeMotion, RigidBodyModel, RigidContact, RigidLink,
+};
 
 const ALONG_X: [f64; 3] = [1.0, 0.0, 0.0];
 const ALONG_Y: [f64; 3] = [0.0, 1.0, 0.0];
@@ -31,6 +33,7 @@ struct Model {
     labels: Vec<u32>,
     rotational: Vec<u32>,
     links: Vec<RigidLink>,
+    contacts: Vec<RigidContact>,
     fixed: Vec<u32>,
 }
 
@@ -146,6 +149,7 @@ impl Model {
             element_labels: &self.labels,
             rotational_nodes: &self.rotational,
             links: &self.links,
+            contacts: &self.contacts,
             fixed_dofs: &self.fixed,
         })
         .expect("a valid model")
@@ -426,10 +430,73 @@ fn a_support_on_a_node_outside_the_model_is_refused() {
         element_labels: &model.labels,
         rotational_nodes: &model.rotational,
         links: &model.links,
+        contacts: &model.contacts,
         fixed_dofs: &model.fixed,
     });
     assert!(
         matches!(result, Err(FemError::RigidBodyInput { .. })),
+        "{result:?}"
+    );
+}
+
+/// A unit block on top of a clamped unit block, meshed apart, with a contact
+/// between the lower block's top and the upper block's bottom.
+fn stacked_with_contact() -> (Model, Vec<u32>) {
+    let mut model = Model::new();
+    let lower = model.block([0.0; 3], [1, 1, 1], 1);
+    let upper = model.block([0.0, 0.0, 1.0], [1, 1, 1], 2);
+    let base = model.on_plane(&lower, 2, 0.0);
+    model.fix(&base, &XYZ);
+    let top = model.on_plane(&lower, 2, 1.0);
+    let bottom = model.on_plane(&upper, 2, 1.0);
+    model.contacts.push(RigidContact {
+        surface: bottom,
+        other: top,
+    });
+    (model, upper)
+}
+
+#[test]
+fn a_contact_holds_a_pressed_block_along_its_normal() {
+    let (mut model, upper) = stacked_with_contact();
+    // Rollers on two sides hold the slide and the spin; only the contact holds
+    // the block down.
+    let side_x = model.on_plane(&upper, 0, 0.0);
+    let side_y = model.on_plane(&upper, 1, 0.0);
+    model.fix(&side_x, &[0]);
+    model.fix(&side_y, &[1]);
+    assert_eq!(model.free(), vec![]);
+    model.contacts.clear();
+    let free = model.free();
+    assert_eq!(free.len(), 1);
+    assert_free(&free[0], &[2], &[ALONG_Z], &[]);
+}
+
+#[test]
+fn a_frictionless_contact_leaves_the_slide_and_the_spin_free() {
+    let (model, _) = stacked_with_contact();
+    let free = model.free();
+    assert_eq!(free.len(), 1);
+    assert_free(&free[0], &[2], &[ALONG_X, ALONG_Y], &[ALONG_Z]);
+}
+
+#[test]
+fn a_contact_surface_without_a_whole_element_face_is_refused() {
+    let (mut model, upper) = stacked_with_contact();
+    let edge = model.on_plane(&model.on_plane(&upper, 2, 1.0), 0, 0.0);
+    model.contacts[0].surface = edge;
+    let result = free_rigid_motions(&RigidBodyModel {
+        positions: &model.positions,
+        element_offsets: &model.offsets,
+        element_nodes: &model.nodes,
+        element_labels: &model.labels,
+        rotational_nodes: &model.rotational,
+        links: &model.links,
+        contacts: &model.contacts,
+        fixed_dofs: &model.fixed,
+    });
+    assert!(
+        matches!(&result, Err(FemError::RigidBodyInput { reason }) if reason.contains("contact 0")),
         "{result:?}"
     );
 }

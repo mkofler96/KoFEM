@@ -958,6 +958,17 @@ export const meshMessages = defineMessages({
     es: (tie: string) => `${tie} lado B`,
     pt: (tie: string) => `${tie} lado B`,
   },
+  nothingToTouch: {
+    en: (contact: string) => `${contact} — a side has no face left to touch`,
+    de: (contact: string) =>
+      `${contact} — einer Seite bleibt keine Fläche zum Berühren`,
+    fr: (contact: string) => `${contact} — un côté n'a plus de face à toucher`,
+    it: (contact: string) => `${contact} — un lato non ha più facce da toccare`,
+    es: (contact: string) =>
+      `${contact} — a un lado no le queda cara que tocar`,
+    pt: (contact: string) =>
+      `${contact} — um lado não tem mais face para tocar`,
+  },
   nothingToTie: {
     en: (tie: string) => `${tie} — a side has nothing left to tie`,
     de: (tie: string) => `${tie} – eine Seite hat nichts mehr zu verbinden`,
