@@ -155,6 +155,16 @@
               },
               {
                 "@type": "TechArticle",
+                "headline": "Scordelis–Lo roof",
+                "url": "https://kofem.org/examples/scordelis-lo-roof/"
+              },
+              {
+                "@type": "TechArticle",
+                "headline": "Pinched cylinder with end diaphragms",
+                "url": "https://kofem.org/examples/pinched-cylinder/"
+              },
+              {
+                "@type": "TechArticle",
                 "headline": "MBB beam, topology optimization",
                 "url": "https://kofem.org/examples/mbb-beam-topopt/"
               }
@@ -931,6 +941,8 @@
             <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
             <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
             <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
+            <li><a href="/examples/scordelis-lo-roof/">Scordelis–Lo roof</a></li>
+            <li><a href="/examples/pinched-cylinder/">Pinched cylinder with end diaphragms</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -972,6 +984,8 @@
             <li><a href="/examples/nafems-le8/">NAFEMS LE8: axisymmetric shell under pressure</a></li>
             <li><a href="/examples/nafems-le10/">NAFEMS LE10: thick plate under pressure</a></li>
             <li><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></li>
+            <li><a href="/examples/scordelis-lo-roof/">Scordelis–Lo roof</a></li>
+            <li><a href="/examples/pinched-cylinder/">Pinched cylinder with end diaphragms</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -993,8 +1007,8 @@
       <p>Problems with a known answer, from theory or the literature. Each page
       derives the answer and compares KoFEM's result with it.</p>
       <p class="meta">
-        22 of 22 benchmarks within their tolerance ·
-        engine engine-e23d3437403a · 2026-11-28 ·
+        24 of 24 benchmarks within their tolerance ·
+        engine engine-f6443e1cd400 · 2026-11-28 ·
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
       </p>
@@ -1130,6 +1144,18 @@
           <h3><a href="/examples/nafems-le11/">NAFEMS LE11: solid cylinder/taper/sphere, temperature loading</a></h3>
           <p>The NAFEMS solid of revolution under a linear temperature field: σzz = −105 MPa at A, from quadratic tetrahedra and a temperature change.</p>
           <p class="meta">Direct stress σzz at A: −103.77&nbsp;MPa, −1.17&nbsp;% from the reference</p>
+        </li>
+        <li data-entry="scordelis-lo-roof">
+          <a href="/examples/scordelis-lo-roof/" tabindex="-1" aria-hidden="true"><img src="/examples/scordelis-lo-roof.png" width="1200" height="900" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/scordelis-lo-roof/">Scordelis–Lo roof</a></h3>
+          <p>The shell obstacle course's Scordelis–Lo roof: a cylindrical roof between rigid diaphragms under its own weight, from curved shells.</p>
+          <p class="meta">Vertical displacement at the middle of the free edge: −299.25&nbsp;mm, −1.04&nbsp;% from the reference</p>
+        </li>
+        <li data-entry="pinched-cylinder">
+          <a href="/examples/pinched-cylinder/" tabindex="-1" aria-hidden="true"><img src="/examples/pinched-cylinder.png" width="1200" height="900" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/pinched-cylinder/">Pinched cylinder with end diaphragms</a></h3>
+          <p>The shell obstacle course's pinched cylinder: a thin cylinder between rigid diaphragms bent by two point loads, from curved shells.</p>
+          <p class="meta">Displacement under the load: −1.8309&thinsp;×&thinsp;10<sup>−5</sup>&nbsp;mm, +0.34&nbsp;% from the reference</p>
         </li>
       </ul>
 
@@ -1319,6 +1345,20 @@
               <td class="num" data-label="Reference">−105.00&nbsp;MPa</td>
               <td class="num" data-label="KoFEM">−103.77&nbsp;MPa</td>
               <td class="num" data-label="Difference">−1.17&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="/examples/scordelis-lo-roof/">Scordelis–Lo roof</a></th>
+              <td class="wide">vertical displacement at the middle of the free edge</td>
+              <td class="num" data-label="Reference">−302.40&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">−299.25&nbsp;mm</td>
+              <td class="num" data-label="Difference">−1.04&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="/examples/pinched-cylinder/">Pinched cylinder with end diaphragms</a></th>
+              <td class="wide">displacement under the load</td>
+              <td class="num" data-label="Reference">−1.8248&thinsp;×&thinsp;10<sup>−5</sup>&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">−1.8309&thinsp;×&thinsp;10<sup>−5</sup>&nbsp;mm</td>
+              <td class="num" data-label="Difference">+0.34&nbsp;%</td>
             </tr>
           </tbody>
         </table>

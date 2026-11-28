@@ -36,3 +36,5 @@ cd web && bun run validate:report
 | NAFEMS LE8: axisymmetric shell under pressure | hoop stress at D, outer surface | 85.757 MPa | NAFEMS LE8 target | -9.25% | 10% | ✅ |
 | NAFEMS LE10: thick plate under pressure | direct stress σyy at D | -5.3684 MPa | NAFEMS LE10 target | -0.22% | 2% | ✅ |
 | NAFEMS LE11: solid cylinder/taper/sphere, temperature loading | direct stress σzz at A | -103.77 MPa | NAFEMS LE11 target | -1.17% | 3% | ✅ |
+| Scordelis–Lo roof | vertical displacement at the middle of the free edge | -299.25 mm | MacNeal and Harder (1985) | -1.04% | 2% | ✅ |
+| Pinched cylinder with end diaphragms | displacement under the load | -1.8309e-5 mm | Belytschko et al. (1985) | +0.34% | 2% | ✅ |
