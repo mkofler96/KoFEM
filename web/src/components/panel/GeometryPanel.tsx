@@ -26,6 +26,7 @@ import {
 } from "../../lib/regions";
 import { useT } from "../../i18n/useLocale";
 import { geometryMessages } from "../../i18n/messages/geometry";
+import type { ShellRoute, ShellRouteReason } from "../../wasm/pkg/kofem_wasm";
 import styles from "./Panel.module.css";
 
 type GeometryText = (typeof geometryMessages)["en"];
@@ -41,6 +42,24 @@ function sectionsTip(
     .map((s) => (s.thickness === undefined ? "?" : `${s.thickness} mm`))
     .join(", ");
   return text.shellSections(sections.length, thicknesses);
+}
+
+// How the last mesh meshed a body marked Shell (KOF-498): its mid-surface
+// from the paired CAD faces, or from its volume mesh and why.
+function shellRouteText(route: ShellRoute, text: GeometryText): string {
+  if (route.path === "cad")
+    return text.shellRouteCad(
+      route.walls.length,
+      route.walls.map((w) => `${w.thickness} mm`).join(", "),
+    );
+  const why: Record<ShellRouteReason, string> = {
+    no_thin_wall: text.shellRouteNoThinWall,
+    no_opposite_face: text.shellRouteNoOppositeFace,
+    varying_thickness: text.shellRouteVaryingThickness,
+    unsupported_surface: text.shellRouteUnsupportedSurface,
+    partial_overlap: text.shellRoutePartialOverlap,
+  };
+  return text.shellRouteMesh(route.face, why[route.reason]);
 }
 
 const STEP_CARD_ICON = (
@@ -161,6 +180,7 @@ function ImportSection() {
 function BodyDetail({ id }: { id: number }) {
   const prop = useModelStore((s) => s.properties.find((p) => p.id === id));
   const properties = useModelStore((s) => s.properties);
+  const shellRoutes = useModelStore((s) => s.shellRoutes);
   const materials = useModelStore((s) => s.materials);
   const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
   const confirmBodyMaterial = useModelStore((s) => s.confirmBodyMaterial);
@@ -208,6 +228,11 @@ function BodyDetail({ id }: { id: number }) {
   const stillMeshed = mismatch.stillMeshed.includes(prop.id);
   const notMeshed = mismatch.missing.includes(prop.id);
   const tip = sectionsTip(shellSectionsOf(properties, prop.id), text);
+  // How the last mesh meshed this body, when it is marked Shell (KOF-498).
+  const route =
+    prop.discretization === "shell"
+      ? shellRoutes.find((r) => r.body === prop.id)
+      : undefined;
   const unbonded = unconnectedBodies(interfaces, properties).includes(prop.id);
   // The material a body the mesh added was offered (KOF-413). A deleted one has
   // nothing to keep; the solve's pre-flight names that case.
@@ -302,6 +327,14 @@ function BodyDetail({ id }: { id: number }) {
         </select>
       </div>
       {tip && <p className={styles.formNote}>{tip}</p>}
+      {route && (
+        <p
+          className={styles.formNote}
+          data-testid={`body-shell-route-${prop.id}`}
+        >
+          {shellRouteText(route, text)}
+        </p>
+      )}
       <div className={styles.formRow} title={text.regionSizeTip}>
         <span className={styles.formLabel}>{text.maxElementSize}</span>
         <input

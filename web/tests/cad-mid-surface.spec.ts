@@ -12,7 +12,12 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { prismStep } from "../../examples/gallery/step-prism.mjs";
 import { gotoApp } from "./fixtures/app";
-import { addBoundary, openTree, setElementType } from "./fixtures/tree";
+import {
+  addBoundary,
+  openBody,
+  openTree,
+  setElementType,
+} from "./fixtures/tree";
 import { clickModelAt, lookFrom } from "./fixtures/viewport";
 
 const THICKNESS = 10; // mm
@@ -117,12 +122,12 @@ test("a plate marked Shell is meshed as its CAD mid-surface, without a volume me
   expect(logs.some((line) => line.includes("step 4/4"))).toBe(false);
 });
 
-async function meshAsShell(page: Page): Promise<void> {
+async function meshAsShell(page: Page, step: Buffer = LE6): Promise<void> {
   await gotoApp(page);
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
-    name: "le6.step",
+    name: "part.step",
     mimeType: "application/octet-stream",
-    buffer: LE6,
+    buffer: step,
   });
   await expect(
     page.getByRole("button", { name: /Generate mesh/ }),
@@ -244,4 +249,40 @@ test("an example saved with a CAD mid-surface opens with its links @pipeline", a
       }),
     )
     .toEqual({ linked: true, routes: ["cad"] });
+});
+
+const L_BRACKET = Buffer.from(
+  prismStep(
+    [
+      [0, 0],
+      [100, 0],
+      [100, 5],
+      [5, 5],
+      [5, 100],
+      [0, 100],
+    ],
+    100,
+    "L-bracket",
+  ),
+);
+
+test("the body panel says a Shell body's mid-surface came from its CAD faces @pipeline", async ({
+  page,
+}) => {
+  await meshAsShell(page);
+  await openBody(page, 1);
+  await expect(page.getByTestId("body-shell-route-1")).toHaveText(
+    "Mid-surface from the CAD faces: 1 wall, 10 mm.",
+  );
+});
+
+test("the body panel says why a Shell body's mid-surface came from its volume mesh @pipeline", async ({
+  page,
+}) => {
+  // An L-bracket's two walls meet at a junction stage 1 does not pair.
+  await meshAsShell(page, L_BRACKET);
+  await openBody(page, 1);
+  await expect(page.getByTestId("body-shell-route-1")).toHaveText(
+    /^Mid-surface from the volume mesh, because face \d+ /,
+  );
 });
