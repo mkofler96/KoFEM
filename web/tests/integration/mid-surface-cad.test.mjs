@@ -201,7 +201,16 @@ describe("a flat plate takes the CAD path (NAFEMS LE6)", () => {
   test("the top side is the upper face on every mesh (KOF-451)", () => {
     for (const [size, { midSurface }] of meshes) {
       expect(midSurface.faces.map((f) => ({ size, ...f }))).toEqual([
-        { size, body: 1, top, bottom, thickness: LE6_THICKNESS },
+        {
+          size,
+          body: 1,
+          top,
+          bottom,
+          thickness: LE6_THICKNESS,
+          // A flat wall's faces have the mid-surface's own area.
+          topAreaRatio: 1,
+          bottomAreaRatio: 1,
+        },
       ]);
       const downward = triangleNormals(midSurface).filter(
         (n) => n[2] < 1 - 1e-6,
@@ -297,7 +306,15 @@ describe("a tube gets a cylindrical mid-surface at the mean radius", () => {
   test("the outer face is the top side", () => {
     const { midSurface } = dto;
     expect(midSurface.faces).toEqual([
-      { body: 1, top: outer, bottom: bore, thickness: TUBE_OUTER - TUBE_INNER },
+      {
+        body: 1,
+        top: outer,
+        bottom: bore,
+        thickness: TUBE_OUTER - TUBE_INNER,
+        // Each face's area per unit mid-surface area: r_face / r_mid.
+        topAreaRatio: TUBE_OUTER / TUBE_MEAN,
+        bottomAreaRatio: TUBE_INNER / TUBE_MEAN,
+      },
     ]);
     const normals = triangleNormals(midSurface);
     const inward = normals.filter((n, t) => {

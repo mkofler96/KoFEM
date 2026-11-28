@@ -143,7 +143,16 @@ export interface MidSurfaceMesh {
   vertices: Float64Array
   triangles: Int32Array
   midFace: Int32Array
-  faces: { body: number; top: number; bottom: number; thickness: number }[]
+  /** `topAreaRatio` / `bottomAreaRatio`: the area of each source face per
+   *  unit mid-surface area (1 when flat, r_face / r_mid when cylindrical). */
+  faces: {
+    body: number
+    top: number
+    bottom: number
+    thickness: number
+    topAreaRatio: number
+    bottomAreaRatio: number
+  }[]
   rimEdges: Int32Array
 }
 

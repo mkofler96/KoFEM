@@ -20,7 +20,9 @@
 // as a surface only and returned as
 //   midSurface { vertices: Float64Array, triangles: Int32Array (wound so each
 //     normal points to the top side), midFace: Int32Array (per triangle, index
-//     into faces), faces: [{ body, top, bottom, thickness }], rimEdges:
+//     into faces), faces: [{ body, top, bottom, thickness, topAreaRatio,
+//     bottomAreaRatio }] (the area of each source face per unit mid-surface
+//     area: 1 when flat, r_face / r_mid when cylindrical), rimEdges:
 //     Int32Array ([a, b, sideFace] per rim edge) }
 // with its own vertex numbering. The other arrays then hold only the bodies
 // meshed as volumes, and are empty when there are none.

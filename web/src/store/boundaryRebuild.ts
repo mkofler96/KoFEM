@@ -55,6 +55,10 @@ export interface SurfaceLoad {
   pressure?: number;
   name?: string;
   unmatchedSelections?: number;
+  // Per face: the area it stands for, per unit of its own area. A shell
+  // facet loaded from a curved CAD face off the mid-surface carries that
+  // face's area (KOF-498). Absent: every face its own area.
+  areaScales?: number[];
 }
 
 export function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
@@ -315,11 +319,15 @@ export function rebuildSurfaceLoads(
   const refPoints = referencePointIds(couplingGroups);
   const loadable = loadableFaceKeys(elements);
   const bottomFaces = new Set(midSurfaceLinks?.facets.map((f) => f.bottom));
+  const areaRatio = new Map(
+    midSurfaceLinks?.areaRatios.map((r) => [r.face, r.ratio]),
+  );
   const result: SurfaceLoad[] = [];
   for (const g of loadGroups) {
     const kind = loadKind(g);
     if (kind === "moment") continue; // moments stay as equivalent point loads
     const faces: number[][] = [];
+    const areaScales: number[] = [];
     const seen = new Set<string>();
     let selections = 0;
     let unmatchedSelections = 0;
@@ -334,6 +342,8 @@ export function rebuildSurfaceLoads(
       selections++;
       const reversed =
         f.cadFaceId !== undefined && bottomFaces.has(f.cadFaceId);
+      const ratio =
+        f.cadFaceId === undefined ? undefined : areaRatio.get(f.cadFaceId);
       const spanned = loadedFaces(f, elements, loadable).map((face) =>
         reversed && face.length === 3 ? [face[0], face[2], face[1]] : face,
       );
@@ -347,13 +357,19 @@ export function rebuildSurfaceLoads(
         if (seen.has(key)) continue;
         seen.add(key);
         faces.push(face);
+        areaScales.push(face.length === 3 && ratio !== undefined ? ratio : 1);
       }
     }
     // A group of nodal selections only is rebuildLoads' alone. Any other group
     // is kept, even with no faces, so it reaches the solve and is refused by
     // name rather than skipped.
     if (selections === 0) continue;
-    const named = { faces, name: g.name, unmatchedSelections };
+    const named = {
+      faces,
+      name: g.name,
+      unmatchedSelections,
+      ...(areaScales.some((scale) => scale !== 1) ? { areaScales } : {}),
+    };
     if (kind === "pressure") {
       result.push({ type: "pressure", pressure: g.totalForce, ...named });
     } else {

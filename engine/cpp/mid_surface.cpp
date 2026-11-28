@@ -501,10 +501,14 @@ ShellBodyAnalysis analyse_shell_body(const TopoDS_Shape& shape, int body,
         wall_of_sheet[walls[w].top] = static_cast<int>(w);
         wall_of_sheet[walls[w].bottom] = static_cast<int>(w);
         const Sheet& top = sheets[walls[w].top];
-        analysis.walls.push_back({top.type == GeomAbs_Plane ? WallKind::Planar
-                                                            : WallKind::Cylindrical,
-                                  walls[w].thickness, face_ids(top, faces),
-                                  face_ids(sheets[walls[w].bottom], faces), {}});
+        const Sheet& bottom = sheets[walls[w].bottom];
+        const bool planar = top.type == GeomAbs_Plane;
+        const double mid_radius = 0.5 * (top.radius + bottom.radius);
+        analysis.walls.push_back({planar ? WallKind::Planar : WallKind::Cylindrical,
+                                  walls[w].thickness,
+                                  planar ? 1.0 : top.radius / mid_radius,
+                                  planar ? 1.0 : bottom.radius / mid_radius,
+                                  face_ids(top, faces), face_ids(bottom, faces), {}});
     }
     for (std::size_t f = 0; f < faces.size(); ++f) {
         const int sheet = sheet_of_face[f];

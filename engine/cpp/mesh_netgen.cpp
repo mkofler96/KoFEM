@@ -765,7 +765,10 @@ val mesh_mid_surfaces(const TopoDS_Shape& shape,
         entry.set("body", ref.body->body);
         entry.set("top", mid.top);
         entry.set("bottom", mid.bottom);
-        entry.set("thickness", ref.body->walls.at(mid.wall).thickness);
+        const Wall& wall = ref.body->walls.at(mid.wall);
+        entry.set("thickness", wall.thickness);
+        entry.set("topAreaRatio", wall.top_area_ratio);
+        entry.set("bottomAreaRatio", wall.bottom_area_ratio);
         faces.call<void>("push", entry);
     }
     val result = val::object();

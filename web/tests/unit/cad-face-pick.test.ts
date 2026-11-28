@@ -17,6 +17,7 @@ import {
 } from "../../src/lib/cadShell";
 import { rebuildSurfaceLoads } from "../../src/store/boundaryRebuild";
 import { carryGroupsToMesh } from "../../src/lib/remeshGroups";
+import { distributeSurfaceLoad } from "../../src/lib/solveLoads";
 
 // Two facets of a strip: top face 7, bottom face 8; side faces 3 (y = 0) and
 // 4 (x = 2).
@@ -25,6 +26,12 @@ const elements = [
   { id: 1, type: "CTRIA3" as const, nodeIds: [1, 2, 5], propertyId: 2 },
 ];
 const links: MidSurfaceLinks = {
+  // A curved wall: the top face lies 5 % farther from the axis than the
+  // mid-surface, the bottom face 5 % nearer.
+  areaRatios: [
+    { face: 7, ratio: 1.05 },
+    { face: 8, ratio: 0.95 },
+  ],
   facets: [
     { element: 0, top: 7, bottom: 8 },
     { element: 1, top: 7, bottom: 8 },
@@ -164,5 +171,63 @@ describe("an entry on the lower face follows it onto a new mesh", () => {
     );
     expect(carried.dropped).toEqual([]);
     expect(carried.loadGroups[0].faces[0].nodeIds).toEqual([0, 1, 2, 4, 5]);
+  });
+});
+
+describe("a load on a curved CAD face carries that face's area", () => {
+  test("its facets carry the face's area ratio to the mid-surface", () => {
+    const [onTop] = rebuildSurfaceLoads(
+      [pressureGroup(7)],
+      elements,
+      [],
+      links,
+    );
+    const [onBottom] = rebuildSurfaceLoads(
+      [pressureGroup(8)],
+      elements,
+      [],
+      links,
+    );
+    expect(onTop.areaScales).toEqual([1.05, 1.05]);
+    expect(onBottom.areaScales).toEqual([0.95, 0.95]);
+  });
+
+  test("a flat wall's faces carry their own area, so nothing is added", () => {
+    const flat = {
+      ...links,
+      areaRatios: links.areaRatios.map((r) => ({ ...r, ratio: 1 })),
+    };
+    const [load] = rebuildSurfaceLoads([pressureGroup(7)], elements, [], flat);
+    expect(load.areaScales).toBeUndefined();
+  });
+
+  test("a pressure on a facet pushes with the area it stands for", () => {
+    const position: Record<number, [number, number, number]> = {
+      0: [0, 0, 0],
+      1: [1, 0, 0],
+      2: [0, 1, 0],
+    };
+    const total = (areaScales?: number[]) => {
+      const forces = new Map<number, { force: number[]; moment: number[] }>();
+      distributeSurfaceLoad(
+        { type: "pressure", pressure: 2, faces: [[0, 1, 2]], areaScales },
+        (id) => position[id],
+        (id) => {
+          let entry = forces.get(id);
+          if (!entry) {
+            entry = { force: [0, 0, 0], moment: [0, 0, 0] };
+            forces.set(id, entry);
+          }
+          return entry as {
+            force: [number, number, number];
+            moment: [number, number, number];
+          };
+        },
+      );
+      return [...forces.values()].reduce((sum, f) => sum + f.force[2], 0);
+    };
+    // Area 0.5, pressure 2, pushing against the +z winding.
+    expect(total()).toBeCloseTo(-1, 12);
+    expect(total([0.95])).toBeCloseTo(-0.95, 12);
   });
 });

@@ -13,6 +13,10 @@ import type { Element, Node, Property } from "../workers/solverTypes.js";
 import { shellSections } from "./shellSections.js";
 
 export interface MidSurfaceLinks {
+  // The area of each top and bottom face per unit area of the mid-surface it
+  // loads: 1 for a flat wall, r_face / r_mid for a cylindrical one. A load on
+  // the face carries the face's own area onto the facets.
+  areaRatios: { face: number; ratio: number }[];
   // One entry per shell facet: its element id and its two source faces.
   facets: { element: number; top: number; bottom: number }[];
   // Each rim edge in store node ids, with the CAD side face it came from.
@@ -109,13 +113,22 @@ export function buildCadShellModel(
       sideFace: mid.rimEdges[3 * e + 2],
     });
 
+  const areaRatios = new Map<number, number>();
+  for (const face of mid.faces) {
+    areaRatios.set(face.top, face.topAreaRatio);
+    areaRatios.set(face.bottom, face.bottomAreaRatio);
+  }
   return {
     nodes,
     elements,
     properties: sections.properties,
     surfaceTriangles,
     surfaceFaceIds,
-    links: { facets, rim },
+    links: {
+      areaRatios: [...areaRatios].map(([face, ratio]) => ({ face, ratio })),
+      facets,
+      rim,
+    },
   };
 }
 

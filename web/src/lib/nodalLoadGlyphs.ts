@@ -6,6 +6,7 @@
 // builds (rebuildSurfaceLoads), so the arrows show where the solver applies the
 // load.
 
+import { faceAreaScales } from "./solveLoads";
 import type { MidSurfaceLinks } from "./cadShell";
 import type { Element, Node } from "../store/geometrySlice";
 import type { CouplingGroup } from "../store/couplingSlice";
@@ -152,16 +153,26 @@ function groupNodalForces(
     input.midSurfaceLinks,
   );
   if (surfaceLoad === undefined) return forces;
-  const facets: { ids: number[]; corners: Vec3[] }[] = [];
+  const facets: { ids: number[]; corners: Vec3[]; scale: number }[] = [];
   const edges: { ids: number[]; corners: Vec3[] }[] = [];
-  for (const ids of surfaceLoad.faces) {
+  const scales = faceAreaScales(surfaceLoad);
+  for (const [index, ids] of surfaceLoad.faces.entries()) {
     // The solver's face match ignores a solid's interior faces; so do glyphs.
     const key = faceKey(ids);
     if (ids.length > 2 && !surface.solid.has(key) && !surface.shell.has(key))
       continue;
     const pts = ids.map(posOf);
     if (pts.some((p) => p === null)) continue;
-    (ids.length === 2 ? edges : facets).push({ ids, corners: pts as Vec3[] });
+    const corners = pts as Vec3[];
+    // The area the facet stands for (SurfaceLoad.areaScales), as the solve
+    // applies it.
+    if (ids.length === 2) edges.push({ ids, corners });
+    else
+      facets.push({
+        ids,
+        corners,
+        scale: scales[index],
+      });
   }
   const vector = loadComponents(g);
 
@@ -179,10 +190,10 @@ function groupNodalForces(
     return forces;
   }
 
-  const areas = facets.map((f) => norm(areaNormal(f.corners)));
+  const areas = facets.map((f) => norm(areaNormal(f.corners)) * f.scale);
   const totalArea = areas.reduce((s, a) => s + a, 0);
   if (totalArea < 1e-30) return forces;
-  facets.forEach(({ ids, corners }, i) => {
+  facets.forEach(({ ids, corners, scale }, i) => {
     if (areas[i] < 1e-30) return;
     let cornerForce: Vec3;
     if (kind === "force") {
@@ -190,7 +201,7 @@ function groupNodalForces(
     } else {
       // n has length A. A shell has no inside: positive pressure pushes
       // against the winding normal. A solid face is pushed into the body.
-      const n = areaNormal(corners);
+      const n = scaled(areaNormal(corners), scale);
       let sign = -1;
       if (!surface.shell.has(faceKey(ids))) {
         const fc: Vec3 = [0, 0, 0];

@@ -954,6 +954,12 @@ function surfaceLoadValues(
   surfaceLoad: SurfaceLoad,
   index: number,
 ): Float64Array {
+  // Area scales come only from a shell's CAD mid-surface, whose facets the
+  // solid solve never takes.
+  if (surfaceLoad.areaScales)
+    throw new Error(
+      `Surface load ${index} scales the area of shell facets, which the solid solve cannot load`,
+    );
   if (surfaceLoad.type === "pressure") {
     if (surfaceLoad.pressure === undefined)
       throw new Error(`Surface load ${index} (pressure) has no pressure value`);

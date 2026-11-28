@@ -54,6 +54,10 @@ const elements = [
   { id: 1, type: "CTRIA3" as const, nodeIds: [1, 2, 5], propertyId: 2 },
 ];
 const links: MidSurfaceLinks = {
+  areaRatios: [
+    { face: 7, ratio: 1 },
+    { face: 8, ratio: 1 },
+  ],
   facets: [
     { element: 0, top: 7, bottom: 8 },
     { element: 1, top: 7, bottom: 8 },

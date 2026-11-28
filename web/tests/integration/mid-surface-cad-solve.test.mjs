@@ -17,13 +17,17 @@
 // plate, 10 mm thick, edges held in Ux, Uy, Uz, 0.7 kPa on one face.
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { prismStep } from "../../../examples/gallery/step-prism.mjs";
+import {
+  annulusStep,
+  prismStep,
+} from "../../../examples/gallery/step-prism.mjs";
 import {
   buildCadShellModel,
   cadFaceNodes,
   cadFaceSurface,
 } from "../../src/lib/cadShell.ts";
 import { buildShellEngineInputs } from "../../src/lib/solve/shell.ts";
+import { rebuildSurfaceLoads } from "../../src/store/boundaryRebuild.ts";
 import { solveShellInRust } from "../../src/lib/solve/shellRust.ts";
 import { loadEngine, loadFem } from "../support/wasm.mjs";
 import { TESSELLATION_OPTIONS } from "../support/step-parts.mjs";
@@ -211,5 +215,89 @@ describe("a pressure on either face of the plate pushes into it (KOF-451)", () =
     expect(Math.abs(fromBottom + fromTop)).toBeLessThan(
       1e-9 * Math.abs(fromTop),
     );
+  });
+});
+
+// A pressure on the bore of a tube acts on the bore's area, 2π·r_inner·L, not
+// on the mid-surface's 2π·r_mid·L: the facets it loads carry the bore's area.
+describe("a pressure on a tube's bore pushes with the bore's area", () => {
+  const INNER = 45; // mm
+  const OUTER = 50; // mm
+  const LENGTH = 300; // mm
+  let radial = 0;
+
+  beforeAll(async () => {
+    const engine = await loadEngine();
+    const tessellation = engine.tessellate_step(
+      new TextEncoder().encode(annulusStep(INNER, OUTER, LENGTH, "Tube")),
+      TESSELLATION_OPTIONS,
+    );
+    const bore = faceWhere(
+      tessellation,
+      (x, y) => Math.abs(Math.hypot(x, y) - INNER) < 1e-3,
+    );
+    const dto = engine.generate_fem_mesh(
+      JSON.stringify({
+        max_element_size: 5,
+        min_element_size: 0,
+        shell_bodies: [1],
+        thin_wall: { max_wall: 15, body_share: 0.1 },
+        grading: 0.3,
+        second_order: false,
+        elementsperedge: 2,
+        elementspercurve: 2,
+        optsteps_2d: 3,
+        optsteps_3d: 3,
+      }),
+    );
+    const tube = buildCadShellModel(
+      { nodes: [], elements: [], surfaceTriangles: [], surfaceFaceIds: [] },
+      dto.midSurface,
+      [{ id: 1, materialId: STEEL.id, discretization: "shell" }],
+    );
+    const [load] = rebuildSurfaceLoads(
+      [
+        {
+          id: 1,
+          name: "Bore pressure",
+          kind: "pressure",
+          dof: 0,
+          totalForce: PRESSURE,
+          faces: [
+            {
+              id: 1,
+              label: "Face 1",
+              nodeIds: cadFaceNodes(tube, bore),
+              geometry: "face",
+              cadFaceId: bore,
+            },
+          ],
+        },
+      ],
+      tube.elements,
+      [],
+      tube.links,
+    );
+    const inputs = buildShellEngineInputs({
+      nodes: tube.nodes,
+      elements: tube.elements,
+      materials: [STEEL],
+      properties: tube.properties,
+      constraints: [],
+      loads: [],
+      surfaceLoads: [load],
+    });
+    const vertices = inputs.mesh.vertices;
+    for (const { vertex, force } of JSON.parse(inputs.bcsJson).point_loads) {
+      if (!force) continue;
+      const px = vertices[3 * vertex];
+      const py = vertices[3 * vertex + 1];
+      radial += Math.abs(force[0] * px + force[1] * py) / Math.hypot(px, py);
+    }
+  });
+
+  test("the radial load adds up to p · 2π · r_inner · L", () => {
+    const expected = PRESSURE * 2 * Math.PI * INNER * LENGTH;
+    expect(Math.abs(radial / expected - 1)).toBeLessThan(0.01);
   });
 });

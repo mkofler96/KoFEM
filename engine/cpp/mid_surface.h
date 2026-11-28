@@ -45,6 +45,12 @@ enum class WallKind { Planar, Cylindrical };
 struct Wall {
     WallKind kind;
     double thickness;
+    // The area of the top and of the bottom sheet per unit area of the
+    // mid-surface: 1 for a flat wall; r_face / r_mid for a cylindrical one,
+    // whose faces lie farther from or nearer to the axis than the mid-surface.
+    // A load on a face carries its own area onto the facets (KOF-498).
+    double top_area_ratio;
+    double bottom_area_ratio;
     // 1-based face ids of the whole shape, ascending.
     std::vector<int> top;
     std::vector<int> bottom;
